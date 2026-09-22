@@ -310,9 +310,14 @@ def arrangement_picture(folder=SCULPTS, place=None):
     P = json.loads(place.read_text(encoding="utf-8"))
     frame, spread = P["frame"], P["spread"]
     back, rank, size = P["back"], P["rank"], P["tuned_at"]
-    plates = sorted(grounds.glob("*.png"))
+    # NAMED, not sorted()[0] -- which picked cobbles_oval, the one plate on file still at the
+    # old 39.8 degree camera, and put the new sculpts on a ground drawn from somewhere else.
+    plate_path = grounds / "flagstones_grey.png"
+    if not plate_path.is_file():
+        rest = sorted(grounds.glob("*.png"))
+        plate_path = rest[0] if rest else None
     files = sorted(folder.glob("*.png"))
-    if not plates or not files:
+    if plate_path is None or not files:
         return None
 
     def trim(im):
@@ -336,14 +341,18 @@ def arrangement_picture(folder=SCULPTS, place=None):
     card = Image.new("RGBA", (W + 2*pad, H + pad + top + 48), (23, 19, 13, 255))
     floor = H - drop
 
-    plate = trim(Image.open(plates[0]).convert("RGBA"))
+    plate = trim(Image.open(plate_path).convert("RGBA"))
+    # the standing line is a property of the picture, so it is measured rather than assumed: the
+    # widest row of the plate's own ink is where a figure's feet belong
+    prows = (np.asarray(plate)[..., 3] > sm.ALPHA).sum(1)
+    anchor = float(prows.argmax()) / max(1, len(prows))
     ph = max(1, round(plate.height * W / plate.width))
     pl = np.asarray(plate.resize((W, ph), Image.LANCZOS)).astype(float)
     rgb, al = pl[..., :3], pl[..., 3:]
     grey = (0.2126*rgb[..., 0] + 0.7152*rgb[..., 1] + 0.0722*rgb[..., 2])[..., None]
     pl = Image.fromarray(np.concatenate(
         [np.clip((grey + (rgb-grey)*0.65)*0.55, 0, 255), al], 2).astype(np.uint8))
-    card.alpha_composite(pl, (pad, int(top + floor - 0.48*ph)))
+    card.alpha_composite(pl, (pad, int(top + floor - anchor*ph)))
 
     pick = [i % len(built) for i in (0, 2, 1, 0, 2)]
     # THE MIDDLE STEPS FORWARD, far enough that the top of its plinth lands on the floor line the
@@ -406,7 +415,8 @@ def arrangement_picture(folder=SCULPTS, place=None):
     buf = io.BytesIO()
     card.convert("RGB").save(buf, "WEBP", quality=86, method=6)
     return {"uri": "data:image/webp;base64," + base64.b64encode(buf.getvalue()).decode("ascii"),
-            "span": span, "frame": W, "clashes": len(clash), "low": low, "drop": drop}
+            "span": span, "frame": W, "clashes": len(clash), "low": low, "drop": drop,
+            "plate": plate_path.stem, "anchor": round(anchor*100)}
 
 
 def on_record(folder=SCULPTS):
@@ -829,11 +839,15 @@ td.why{color:#403a31}
 #record h2{font:11px/1.5 inherit;font-weight:400;color:#5f574a;margin:0 0 8px;max-width:96ch}
 #record h2 b{color:#8b8071;font-weight:400}
 #record .row{display:flex;gap:18px;flex-wrap:wrap}
-#record .one{background:#17130d;border:1px solid #241d13;padding:8px}
+#record .one{background:#17130d;border:1px solid #241d13;padding:8px;max-width:366px}
+/* the caption used to set the cell's width -- one long line made the tile cell 528 px and
+   wrapped the row at 1600. It wraps to the picture's width instead. */
+#record .one .num{white-space:normal;max-width:366px}
 #record .one .nm{color:#c9b27a;padding-bottom:4px}
 #record .one .num{color:#5f574a;padding-top:4px}
 #record img{display:block}
 #record .fig{height:250px}
+#record .tileimg{height:476px}
 #record .tile{margin-top:16px}
 #record .tile .cap{color:#5f574a;padding-bottom:6px;max-width:96ch}
 #record .tile .bad{color:#ff8a8a}
@@ -862,7 +876,14 @@ var ARRANGE = __ARRANGE__;
            + "two numbers check (b) compares: the base's own width, and the lit wall above it."
            + "<br>These are NOT the band a newcomer is judged against &#8212; that still comes "
            + "from <b>ui/concept/</b>, the 9&#176; art being replaced, which is why a correct new "
-           + "sculpt reports a height gap. Recompute it once the four seats exist.</h2>"
+           + "sculpt reports a height gap. Recompute it once the four seats exist."
+           + "<br>The last cell is five of them on a tile, at the spread, rank and frame from "
+           + "<b>duty_placement.json</b>, with the middle of the front three stepped FORWARD "
+           + "until the top of its plinth reaches the floor line &#8212; where that file still "
+           + "says set it back. A plinth is as deep as it is wide times sin(camera), so raising "
+           + "the camera from 9&#176; to 32&#176; made every base three times deeper without "
+           + "moving a number there, and at a set-back of 21 the middle plinth overlaps both of "
+           + "the back rank's. Overlap is rasterised and intersected, not judged by eye.</h2>"
            + "<div class=row>"];
   ONRECORD.forEach(function(r){
     h.push("<div class=one><div class=nm>" + r.name + "</div>");
@@ -873,26 +894,18 @@ var ARRANGE = __ARRANGE__;
            + " &#183; height " + (r.proportion == null ? "&#8212;" : r.proportion.toFixed(2))
            + "</div></div>");
   });
-  h.push("</div>");
   if (ARRANGE) {
-    h.push("<div class=tile><div class=cap>And the same sculpts on a tile, five of them at the "
-           + "spread, rank and frame from <b>duty_placement.json</b> &#8212; but with the middle "
-           + "of the front three stepped FORWARD until the top of its plinth reaches the floor "
-           + "line, where that file still says set it back. At a set-back of 21 its plinth "
-           + "overlaps both of the back rank's: a plinth is as deep as it is wide times "
-           + "sin(camera), so raising the camera from 9&#176; to 32&#176; made every base three "
-           + "times deeper without moving a number in that file. Overlap is rasterised and "
-           + "intersected rather than judged by eye &#8212; green outlines clear, red clash."
-           + (ARRANGE.clashes
-              ? " <span class=bad>" + ARRANGE.clashes + " clash.</span>"
-              : "")
+    h.push("<div class=one><div class=nm>five on a tile &#183; " + ARRANGE.plate + "</div>"
+           + "<img class=tileimg src='" + ARRANGE.uri + "' alt=''>"
+           + "<div class=num>" + ARRANGE.span + " of " + ARRANGE.frame + " px across &#183; "
+           + (ARRANGE.clashes ? "<span class=bad>" + ARRANGE.clashes + " plinth clash</span>"
+                              : "no plinths overlap")
            + (ARRANGE.low > ARRANGE.drop
-              ? " <span class=bad>The front plinth reaches " + ARRANGE.low
-                + " px below the floor and the frame's drop is " + ARRANGE.drop
-                + ", so it needs " + (ARRANGE.low - ARRANGE.drop) + " px more.</span>"
-              : "")
-           + "</div><img src='" + ARRANGE.uri + "' alt=''></div>");
+              ? " &#183; <span class=bad>front plinth needs " + (ARRANGE.low - ARRANGE.drop)
+                + " px more drop</span>" : "")
+           + "</div></div>");
   }
+  h.push("</div>");
   host.innerHTML = h.join("");
 })();
 if (BAND && BAND.degrees)
