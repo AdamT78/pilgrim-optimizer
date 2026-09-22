@@ -96,7 +96,7 @@ RULES_JS = HERE / "duty_sculpt_rules.js"
 # not: the offline path wrote the wire payload under the name of the placement file, a shape
 # that file never has, carrying the ground assignments in a key nothing reads them from.
 PLACEMENT_KEYS = ("spread", "back", "rank", "order", "depth", "frame")
-GROUND_KEYS = ("by_duty", "grounds")
+GROUND_KEYS = ("by_duty", "grounds", "lift")
 
 
 def save_settings(board, sent):
@@ -182,7 +182,7 @@ def save_grounds(board, sent):
     if board.GROUND_PLAN.is_file():
         current = json.loads(board.GROUND_PLAN.read_text(encoding="utf-8"))
     merged = dict(current)
-    assert set(GROUND_KEYS) == {"by_duty", "grounds"}, (
+    assert set(GROUND_KEYS) == {"by_duty", "grounds", "lift"}, (
         "GROUND_KEYS names something this function does not write")
 
     by_duty = sent.get("by_duty")
@@ -211,6 +211,13 @@ def save_grounds(board, sent):
                 row[key] = value
             clean[name] = row
         merged["grounds"] = clean
+
+    # ONE LIFT FOR ALL NINE TILES. Same range the generator reads by.
+    lift = sent.get("lift")
+    if lift is not None:
+        if isinstance(lift, bool) or not isinstance(lift, int) or not -300 <= lift <= 600:
+            raise ValueError("lift is %r, want a whole number -300-600" % lift)
+        merged["lift"] = lift
 
     # A plate the plan names but the folder no longer holds would draw nothing and say nothing.
     for slug, name in (merged.get("by_duty") or {}).items():
@@ -379,6 +386,7 @@ def main():
     print("  %d ground plate(s) from %s, %d duties assigned, standing on: %s"
           % (len(plates), board.GROUNDS_DIR.name, len(plan.get("by_duty") or {}),
              ", ".join(in_use) or "bare floor only"))
+    print("  ground lifted %d px above the floor line on every tile" % plan.get("lift", 0))
     if args.serve is None:
         print("  NOT SERVED -- the save button can only download. Add --serve to write "
               "%s and %s in place."
@@ -465,6 +473,10 @@ body{padding-left:243px}
 #ui button[aria-pressed=true]{background:#c9b27a;border-color:#c9b27a;color:#1a1610}
 #ui input[type=range]{width:100%;accent-color:#c9b27a;background:transparent;margin:0}
 #ui .val{color:#c9b27a;text-align:right}
+/* The lift's readout: what the number MEANS on the tile -- all nine, and whether the plate is
+   still lying across the banner -- rather than the number again. */
+#ui .note{grid-column:1 / -1;color:#5f574a;line-height:1.4;margin:-1px 0 2px 2px}
+#ui .note b{color:#e0705f;font-weight:400}
 #save{border-color:#4a5a3a}
 /* The offline warning is two or three lines long in a narrow column, and it has to be read
    rather than glanced at -- that is the whole point of it. */
@@ -504,6 +516,13 @@ body{padding-left:243px}
   <span class=lab>ratio</span><span class=wide id=ratio></span>
 
   <div class=ttl>the ground it stands on</div>
+  <!-- LIFT IS THE ONE GLOBAL CONTROL IN THIS BLOCK and is marked as such, because everything
+       under it acts on the plate beneath the tile you clicked. A slider that silently moved
+       nine tiles while sitting among five that move one is a control you learn twice. -->
+  <span class=lab>lift</span>
+  <input id=glift type=range min=-150 max=400 step=1><span class=val id=gliftv></span>
+  <span class=note id=gliftn></span>
+  <div class=sep></div>
   <span class=lab>plate</span><span class=wide id=gwho></span>
   <span class=lab>anchor</span>
   <input id=ganc type=range min=0 max=100 step=1><span class=val id=gancv></span>
@@ -541,6 +560,9 @@ var DOC_PLACEMENT = __PLACEMENTDOC__, SAVE_KEYS = __SAVEKEYS__;
 // would have to guess, and the guess it would make is "all of them".
 var PICKED = null, RESIZING = false;
 var GROUND_DEFAULTS = DUTY_GROUND_DEFAULTS;
+// One lift for all nine tiles, real pixels, positive upward. Read from the plan like everything
+// else here, so the page opens where the file left off.
+var LIFT = PLAN.lift || 0;
 
 // Resolved by the shared rule, so this page and the sow agree about what a duty stands on.
 function groundFor(slug){ return dutyGroundFor(PLAN, slug); }
@@ -625,12 +647,17 @@ function drawWheel(){
     // THE GROUND, between the frame and the figures. Its standing line -- the row of the plate
     // the feet belong on -- is put ON the floor line, which is why the anchor is a property of
     // each picture rather than a number shared by all of them.
+    //
+    // LIFT then moves the whole thing off that line, the same distance on every tile. Two
+    // separate ideas kept separate: anchor is where the standing line is IN THE PICTURE, lift is
+    // how far the picture sits above the floor line ON THE TILE. Tuned against the banner, so it
+    // belongs to the board rather than to any one plate.
     var gname = groundFor(C.slug), plate = PLATES[gname];
     if (plate){
       var gs = settingsFor(gname);
       var gw = FRAME.w * gs.scale / 100, gh = gw * plate.h / plate.w;
       h += '<div class=ground style="left:' + px(CELL / 2 - gw / 2) + ';top:'
-         + px(floor - gh * gs.anchor / 100) + ';width:' + px(gw) + ';height:' + px(gh)
+         + px(floor - LIFT - gh * gs.anchor / 100) + ';width:' + px(gw) + ';height:' + px(gh)
          + ';opacity:' + (gs.opacity / 100) + ';filter:brightness(' + (gs.dim / 100)
          + ') saturate(' + (gs.saturate / 100) + ')"><img src="' + plate.uri + '"></div>';
     }
@@ -671,6 +698,7 @@ function drawWheel(){
   });
   drawPicker();
   syncGroundSliders();
+  sayLift(L, floor);
   // The strip's height is only knowable once it is in the document, and it changes the board's
   // budget. One re-measure, guarded, rather than a layout loop.
   var after = pick.hidden ? 0 : pick.getBoundingClientRect().height;
@@ -716,6 +744,44 @@ function drawPicker(){
       draw();                      // which re-syncs the sliders onto whatever is now assigned
     };
   });
+}
+
+// WHAT THE LIFT IS ACTUALLY FOR, said as a number. The lift exists to get the plate off the
+// banner, so the useful readout is not the lift again but how much plate is still lying across
+// the parchment -- which is what changes when the banner changes, and the reason this had to be
+// a slider rather than a constant.
+//
+// Measured on the WORST plate in use, not on the picked one: lifting until the tile in front of
+// you is clear, while another duty's taller plate still overlaps, is the whole failure mode.
+function bannerClear(L, floor){
+  var worst = null, seen = {};
+  for (var i = 0; i < 9; i++){
+    var C = CELLS[i] || {}, name = groundFor(C.slug), plate = PLATES[name];
+    if (!plate || seen[name]) continue;
+    seen[name] = 1;
+    var gs = settingsFor(name);
+    var gw = FRAME.w * gs.scale / 100, gh = gw * plate.h / plate.w;
+    // the plate's own bottom edge, against the top of the parchment below the floor line
+    var gap = (floor + L.gapA) - (floor - LIFT + gh * (1 - gs.anchor / 100));
+    if (worst === null || gap < worst.gap) worst = {gap: gap, name: name};
+  }
+  return worst;
+}
+function sayLift(L, floor){
+  var e = document.getElementById("gliftn");
+  if (!e) return;
+  var w = bannerClear(L, floor);
+  if (!w){ e.innerHTML = "all nine tiles &#183; no plate assigned to measure"; return; }
+  // ROUNDED FIRST, THEN BRANCHED. Branching on the raw gap and printing the rounded one says
+  // "0 px still lies over the banner" for any overlap under half a pixel -- a number that reads
+  // as a contradiction at exactly the setting you are hunting for.
+  var n = Math.round(w.gap / DPR);
+  e.innerHTML = "all nine tiles &#183; "
+    + (n > 0
+        ? "clears the banner by <b style='color:#8fae6a'>" + n + "</b> px on " + w.name
+        : n < 0
+          ? "<b>" + (-n) + "</b> px of " + w.name + " still lies over the banner"
+          : "<b style='color:#8fae6a'>just clear</b> of the banner on " + w.name);
 }
 
 // The ground sliders act on the plate under the CHOSEN tile, or on the default when no tile is
@@ -840,6 +906,10 @@ slider("frd", FRAME.drop, function(v){ FRAME.drop = v; });
  ["gsat", "saturate"], ["gopa", "opacity"]].forEach(function(pair){
   slider(pair[0], 0, function(v){ setGround(pair[1], v); });
 });
+// The lift is not in that list because it is not a per-plate setting: it takes its opening value
+// from the plan rather than from whichever plate happens to be picked, and it is never disabled,
+// because it still means something on a tile standing on bare floor.
+slider("glift", LIFT, function(v){ LIFT = v; });
 syncGroundSliders();
 function showRatio(){
   document.getElementById("ratio").textContent =
@@ -866,7 +936,7 @@ function settings(){
   return {spread: SPREAD, back: BACK, rank: RANK, order: ORDER,
           depth: {mode: MODE, amount: SHADE, full_at: FULL_AT},
           frame: {w: FRAME.w, h: FRAME.h, drop: FRAME.drop},
-          grounds: {by_duty: PLAN.by_duty || {}, grounds: PLAN.grounds || {}}};
+          grounds: {by_duty: PLAN.by_duty || {}, grounds: PLAN.grounds || {}, lift: LIFT}};
 }
 function say(msg, cls){
   var e = document.getElementById("saymsg");

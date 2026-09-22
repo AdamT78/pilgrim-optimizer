@@ -381,6 +381,17 @@ def ground_plan(notes):
         if name and name not in grounds:
             raise SystemExit("%s: %s is assigned %r, which has no entry under grounds"
                              % (_short(GROUND_PLAN), slug, name))
+    # ONE LIFT FOR ALL NINE TILES, in real pixels, positive upward. Not per plate, and not the
+    # same thing as a plate's `anchor`: anchor says where in the PICTURE the standing line falls,
+    # which is a fact about that piece of art, while the lift says how far the whole ground sits
+    # off the floor line on every tile at once -- which is a fact about the tile's layout, tuned
+    # against the banner underneath it. Defaulted rather than required, so a plan written before
+    # this existed still loads.
+    lift = data.get("lift", 0)
+    if isinstance(lift, bool) or not isinstance(lift, int) or not -300 <= lift <= 600:
+        raise SystemExit("%s: lift is %r, want a whole number -300-600"
+                         % (_short(GROUND_PLAN), lift))
+    data["lift"] = lift
     return data
 
 

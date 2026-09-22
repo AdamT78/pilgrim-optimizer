@@ -1101,6 +1101,138 @@ def test_the_sow_names_every_plate_it_stands_a_duty_on(sow, mod, tmp_path, monke
         assert '"%s"' % name in page, "%s is assigned but never reached the page" % name
 
 
+# ---------------------------------------------------------------- lifting the ground off the banner
+
+def test_the_lift_is_one_number_for_all_nine_tiles(sheet, mod, tmp_path, monkeypatch):
+    """The plate is drawn centred on the floor line, which puts its lower half across the
+    parchment. The lift moves the whole ground up, the same distance on every tile, so the
+    banner can be cleared -- and re-cleared when the banner art changes.
+
+    Saved and validated like the rest of the plan, because a lift you cannot keep is a lift you
+    set again every time you open the page.
+    """
+    board = sheet._board_module()
+    path = tmp_path / "duty_grounds.json"
+    path.write_text(mod.GROUND_PLAN.read_text(encoding="utf-8"), encoding="utf-8")
+    monkeypatch.setattr(board, "GROUND_PLAN", path)
+    saved = sheet.save_grounds(board, {"by_duty": {}, "grounds": {}, "lift": 137})
+    assert saved["lift"] == 137
+    assert "note" in saved and "angle_note" in saved, "the prose was thrown away"
+    # named by the one list the offline download merges by, or it saves served and not otherwise
+    assert "lift" in sheet.GROUND_KEYS, "a saved key the page is not told to merge"
+    # and the generator accepts what the button wrote
+    monkeypatch.setattr(mod, "GROUND_PLAN", path)
+    assert mod.ground_plan([])["lift"] == 137
+    for bad in (7.5, "20", True, 900, -400):
+        with pytest.raises(ValueError):
+            sheet.save_grounds(board, {"by_duty": {}, "grounds": {}, "lift": bad})
+
+
+def test_a_plan_written_before_the_lift_existed_still_loads(mod, tmp_path, monkeypatch):
+    """Every duty_grounds.json on anyone's disk predates this key. Defaulted, not required."""
+    plan = json.loads(mod.GROUND_PLAN.read_text(encoding="utf-8"))
+    plan.pop("lift", None)
+    path = tmp_path / "duty_grounds.json"
+    path.write_text(json.dumps(plan), encoding="utf-8")
+    monkeypatch.setattr(mod, "GROUND_PLAN", path)
+    assert mod.ground_plan([])["lift"] == 0, "a plan with no lift did not default to flat"
+
+
+def test_the_lift_is_in_the_expression_that_places_the_plate(sheet, mod):
+    """THAT THE DRAWING USES IT -- which is not what rendering the page twice proves.
+
+    The first version of this rendered each page at two lifts and asserted the pages differed
+    and that '"lift": 211' was in the output. Deleting LIFT from the sheet's positioning
+    expression left every one of those assertions true: the plan is embedded whole, so the
+    number is in the page whether or not anything draws with it, and `var LIFT = PLAN.lift`
+    still matched a search for "LIFT". The test passed on code that ignored the slider.
+
+    So the assertion has to be on the expression that puts the plate somewhere, and nothing
+    else. Falsified by removing LIFT from exactly that expression in each page.
+    """
+    here = pathlib.Path(mod.__file__).parent
+    for page, src, marker in (
+            ("the placement sheet", sheet.TEMPLATE, "<div class=ground"),
+            ("the sow", (here / "duty_sow.html.tmpl").read_text(encoding="utf-8"),
+             "<div class=plate")):
+        at = src.index(marker)
+        where = src[at:at + 400]
+        assert "';top:'" in where, "%s: the plate emit does not set a top" % page
+        top = where[where.index("';top:'"):]
+        top = top[:top.index("';width:'")]
+        assert "LIFT" in top, (
+            "%s positions the plate without the lift, so the slider moves nothing: %s"
+            % (page, top.strip()))
+        assert "anchor" in top, "%s stopped using the plate's own anchor" % page
+
+
+def test_the_lift_reaches_both_pages(sheet, sow, mod, tmp_path, monkeypatch):
+    """The generators must carry the key through to the page at all -- a separate claim from
+    the one above, and the one that catches a generator trimming the plan on its way out."""
+    board = sheet._board_module()
+    if not any((board.FIGURE_DIR / ("figure_player_1_%d.png" % s)).is_file()
+               for s in board.FIGURE_SIZES):
+        pytest.skip("no rendered sculpts; run make_tray_figures.py")
+    plan = json.loads(mod.GROUND_PLAN.read_text(encoding="utf-8"))
+    path = tmp_path / "duty_grounds.json"
+    monkeypatch.setattr(board, "GROUND_PLAN", path)
+    # BOTH generators have to be pointed at the patched board. The sow caches its board module
+    # and the sheet does not, so patching the object alone leaves sheet.main() re-executing
+    # generate_duty_board_check and reading the real file -- which is how this test first
+    # "proved" the lift was ignored when it was only looking at the wrong plan.
+    monkeypatch.setattr(sow, "_board_module", lambda: board)
+    monkeypatch.setattr(sheet, "_board_module", lambda: board)
+
+    for page_name, module, argv0 in (("placement sheet", sheet, "generate_placement_sheet.py"),
+                                     ("sow", sow, "generate_duty_sow.py")):
+        drawn = {}
+        for lift in (0, 211):
+            plan["lift"] = lift
+            path.write_text(json.dumps(plan), encoding="utf-8")
+            out = tmp_path / ("%d_%s.html" % (lift, argv0))
+            monkeypatch.setattr(sys, "argv", [argv0, "--no-open", "--out", str(out)])
+            module.main()
+            drawn[lift] = out.read_text(encoding="utf-8")
+        assert '"lift": 211' in drawn[211], "%s never received the lift" % page_name
+        assert '"lift": 0' in drawn[0], "%s never received the lift" % page_name
+
+
+def test_the_lift_is_not_a_sixth_per_plate_slider(sheet):
+    """It sits among five sliders that act on one plate, so it has to be unmistakably different.
+
+    It must not be wired through setGround (which writes into the picked plate's settings), must
+    not be disabled when a tile stands on bare floor, and must say on the page that it moves all
+    nine.
+    """
+    src = sheet.TEMPLATE
+    assert "id=glift type=range" in src, "there is no lift slider"
+    wiring = src[src.index('slider("glift"'):]
+    wiring = wiring[:wiring.index("\n")]
+    assert "setGround" not in wiring, (
+        "the lift is wired through setGround, so it writes into one plate's settings")
+    sync = src[src.index("function syncGroundSliders"):]
+    sync = sync[:sync.index("\n}")]
+    assert "glift" not in sync, (
+        "syncGroundSliders touches the lift, so picking a plate will overwrite it")
+    assert "all nine tiles" in src, "the panel does not say the lift moves every tile"
+
+
+def test_the_lift_readout_measures_the_worst_plate_not_the_picked_one(sheet):
+    """The number worth showing is how much plate still lies over the banner -- that is what the
+    lift is for, and what moves when the banner art changes.
+
+    Measured across every plate in use. Reporting the picked tile's clearance would let you lift
+    until the tile in front of you is clear while a taller plate on another duty still overlaps,
+    which is the exact mistake the readout exists to catch.
+    """
+    src = sheet.TEMPLATE
+    body = src[src.index("function bannerClear"):src.index("function sayLift")]
+    assert "for (var i = 0; i < 9; i++)" in body, "the clearance is not measured across the tiles"
+    assert "PICKED" not in body, "the clearance is measured on the picked tile"
+    assert "gap < worst.gap" in body, "it does not keep the worst plate"
+    assert "L.gapA" in body, "the clearance is not measured against the banner"
+
+
 # ---------------------------------------------------------------- judging a new asset
 
 

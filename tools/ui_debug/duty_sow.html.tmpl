@@ -132,6 +132,10 @@ __FORMATION__
 var CELLS = __CELLS__, EDGES = __EDGES__, FIGS = __FIGS__, SIZES = __SIZES__;
 var PLACE = __PLACEMENT__, OPENING = __OPENING__;
 var FRAME = __FRAME__, PLATES = __PLATES__, PLAN = __GROUNDPLAN__;
+// How far the ground sits above the floor line, the same on all nine tiles. Tuned in the
+// placement sheet against the banner and saved with the rest of the plan; there is nothing to
+// set here. Positive is upward.
+var LIFT = PLAN.lift || 0;
 var BANNER_FS = __BANNERFS__, BANNER_TRACK = __BANNERTRACK__;
 var BANNER_TOP = __BANNERTOP__, BANNER_INK = __BANNERINK__;
 
@@ -302,7 +306,7 @@ function build(){
       var gs = dutyGroundSettings(PLAN, PLATES, gname0);
       var gw = FRAME.w * gs.scale / 100, gh = gw * plate.h / plate.w;
       h += '<div class=plate style="left:' + px(CELL / 2 - gw / 2) + ';top:'
-         + px(floorY - gh * gs.anchor / 100) + ';width:' + px(gw) + ';height:' + px(gh)
+         + px(floorY - LIFT - gh * gs.anchor / 100) + ';width:' + px(gw) + ';height:' + px(gh)
          + ';opacity:' + (gs.opacity / 100) + ';filter:brightness(' + (gs.dim / 100)
          + ') saturate(' + (gs.saturate / 100) + ')"><img src="' + plate.uri + '"></div>';
     }
