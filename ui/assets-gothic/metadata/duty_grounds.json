@@ -1,19 +1,20 @@
 {
   "note": "Which ground plate each duty stands on, and how each plate is drawn. Read by tools/ui_debug/generate_placement_sheet.py and generate_duty_sow.py. The plates themselves live in ui/assets-gothic/grounds/ and are DISCOVERED -- what art exists is a fact about the folder, so nothing here lists them. What is decided, and therefore written down, is which duty gets which, and how each one is toned down to sit under sculpts rather than compete with them.",
   "layer_note": "A ground is a layer, not a tile face. The duty-tiles tree holds the opaque face of the wheel; a plate is a transparent cut-out drawn ON TOP of that face and UNDER the figures, so the same plate can sit on any face and a face can change without redrawing its ground.",
-  "default": "cobbles_oval",
+  "default": "flagstones_grey",
+  "lift": 92,
   "by_duty": {
-    "produce": "cobbles_oval",
-    "clerical": "cobbles_oval",
-    "build_roads": "flagstones_slab",
-    "construct": "flagstones_slab",
-    "give_alms": "cobbles_oval",
-    "ordination": "cobbles_oval",
-    "allocation": "cobbles_oval",
-    "taxation": "cobbles_oval",
-    "city": "flagstones_slab"
+    "produce": "flagstones_grey",
+    "clerical": "limestone_irregular",
+    "build_roads": "flagstones_grey",
+    "construct": "limestone_irregular",
+    "give_alms": "flagstones_grey",
+    "ordination": "limestone_irregular",
+    "allocation": "flagstones_grey",
+    "taxation": "limestone_irregular",
+    "city": "limestone_irregular"
   },
-  "by_duty_note": "Keyed by duty slug rather than by compass position, because duty tiles can be shuffled by a scenario and a ground belongs to the duty rather than to the place it happens to sit this game.",
+  "by_duty_note": "Keyed by duty slug rather than by compass position, because duty tiles can be shuffled by a scenario and a ground belongs to the duty rather than to the place it happens to sit this game. Assigned in the placement sheet's wheel view and saved from it; the sow plays on the result. Both pages resolve a duty to its plate through dutyGroundFor() in tools/ui_debug/duty_sculpt_rules.js, so there is no second answer to drift from this one.",
   "grounds": {
     "cobbles_oval": {
       "anchor": 46,
@@ -28,8 +29,30 @@
       "dim": 55,
       "saturate": 65,
       "opacity": 100
+    },
+    "limestone_irregular": {
+      "anchor": 46,
+      "scale": 100,
+      "dim": 55,
+      "saturate": 65,
+      "opacity": 100
+    },
+    "flagstones_grey": {
+      "anchor": 46,
+      "scale": 100,
+      "dim": 55,
+      "saturate": 65,
+      "opacity": 100
+    },
+    "slate_irregular": {
+      "anchor": 48,
+      "scale": 100,
+      "dim": 55,
+      "saturate": 65,
+      "opacity": 100
     }
   },
   "grounds_note": "All whole-number percentages. `anchor` is where down the plate's own ink the standing line falls -- where the figures' feet belong -- and it is per plate rather than global because it is a property of the picture: measured at the widest row, the oval sits at 46% and the slab at 61%. `scale` is the plate's width as a percentage of the frame's. `dim`, `saturate` and `opacity` tone it down; the plates arrive at full strength and compete with the sculpts until they are brought down.",
-  "angle_note": "The plates and the sculpts do not yet agree about where the camera is. Measured from their plinth ellipses the sculpts sit about 6 degrees above the horizon (minor/major 0.113, spread 0.035 across the four, which is tight enough to be one camera); the oval plate reads near 38 degrees if its outline is taken as a circle in plan. Figures will look pasted onto the ground until one side moves. The sculpts are the side being redrawn."
+  "angle_note": "SETTLED AT 32 DEGREES, and the assignments follow it. Every duty now stands on flagstones_grey (31.5) or limestone_irregular (31.9), the two plates drawn at the board's camera; the sculpts on file measure 32.2, 32.3 and 33.5. Ground and figure are within about a degree and a half of each other, which is inside the scatter of the generator itself.\n\nThe three plates nobody stands on are kept rather than deleted: cobbles_oval reads near 39.8 and flagstones_slab near 27.5 -- both were drawn before the camera was settled, and both are the evidence for what a mismatch looks like. slate_irregular is at 34.2, which is the near miss: one style word ('slate' for 'limestone') moved a plate 4.4 degrees against a within-style scatter near 1.\n\n`default` is flagstones_grey for the same reason. It was cobbles_oval, which no duty stands on any more -- a fallback pointing at the one plate drawn from the wrong camera, waiting for the next duty somebody adds.",
+  "lift_note": "How far the ground sits ABOVE the floor line, in real pixels, positive upward -- the same on all nine tiles. Set with the `lift` slider in the placement sheet's wheel view and drawn by the sow from this value.\n\nIt is not a plate's `anchor` and the two are easy to confuse. Anchor says where down a plate's own ink the standing line falls: a fact about that piece of art, measured from it, and different for every plate. Lift says how far the whole ground sits off the floor line on the tile: a fact about the tile's layout, the same for every plate, and tuned against the parchment underneath. Move a plate up with its anchor and you have told the tool the picture is wrong; move it with the lift and you have told it the board is.\n\nOne number rather than nine because the reason to lift is the banner, and every tile has the same banner geometry. The sheet reports the clearance on the WORST plate in use, not the one under the tile you clicked -- lifting until the tile in front of you is clear while another duty's taller plate still overlaps is the failure this is meant to prevent.\n\nReal pixels, like spread, set-back, rank gap and frame.drop, because the plate is sized in frame space (`scale` is a percentage of the frame's width) and the frame is real pixels. The banner is NOT: it scales with the cell, so the clearance the sheet reports moves with the window while the lift does not."
 }

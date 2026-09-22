@@ -217,8 +217,11 @@ def main():
     if frame:
         print("  frame %d x %d real px, base %d below the floor"
               % (frame["w"], frame["h"], frame.get("drop", 0)))
-    print("  %d ground plate(s), %d duties assigned  (from %s)"
-          % (len(plates), len(plan.get("by_duty") or {}), board.GROUND_PLAN.name))
+    in_use = board.ground_check(plan, plates, notes)
+    print("  %d ground plate(s) in %s, %d duties assigned by %s, standing on: %s"
+          % (len(plates), board.GROUNDS_DIR.name, len(plan.get("by_duty") or {}),
+             board.GROUND_PLAN.name, ", ".join(in_use) or "bare floor only"))
+    print("  ground lifted %d px above the floor line on every tile" % plan.get("lift", 0))
     print("  spread %d, set-back %d, rank gap %d  ·  order %s  ·  mark %s  ·  depth %s %d%%"
           % (place["spread"], place["back"], place["rank"], place["order"], place["mark"],
              place["depth"]["mode"], place["depth"]["amount"]))

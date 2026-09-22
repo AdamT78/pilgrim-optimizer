@@ -2292,15 +2292,53 @@ inside tolerance.
 
 Generating art is cheap and judging it is not. The hard part is not making another sculpt, it is
 knowing which of the eight you just made is the one to keep — and "looks about right" is not a
-judgement that repeats tomorrow. Drop a PNG on the served page and it reports the camera angle,
-the figure's height against its own base, whether it is cut out, and whether five of them fit the
-frame, each against a tolerance you can see and change.
+judgement that repeats tomorrow. Drop a PNG on the served page and it answers, in this order:
+
+**(a) is the angle right** — where the camera stood, read off the base's ellipse.
+**(b) is the base right** — the plinth's own side wall over its own width, which says how chunky
+the base is. A thin base and a chunky one photograph at the same angle and carry the same figure,
+so neither of the other two questions can see this one. Ten nuns measured 0.22 here against ten
+monks at 0.13 — bases two thirds thicker — while agreeing on both the others.
+**(c) is the height right** — the figure's height over that base width.
+
+Then whether it is cut out, whether the edge carries a halo, and whether five of them fit the
+frame. Each has a tolerance you can see and change on the page.
+
+(b) and (c) are both PROJECTED measurements and are corrected before being compared. The wall and
+the figure are vertical, so raising the camera shortens them while leaving the base's width alone:
+the same sculpt measures smaller the higher you look from. Comparing a 32° figure with a 9° one
+uncorrected reads a camera move as a change of shape, which is the precise confusion this tool
+exists to prevent.
 
 `--scan` measures a folder in one pass, because a run of generations answers a different question
 from a single file: not "is this one good" but "is the prompt wrong, or are these files wrong",
 and that only shows up with the spread in front of you. It says so only when the spread shows
 there IS a batch — pointed at a mixed folder it will tell you to read the rows instead, rather
 than announcing that forty-five unrelated images share one bias.
+
+The page opens with the sculpts on file in `ui/assets-gothic/sculpts/`. Each is drawn twice:
+the whole figure with its height bracketed and reported over its own base's width — check (c) —
+and below it a magnified picture of its plinth with the width and the wall marked — check (b).
+Both are captioned with the camera they were measured at. The camera is on the picture because a wall is meaningless without
+it: a wall is a vertical edge, so a higher camera draws it shorter, and 67 px at 32° is a
+different plinth from 67 px at 9°. Two pictures captioned with a width and a wall and nothing
+else would invite precisely the comparison this tool exists to stop anyone making. A band printed as
+figures is a poor thing to hold in your head while looking at a new sculpt, and drawing the two
+measurements on the pixels they were taken from is also the only way to notice them being taken
+from the wrong place.
+
+Below them is a whole tile: five of those sculpts at the spread, rank and frame from
+`duty_placement.json`, with the middle of the front three stepped forward until the top of its
+plinth reaches the floor line. The checks above judge a figure alone; what collides on a tile is
+the plinths, and a plinth is as deep as it is wide times sin(camera) — so raising the camera from
+9° to 32° made every base three times deeper without moving a number in that file, and at the
+set-back of 21 it still holds, the middle plinth overlaps both of the back rank's. Every pair is
+rasterised and intersected rather than judged by eye.
+
+Those figures are **not** the band a newcomer is judged against. That still comes from
+`ui/concept/`, the 9° art being replaced, which is why a correct new sculpt reports a height gap
+against it. The page says so on itself, and there is a test that fails if the two stop being
+distinguished. Recompute the band from the new seats once all four exist.
 
 Two things worth knowing before trusting a number. The angle is exact for a circular plate and
 only approximate for a rectangular one, which the page says on itself. And a file with no
@@ -2310,3 +2348,29 @@ brightness.
 
 The measuring lives in `sculpt_metrics.py`, shared with `make_tray_figures.py` and
 `check_sculpt.py`, so a threshold that moves moves for all three.
+
+## The card a sculpt is generated from
+
+`generate_sculpt_reference.py` draws the diagram attached to the image model when a new acolyte
+is made.
+
+    python3 tools/ui_debug/generate_sculpt_reference.py
+
+A figurine's camera cannot be steered by text. Every photograph of a miniature ever taken is at
+eye level and that prior wins, so sculpts came back at 9 degrees however the brief was worded.
+What works is handing over a picture of the BASE at the wanted ellipse ratio and saying to keep
+it exactly as it is: the base pins the camera and the figure follows the base. Only the base is
+drawn — three attempts at a schematic figure produced two traffic cones and a lampshade, any of
+which the model might have copied — so the card carries the base, the empty room above it marked
+at the figure's height, and nothing else.
+
+The card reads **27 degrees while the target is 32, and that is deliberate**. It was set to 27 to
+correct a measured bias while the target was still 29, and the batches that followed showed the
+ask does not steer the result at all: cards of 30 and 27 produced 32.1 and 31.9. So the target
+moved and the card stayed. Every sculpt in `ui/assets-gothic/sculpts/` came from this card, and
+redrawing it at 32 changes nothing about the output while breaking the one property worth having
+— that the committed art and the committed card agree about how the art was made. The docstring
+says the same thing at more length before anyone edits the number.
+
+The committed PNG lives at `ui/assets-gothic/references/` and is byte-identical to this script's
+output.

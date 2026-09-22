@@ -60,6 +60,7 @@ except ModuleNotFoundError:                                             # pragma
     Image = ImageDraw = None
 
 CONCEPT = ROOT / "ui" / "concept"
+SCULPTS = ROOT / "ui" / "assets-gothic" / "sculpts"
 PLAYERS = ("player_1", "player_2", "player_3", "player_4")
 
 # THE ANGLE THE SET IS BEING REDRAWN TO. A constant rather than a file because exactly one thing
@@ -79,6 +80,11 @@ TOLERANCE_DEGREES = 2.5
 # width, so that ratio IS the levelled height -- a figure generated larger or
 # smaller compares directly with its siblings.
 HEIGHT_TOLERANCE_PCT = 8.0
+# How far a plinth may be chunkier or thinner than the set's, measured as its own side wall over
+# its own width. A separate question from the camera and from the figure's height: a thin base
+# and a chunky one photograph at the same angle and carry the same figure. Wider than the height
+# tolerance because it is a smaller measurement on a shorter edge, and so noisier.
+BASE_TOLERANCE_PCT = 12.0
 
 
 def _board():
@@ -89,6 +95,20 @@ def _board():
     sys.modules["generate_duty_board_check"] = mod
     spec.loader.exec_module(mod)
     return mod
+
+
+def _upright(ratio, degrees):
+    """Any VERTICAL measurement over the base's width, with the camera divided out.
+
+    Height over plinth width and wall over plinth width are both projected: raising the camera
+    shortens the drawn height of anything standing up while leaving the base's width alone, so
+    the same sculpt measures smaller the higher you look from. Both therefore need dividing by
+    cos(theta) before one figure can be compared with another shot from elsewhere.
+    """
+    if ratio is None or degrees is None:
+        return None
+    c = math.cos(math.radians(max(0.0, min(89.0, degrees))))
+    return ratio / c if c > 1e-6 else None
 
 
 def _proportion(h_plinth, degrees):
@@ -121,11 +141,12 @@ def reference_band(kind="sculpt_plastic"):
         g = sm.ground_ellipse(im)
         rows.append({"h_plinth": m["h_plinth"], "wall_ratio": m["wall_ratio"],
                      "degrees": g["degrees"] if g else None,
-                     "proportion": _proportion(m["h_plinth"], g["degrees"] if g else None)})
+                     "proportion": _proportion(m["h_plinth"], g["degrees"] if g else None),
+                     "base_ratio": _upright(m["wall_ratio"], g["degrees"] if g else None)})
     if not rows:
         return None
     out = {}
-    for key in ("h_plinth", "wall_ratio", "degrees", "proportion"):
+    for key in ("h_plinth", "wall_ratio", "degrees", "proportion", "base_ratio"):
         vals = [r[key] for r in rows if r[key] is not None]
         if vals:
             out[key] = {"lo": min(vals), "hi": max(vals),
@@ -158,6 +179,269 @@ def overlay(im, g, kind):
     buf = io.BytesIO()
     back.convert("RGB").save(buf, "WEBP", quality=88, method=6)
     return "data:image/webp;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+def plinth_picture(im, width=340, degrees=None):
+    """The base on its own, magnified, with the two numbers check (b) compares drawn on it.
+
+    The band is printed as figures everywhere else, and a figure is a poor way to hold a shape in
+    your head while looking at a new sculpt. The width is measured across the widest row of the
+    base; the wall is the lit rim down to the bottom of the art, which is what `measure` finds by
+    looking for the brightest row. Drawing both on the actual pixels they were taken from is the
+    only way to see that they were taken from the right place.
+
+    THE CAMERA IS STATED ON THE PICTURE because the wall is meaningless without it. A wall is a
+    vertical edge, so it is drawn shorter the higher the camera sits: 67 px at 32 degrees is a
+    different plinth from 67 px at 9. Two of these pictures side by side, each captioned with its
+    own width and wall and nothing else, would invite exactly the comparison the whole tool
+    exists to stop anyone making.
+    """
+    art = sm.crop_to_art(im)
+    y, w, lo, hi = sm._base_row(art)
+    wall = sm.measure(art)["wall"]
+    H = art.height
+    pad = max(18, int(wall * 0.9))
+    box = (max(0, lo - pad), max(0, H - 1 - int(wall * 2.6) - pad),
+           min(art.width, hi + pad), H)
+    crop = art.crop(box)
+    if crop.width < 4 or crop.height < 4:
+        return None
+    k = width / crop.width
+    big = crop.resize((width, max(1, round(crop.height * k))), Image.LANCZOS).convert("RGBA")
+    back = Image.new("RGBA", (big.width, big.height + 34), (23, 19, 13, 255))
+    back.alpha_composite(big)
+    d = ImageDraw.Draw(back, "RGBA")
+
+    gold, ink = (255, 212, 126, 255), (150, 142, 124, 255)
+    xl, xr = (lo - box[0]) * k, (hi - box[0]) * k
+    yb = (H - 1 - box[1]) * k
+    ytop = (H - 1 - wall - box[1]) * k
+
+    d.line([(xl, yb + 12), (xr, yb + 12)], fill=gold, width=2)          # width, across the base
+    for x in (xl, xr):
+        d.line([(x, yb + 6), (x, yb + 18)], fill=gold, width=2)
+    d.text((max(2, (xl + xr) / 2 - 34), yb + 18), "width %d" % w, fill=gold)
+
+    xw = min(back.width - 3, xr + 10)                                   # wall, down the near side
+    d.line([(xw, ytop), (xw, yb)], fill=gold, width=2)
+    for yy in (ytop, yb):
+        d.line([(xw - 6, yy), (xw + 6, yy)], fill=gold, width=2)
+    d.line([(xl, ytop), (xr, ytop)], fill=ink, width=1)
+    # above the bracket rather than beside it: beside it, the label sat on its own tick marks
+    d.text((max(2, min(back.width - 56, xw - 26)), max(0, ytop - 15)), "wall %d" % wall,
+           fill=gold)
+
+    if degrees is not None:
+        cap = "camera %.1f deg" % degrees
+        up = _upright(wall / float(w), degrees) if w else None
+        if up is not None:
+            # ASCII only: the default bitmap font has no em dash and draws a missing-glyph box
+            cap += "   wall/width %.3f, %.3f upright" % (wall / float(w), up)
+        d.rectangle([0, 0, back.width, 17], fill=(23, 19, 13, 215))
+        d.text((4, 3), cap, fill=(201, 178, 122, 255))
+
+    buf = io.BytesIO()
+    back.convert("RGB").save(buf, "WEBP", quality=90, method=6)
+    return "data:image/webp;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+def figure_picture(im, height=250, degrees=None):
+    """The whole sculpt with check (c) drawn on it: how tall it stands over its own base.
+
+    Height alone is not a number anyone can use -- a figure generated larger or smaller is not a
+    different sculpt -- so what is drawn is the span and what is reported is the span over the
+    base's own width. And that ratio is projected like everything else standing up, so the camera
+    is stated beside it and divided out, exactly as on the plinth below.
+    """
+    art = sm.crop_to_art(im)
+    k = height / art.height
+    fw = max(1, round(art.width * k))
+    big = art.resize((fw, height), Image.LANCZOS).convert("RGBA")
+    gutter = 112
+    back = Image.new("RGBA", (fw + gutter, height + 18), (23, 19, 13, 255))
+    back.alpha_composite(big, (0, 18))
+    d = ImageDraw.Draw(back, "RGBA")
+    gold = (255, 212, 126, 255)
+
+    top, bot = 18, 18 + height - 1
+    x = fw + 14
+    d.line([(x, top), (x, bot)], fill=gold, width=2)
+    for y in (top, bot):
+        d.line([(x - 6, y), (x + 6, y)], fill=gold, width=2)
+
+    m = sm.measure(art)
+    plinth = m["plinth"] or 1
+    d.text((x + 11, top + 4), "height", fill=gold)
+    d.text((x + 11, top + 16), "%d" % art.height, fill=gold)
+    d.text((x + 11, (top + bot) / 2 - 18), "over", fill=(150, 142, 124, 255))
+    d.text((x + 11, (top + bot) / 2 - 6), "base", fill=(150, 142, 124, 255))
+    d.text((x + 11, (top + bot) / 2 + 6), "%d" % plinth, fill=(150, 142, 124, 255))
+    d.text((x + 11, bot - 26), "= %.2f" % m["h_plinth"], fill=gold)
+    if degrees is not None:
+        up = _proportion(m["h_plinth"], degrees)
+        if up is not None:
+            d.text((x + 11, bot - 14), "%.2f upright" % up, fill=gold)
+    cap = "camera %.1f deg" % degrees if degrees is not None else "camera not measured"
+    d.text((4, 3), cap, fill=(201, 178, 122, 255))
+
+    buf = io.BytesIO()
+    back.convert("RGB").save(buf, "WEBP", quality=88, method=6)
+    return "data:image/webp;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+def arrangement_picture(folder=SCULPTS, place=None):
+    """A full tile: five sculpts on a plate, in the formation the placement file describes.
+
+    The two checks above judge a figure ALONE. A set can pass both and still not work on a tile,
+    because what collides there is the plinths, and a plinth's ellipse is as deep as its width
+    times sin(camera). Raising the camera from 9 to 32 degrees made the base three times deeper
+    without moving a single number in duty_placement.json, and the rank gap those numbers were
+    tuned against stopped being enough.
+
+    So this draws the file's own formation and then RASTERISES every plinth and intersects each
+    pair, rather than inviting anyone to judge overlap by eye. Red means a clash. The picture
+    follows the file: change `back` or `rank` there and this follows, which is the point -- it is
+    a check, not a screenshot of one good arrangement.
+    """
+    grounds = ROOT / "ui" / "assets-gothic" / "grounds"
+    place = place or ROOT / "ui" / "assets-gothic" / "metadata" / "duty_placement.json"
+    if not folder.is_dir() or not place.is_file():
+        return None
+    P = json.loads(place.read_text(encoding="utf-8"))
+    frame, spread = P["frame"], P["spread"]
+    back, rank, size = P["back"], P["rank"], P["tuned_at"]
+    # NAMED, not sorted()[0] -- which picked cobbles_oval, the one plate on file still at the
+    # old 39.8 degree camera, and put the new sculpts on a ground drawn from somewhere else.
+    plate_path = grounds / "flagstones_grey.png"
+    if not plate_path.is_file():
+        rest = sorted(grounds.glob("*.png"))
+        plate_path = rest[0] if rest else None
+    files = sorted(folder.glob("*.png"))
+    if plate_path is None or not files:
+        return None
+
+    def trim(im):
+        bb = im.getchannel("A").point(lambda v: 255 if v > 8 else 0).getbbox()
+        return im.crop(bb) if bb else im
+
+    raw = [trim(Image.open(f).convert("RGBA")) for f in files]
+    pw = [sm.plinth_width(f) for f in raw]
+    narrow = min(pw)
+    tall = max(f.height * (narrow / w) for f, w in zip(raw, pw, strict=True))
+    built = []
+    for f, w in zip(raw, pw, strict=True):
+        k = (narrow / w) * size / tall
+        g = sm.ground_ellipse(f)
+        built.append({"im": f.resize((max(1, round(f.width*k)), max(1, round(f.height*k))),
+                                     Image.LANCZOS),
+                      "pw": w * k, "minor": (g["width"] * g["sin_theta"] * k) if g else 0.0})
+
+    W, H, drop = frame["w"], frame["h"], frame["drop"]
+    pad, top = 22, 16
+    card = Image.new("RGBA", (W + 2*pad, H + pad + top + 48), (23, 19, 13, 255))
+    floor = H - drop
+
+    plate = trim(Image.open(plate_path).convert("RGBA"))
+    # the standing line is a property of the picture, so it is measured rather than assumed: the
+    # widest row of the plate's own ink is where a figure's feet belong
+    prows = (np.asarray(plate)[..., 3] > sm.ALPHA).sum(1)
+    anchor = float(prows.argmax()) / max(1, len(prows))
+    ph = max(1, round(plate.height * W / plate.width))
+    pl = np.asarray(plate.resize((W, ph), Image.LANCZOS)).astype(float)
+    rgb, al = pl[..., :3], pl[..., 3:]
+    grey = (0.2126*rgb[..., 0] + 0.7152*rgb[..., 1] + 0.0722*rgb[..., 2])[..., None]
+    pl = Image.fromarray(np.concatenate(
+        [np.clip((grey + (rgb-grey)*0.65)*0.55, 0, 255), al], 2).astype(np.uint8))
+    card.alpha_composite(pl, (pad, int(top + floor - anchor*ph)))
+
+    pick = [i % len(built) for i in (0, 2, 1, 0, 2)]
+    # THE MIDDLE STEPS FORWARD, far enough that the top of its plinth lands on the floor line the
+    # outer two stand on -- minus half its own plinth depth, since y is height above the floor.
+    # The file still says a set-BACK of `back`, and at 21 the middle plinth overlaps both of the
+    # back rank's: a plinth is as deep as it is wide times sin(camera), so raising the camera
+    # from 9 to 32 degrees made every base three times deeper without moving a number in that
+    # file. Stepping forward clears it without growing `field`, which a larger rank gap would.
+    forward = built[pick[3]]["minor"] / 2.0
+    slots = [(-spread/2, rank), (spread/2, rank), (-spread, 0), (0, -forward), (spread, 0)]
+    del back
+    ells = [(W/2 + dx, floor - dy, built[i]["pw"]/2.0, built[i]["minor"]/2.0)
+            for (dx, dy), i in zip(slots, pick, strict=True)]
+
+    masks = []
+    for cx, cy, a, b in ells:
+        m = Image.new("L", card.size, 0)
+        ImageDraw.Draw(m).ellipse([pad+cx-a, top+cy-b, pad+cx+a, top+cy+b], fill=255)
+        masks.append(np.asarray(m) > 0)
+    clash = [(i, j) for i in range(len(masks)) for j in range(i+1, len(masks))
+             if (masks[i] & masks[j]).any()]
+
+    for i in sorted(range(len(slots)), key=lambda k: -slots[k][1]):
+        dx, dy = slots[i]
+        b = built[pick[i]]
+        im = b["im"]
+        if dy:
+            a = np.asarray(im).astype(float)
+            a[..., :3] *= 0.80
+            im = Image.fromarray(np.clip(a, 0, 255).astype(np.uint8))
+        card.alpha_composite(im, (int(pad + W/2 + dx - im.width/2),
+                                  int(top + floor - dy + b["minor"]/2 - im.height)))
+
+    d = ImageDraw.Draw(card, "RGBA")
+    hot = {i for pair in clash for i in pair}
+    for i, (cx, cy, a, b) in enumerate(ells):
+        d.ellipse([pad+cx-a, top+cy-b, pad+cx+a, top+cy+b],
+                  outline=(255, 96, 96, 235) if i in hot else (120, 220, 150, 200), width=2)
+    d.rectangle([pad, top, pad+W, top+H], outline=(255, 212, 126, 200), width=2)
+    xs = [W/2 + dx + s*built[i]["im"].width/2
+          for (dx, _), i in zip(slots, pick, strict=True) for s in (-1, 1)]
+    span = round(max(xs) - min(xs))
+    low = round(max(cy + b for _, cy, _, b in ells) - floor)
+    # THREE SHORT LINES, not one long one: the card is only W + 2*pad wide and a single line ran
+    # off its right edge, which the page happily rendered with the verdict missing.
+    ok = (120, 220, 150, 255)
+    d.text((pad, top + H + 6),
+           "five sculpts, spread %d, middle forward %d, rank %d"
+           % (spread, round(forward), rank),
+           fill=(201, 178, 122, 255))
+    d.text((pad, top + H + 19),
+           "%d of %d px across" % (span, W),
+           fill=ok if span <= W else (255, 120, 120, 255))
+    d.text((pad, top + H + 32),
+           "lowest plinth %d below the floor, frame drop %d" % (low, drop),
+           fill=ok if low <= drop else (255, 120, 120, 255))
+    d.text((pad + 168, top + H + 19),
+           "no plinths overlap" if not clash else "%d plinth clash(es)" % len(clash),
+           fill=ok if not clash else (255, 120, 120, 255))
+    buf = io.BytesIO()
+    card.convert("RGB").save(buf, "WEBP", quality=86, method=6)
+    return {"uri": "data:image/webp;base64," + base64.b64encode(buf.getvalue()).decode("ascii"),
+            "span": span, "frame": W, "clashes": len(clash), "low": low, "drop": drop,
+            "plate": plate_path.stem, "anchor": round(anchor*100)}
+
+
+def on_record(folder=SCULPTS):
+    """The sculpts a newcomer is being judged against, drawn rather than summarised."""
+    out = []
+    if not folder.is_dir():
+        return out
+    for path in sorted(folder.glob("*.png")):
+        try:
+            im = Image.open(path).convert("RGBA")
+            m = sm.measure(im)
+            g = sm.ground_ellipse(im)
+            out.append({"name": path.stem,
+                        "degrees": round(g["degrees"], 1) if g else None,
+                        "base": round(_upright(m["wall_ratio"], g["degrees"]) or 0, 3) if g
+                        else None,
+                        "proportion": round(_proportion(m["h_plinth"], g["degrees"]) or 0, 2) if g
+                        else None,
+                        "figure": figure_picture(
+                            im, degrees=g["degrees"] if g else None),
+                        "plinth": plinth_picture(
+                            im, degrees=g["degrees"] if g else None)})
+        except Exception as exc:                                        # noqa: BLE001
+            print("  could not draw %s: %s" % (path.name, exc))
+    return out
 
 
 def without_background(im):
@@ -195,7 +479,8 @@ def without_background(im):
     return Image.fromarray(out)
 
 
-def judge(raw, target, tol, height_tol=HEIGHT_TOLERANCE_PCT):
+def judge(raw, target, tol, height_tol=HEIGHT_TOLERANCE_PCT,
+          base_tol=BASE_TOLERANCE_PCT):
     """Measure one dropped file and say what is inside tolerance and what is not."""
     im = Image.open(io.BytesIO(raw)).convert("RGBA")
     W, H = im.size
@@ -277,6 +562,25 @@ def judge(raw, target, tol, height_tol=HEIGHT_TOLERANCE_PCT):
                            "ok" if off <= tol else ("check" if off <= tol * 2 else "bad"),
                            "target %.0f, tolerance %.1f" % (target, tol)])
         band = reference_band()
+        deg = g["degrees"] if g else None
+
+        # (b) THE BASE ITSELF, before anything standing on it. Its own side wall over its own
+        # width says how chunky the plinth is, which neither the camera nor the figure's height
+        # can see: a thin base and a chunky one photograph at the same angle and carry the same
+        # figure. Ten nuns measured 0.22 against ten monks at 0.13 -- bases two thirds thicker,
+        # with both batches passing every other check they were given.
+        base = _upright(m["wall_ratio"], deg)
+        if band and "base_ratio" in band and base is not None:
+            b = band["base_ratio"]
+            row["base_ratio"] = round(base, 3)
+            off = 100.0 * (base - b["mid"]) / b["mid"] if b["mid"] else 0.0
+            checks.append(["base height / width", "%+.1f%% of the set" % off,
+                           "ok" if abs(off) <= base_tol
+                           else ("check" if abs(off) <= base_tol * 2 else "bad"),
+                           "wall/width %.3f at %.1f deg is %.3f upright, against a median of "
+                           "%.3f, tolerance %.0f%%"
+                           % (m["wall_ratio"], deg, base, b["mid"], base_tol)])
+
         prop = _proportion(m["h_plinth"], g["degrees"] if g else None)
         if band and "proportion" in band and prop is not None:
             b = band["proportion"]
@@ -356,7 +660,8 @@ def serve(page, port, open_it):
                 target = float(sent.get("target", TARGET_DEGREES))
                 tol = float(sent.get("tolerance", TOLERANCE_DEGREES))
                 htol = float(sent.get("height_tolerance", HEIGHT_TOLERANCE_PCT))
-                result = judge(raw, target, tol, htol)
+                btol = float(sent.get("base_tolerance", BASE_TOLERANCE_PCT))
+                result = judge(raw, target, tol, htol, btol)
             except Exception as exc:                                    # noqa: BLE001
                 print("  could not measure %s: %s" % (sent.get("name", "?"), exc))
                 return self._send(400, json.dumps({"error": str(exc)}))
@@ -474,7 +779,10 @@ def main():
             .replace("__TARGET__", json.dumps(TARGET_DEGREES))
             .replace("__TOL__", json.dumps(TOLERANCE_DEGREES))
             .replace("__HTOL__", json.dumps(HEIGHT_TOLERANCE_PCT))
-            .replace("__BAND__", json.dumps(band)))
+            .replace("__BTOL__", json.dumps(BASE_TOLERANCE_PCT))
+            .replace("__BAND__", json.dumps(band))
+            .replace("__ONRECORD__", json.dumps(on_record()))
+            .replace("__ARRANGE__", json.dumps(arrangement_picture())))
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(page, encoding="utf-8")
     print("wrote %s  (%.0f KB)" % (out, len(page) / 1024))
@@ -487,8 +795,8 @@ def main():
         print("  and %.2f to %.2f height/plinth (median %.2f), the tallest %+.1f%% of it"
               % (b["lo"], b["hi"], b["mid"],
                  100.0 * (b["hi"] - b["mid"]) / b["mid"] if b["mid"] else 0.0))
-    print("  target %.0f deg, tolerance %.1f, height tolerance %.0f%%"
-          % (TARGET_DEGREES, TOLERANCE_DEGREES, HEIGHT_TOLERANCE_PCT))
+    print("  target %.0f deg, tolerance %.1f, height tolerance %.0f%%, base tolerance %.0f%%"
+          % (TARGET_DEGREES, TOLERANCE_DEGREES, HEIGHT_TOLERANCE_PCT, BASE_TOLERANCE_PCT))
     if args.serve is not None:
         serve(out, args.serve, args.open)
     else:
@@ -527,6 +835,22 @@ td.why{color:#403a31}
 .key{color:#403a31;margin-top:10px;line-height:1.7}
 .key i{font-style:normal}
 .k1{color:#ff6060} .k2{color:#78c8ff} .k3{color:#78ff96} .k4{color:#ffd47e}
+#record{padding:4px 18px 14px}
+#record h2{font:11px/1.5 inherit;font-weight:400;color:#5f574a;margin:0 0 8px;max-width:96ch}
+#record h2 b{color:#8b8071;font-weight:400}
+#record .row{display:flex;gap:18px;flex-wrap:wrap}
+#record .one{background:#17130d;border:1px solid #241d13;padding:8px;max-width:366px}
+/* the caption used to set the cell's width -- one long line made the tile cell 528 px and
+   wrapped the row at 1600. It wraps to the picture's width instead. */
+#record .one .num{white-space:normal;max-width:366px}
+#record .one .nm{color:#c9b27a;padding-bottom:4px}
+#record .one .num{color:#5f574a;padding-top:4px}
+#record img{display:block}
+#record .fig{height:250px}
+#record .tileimg{height:476px}
+#record .tile{margin-top:16px}
+#record .tile .cap{color:#5f574a;padding-bottom:6px;max-width:96ch}
+#record .tile .bad{color:#ff8a8a}
 </style>
 <div id=head>Drop a sculpt or a ground plate. It is measured by
 <b>tools/ui_debug/sculpt_metrics.py</b> &#8212; the same code that builds the pieces &#8212;
@@ -535,12 +859,55 @@ and drawn back with the measurement on it.</div>
   <label for=target>target angle</label><input id=target value=__TARGET__>
   <label for=tol>tolerance</label><input id=tol value=__TOL__>
   <label for=htol>height tol %</label><input id=htol value=__HTOL__>
+  <label for=btol>base tol %</label><input id=btol value=__BTOL__>
   <span id=ref class=info></span>
 </div>
+<div id=record></div>
 <div id=drop>drop PNGs here</div>
 <div id=cards></div>
 <script>
 var BAND = __BAND__;
+var ONRECORD = __ONRECORD__;
+var ARRANGE = __ARRANGE__;
+(function(){
+  if (!ONRECORD || !ONRECORD.length) return;
+  var host = document.getElementById("record");
+  var h = ["<h2>The sculpts on file in <b>ui/assets-gothic/sculpts/</b>. Below each figure, the "
+           + "two numbers check (b) compares: the base's own width, and the lit wall above it."
+           + "<br>These are NOT the band a newcomer is judged against &#8212; that still comes "
+           + "from <b>ui/concept/</b>, the 9&#176; art being replaced, which is why a correct new "
+           + "sculpt reports a height gap. Recompute it once the four seats exist."
+           + "<br>The last cell is five of them on a tile, at the spread, rank and frame from "
+           + "<b>duty_placement.json</b>, with the middle of the front three stepped FORWARD "
+           + "until the top of its plinth reaches the floor line &#8212; where that file still "
+           + "says set it back. A plinth is as deep as it is wide times sin(camera), so raising "
+           + "the camera from 9&#176; to 32&#176; made every base three times deeper without "
+           + "moving a number there, and at a set-back of 21 the middle plinth overlaps both of "
+           + "the back rank's. Overlap is rasterised and intersected, not judged by eye.</h2>"
+           + "<div class=row>"];
+  ONRECORD.forEach(function(r){
+    h.push("<div class=one><div class=nm>" + r.name + "</div>");
+    h.push("<img class=fig src='" + r.figure + "' alt=''>");
+    if (r.plinth) h.push("<img src='" + r.plinth + "' alt=''>");
+    h.push("<div class=num>" + (r.degrees == null ? "&#8212;" : r.degrees.toFixed(1) + " deg")
+           + " &#183; base " + (r.base == null ? "&#8212;" : r.base.toFixed(3))
+           + " &#183; height " + (r.proportion == null ? "&#8212;" : r.proportion.toFixed(2))
+           + "</div></div>");
+  });
+  if (ARRANGE) {
+    h.push("<div class=one><div class=nm>five on a tile &#183; " + ARRANGE.plate + "</div>"
+           + "<img class=tileimg src='" + ARRANGE.uri + "' alt=''>"
+           + "<div class=num>" + ARRANGE.span + " of " + ARRANGE.frame + " px across &#183; "
+           + (ARRANGE.clashes ? "<span class=bad>" + ARRANGE.clashes + " plinth clash</span>"
+                              : "no plinths overlap")
+           + (ARRANGE.low > ARRANGE.drop
+              ? " &#183; <span class=bad>front plinth needs " + (ARRANGE.low - ARRANGE.drop)
+                + " px more drop</span>" : "")
+           + "</div></div>");
+  }
+  h.push("</div>");
+  host.innerHTML = h.join("");
+})();
 if (BAND && BAND.degrees)
   document.getElementById("ref").textContent =
     "the set on record sits " + BAND.degrees.lo.toFixed(1) + " to "
@@ -582,7 +949,8 @@ function measure(file){
       body: JSON.stringify({name: file.name, data: reader.result,
                             target: +document.getElementById("target").value,
                             tolerance: +document.getElementById("tol").value,
-                            height_tolerance: +document.getElementById("htol").value})})
+                            height_tolerance: +document.getElementById("htol").value,
+                            base_tolerance: +document.getElementById("btol").value})})
       .then(function(r){ return r.json().then(function(j){ return [r.ok, j]; }); })
       .then(function(pair){ show(file.name, pair[0], pair[1]); })
       .catch(function(e){ show(file.name, false, {error: String(e)}); });

@@ -90,6 +90,15 @@ GROUND = "#17130d"
 # cue twice; they agreed only because they had been copied from each other.
 RULES_JS = HERE / "duty_sculpt_rules.js"
 
+# WHICH KEYS THE BUTTON WRITES, AND INTO WHICH FILE. Handed to the page as well as used here,
+# because the button has two paths -- POST to this generator when served, download when the page
+# was opened as a file -- and they must merge the same keys into the same documents. They did
+# not: the offline path wrote the wire payload under the name of the placement file, a shape
+# that file never has, carrying the ground assignments in a key nothing reads them from.
+PLACEMENT_KEYS = ("spread", "back", "rank", "order", "depth", "frame")
+GROUND_KEYS = ("by_duty", "grounds", "lift")
+
+
 def save_settings(board, sent):
     """Write the tuned numbers back into the placement file.
 
@@ -102,16 +111,17 @@ def save_settings(board, sent):
     """
     current = json.loads(board.PLACEMENT.read_text(encoding="utf-8"))
     merged = dict(current)
+    clean = {}
     for key in ("spread", "back", "rank"):
         if key not in sent:
             raise ValueError("no %s in what the page sent" % key)
         value = sent[key]
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
             raise ValueError("%s is %r, want a non-negative whole number" % (key, value))
-        merged[key] = value
+        clean[key] = value
     if sent.get("order") not in ("grouped", "arrival"):
         raise ValueError("order is %r, want grouped or arrival" % sent.get("order"))
-    merged["order"] = sent["order"]
+    clean["order"] = sent["order"]
     depth = sent.get("depth") or {}
     if depth.get("mode") not in ("haze", "dark", "off"):
         raise ValueError("depth.mode is %r, want haze, dark or off" % depth.get("mode"))
@@ -121,8 +131,8 @@ def save_settings(board, sent):
     if isinstance(depth.get("full_at"), bool) or not isinstance(depth.get("full_at"), int) \
             or depth["full_at"] <= 0:
         raise ValueError("depth.full_at is %r, want a positive whole number" % depth.get("full_at"))
-    merged["depth"] = {"mode": depth["mode"], "amount": depth["amount"],
-                       "full_at": depth["full_at"]}
+    clean["depth"] = {"mode": depth["mode"], "amount": depth["amount"],
+                      "full_at": depth["full_at"]}
     # The frame, when the page is showing the wheel. Same rules the generator reads by, so the
     # button cannot write a file the tool would then refuse to load.
     frame = sent.get("frame")
@@ -134,7 +144,17 @@ def save_settings(board, sent):
         drop = frame.get("drop", 0)
         if isinstance(drop, bool) or not isinstance(drop, int):
             raise ValueError("frame.drop is %r, want a whole number" % drop)
-        merged["frame"] = {"w": frame["w"], "h": frame["h"], "drop": drop}
+        clean["frame"] = {"w": frame["w"], "h": frame["h"], "drop": drop}
+
+    # MERGED THROUGH THE ONE LIST the page is also given, so a key this function learns to
+    # validate but nobody adds to PLACEMENT_KEYS is dropped here loudly rather than written by
+    # one save path and not the other.
+    if set(clean) - set(PLACEMENT_KEYS):
+        raise ValueError("validated %s, which PLACEMENT_KEYS does not name"
+                         % ", ".join(sorted(set(clean) - set(PLACEMENT_KEYS))))
+    for key in PLACEMENT_KEYS:
+        if key in clean:
+            merged[key] = clean[key]
 
     # ---- and the grounds, which live in their own file ---------------------------------------
     # Two files, one button. They are separate files because they are separate decisions with
@@ -162,6 +182,8 @@ def save_grounds(board, sent):
     if board.GROUND_PLAN.is_file():
         current = json.loads(board.GROUND_PLAN.read_text(encoding="utf-8"))
     merged = dict(current)
+    assert set(GROUND_KEYS) == {"by_duty", "grounds", "lift"}, (
+        "GROUND_KEYS names something this function does not write")
 
     by_duty = sent.get("by_duty")
     if by_duty is not None:
@@ -189,6 +211,13 @@ def save_grounds(board, sent):
                 row[key] = value
             clean[name] = row
         merged["grounds"] = clean
+
+    # ONE LIFT FOR ALL NINE TILES. Same range the generator reads by.
+    lift = sent.get("lift")
+    if lift is not None:
+        if isinstance(lift, bool) or not isinstance(lift, int) or not -300 <= lift <= 600:
+            raise ValueError("lift is %r, want a whole number -300-600" % lift)
+        merged["lift"] = lift
 
     # A plate the plan names but the folder no longer holds would draw nothing and say nothing.
     for slug, name in (merged.get("by_duty") or {}).items():
@@ -320,6 +349,16 @@ def main():
                      ("__CELLS__", json.dumps(cells)),
                      ("__PLATES__", json.dumps(plates)),
                      ("__GROUNDPLAN__", json.dumps(plan)),
+                     # The WHOLE placement document, not just the three numbers the sliders
+                     # move, so a page with no server behind it can still hand you the real
+                     # file -- prose and all -- rather than the wire payload under its name.
+                     ("__PLACEMENTDOC__", json.dumps(place)),
+                     ("__SAVEKEYS__", json.dumps({
+                         "placement": list(PLACEMENT_KEYS),
+                         "grounds": list(GROUND_KEYS),
+                         "placement_file": board.PLACEMENT.name,
+                         "grounds_file": board.GROUND_PLAN.name,
+                         "where": str(board._short(board.PLACEMENT.parent))})),
                      ("__FRAME__", json.dumps(place.get(
                          "frame", {"w": 320, "h": 390, "drop": 40}))),
                      ("__BANNERTOP__", json.dumps(board.BANNER_TOP)),
@@ -343,8 +382,15 @@ def main():
     if frame:
         print("  frame %d x %d real px (%.2f:1), base %d below the floor"
               % (frame["w"], frame["h"], frame["w"] / frame["h"], frame.get("drop", 0)))
-    print("  %d ground plate(s) from %s, %d duties assigned"
-          % (len(plates), board.GROUNDS_DIR.name, len(plan.get("by_duty") or {})))
+    in_use = board.ground_check(plan, plates, notes)
+    print("  %d ground plate(s) from %s, %d duties assigned, standing on: %s"
+          % (len(plates), board.GROUNDS_DIR.name, len(plan.get("by_duty") or {}),
+             ", ".join(in_use) or "bare floor only"))
+    print("  ground lifted %d px above the floor line on every tile" % plan.get("lift", 0))
+    if args.serve is None:
+        print("  NOT SERVED -- the save button can only download. Add --serve to write "
+              "%s and %s in place."
+              % (board.PLACEMENT.name, board.GROUND_PLAN.name))
     print("  spread %d, set-back %d, rank gap %d  (from %s, tuned at %s px and used at every "
           "size)" % (place["spread"], place["back"], place["rank"], board.PLACEMENT.name,
                      place.get("tuned_at", "?")))
@@ -427,9 +473,16 @@ body{padding-left:243px}
 #ui button[aria-pressed=true]{background:#c9b27a;border-color:#c9b27a;color:#1a1610}
 #ui input[type=range]{width:100%;accent-color:#c9b27a;background:transparent;margin:0}
 #ui .val{color:#c9b27a;text-align:right}
+/* The lift's readout: what the number MEANS on the tile -- all nine, and whether the plate is
+   still lying across the banner -- rather than the number again. */
+#ui .note{grid-column:1 / -1;color:#5f574a;line-height:1.4;margin:-1px 0 2px 2px}
+#ui .note b{color:#e0705f;font-weight:400}
 #save{border-color:#4a5a3a}
-#saymsg{margin-left:4px}
+/* The offline warning is two or three lines long in a narrow column, and it has to be read
+   rather than glanced at -- that is the whole point of it. */
+#saymsg{margin-left:4px;display:block;line-height:1.45}
 #saymsg.ok{color:#8fae6a} #saymsg.bad{color:#e0705f} #saymsg.busy{color:#5f574a}
+#save.offline{border-color:#7a4a3a;color:#e0a08f}
 </style>
 <svg width=0 height=0 style="position:absolute" aria-hidden=true><defs id=hazedefs></defs></svg>
 <div id=ui>
@@ -463,6 +516,13 @@ body{padding-left:243px}
   <span class=lab>ratio</span><span class=wide id=ratio></span>
 
   <div class=ttl>the ground it stands on</div>
+  <!-- LIFT IS THE ONE GLOBAL CONTROL IN THIS BLOCK and is marked as such, because everything
+       under it acts on the plate beneath the tile you clicked. A slider that silently moved
+       nine tiles while sitting among five that move one is a control you learn twice. -->
+  <span class=lab>lift</span>
+  <input id=glift type=range min=-150 max=400 step=1><span class=val id=gliftv></span>
+  <span class=note id=gliftn></span>
+  <div class=sep></div>
   <span class=lab>plate</span><span class=wide id=gwho></span>
   <span class=lab>anchor</span>
   <input id=ganc type=range min=0 max=100 step=1><span class=val id=gancv></span>
@@ -495,25 +555,24 @@ var SIZE = SIZES.indexOf(210) >= 0 ? 210 : SIZES[SIZES.length - 1], ORDER = __OP
 var SPREAD = RULE.spread, BACK = RULE.back, RANK = RULE.rank;
 var CELLS = __CELLS__, FRAME = __FRAME__, VIEW = "arrangements";
 var PLATES = __PLATES__, PLAN = __GROUNDPLAN__;
+var DOC_PLACEMENT = __PLACEMENTDOC__, SAVE_KEYS = __SAVEKEYS__;
 // Which tile the picker is aimed at. Null until you click one, because a picker with no target
 // would have to guess, and the guess it would make is "all of them".
 var PICKED = null, RESIZING = false;
-var GROUND_DEFAULTS = {anchor: 50, scale: 100, dim: 55, saturate: 65, opacity: 100};
+var GROUND_DEFAULTS = DUTY_GROUND_DEFAULTS;
+// One lift for all nine tiles, real pixels, positive upward. Read from the plan like everything
+// else here, so the page opens where the file left off.
+var LIFT = PLAN.lift || 0;
 
-// A plate that is in the folder but not in the plan is a NEW asset, not a broken one: it draws
-// with the defaults until somebody tunes it. Only a plate the plan names and the folder lacks is
-// a real problem, and that one the page says out loud.
-function groundFor(slug){
-  var name = (PLAN.by_duty || {})[slug];
-  if (name === undefined) name = PLAN["default"] || "";
-  return name;
-}
+// Resolved by the shared rule, so this page and the sow agree about what a duty stands on.
+function groundFor(slug){ return dutyGroundFor(PLAN, slug); }
+// The same rule, plus one thing only this page needs: a plate that arrives on its defaults is
+// REMEMBERED in the plan, because a setting the page invented and did not store would not be in
+// what the save button sends, and the plate would come back untuned every time.
 function settingsFor(name){
   var g = (PLAN.grounds || {})[name];
   if (!g){
-    g = {};
-    for (var k in GROUND_DEFAULTS) g[k] = GROUND_DEFAULTS[k];
-    if (PLATES[name]) g.anchor = PLATES[name].widest;   // the plate's own widest row
+    g = dutyGroundSettings(PLAN, PLATES, name);
     (PLAN.grounds = PLAN.grounds || {})[name] = g;
   }
   return g;
@@ -588,12 +647,17 @@ function drawWheel(){
     // THE GROUND, between the frame and the figures. Its standing line -- the row of the plate
     // the feet belong on -- is put ON the floor line, which is why the anchor is a property of
     // each picture rather than a number shared by all of them.
+    //
+    // LIFT then moves the whole thing off that line, the same distance on every tile. Two
+    // separate ideas kept separate: anchor is where the standing line is IN THE PICTURE, lift is
+    // how far the picture sits above the floor line ON THE TILE. Tuned against the banner, so it
+    // belongs to the board rather than to any one plate.
     var gname = groundFor(C.slug), plate = PLATES[gname];
     if (plate){
       var gs = settingsFor(gname);
       var gw = FRAME.w * gs.scale / 100, gh = gw * plate.h / plate.w;
       h += '<div class=ground style="left:' + px(CELL / 2 - gw / 2) + ';top:'
-         + px(floor - gh * gs.anchor / 100) + ';width:' + px(gw) + ';height:' + px(gh)
+         + px(floor - LIFT - gh * gs.anchor / 100) + ';width:' + px(gw) + ';height:' + px(gh)
          + ';opacity:' + (gs.opacity / 100) + ';filter:brightness(' + (gs.dim / 100)
          + ') saturate(' + (gs.saturate / 100) + ')"><img src="' + plate.uri + '"></div>';
     }
@@ -634,6 +698,7 @@ function drawWheel(){
   });
   drawPicker();
   syncGroundSliders();
+  sayLift(L, floor);
   // The strip's height is only knowable once it is in the document, and it changes the board's
   // budget. One re-measure, guarded, rather than a layout loop.
   var after = pick.hidden ? 0 : pick.getBoundingClientRect().height;
@@ -679,6 +744,44 @@ function drawPicker(){
       draw();                      // which re-syncs the sliders onto whatever is now assigned
     };
   });
+}
+
+// WHAT THE LIFT IS ACTUALLY FOR, said as a number. The lift exists to get the plate off the
+// banner, so the useful readout is not the lift again but how much plate is still lying across
+// the parchment -- which is what changes when the banner changes, and the reason this had to be
+// a slider rather than a constant.
+//
+// Measured on the WORST plate in use, not on the picked one: lifting until the tile in front of
+// you is clear, while another duty's taller plate still overlaps, is the whole failure mode.
+function bannerClear(L, floor){
+  var worst = null, seen = {};
+  for (var i = 0; i < 9; i++){
+    var C = CELLS[i] || {}, name = groundFor(C.slug), plate = PLATES[name];
+    if (!plate || seen[name]) continue;
+    seen[name] = 1;
+    var gs = settingsFor(name);
+    var gw = FRAME.w * gs.scale / 100, gh = gw * plate.h / plate.w;
+    // the plate's own bottom edge, against the top of the parchment below the floor line
+    var gap = (floor + L.gapA) - (floor - LIFT + gh * (1 - gs.anchor / 100));
+    if (worst === null || gap < worst.gap) worst = {gap: gap, name: name};
+  }
+  return worst;
+}
+function sayLift(L, floor){
+  var e = document.getElementById("gliftn");
+  if (!e) return;
+  var w = bannerClear(L, floor);
+  if (!w){ e.innerHTML = "all nine tiles &#183; no plate assigned to measure"; return; }
+  // ROUNDED FIRST, THEN BRANCHED. Branching on the raw gap and printing the rounded one says
+  // "0 px still lies over the banner" for any overlap under half a pixel -- a number that reads
+  // as a contradiction at exactly the setting you are hunting for.
+  var n = Math.round(w.gap / DPR);
+  e.innerHTML = "all nine tiles &#183; "
+    + (n > 0
+        ? "clears the banner by <b style='color:#8fae6a'>" + n + "</b> px on " + w.name
+        : n < 0
+          ? "<b>" + (-n) + "</b> px of " + w.name + " still lies over the banner"
+          : "<b style='color:#8fae6a'>just clear</b> of the banner on " + w.name);
 }
 
 // The ground sliders act on the plate under the CHOSEN tile, or on the default when no tile is
@@ -803,6 +906,10 @@ slider("frd", FRAME.drop, function(v){ FRAME.drop = v; });
  ["gsat", "saturate"], ["gopa", "opacity"]].forEach(function(pair){
   slider(pair[0], 0, function(v){ setGround(pair[1], v); });
 });
+// The lift is not in that list because it is not a per-plate setting: it takes its opening value
+// from the plan rather than from whichever plate happens to be picked, and it is never disabled,
+// because it still means something on a tile standing on bare floor.
+slider("glift", LIFT, function(v){ LIFT = v; });
 syncGroundSliders();
 function showRatio(){
   document.getElementById("ratio").textContent =
@@ -816,29 +923,84 @@ document.getElementById("bshadow").onclick = function(){
 };
 
 // ---- saving --------------------------------------------------------------------------------
-// A page opened as a file: URL cannot write to disk, so the button does the only honest thing
-// there: it hands you the JSON as a download and says why. Served by `--serve` it POSTs and the
-// generator writes the file, merging into what is already there so the prose notes survive.
+// Served by `--serve` the button POSTs and the generator writes both files, merging into what is
+// already there so the prose notes survive.
+//
+// A page opened as a file: URL cannot write to disk. It used to hand you ONE download called
+// duty_placement.json whose contents were the wire payload -- a shape that file never has, with
+// every ground assignment buried in a `grounds` key nothing reads out of it. Dropping it into
+// the repo would have destroyed the placement file and still lost the grounds. Now the offline
+// path builds the two real documents, merging the same keys into the same files the server
+// would, and says plainly that nothing was written.
 function settings(){
   return {spread: SPREAD, back: BACK, rank: RANK, order: ORDER,
           depth: {mode: MODE, amount: SHADE, full_at: FULL_AT},
           frame: {w: FRAME.w, h: FRAME.h, drop: FRAME.drop},
-          grounds: {by_duty: PLAN.by_duty || {}, grounds: PLAN.grounds || {}}};
+          grounds: {by_duty: PLAN.by_duty || {}, grounds: PLAN.grounds || {}, lift: LIFT}};
 }
 function say(msg, cls){
   var e = document.getElementById("saymsg");
   e.textContent = msg; e.className = cls || "";
 }
+function connected(){
+  return location.protocol === "http:" || location.protocol === "https:";
+}
+// The two files as the generator would write them: the tuned keys merged INTO the documents that
+// are on disk, so every line of prose explaining those numbers survives. The key lists come from
+// the generator, so this cannot merge a different set than the server does.
+// WHAT THE TWO FILES LOOKED LIKE WHEN THE PAGE OPENED, frozen. PLAN is mutated as you work --
+// settingsFor() writes a new plate's defaults into it -- so it cannot be its own before-picture.
+var OPENED = {place: JSON.parse(JSON.stringify(DOC_PLACEMENT)),
+              plan: JSON.parse(JSON.stringify(PLAN))};
+
+function documents(){
+  var sent = settings(), k, i, out = [];
+  var place = {};
+  for (k in DOC_PLACEMENT) place[k] = DOC_PLACEMENT[k];
+  for (i = 0; i < SAVE_KEYS.placement.length; i++)
+    place[SAVE_KEYS.placement[i]] = sent[SAVE_KEYS.placement[i]];
+  out.push({name: SAVE_KEYS.placement_file, doc: place,
+            changed: JSON.stringify(place) !== JSON.stringify(OPENED.place)});
+  var plan = {};
+  for (k in PLAN) plan[k] = PLAN[k];
+  for (i = 0; i < SAVE_KEYS.grounds.length; i++)
+    plan[SAVE_KEYS.grounds[i]] = sent.grounds[SAVE_KEYS.grounds[i]];
+  out.push({name: SAVE_KEYS.grounds_file, doc: plan,
+            changed: JSON.stringify(plan) !== JSON.stringify(OPENED.plan)});
+  return out;
+}
 addEventListener("resize", function(){ if (VIEW === "wheel") draw(); });
 document.getElementById("save").onclick = function(){
   var body = JSON.stringify(settings(), null, 2);
-  if (location.protocol !== "http:" && location.protocol !== "https:"){
-    var a = document.createElement("a");
-    a.href = "data:application/json;charset=utf-8," + encodeURIComponent(body);
-    a.download = "duty_placement.json";
-    a.click();
-    say("downloaded -- a file:// page cannot write to the repo. Run with --serve to save in place.",
-        "bad");
+  if (!connected()){
+    // ONLY WHAT ACTUALLY MOVED. Handing over both files every time meant a browser prompt to
+    // allow multiple downloads, a folder with two copies of a document you never touched, and
+    // -- because the browser will not overwrite -- names like "duty_placement (1).json", where
+    // the useful file is the one with the suffix and the stale one keeps the clean name.
+    // Nudging the lift changes one file; the button should hand you one file.
+    var docs = documents().filter(function(d){ return d.changed; });
+    var kept = documents().filter(function(d){ return !d.changed; })
+                          .map(function(d){ return d.name; });
+    if (!docs.length){
+      say("nothing to save -- both files already match what is on disk.", "busy");
+      return;
+    }
+    var names = [];
+    docs.forEach(function(d){
+      var a = document.createElement("a");
+      a.href = "data:application/json;charset=utf-8,"
+             + encodeURIComponent(JSON.stringify(d.doc, null, 2) + "\n");
+      a.download = d.name;
+      a.click();
+      names.push(d.name);
+    });
+    say("NOT saved -- a file:// page cannot write to the repository. Downloaded "
+        + names.join(" and ") + " instead; "
+        + (names.length > 1 ? "they are" : "it is") + " the finished "
+        + (names.length > 1 ? "files" : "file") + ", so copy "
+        + (names.length > 1 ? "them" : "it") + " into " + SAVE_KEYS.where + " to keep this."
+        + (kept.length ? "  " + kept.join(" and ") + " is unchanged, so it was left alone." : "")
+        + "  Re-run with --serve to have the button do it.", "bad");
     return;
   }
   say("saving...", "busy");
@@ -850,6 +1012,17 @@ document.getElementById("save").onclick = function(){
     })
     .catch(function(e){ say("not saved: " + e.message, "bad"); });
 };
+
+// SAID BEFORE THE TUNING, NOT AFTER IT. The page used to mention that a file: URL cannot write
+// to the repository only once the button had been pressed -- at the end of a sitting, in the
+// same small line a success message uses. An hour of assignments went into a download nobody
+// knew was a download. The button now says what it is from the moment the page opens.
+if (!connected()){
+  document.getElementById("save").textContent = "download json";
+  document.getElementById("save").className = "offline";
+  say("not connected to the generator: this page can only DOWNLOAD the two files, not write "
+      + "them. Re-run with --serve to save in place.", "bad");
+}
 
 document.body.classList.add("shadow");
 draw();

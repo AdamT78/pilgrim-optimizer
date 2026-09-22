@@ -381,6 +381,17 @@ def ground_plan(notes):
         if name and name not in grounds:
             raise SystemExit("%s: %s is assigned %r, which has no entry under grounds"
                              % (_short(GROUND_PLAN), slug, name))
+    # ONE LIFT FOR ALL NINE TILES, in real pixels, positive upward. Not per plate, and not the
+    # same thing as a plate's `anchor`: anchor says where in the PICTURE the standing line falls,
+    # which is a fact about that piece of art, while the lift says how far the whole ground sits
+    # off the floor line on every tile at once -- which is a fact about the tile's layout, tuned
+    # against the banner underneath it. Defaulted rather than required, so a plan written before
+    # this existed still loads.
+    lift = data.get("lift", 0)
+    if isinstance(lift, bool) or not isinstance(lift, int) or not -300 <= lift <= 600:
+        raise SystemExit("%s: lift is %r, want a whole number -300-600"
+                         % (_short(GROUND_PLAN), lift))
+    data["lift"] = lift
     return data
 
 
@@ -422,6 +433,38 @@ def ground_art(notes):
     if not art:
         notes.append("no ground plates found under %s" % _short(GROUNDS_DIR))
     return art
+
+
+def ground_check(plan, plates, notes):
+    """Cross the plan against the folder, and say which plates are actually in use.
+
+    `ground_plan` checks the plan against ITSELF -- that every duty is assigned something the
+    plan also tunes -- and `ground_art` discovers whatever PNGs happen to exist. Neither asks the
+    question that bites: does the plate this duty is assigned have a PICTURE? A name with no art
+    draws nothing and says nothing, which on screen is indistinguishable from a duty nobody has
+    assigned yet.
+
+    Returns the plate names in use, so every page that draws grounds prints the same line rather
+    than each summarising the same two files its own way.
+    """
+    by_duty = plan.get("by_duty") or {}
+    in_use, missing = [], []
+    for slug in SLUGS:
+        name = by_duty.get(slug, plan.get("default") or "")
+        if not name:
+            continue
+        if name not in plates:
+            missing.append((slug, name))
+        elif name not in in_use:
+            in_use.append(name)
+    for slug, name in missing:
+        notes.append("%s is assigned %r, which has no art in %s -- that tile draws a bare floor"
+                     % (slug, name, _short(GROUNDS_DIR)))
+    spare = sorted(n for n in plates if n not in in_use)
+    if spare:
+        notes.append("%d plate(s) in %s that no duty stands on: %s"
+                     % (len(spare), GROUNDS_DIR.name, ", ".join(spare)))
+    return sorted(in_use)
 
 
 def figures(fig_dir, notes):

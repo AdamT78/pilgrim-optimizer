@@ -897,6 +897,369 @@ def test_the_sheet_can_pick_a_ground(sheet):
         "the plates or the plan are hardcoded rather than read")
 
 
+# ---------------------------------------------------------------- the button that did not save
+
+def test_the_offline_button_downloads_both_real_files(sheet):
+    """THE BUG THIS PAIR EXISTS FOR.
+
+    Opened as a file:// page -- which is what the generator does without --serve -- the save
+    button could not POST, so it fell back to a download. It downloaded ONE file, named
+    duty_placement.json, whose contents were the wire payload: spread/back/rank at the top and
+    every ground assignment nested under a `grounds` key. That is not the shape of the placement
+    file. Dropped into the repository it would have replaced a document full of explanatory prose
+    with a payload, and STILL lost every ground, because nothing reads grounds out of that file.
+
+    An afternoon of assignments went into ~/Downloads and looked, from the panel, like a save.
+
+    So: the offline path must build BOTH documents, name them after the files they are, and never
+    hand out the wire payload under a real filename.
+    """
+    src = sheet.TEMPLATE
+    save = src[src.index("document.getElementById(\"save\").onclick"):]
+    save = save[:save.index("\n};")]
+    assert "documents()" in save, "the offline path does not build the real documents"
+    assert "a.download = d.name" in save, "the download is not named after the document it is"
+    assert '"duty_placement.json"' not in save and "'duty_placement.json'" not in save, (
+        "a filename is hardcoded in the save path -- that is how the payload got that name")
+    # and the payload must never be what gets downloaded
+    offline = save[save.index("if (!connected())"):save.index("say(\"saving")]
+    assert "encodeURIComponent(body)" not in offline, (
+        "the offline path still downloads the wire payload")
+    assert "JSON.stringify(d.doc" in offline, "the download is not a document"
+
+
+def test_the_offline_button_downloads_only_what_moved(sheet):
+    """Nudging one slider changed one file and handed over two.
+
+    The browser then asks permission to download multiple files, and -- because it will not
+    overwrite -- the second copy lands as "duty_placement (1).json", which leaves the USEFUL
+    file wearing the suffix while whatever stale thing was already there keeps the clean name.
+    So the offline path compares each document against what the page opened with and hands over
+    only the ones that moved.
+
+    The before-picture has to be frozen at load: PLAN is mutated while you work, because
+    settingsFor() writes a new plate's defaults into it, so it cannot be its own baseline.
+    """
+    src = sheet.TEMPLATE
+    assert "var OPENED = " in src, "nothing records what the two files looked like on opening"
+    opened = src[src.index("var OPENED = "):]
+    opened = opened[:opened.index(";\n")]
+    assert "JSON.parse(JSON.stringify(PLAN))" in opened, (
+        "the baseline aliases PLAN, which is mutated as you work -- it could never differ")
+    docs = src[src.index("function documents()"):]
+    docs = docs[:docs.index("\n}")]
+    assert docs.count("changed:") == 2, "not every document is compared against its baseline"
+    save = src[src.index('document.getElementById("save").onclick'):]
+    save = save[:save.index("\n};")]
+    assert "return d.changed; }" in save, "the offline path downloads regardless of what moved"
+    assert "nothing to save" in save, "pressing save with nothing changed still downloads"
+
+
+def test_the_two_save_paths_merge_the_same_keys(sheet):
+    """The served save and the offline download are two pieces of code writing two files.
+
+    They agreed by coincidence until they did not. The generator now owns ONE list of keys per
+    file and hands it to the page, so the page cannot merge a different set -- there is no second
+    list to drift from. This test is the guard on that arrangement, not on the lists themselves.
+    """
+    src = sheet.TEMPLATE
+    assert "SAVE_KEYS = __SAVEKEYS__" in src, "the page was not given the key lists"
+    assert "DOC_PLACEMENT = __PLACEMENTDOC__" in src, (
+        "the page has no copy of the placement document to merge into, so it cannot build it")
+    docs = src[src.index("function documents()"):]
+    docs = docs[:docs.index("\n}")]
+    for key in ("SAVE_KEYS.placement[i]", "SAVE_KEYS.grounds[i]",
+                "SAVE_KEYS.placement_file", "SAVE_KEYS.grounds_file"):
+        assert key in docs, "documents() does not go through %s" % key
+    for literal in ("spread", "back", "rank", "by_duty"):
+        assert '"%s"' % literal not in docs, (
+            "documents() names %r itself instead of taking the generator's list" % literal)
+
+
+def test_the_generator_hands_the_page_the_keys_it_merges_by(sheet, mod, tmp_path, monkeypatch):
+    """Proved by writing the page and reading back what it was given, not by reading the source.
+
+    The lists must be the ones save_settings and save_grounds actually merge by; a page handed a
+    stale copy is the same bug wearing the fix.
+    """
+    board = sheet._board_module()
+    if not any((board.FIGURE_DIR / ("figure_player_1_%d.png" % s)).is_file()
+               for s in board.FIGURE_SIZES):
+        pytest.skip("no rendered sculpts; run make_tray_figures.py")
+    out = tmp_path / "placement_sheet.html"
+    monkeypatch.setattr(sys, "argv",
+                        ["generate_placement_sheet.py", "--no-open", "--out", str(out)])
+    sheet.main()
+    page = out.read_text(encoding="utf-8")
+    m = re.search(r"SAVE_KEYS = (\{.*?\});", page, re.S)
+    assert m, "the key lists never reached the page"
+    keys = json.loads(m.group(1))
+    assert tuple(keys["placement"]) == sheet.PLACEMENT_KEYS
+    assert tuple(keys["grounds"]) == sheet.GROUND_KEYS
+    assert keys["placement_file"] == mod.PLACEMENT.name
+    assert keys["grounds_file"] == mod.GROUND_PLAN.name
+
+    # the whole placement document, not the three numbers the sliders move
+    d = re.search(r"DOC_PLACEMENT = (\{.*?\}), SAVE_KEYS", page, re.S)
+    assert d, "the placement document never reached the page"
+    doc = json.loads(d.group(1))
+    on_disk = json.loads(mod.PLACEMENT.read_text(encoding="utf-8"))
+    assert set(doc) == set(on_disk), (
+        "the page was given a trimmed placement document, so its download would lose "
+        "%s" % sorted(set(on_disk) - set(doc)))
+
+
+def test_save_settings_writes_exactly_the_keys_it_advertises(sheet, mod, tmp_path, monkeypatch):
+    """Whatever PLACEMENT_KEYS names, a save must move -- and nothing outside it may move.
+
+    The page merges by that list offline. A key this function quietly validated but left out of
+    the list would be saved when served and lost when not, which is precisely the failure that
+    started this.
+    """
+    board = sheet._board_module()
+    path = tmp_path / "duty_placement.json"
+    original = json.loads(mod.PLACEMENT.read_text(encoding="utf-8"))
+    path.write_text(json.dumps(original), encoding="utf-8")
+    monkeypatch.setattr(board, "PLACEMENT", path)
+    sent = {"spread": 97, "back": 13, "rank": 41, "order": "arrival",
+            "depth": {"mode": "dark", "amount": 33, "full_at": 44},
+            "frame": {"w": 301, "h": 402, "drop": -7}}
+    saved = sheet.save_settings(board, sent)
+    moved = {k for k in saved if saved[k] != original.get(k)}
+    assert moved <= set(sheet.PLACEMENT_KEYS), (
+        "%s moved but is not named by PLACEMENT_KEYS" % sorted(moved - set(sheet.PLACEMENT_KEYS)))
+    assert moved == set(sheet.PLACEMENT_KEYS), (
+        "%s is named by PLACEMENT_KEYS but a save does not move it"
+        % sorted(set(sheet.PLACEMENT_KEYS) - moved))
+    assert "tuned_at" in saved, "the prose and the untouched keys were thrown away"
+
+
+def test_the_page_says_it_cannot_save_before_the_tuning_not_after(sheet):
+    """The old page mentioned that a file:// URL cannot write only once the button was pressed --
+    at the end of a sitting, in the one small line a success message also uses. That is too late
+    to be a warning; it is a bereavement notice. It has to be on screen from the start."""
+    src = sheet.TEMPLATE
+    opening = src[src.index("document.body.classList.add(\"shadow\")") - 900:
+                  src.index("document.body.classList.add(\"shadow\")")]
+    assert "connected()" in opening, "nothing checks on load whether the page can save"
+    assert "download json" in opening, (
+        "the button still says 'save to json' on a page that cannot save")
+
+
+def test_one_rule_decides_what_a_duty_stands_on(sheet, mod):
+    """The sheet assigns a ground; the sow plays on it. They must draw the same picture.
+
+    Each had its own resolver, with its own fallback for a plate nobody had tuned. Two spellings
+    of one rule is how you assign a ground in one page and get a different one in the other.
+    """
+    rules = (pathlib.Path(mod.__file__).parent / "duty_sculpt_rules.js").read_text(
+        encoding="utf-8")
+    for fn in ("function dutyGroundFor", "function dutyGroundSettings"):
+        assert fn in rules, "%s is not in the shared file" % fn
+    sow_tmpl = (pathlib.Path(mod.__file__).parent / "duty_sow.html.tmpl").read_text(
+        encoding="utf-8")
+    for page, src in (("the placement sheet", sheet.TEMPLATE), ("the sow", sow_tmpl)):
+        assert "dutyGroundFor(PLAN" in src, "%s resolves the ground itself" % page
+        assert "dutyGroundSettings(PLAN" in src, "%s has its own tuning fallback" % page
+        assert 'PLAN["default"]' not in src, (
+            "%s still unpacks the plan by hand, so the rule lives in two places" % page)
+
+
+def test_bare_floor_survives_the_shared_rule(sheet, mod):
+    """An unassigned duty falls back to the plan's default. A duty assigned the empty string has
+    been DECIDED -- bare floor -- and must stay bare. Collapsing the two makes that choice
+    unsaveable, which is not a subtle failure: the picker's first button stops working."""
+    rules = (pathlib.Path(mod.__file__).parent / "duty_sculpt_rules.js").read_text(
+        encoding="utf-8")
+    body = rules[rules.index("function dutyGroundFor"):]
+    body = body[:body.index("\n}")]
+    assert "=== undefined" in body, (
+        "dutyGroundFor tests the name for truthiness, so bare floor becomes the default")
+
+
+def test_a_ground_with_no_picture_is_named_out_loud(mod):
+    """A duty assigned a plate the folder does not hold draws nothing and says nothing, which on
+    screen is the same as a duty nobody has assigned. ground_plan cannot catch it -- it checks
+    the plan against itself -- and ground_art cannot, because it only knows what exists."""
+    notes = []
+    plan = {"default": "", "by_duty": {s: "ghost_plate" for s in mod.SLUGS}, "grounds": {}}
+    in_use = mod.ground_check(plan, {"cobbles_oval": {"widest": 46}}, notes)
+    assert in_use == [], "a plate with no art was reported as in use"
+    assert any("ghost_plate" in n and "no art" in n for n in notes), (
+        "an assigned plate with no picture passed without a word: %r" % notes)
+    # and the other direction: art nobody stands on is worth saying once, not nine times
+    notes = []
+    plan = {"default": "cobbles_oval", "by_duty": {}, "grounds": {}}
+    in_use = mod.ground_check(plan, {"cobbles_oval": {"widest": 46},
+                                     "spare_plate": {"widest": 50}}, notes)
+    assert in_use == ["cobbles_oval"]
+    assert sum("spare_plate" in n for n in notes) == 1, notes
+
+
+def test_the_sow_names_every_plate_it_stands_a_duty_on(sow, mod, tmp_path, monkeypatch):
+    """Asked for directly: the sow must take its grounds from duty_grounds.json, all of them.
+
+    It did read the file -- but the file had never changed, because the save button was dropping
+    the assignments. The terminal line now names what was actually resolved, so the next time the
+    two disagree you can see it without opening the page.
+    """
+    board = sow._board_module()
+    if not any((board.FIGURE_DIR / ("figure_player_1_%d.png" % s)).is_file()
+               for s in board.FIGURE_SIZES):
+        pytest.skip("no rendered sculpts; run make_tray_figures.py")
+
+    plan = json.loads(mod.GROUND_PLAN.read_text(encoding="utf-8"))
+    names = sorted(p.stem for p in mod.GROUNDS_DIR.glob("*.png"))
+    assert len(names) >= 2, "need at least two plates on file to tell them apart"
+    # every duty on a DIFFERENT plate than the file ships, so a page reading a stale copy shows
+    plan["by_duty"] = {slug: names[i % len(names)] for i, slug in enumerate(mod.SLUGS)}
+    plan["grounds"] = {n: {"anchor": 50, "scale": 100, "dim": 55, "saturate": 65, "opacity": 100}
+                       for n in names}
+    doctored = tmp_path / "duty_grounds.json"
+    doctored.write_text(json.dumps(plan), encoding="utf-8")
+    monkeypatch.setattr(board, "GROUND_PLAN", doctored)
+    monkeypatch.setattr(sow, "_board_module", lambda: board)
+    out = tmp_path / "duty_sow.html"
+    monkeypatch.setattr(sys, "argv", ["generate_duty_sow.py", "--no-open", "--out", str(out)])
+    sow.main()
+
+    page = out.read_text(encoding="utf-8")
+    for name in set(plan["by_duty"].values()):
+        assert '"%s"' % name in page, "%s is assigned but never reached the page" % name
+
+
+# ---------------------------------------------------------------- lifting the ground off the banner
+
+def test_the_lift_is_one_number_for_all_nine_tiles(sheet, mod, tmp_path, monkeypatch):
+    """The plate is drawn centred on the floor line, which puts its lower half across the
+    parchment. The lift moves the whole ground up, the same distance on every tile, so the
+    banner can be cleared -- and re-cleared when the banner art changes.
+
+    Saved and validated like the rest of the plan, because a lift you cannot keep is a lift you
+    set again every time you open the page.
+    """
+    board = sheet._board_module()
+    path = tmp_path / "duty_grounds.json"
+    path.write_text(mod.GROUND_PLAN.read_text(encoding="utf-8"), encoding="utf-8")
+    monkeypatch.setattr(board, "GROUND_PLAN", path)
+    saved = sheet.save_grounds(board, {"by_duty": {}, "grounds": {}, "lift": 137})
+    assert saved["lift"] == 137
+    assert "note" in saved and "angle_note" in saved, "the prose was thrown away"
+    # named by the one list the offline download merges by, or it saves served and not otherwise
+    assert "lift" in sheet.GROUND_KEYS, "a saved key the page is not told to merge"
+    # and the generator accepts what the button wrote
+    monkeypatch.setattr(mod, "GROUND_PLAN", path)
+    assert mod.ground_plan([])["lift"] == 137
+    for bad in (7.5, "20", True, 900, -400):
+        with pytest.raises(ValueError):
+            sheet.save_grounds(board, {"by_duty": {}, "grounds": {}, "lift": bad})
+
+
+def test_a_plan_written_before_the_lift_existed_still_loads(mod, tmp_path, monkeypatch):
+    """Every duty_grounds.json on anyone's disk predates this key. Defaulted, not required."""
+    plan = json.loads(mod.GROUND_PLAN.read_text(encoding="utf-8"))
+    plan.pop("lift", None)
+    path = tmp_path / "duty_grounds.json"
+    path.write_text(json.dumps(plan), encoding="utf-8")
+    monkeypatch.setattr(mod, "GROUND_PLAN", path)
+    assert mod.ground_plan([])["lift"] == 0, "a plan with no lift did not default to flat"
+
+
+def test_the_lift_is_in_the_expression_that_places_the_plate(sheet, mod):
+    """THAT THE DRAWING USES IT -- which is not what rendering the page twice proves.
+
+    The first version of this rendered each page at two lifts and asserted the pages differed
+    and that '"lift": 211' was in the output. Deleting LIFT from the sheet's positioning
+    expression left every one of those assertions true: the plan is embedded whole, so the
+    number is in the page whether or not anything draws with it, and `var LIFT = PLAN.lift`
+    still matched a search for "LIFT". The test passed on code that ignored the slider.
+
+    So the assertion has to be on the expression that puts the plate somewhere, and nothing
+    else. Falsified by removing LIFT from exactly that expression in each page.
+    """
+    here = pathlib.Path(mod.__file__).parent
+    for page, src, marker in (
+            ("the placement sheet", sheet.TEMPLATE, "<div class=ground"),
+            ("the sow", (here / "duty_sow.html.tmpl").read_text(encoding="utf-8"),
+             "<div class=plate")):
+        at = src.index(marker)
+        where = src[at:at + 400]
+        assert "';top:'" in where, "%s: the plate emit does not set a top" % page
+        top = where[where.index("';top:'"):]
+        top = top[:top.index("';width:'")]
+        assert "LIFT" in top, (
+            "%s positions the plate without the lift, so the slider moves nothing: %s"
+            % (page, top.strip()))
+        assert "anchor" in top, "%s stopped using the plate's own anchor" % page
+
+
+def test_the_lift_reaches_both_pages(sheet, sow, mod, tmp_path, monkeypatch):
+    """The generators must carry the key through to the page at all -- a separate claim from
+    the one above, and the one that catches a generator trimming the plan on its way out."""
+    board = sheet._board_module()
+    if not any((board.FIGURE_DIR / ("figure_player_1_%d.png" % s)).is_file()
+               for s in board.FIGURE_SIZES):
+        pytest.skip("no rendered sculpts; run make_tray_figures.py")
+    plan = json.loads(mod.GROUND_PLAN.read_text(encoding="utf-8"))
+    path = tmp_path / "duty_grounds.json"
+    monkeypatch.setattr(board, "GROUND_PLAN", path)
+    # BOTH generators have to be pointed at the patched board. The sow caches its board module
+    # and the sheet does not, so patching the object alone leaves sheet.main() re-executing
+    # generate_duty_board_check and reading the real file -- which is how this test first
+    # "proved" the lift was ignored when it was only looking at the wrong plan.
+    monkeypatch.setattr(sow, "_board_module", lambda: board)
+    monkeypatch.setattr(sheet, "_board_module", lambda: board)
+
+    for page_name, module, argv0 in (("placement sheet", sheet, "generate_placement_sheet.py"),
+                                     ("sow", sow, "generate_duty_sow.py")):
+        drawn = {}
+        for lift in (0, 211):
+            plan["lift"] = lift
+            path.write_text(json.dumps(plan), encoding="utf-8")
+            out = tmp_path / ("%d_%s.html" % (lift, argv0))
+            monkeypatch.setattr(sys, "argv", [argv0, "--no-open", "--out", str(out)])
+            module.main()
+            drawn[lift] = out.read_text(encoding="utf-8")
+        assert '"lift": 211' in drawn[211], "%s never received the lift" % page_name
+        assert '"lift": 0' in drawn[0], "%s never received the lift" % page_name
+
+
+def test_the_lift_is_not_a_sixth_per_plate_slider(sheet):
+    """It sits among five sliders that act on one plate, so it has to be unmistakably different.
+
+    It must not be wired through setGround (which writes into the picked plate's settings), must
+    not be disabled when a tile stands on bare floor, and must say on the page that it moves all
+    nine.
+    """
+    src = sheet.TEMPLATE
+    assert "id=glift type=range" in src, "there is no lift slider"
+    wiring = src[src.index('slider("glift"'):]
+    wiring = wiring[:wiring.index("\n")]
+    assert "setGround" not in wiring, (
+        "the lift is wired through setGround, so it writes into one plate's settings")
+    sync = src[src.index("function syncGroundSliders"):]
+    sync = sync[:sync.index("\n}")]
+    assert "glift" not in sync, (
+        "syncGroundSliders touches the lift, so picking a plate will overwrite it")
+    assert "all nine tiles" in src, "the panel does not say the lift moves every tile"
+
+
+def test_the_lift_readout_measures_the_worst_plate_not_the_picked_one(sheet):
+    """The number worth showing is how much plate still lies over the banner -- that is what the
+    lift is for, and what moves when the banner art changes.
+
+    Measured across every plate in use. Reporting the picked tile's clearance would let you lift
+    until the tile in front of you is clear while a taller plate on another duty still overlaps,
+    which is the exact mistake the readout exists to catch.
+    """
+    src = sheet.TEMPLATE
+    body = src[src.index("function bannerClear"):src.index("function sayLift")]
+    assert "for (var i = 0; i < 9; i++)" in body, "the clearance is not measured across the tiles"
+    assert "PICKED" not in body, "the clearance is measured on the picked tile"
+    assert "gap < worst.gap" in body, "it does not keep the worst plate"
+    assert "L.gapA" in body, "the clearance is not measured against the banner"
+
+
 # ---------------------------------------------------------------- judging a new asset
 
 
@@ -1268,3 +1631,260 @@ def test_the_target_angle_is_the_one_the_generator_actually_reaches(checker):
     landed at 32.1 and 31.9. The plates converge on the same place unprompted. A target the
     generator cannot be moved to is a target that fails honest art on both sides of the board."""
     assert checker.TARGET_DEGREES == 32.0
+
+
+def _plinth(width, degrees, wall, pad=40, stem=500):
+    """A disc with a LIT RIM, because that is what the wall measurement actually looks for.
+
+    `measure` scans up from the bottom of the art for the brightest row in a central strip and
+    calls that the top of the wall -- a real sculpt's rounded rim catches the light there. The
+    flat-filled disc used elsewhere in this file has no such row, so it reported the same wall
+    whatever was drawn, and any test built on it would have proved nothing.
+    """
+    import math
+
+    from PIL import Image, ImageDraw
+    minor = width*math.sin(math.radians(degrees))
+    im = Image.new("RGBA", (width+2*pad, int(minor+wall+2*pad)+stem), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    top = pad+stem
+    d.rectangle([pad+width*0.3, pad, pad+width*0.7, top+wall], fill=(140, 140, 140, 255))
+    d.ellipse([pad, top, pad+width, top+minor], fill=(120, 120, 120, 255))
+    d.rectangle([pad, top+minor/2, pad+width, top+minor/2+wall], fill=(90, 90, 90, 255))
+    d.ellipse([pad, top+wall, pad+width, top+minor+wall], fill=(90, 90, 90, 255))
+    d.ellipse([pad, top+minor-3, pad+width, top+minor+3], fill=(250, 250, 250, 255))
+    return im
+
+
+def _named(checker, raw, **kw):
+    return {c[0]: (c[1], c[2]) for c in checker.judge(raw, 32.0, 2.5, **kw)["checks"]}
+
+
+def _png(im):
+    import io
+    buf = io.BytesIO()
+    im.save(buf, "PNG")
+    return buf.getvalue()
+
+
+def test_the_plinth_fixture_is_readable_by_the_measurement(metrics):
+    """The guard on the guards. Every base test below varies the drawn wall, so if the measured
+    wall does not follow it they all pass against a constant and mean nothing."""
+    seen = [metrics.measure(_plinth(240, 32, w))["wall"] for w in (40, 60, 90)]
+    assert seen == sorted(seen), "measured wall does not rise with the drawn wall: %s" % seen
+    for drawn, got in zip((40, 60, 90), seen, strict=True):
+        assert abs(got - drawn) <= 6, "drew a %d px wall and measured %d" % (drawn, got)
+
+
+def test_a_sculpt_is_judged_on_angle_then_base_then_height(checker):
+    """Three questions, asked in that order, because they fail independently.
+
+    The camera says where you stood. The base says how chunky the plinth is. The height says how
+    tall the figure stands above it. A set can agree on any two and disagree on the third: ten
+    nuns and ten monks shared a camera and a height and differed by two thirds on their bases.
+    """
+    order = [c[0] for c in checker.judge(_png(_plinth(240, 32, 40)), 32.0, 2.5)["checks"]]
+    for name in ("camera angle", "base height / width", "height"):
+        assert name in order, "%s is not among the sculpt checks" % name
+    assert (order.index("camera angle") < order.index("base height / width")
+            < order.index("height")), "the three questions are not asked in order: %s" % order
+
+
+def test_the_base_check_sees_what_the_other_two_cannot(checker):
+    """A plinth drawn twice as thick at the same camera. The angle does not move; the base
+    measurement moves enormously. That gap is the whole reason the check exists -- without it a
+    batch whose bases are two thirds too thick passes every question it is asked.
+
+    Note the walls: below about 45 px the base band clips into the wall and the ANGLE starts
+    moving too, which would make this a test of two things at once rather than of one.
+    """
+    band = checker.reference_band()
+    if not band or "base_ratio" not in band:
+        pytest.skip("no set on record to compare a base against")
+    thin = _named(checker, _png(_plinth(240, 32, 45)))
+    thick = _named(checker, _png(_plinth(240, 32, 90)))
+    # NOT a skip: with a band on record the row has to be there. Skipping when it is missing is
+    # how a renamed or deleted check goes green instead of red.
+    assert "base height / width" in thin, "the base check is not being reported at all"
+    assert thin["camera angle"][:2] == thick["camera angle"][:2], (
+        "the camera moved too, so this is not an isolated change of base: %s against %s"
+        % (thin["camera angle"], thick["camera angle"]))
+
+    def pct(row):
+        return float(row[0].split("%")[0])
+
+    assert pct(thick["base height / width"]) - pct(thin["base height / width"]) > 50.0, (
+        "doubling the plinth's thickness barely moved the base reading: %s against %s"
+        % (thin["base height / width"][0], thick["base height / width"][0]))
+
+
+def test_the_base_verdict_moves_with_its_own_tolerance(checker):
+    """Its own tolerance and not the height's: a smaller measurement on a shorter edge is
+    noisier and wants a wider bar, and sharing one would hide that."""
+    band = checker.reference_band()
+    if not band or "base_ratio" not in band:
+        pytest.skip("no set on record to compare a base against")
+    raw = _png(_plinth(240, 32, 60))
+    assert "base height / width" in _named(checker, raw), (
+        "the base check is not being reported at all")
+    loose = _named(checker, raw, base_tol=200.0)["base height / width"][1]
+    tight = _named(checker, raw, base_tol=4.0)["base height / width"][1]
+    assert loose == "ok" and tight == "bad", (
+        "the base tolerance did not change the verdict: %s then %s" % (loose, tight))
+
+
+def test_the_base_measurement_divides_the_camera_out(checker):
+    """wall over width is projected exactly as height over width is: the wall is a vertical edge,
+    so raising the camera shortens it while leaving the base's width alone. Comparing a 32 degree
+    plinth against a 9 degree one uncorrected reads a camera move as a thicker base."""
+    import math
+    for deg in (9.0, 32.0, 45.0):
+        assert abs(checker._upright(0.14*math.cos(math.radians(deg)), deg) - 0.14) < 1e-9, (
+            "the camera was not divided out of the base ratio at %.0f degrees" % deg)
+    gap = 0.14*math.cos(math.radians(9.0)) - 0.14*math.cos(math.radians(32.0))
+    assert gap > 0.01, "the uncorrected numbers barely differ, so correcting proves nothing"
+
+
+def test_the_page_shows_the_sculpts_on_file_with_their_plinths(checker):
+    """The band is printed as figures everywhere else, and a figure is a poor way to hold a shape
+    in your head while judging a new one. Each sculpt on file is drawn with the two numbers check
+    (b) compares marked on the pixels they were taken from -- which is also the only way to catch
+    the measurement being taken from the wrong place."""
+    rows = checker.on_record()
+    if not rows:
+        pytest.skip("no sculpts on file yet")
+    for r in rows:
+        assert r["plinth"], "%s has no plinth picture" % r["name"]
+        assert r["plinth"].startswith("data:image/"), "the plinth picture is not embedded"
+        assert r["figure"], "%s has no figure picture" % r["name"]
+        assert r["degrees"] and r["base"] and r["proportion"], (
+            "%s was drawn but not measured" % r["name"])
+
+
+def test_the_page_does_not_call_two_different_sets_the_set_on_record(checker):
+    """The panel draws ui/assets-gothic/sculpts/ at 32 degrees while the band that actually
+    judges a newcomer still comes from ui/concept/ at 9. Calling both 'the set on record' on one
+    page is how someone reads the wrong number off the screen."""
+    src = (ROOT / "tools" / "ui_debug" / "generate_asset_check.py").read_text(encoding="utf-8")
+    panel = src.split('id="record"')[-1] if 'id="record"' in src else src
+    assert "ui/assets-gothic/sculpts/" in src, "the panel does not say where its figures came from"
+    assert "NOT the band" in src, "the panel does not distinguish itself from the judging band"
+    del panel
+
+
+def test_the_plinth_picture_states_the_camera_it_was_measured_at(checker, metrics):
+    """A wall is a vertical edge, so a higher camera draws it shorter: 67 px at 32 degrees is a
+    different plinth from 67 px at 9. Two of these pictures captioned with a width and a wall and
+    nothing else would invite exactly the comparison this tool exists to stop anyone making."""
+    im = _plinth(240, 32, 60)
+    bare = checker.plinth_picture(im)
+    at32 = checker.plinth_picture(im, degrees=32.0)
+    at9 = checker.plinth_picture(im, degrees=9.0)
+    assert bare and at32 and at9, "the plinth picture was not drawn"
+    assert at32 != bare, "stating the camera changed nothing on the picture"
+    assert at32 != at9, "the same picture is drawn for two different cameras"
+
+
+def test_the_plinth_caption_stays_within_the_default_font(checker):
+    """PIL's default bitmap font draws a missing-glyph box for anything outside ASCII, and an em
+    dash in the caption shipped one. The caption is built from a format string in the source, so
+    the source is where it can be checked."""
+    src = (ROOT / "tools" / "ui_debug" / "generate_asset_check.py").read_text(encoding="utf-8")
+    body = src.split("def plinth_picture")[1].split("def figure_picture")[0]
+    for line in body.splitlines():
+        if "cap" in line and ("=" in line or "+=" in line):
+            assert line.isascii(), "a non-ASCII character reached the plinth caption: %r" % line
+
+
+def test_the_figure_picture_draws_the_height_it_reports(checker):
+    """Check (c) drawn on the sculpt, as (b) is drawn on the plinth. Height alone is not a number
+    anyone can use -- a figure generated larger is not a different sculpt -- so the span is drawn
+    and the RATIO to the base's own width is what gets reported, with the camera stated beside it
+    because that ratio is projected like everything else standing up."""
+    im = _plinth(240, 32, 60, stem=700)
+    bare = checker.figure_picture(im)
+    at32 = checker.figure_picture(im, degrees=32.0)
+    at9 = checker.figure_picture(im, degrees=9.0)
+    assert bare and at32 and at9, "the figure picture was not drawn"
+    assert at32 != bare, "stating the camera changed nothing on the figure picture"
+    assert at32 != at9, "the same figure picture is drawn for two different cameras"
+
+    # THE IMAGE TEST ALONE IS NOT ENOUGH. Two cameras give two different pictures because the
+    # camera-corrected ratio is also drawn, so deleting the camera caption left this passing.
+    # The caption has to be asserted where it is written.
+    src = (ROOT / "tools" / "ui_debug" / "generate_asset_check.py").read_text(encoding="utf-8")
+    body = src.split("def figure_picture")[1].split("def on_record")[0]
+    drawn = [ln for ln in body.splitlines() if "d.text(" in ln or "cap =" in ln]
+    assert any("camera" in ln for ln in drawn), (
+        "the figure picture no longer states the camera it was measured at")
+    for ln in drawn:
+        assert ln.isascii(), "a non-ASCII character reached the figure caption: %r" % ln
+
+
+def test_the_figure_picture_leaves_room_for_its_own_labels(checker, metrics):
+    """The labels sit in a gutter beside the art. Drawn into too narrow a gutter they run off the
+    edge silently -- the image still renders, the tests still pass, and the number is simply not
+    there to read."""
+    im = _plinth(240, 32, 60, stem=700)
+    art = metrics.crop_to_art(im)
+    drawn = checker.figure_picture(im, degrees=32.0)
+    import base64
+    import io as _io
+
+    from PIL import Image as _Image
+    got = _Image.open(_io.BytesIO(base64.b64decode(drawn.split(",", 1)[1])))
+    fw = round(art.width * (250 / art.height))
+    assert got.width - fw >= 100, (
+        "only %d px of gutter for the height labels" % (got.width - fw))
+
+
+def _placement(tmp_path, **over):
+    """A copy of the real placement file with one or two numbers changed."""
+    import json
+    src = ROOT / "ui" / "assets-gothic" / "metadata" / "duty_placement.json"
+    d = json.loads(src.read_text(encoding="utf-8"))
+    d.update(over)
+    out = tmp_path / "duty_placement.json"
+    out.write_text(json.dumps(d), encoding="utf-8")
+    return out
+
+
+def test_the_tile_picture_follows_the_placement_file(checker, tmp_path):
+    """It is a check, not a screenshot of one good arrangement. Change the file and the picture
+    changes, or it is decoration that happened to be right on the day it was drawn."""
+    a = checker.arrangement_picture(place=_placement(tmp_path, back=21, rank=52))
+    b = checker.arrangement_picture(place=_placement(tmp_path, back=21, rank=80))
+    if a is None or b is None:
+        pytest.skip("no sculpts or no plates on file")
+    assert a["uri"] != b["uri"], "the tile picture ignored a changed rank gap"
+
+
+def test_the_tile_picture_has_no_plinths_overlapping(checker, tmp_path):
+    """The arrangement drawn is the one that clears: the middle steps forward until the top of
+    its plinth reaches the floor line, instead of being set back into the rank behind it.
+
+    What collides on a tile is the plinths, and a plinth is as deep as it is wide times
+    sin(camera) -- raising the camera from 9 to 32 degrees made every base three times deeper
+    without moving a number in duty_placement.json. Overlap is rasterised and intersected rather
+    than judged by eye, so this fails if the arrangement ever stops clearing.
+    """
+    got = checker.arrangement_picture()
+    if got is None:
+        pytest.skip("no sculpts or no plates on file")
+    assert got["clashes"] == 0, "%d plinth clash(es) in the drawn arrangement" % got["clashes"]
+
+    # and the detection is not simply always-zero: squeeze the rank gap and it must find one
+    squashed = checker.arrangement_picture(place=_placement(tmp_path, rank=4))
+    assert squashed["clashes"] > 0, "a rank gap of 4 reported no clash, so nothing is detected"
+
+
+def test_the_tile_picture_reports_whether_the_group_fits_the_frame(checker, tmp_path):
+    wide = checker.arrangement_picture(place=_placement(tmp_path, spread=260))
+    if wide is None:
+        pytest.skip("no sculpts or no plates on file")
+    assert wide["span"] > wide["frame"], (
+        "a spread of 260 was reported as fitting a %d px frame" % wide["frame"])
+    normal = checker.arrangement_picture()
+    assert normal["span"] <= normal["frame"], (
+        "the file's own spread overflows the frame: %d of %d"
+        % (normal["span"], normal["frame"]))
