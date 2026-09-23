@@ -143,10 +143,41 @@ TOLERANCE_DEGREES = 2.5
 # freehand, and five near-identical renders of one monk scatter by about 0.6 degrees -- so 2.5
 # is a tolerance sized to the noise in the instrument. A plate is a single flat ellipse 1500 px
 # across with nothing standing on it: the reading is far steadier, and what it has to agree with
-# is the whole set of figures at once. Four plates measured 27.5, 31.5, 31.9 and 34.2 -- two in
-# use, two not -- and at 2.5 a plate 2.2 degrees out passes while looking visibly wrong under
-# the same figures.
-GROUND_TOLERANCE_DEGREES = 1.0
+# is the whole set of figures at once.
+#
+# BOTH NUMBERS BELOW ARE READ OFF THE PLATES THEMSELVES, not chosen. Every plate on file has
+# been looked at under figures and accepted, so the set IS the specification: its mean is what
+# a plate should measure, and the furthest any accepted plate strays from that mean is how far
+# a new one may stray before it is a different kind of picture. Measured 2026-09-23 --
+#
+#     slate_irregular       31.07   -0.47
+#     planks_rough          31.14   -0.40      (from its ring; its outline reads 30.66)
+#     flagstones_grey       31.52   -0.02
+#     cobbles_oval          31.63   +0.09
+#     limestone_irregular   31.89   +0.35
+#     flagstones_slab       32.02   +0.48
+#
+#     mean 31.55, largest deviation 0.48, so the window is 31.07 to 32.03
+#
+# This REPLACED a target of 32.0 with a tolerance of 1.0, which were both picked rather than
+# measured: 32 was a round number the board settled on and 1.0 was half the sculpt figure.
+# The set never actually centred on 32 -- five of the six sit below it.
+#
+# IT IS ABOUT HALF THE OLD WINDOW AND THAT IS THE POINT, not a side effect. Against the batch
+# of five that produced the current cobbles plate it passes exactly one, the one that was
+# chosen by eye: 31.6 passes, and 32.2, 32.9, 34.4 and 35.9 do not. One in five is what this
+# work has actually cost all along, and a tolerance that admitted four of them was not
+# describing the thing being accepted. The briefs' 0.530 ceiling needs no change: sin(32.03)
+# is 0.530, so the ceiling already sits on the window's upper edge.
+#
+# THE RULE IS A RATCHET AND IT IS WORTH KNOWING. Accept a plate and the window follows it, so
+# each accepted outlier loosens the bar that judges the next one. planks_rough was the first
+# test of that and cost nothing at all -- the window TIGHTENED, 0.55 to 0.48 -- because it was
+# filed at its ring's 31.14 rather than its outline's 30.66, which would have cost 0.52 to
+# 0.80, a 54% wider window on the strength of one plate. Filing a plate near the edge is
+# cheap; filing one past it is how the specification stops meaning anything.
+GROUND_TARGET_DEGREES = 31.55
+GROUND_TOLERANCE_DEGREES = 0.48
 BASE_TOLERANCE_PCT = 24.0        # chunkier than the set's median
 BASE_THIN_PCT = 12.0             # thinner than it
 
@@ -606,8 +637,33 @@ def ground_record(folder=GROUNDS, rel_to=None):
     for path in sorted(folder.glob("*.png")):
         try:
             im = Image.open(path).convert("RGBA")
-            g = sm.ground_ellipse(im, base_band=False)
+            # A PLATE WITH NO RING TAKES THE PATH IT ALWAYS TOOK. The ring is something a fresh
+            # generation carries so its camera can be read off a clean ellipse instead of off
+            # its own edge; nothing on file has one, and nothing on file is re-measured.
+            ringed = sm.has_measuring_ring(im)
+            ring = sm.ring_ellipse(im) if ringed else None
+            if ringed:
+                im = sm.without_ring(im)
+            g = ring or sm.ground_ellipse(im, base_band=False)
             art = sm.crop_to_art(im)
+            # A RECORDED CAMERA, for a plate whose own outline cannot be trusted to give one.
+            # ground_ellipse fits an ellipse; on a round rimmed plate that is what it is
+            # looking at, and the fit tracks the rim all the way round. On a ragged patch it
+            # is a best fit to a shape that is not an ellipse, and it visibly misses -- on
+            # planks_rough the fit bulges past the timber on one side and falls inside it on
+            # the other. That plate's measuring ring, which IS a circle, fits at 31.14 where its
+            # outline read 30.66.
+            #
+            # So duty_grounds.json may carry the camera for such a plate, and this reports it
+            # as the plate's angle. THE MEASURED OUTLINE IS STILL REPORTED ALONGSIDE and never
+            # replaced, because a recorded number is exactly the kind of thing that goes
+            # quietly wrong: the ring it came from was stripped when the art was filed, so
+            # nothing here can re-derive it. Two guards keep it honest -- a test refuses a
+            # recorded camera further than the ring/outline agreement bar from the plate's own
+            # outline, and another refuses one that does not say where it came from.
+            rec = (settings.get(path.stem) or {}).get("camera") or {}
+            measured = round(g["degrees"], 2) if g else None
+            recorded = rec.get("degrees")
             import numpy as np
             rows = (np.asarray(art)[:, :, 3] > 128).sum(1)
             widest = int(rows.argmax()) if rows.size else 0
@@ -617,7 +673,12 @@ def ground_record(folder=GROUNDS, rel_to=None):
                 "file": path.name,
                 "kb": round(path.stat().st_size / 1024),
                 "orig": href(path, rel_to),
-                "degrees": round(g["degrees"], 1) if g else None,
+                "degrees": round(float(recorded), 2) if recorded is not None else measured,
+                "measured": measured,
+                "camera_from": (rec.get("from") if recorded is not None
+                                else ("ring" if ringed else "outline")),
+                "camera_note": rec.get("why"),
+                "ringed": bool(ringed),
                 "anchor": round(100.0 * widest / max(1, art.height), 1),
                 "anchor_set": (settings.get(path.stem) or {}).get("anchor"),
                 "duties": duties,
@@ -677,19 +738,36 @@ def prompts(folder=None, rel_to=None):
         attach = []
         # AS MANY AS THE BRIEF NAMES, in the order it names them, because that is the order they
         # are attached in and the briefs say "the first attached image" and "the second".
+        # ANY leading HTML comment is bookkeeping, not brief. It used to be only `attach:`
+        # lines, and the first note written for a human reader -- an eight-line explanation of
+        # why cobbles_oval attaches the plate it REPLACED -- went straight to the clipboard and
+        # into the image model. A brief has to be able to carry a reason without the reason
+        # becoming part of the instruction.
         while True:
-            m = re.match(r"\s*<!--\s*attach:\s*(.+?)\s*-->\s*\n", text)
+            m = re.match(r"\s*<!--(.*?)-->[ \t]*\n", text, re.S)
             if not m:
                 break
             text = text[m.end():]
-            target = ROOT / m.group(1)
+            body = m.group(1).strip()
+            if not body.lower().startswith("attach:"):
+                continue                     # a note to whoever reads the file; not copied
+            target = ROOT / body[len("attach:"):].strip()
             if not target.is_file():
                 print("  %s names an attachment that is not there: %s"
-                      % (path.name, m.group(1)))
+                      % (path.name, target))
                 continue
             attach.append({"name": target.name, "bytes": target.stat().st_size,
                            "uri": href(target, rel_to)})
-        out.append({"name": path.stem, "text": text, "attach": attach})
+        # A brief belongs beside the thing it makes: one named after a plate in
+        # grounds/ is offered on the ground-tiles tab, the rest with the sculpts.
+        # A BRIEF FOR A PLATE THAT IS STILL A CANDIDATE IS STILL A GROUND BRIEF. The rule was
+        # "is there grounds/<name>.png", which is true only AFTER a brief has succeeded --
+        # so the brief for a plate being worked on showed up beside the sculpts, which is
+        # exactly when it is most in the way. Candidates are named <name>_cNN.png.
+        made = (GROUNDS / (path.stem + ".png")).is_file()
+        held = any((GROUNDS / "candidates").glob(path.stem + "_c*.png"))
+        out.append({"name": path.stem, "text": text, "attach": attach,
+                    "makes": "ground" if (made or held) else "sculpt"})
     return out
 
 
@@ -1106,6 +1184,7 @@ def main():
             .replace("__TOL__", json.dumps(TOLERANCE_DEGREES))
             .replace("__BTOL__", json.dumps(BASE_TOLERANCE_PCT))
             .replace("__BTHIN__", json.dumps(BASE_THIN_PCT))
+            .replace("__GTARGET__", json.dumps(GROUND_TARGET_DEGREES))
             .replace("__GTOL__", json.dumps(GROUND_TOLERANCE_DEGREES))
             .replace("__BAND__", json.dumps(band))
             .replace("__ONRECORD__", json.dumps(on_record(rel_to=out.parent)))
@@ -1128,8 +1207,11 @@ def main():
               % (b["lo"], b["hi"], b["mid"]))
     print("  target %.0f deg, tolerance %.1f  (height is not checked)"
           % (TARGET_DEGREES, TOLERANCE_DEGREES))
-    print("  ground plates: same %.0f deg target, tolerance %.1f -- tighter than a sculpt's %.1f"
-          % (TARGET_DEGREES, GROUND_TOLERANCE_DEGREES, TOLERANCE_DEGREES))
+    print("  ground plates: %.2f deg target, tolerance %.2f -- both read off the accepted set"
+          % (GROUND_TARGET_DEGREES, GROUND_TOLERANCE_DEGREES))
+    print("                 (window %.2f to %.2f; a sculpt's tolerance is %.1f)"
+          % (GROUND_TARGET_DEGREES - GROUND_TOLERANCE_DEGREES,
+             GROUND_TARGET_DEGREES + GROUND_TOLERANCE_DEGREES, TOLERANCE_DEGREES))
     if band and "base_ratio" in band:
         m = band["base_ratio"]["mid"]
         print("  base %.3f to %.3f  (median %.3f, %.0f%% thinner to %.0f%% chunkier)"
@@ -1224,6 +1306,7 @@ and drawn back with the measurement on it.</div>
   <label for=tol>tolerance</label><input id=tol value=__TOL__>
   <label for=btol>base, max % chunkier</label><input id=btol value=__BTOL__>
   <label for=bthin>max % thinner</label><input id=bthin value=__BTHIN__>
+  <label for=gtarget>ground target</label><input id=gtarget value=__GTARGET__>
   <label for=gtol>ground tol</label><input id=gtol value=__GTOL__>
   <span id=ref class=info></span>
 </div>
@@ -1272,10 +1355,12 @@ var INGAME = __INGAME__;
   }
   // THE PROMPTS THAT WORKED, beside the card they were used with -- the two halves of one
   // instruction. Copied rather than downloaded: a prompt's destination is a text box.
-  if (PROMPTS && PROMPTS.length) {
+  var SCULPT_PROMPTS = (PROMPTS || []).filter(function(p){ return p.makes !== "ground"; });
+  if (SCULPT_PROMPTS.length) {
     var ph = ["<div id=prompts><span class=lab>copy the brief:</span>"];
-    PROMPTS.forEach(function(p, i){
-      ph.push("<button class=cp data-i='" + i + "'>&#128203;&nbsp; " + p.name + "</button>");
+    SCULPT_PROMPTS.forEach(function(p, i){
+      ph.push("<button class=cp data-i='" + PROMPTS.indexOf(p) + "'>&#128203;&nbsp; "
+              + p.name + "</button>");
       // The image the brief tells you to attach, right beside it. "use the same base and angle
       // as in the attached image" is only an instruction if the attachment is the right file.
       (p.attach || []).forEach(function(a, k){
@@ -1471,9 +1556,15 @@ function show(name, ok, res){
   // mismatch looks like, and a panel that quietly dropped them would be throwing that away.
   if (!GROUNDS || !GROUNDS.length) return;
   // The target and the tolerance live in the boxes at the top, not in a constant -- they are
-  // tunable while the page is open, and a plate has to be judged by the same two numbers a
-  // sculpt is or the two panels are answering different questions.
-  var TARGET = +document.getElementById("target").value;
+  // tunable while the page is open.
+  // A PLATE HAS ITS OWN TARGET AS WELL AS ITS OWN TOLERANCE. It used to borrow the sculpts'
+  // 32.0 and differ only in tolerance, on the reasoning that ground and figure must agree
+  // about where you are standing -- which is true, and is still checked, but is not the same
+  // as the two being judged by one number. Both plate numbers are now read off the plates
+  // themselves: 31.55 is what the accepted set averages and 0.48 is how far the furthest
+  // accepted plate strays from that. The sculpts keep 32.0, and the gap between the two --
+  // four tenths of a degree, well inside either tolerance -- is itself the agreement.
+  var TARGET = +document.getElementById("gtarget").value;
   var TOL = +document.getElementById("gtol").value;   // a plate's own, tighter than a sculpt's
   var host = document.getElementById("grounds");
   var h = ["<h2>The ground plates in <b>ui/assets-gothic/grounds/</b>, judged on the camera and "
@@ -1487,6 +1578,21 @@ function show(name, ok, res){
            + "sets. They differ by a point or so, always the same way, which reads as feet set "
            + "deliberately forward of the widest row rather than as drift &#8212; so both are "
            + "shown and neither is called wrong.</h2>"];
+  var GROUND_PROMPTS = (PROMPTS || []).filter(function(p){ return p.makes === "ground"; });
+  if (GROUND_PROMPTS.length) {
+    var gp = ["<div id=prompts><span class=lab>copy the brief:</span>"];
+    GROUND_PROMPTS.forEach(function(p){
+      gp.push("<button class=cp data-i='" + PROMPTS.indexOf(p) + "'>&#128203;&nbsp; "
+              + p.name + "</button>");
+      (p.attach || []).forEach(function(a, k){
+        gp.push("<a class=att download='" + a.name + "' href='" + a.uri + "'>"
+                + "&#128206;&nbsp; " + (k + 1) + ". " + a.name + "</a>");
+      });
+    });
+    gp.push("<span class=note>the brief that produced the plate of the same name, verbatim "
+            + "from tools/ui_debug/prompts/</span></div>");
+    h.push(gp.join(""));
+  }
   GROUNDS.forEach(function(r){
     var off = r.degrees == null ? 99 : Math.abs(r.degrees - TARGET);
     var cls = off <= TOL ? "ok" : (off <= 2 * TOL ? "check" : "bad");
@@ -1497,10 +1603,15 @@ function show(name, ok, res){
            + " &#183; anchor " + r.anchor.toFixed(1) + "%"
            + (r.anchor_set == null ? "" : " (file says " + r.anchor_set + ")")
            + " &#183; " + r.w + "&#215;" + r.h + "</div>");
+    // NOT "kept as evidence of a camera that missed". That was true when every duty-less plate
+    // was also a failed one; two of them now pass and the line was calling them mistakes.
+    // Standing on nobody and being wrong are separate facts, so they are separate sentences.
     h.push("<div class=who>" + (r.duties.length
            ? r.duties.length + " dut" + (r.duties.length === 1 ? "y" : "ies") + ": "
              + r.duties.join(", ")
-           : "no duty stands on this one &#8212; kept as evidence of a camera that missed")
+           : (cls === "ok"
+              ? "no duty stands on this one yet &#8212; ready for the next one added"
+              : "no duty stands on this one &#8212; kept as evidence of a camera that missed"))
            + "</div>");
     h.push("<a class=orig download='" + r.file + "' href='" + r.orig + "'>"
            + "&#8595;&nbsp; " + r.file + " &#183; " + r.kb + " KB</a>");

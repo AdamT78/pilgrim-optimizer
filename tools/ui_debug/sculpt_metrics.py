@@ -197,6 +197,173 @@ def _rim(strip, h, width):
     return int(ks[first])
 
 
+# A MEASURING RING, drawn around a plate purely so it can be measured and then thrown away.
+#
+# ground_ellipse reads a plate's own outline, which is exact on a clean ellipse and meaningless
+# on a ragged one -- the docstring above says so. A ring solves that by not asking the art to be
+# measurable at all: the generator draws a clean ellipse well clear of the tile, the ring is
+# measured, and then it is deleted by COLOUR. Colour, not shape: every attempt to recover the
+# tile's geometry by eroding or fitting its silhouette failed, because a silhouette is exactly
+# the thing a ragged plate does not have.
+#
+# Spring green because it is the furthest any common key sits from this game's palette. Measured
+# across all 81 committed PNGs in ui/assets-gothic/, the closest pixel to it is 182 away in
+# stones_sage.png, where magenta comes within 34 of stones_plum.png -- plum being a purple. A key
+# that lives inside the palette is a trap for the first person who points this at the wrong file.
+RING_KEY = (0, 255, 128)
+RING_TOLERANCE = 150        # sum of per-channel differences; the palette's closest is 182
+
+
+def _ring_mask(im):
+    a = np.array(im.convert("RGBA")).astype(int)
+    d = np.abs(a[..., :3] - np.array(RING_KEY)).sum(2)
+    return (d < RING_TOLERANCE) & (a[..., 3] > ALPHA), a
+
+
+def has_measuring_ring(im, least=0.0005):
+    """Whether this image carries a ring at all. Everything else depends on this being cheap
+    and certain: a plate with no ring must take exactly the path it took before rings existed."""
+    m, _ = _ring_mask(im)
+    return bool(m.mean() >= least)
+
+
+def _fit_ellipse(mask):
+    """Least-squares conic through a ring's pixels, returning (major, minor) in pixels.
+
+    No new dependency: this is the ordinary algebraic conic fit solved by SVD on the design
+    matrix. cv2.fitEllipse does the same job and OpenCV is not in pyproject.toml. Points are
+    centred and scaled first, because the fit is badly conditioned in raw pixel coordinates --
+    x*x on a 1600 px canvas is 2.5e6 and the constant column is 1.
+    """
+    ys, xs = np.nonzero(mask)
+    if len(xs) < 50:
+        return None
+    x = xs.astype(np.float64)
+    y = ys.astype(np.float64)
+    mx, my = x.mean(), y.mean()
+    sc = max(x.std(), y.std())
+    if sc <= 0:
+        return None
+    x = (x - mx) / sc
+    y = (y - my) / sc
+    d = np.column_stack([x * x, x * y, y * y, x, y, np.ones_like(x)])
+    try:
+        _, _, v = np.linalg.svd(d, full_matrices=False)
+    except np.linalg.LinAlgError:
+        return None
+    a, b, c, dd, e, f = v[-1]
+    m = np.array([[a, b / 2.0], [b / 2.0, c]])
+    try:
+        cen = np.linalg.solve(2 * m, [-dd, -e])
+    except np.linalg.LinAlgError:
+        return None
+    val = (a * cen[0] ** 2 + b * cen[0] * cen[1] + c * cen[1] ** 2
+           + dd * cen[0] + e * cen[1] + f)
+    ev = np.linalg.eigvalsh(m)
+    if np.any(ev == 0):
+        return None
+    q = -val / ev
+    if np.any(q <= 0) or not np.all(np.isfinite(q)):
+        return None                      # the conic is a hyperbola or degenerate, not an ellipse
+    ax = np.sqrt(q) * sc
+    return float(max(ax)) * 2.0, float(min(ax)) * 2.0
+
+
+def ring_ellipse(im):
+    """The camera, read off the ring rather than off the tile.
+
+    THE RING IS FITTED, NOT BOUNDED, and the difference is bigger than the tolerance a plate
+    is held to. The first version filled the ring and handed the result to ground_ellipse,
+    which takes the widest ROW and the bounding height. Filling an annulus recovers its OUTER
+    edge -- and an outer edge is a fatter ellipse than the centreline it was drawn around,
+    because adding half-stroke t to both semi-axes gives (b+t)/(a+t), which is larger than b/a
+    whenever b < a. So every reading was biased toward a STEEPER camera, by an amount that
+    grows with the stroke.
+
+    Measured against rings whose centreline is known exactly -- the band between the (a-t, b-t)
+    and (a+t, b+t) ellipses -- the old method erred by +0.27 to +0.48 degrees at t=9, and by
+    +0.70 at t=18, which is what a "2% of the tile's width" brief can produce. This fit errs by
+    0.01. On the real generated rings the shift is smaller, -0.02 to -0.44, because a soft edge
+    pulls the keyed mask inward and partly cancels the bias; on the plank plate it was -0.43,
+    and the fitted number agreed with an independent measurement to 0.01.
+
+    WHY THE TEST SUITE NEVER CAUGHT IT: the fixture drew its ring with PIL's ellipse outline,
+    which strokes INWARD from the bounding box, so filling it recovered the box exactly and the
+    round trip was perfect. The fixture was not representative of the thing being measured. It
+    now draws the band between two ellipses, so the centreline is known and the bias is visible.
+
+    THE FILL IS STILL USED, for what it is actually good at: deciding whether the loop is
+    closed. Returns None when it is not, which in practice means the tile is sitting on top of
+    the ring. The ring's height is 2 x radius x sin(theta), so at a shallow camera a ring that
+    looks generous side to side is still shorter than the tile it encircles: at 1.04 times the
+    tile's height a 32 degree ring read 6.0, and at 1.20 it read 31.9. The brief asks for a
+    clear gap all the way round for this reason, and a broken ring must refuse rather than
+    report the number occlusion produces.
+    """
+    try:
+        from scipy import ndimage
+    except ModuleNotFoundError:
+        return None
+    m, _ = _ring_mask(im)
+    if not m.any():
+        return None
+    filled = ndimage.binary_fill_holes(m)
+    if filled.sum() <= m.sum() * 1.5:
+        return None                      # nothing was enclosed: the ring is not a closed loop
+    got = _fit_ellipse(m)
+    if got is None:
+        return None
+    major, minor = got
+    if major <= 0 or minor <= 0 or minor > major:
+        return None
+    s = minor / major
+    if not 0.0 < s <= 1.0:
+        return None
+    return {"width": major, "height": minor, "sin_theta": s,
+            "degrees": round(math.degrees(math.asin(s)), 2)}
+
+
+RING_FEATHER = 4            # px of dilation; the generator's ring edge measured 2-3 px wide
+RING_SOLID = 200            # inside that band, only a near-opaque pixel is tile rather than ring
+
+
+def without_ring(im):
+    """The tile with the ring deleted -- INCLUDING the ring's own antialiased edge.
+
+    The colour key alone is not enough, and the failure is quiet. A pixel halfway along the
+    ring's soft edge is a BLEND of spring green and transparent background: its alpha is low
+    but nonzero, and its RGB has been pulled far enough off the key to sit outside
+    RING_TOLERANCE. So it survives the strip, and what is left is a faint ghost of the ring
+    exactly where the ring was.
+
+    Measured on the cobbles candidate of 2026-09-23: the ring's own ellipse is 1382 px wide,
+    and after the old strip the image's alpha>8 box was 1382 x 730 while the SOLID plate was
+    1159 x 616. The ghost was not near the ring, it WAS the ring, and it padded the bounding
+    box by 16%.
+
+    It never moved a measured angle -- ground_ellipse fits the shape rather than taking a box,
+    and the ghost is 0.8% of the ink, too sparse and too thin to shift the fit. Re-measuring
+    fifteen candidates across three batches with this fix returned every angle identical to a
+    tenth of a degree. What it did corrupt was anything that CROPS: a preview trimmed at
+    alpha>8 came out 16% too wide and made the plate look small beside its neighbours.
+
+    So: dilate the keyed mask, and inside that band only, drop whatever is not near-opaque.
+    Solid tile is untouched because the brief keeps the ring clear of the tile -- and a ring
+    that does touch the tile is refused by ring_ellipse before it ever gets here.
+    """
+    m, a = _ring_mask(im)
+    b = a.copy()
+    b[m, 3] = 0
+    try:
+        from scipy import ndimage
+    except ModuleNotFoundError:
+        return Image.fromarray(b.astype(np.uint8), "RGBA")
+    k = 2 * RING_FEATHER + 1
+    band = ndimage.binary_dilation(m, np.ones((k, k), bool))
+    b[band & (b[..., 3] < RING_SOLID), 3] = 0
+    return Image.fromarray(b.astype(np.uint8), "RGBA")
+
+
 def measure(im):
     """Every number this project asks of a sculpt, from an image already cropped to its art."""
     c = crop_to_art(im) if im.size != (bbox(im)[2] - bbox(im)[0], bbox(im)[3] - bbox(im)[1]) else im
