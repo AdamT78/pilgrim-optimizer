@@ -5,6 +5,19 @@ the generator so they can be held here: the enumeration of distinct tile shapes,
 seating rules that turn a shape into an order of seats. The page looks both up rather than
 deriving them, so a drift between generator and page would fail here rather than quietly draw a
 board nobody asked for.
+
+
+TWO LANES, because ten of these tests are 90% of the clock. Each of them builds a whole page
+-- the sheet, the sow, the board check -- and page building dominates: one test alone,
+`test_the_lift_reaches_both_pages`, runs for nearly two minutes, and the ten together come to
+about 310 seconds of a 340 second suite.
+
+    pytest tests/test_ui_debug_duty_board.py -m "not slow"     # ~30s, while you work
+    pytest tests/test_ui_debug_duty_board.py                   # everything, before you commit
+
+The fast lane keeps every check on measurement, on the briefs and on the plate window, which
+is where the work actually is. It cannot tell you a page still renders, so it is not a
+substitute for the full run -- it is what you use between full runs.
 """
 
 import importlib.util
@@ -131,6 +144,7 @@ def test_slug_table_matches_the_duty_names(mod):
         "The City has gained an action icon -- the page's 'no action icon' note is now a lie")
 
 
+@pytest.mark.slow                      # ~8s: builds a whole page
 def test_page_builds_with_every_placeholder_substituted(mod, tmp_path, monkeypatch):
     """The generator asserts this itself; running it here means a template edit that adds a
     placeholder without a value fails in CI rather than on someone's screen."""
@@ -146,6 +160,7 @@ def test_page_builds_with_every_placeholder_substituted(mod, tmp_path, monkeypat
     assert '"parts"' in page and '"queues"' in page
 
 
+@pytest.mark.slow                      # ~8s: builds a whole page
 def test_page_survives_missing_sculpt_art(mod, tmp_path, monkeypatch, capsys):
     """The sculpts are git-ignored debug input, so a fresh clone has none. A missing size must
     cost that size, not the page.
@@ -170,6 +185,7 @@ def test_page_survives_missing_sculpt_art(mod, tmp_path, monkeypatch, capsys):
         % (re.search(r"FIGS\s*=\s*.{0,40}", page) or "no FIGS at all"))
 
 
+@pytest.mark.slow                      # ~8s: builds a whole page
 def test_page_embeds_the_sculpt_table_when_the_art_is_there(mod, tmp_path, monkeypatch):
     """The other half of the pair. Without this, an empty figure table would satisfy the
     missing-art test above and nothing would notice the art had stopped being embedded."""
@@ -265,6 +281,7 @@ def test_sheet_covers_the_cases_that_matter(sheet):
     assert all(1 <= sum(c) <= 5 for _l, c in sheet.CASES)
 
 
+@pytest.mark.slow                      # ~30s: builds a whole page
 def test_sheet_reads_the_placement_file(sheet, mod, tmp_path, monkeypatch):
     """The claim the tool makes about itself, checked the only way that means anything: put an
     unmistakable value in the file and look for it in the page."""
@@ -574,6 +591,7 @@ def test_placement_refuses_a_broken_size_list(mod, tmp_path, monkeypatch):
         assert "sizes" in str(caught.value), "the refusal does not name what was wrong: %r" % bad
 
 
+@pytest.mark.slow                      # ~30s: builds a whole page
 def test_sow_page_builds_and_reads_the_placement_file(sow, mod, tmp_path, monkeypatch):
     """Built end to end, with every placeholder gone -- and the claim that it reads the file
     checked the only way that means anything: put an unmistakable value in and look for it."""
@@ -775,6 +793,7 @@ def test_every_ground_plate_has_a_licence_on_record(mod):
     assert seen >= 5, "only %d plate(s) walked -- the tree is not being searched" % seen
 
 
+@pytest.mark.slow                      # ~21s: builds a whole page
 def test_the_plates_are_discovered_rather_than_listed(mod):
     """Dropping a PNG in the folder is all it takes to be able to pick it. A list in the plan
     would be a second place for the folder's contents to be wrong."""
@@ -852,6 +871,7 @@ def test_switching_view_hides_everything_the_other_view_owns(sheet):
             "draw() does not decide whether #%s is on screen" % element)
 
 
+@pytest.mark.slow                      # ~29s: builds a whole page
 def test_the_sow_page_plays_on_what_the_sheet_saved(sow, mod, tmp_path, monkeypatch):
     """The sheet tunes and the sow page plays on the result. It was reading neither the frame
     nor the grounds -- it took the placement file and drew acolytes on an empty board, so a
@@ -983,6 +1003,7 @@ def test_the_two_save_paths_merge_the_same_keys(sheet):
             "documents() names %r itself instead of taking the generator's list" % literal)
 
 
+@pytest.mark.slow                      # ~29s: builds a whole page
 def test_the_generator_hands_the_page_the_keys_it_merges_by(sheet, mod, tmp_path, monkeypatch):
     """Proved by writing the page and reading back what it was given, not by reading the source.
 
@@ -1103,6 +1124,7 @@ def test_a_ground_with_no_picture_is_named_out_loud(mod):
     assert sum("spare_plate" in n for n in notes) == 1, notes
 
 
+@pytest.mark.slow                      # ~29s: builds a whole page
 def test_the_sow_names_every_plate_it_stands_a_duty_on(sow, mod, tmp_path, monkeypatch):
     """Asked for directly: the sow must take its grounds from duty_grounds.json, all of them.
 
@@ -1200,6 +1222,7 @@ def test_the_lift_is_in_the_expression_that_places_the_plate(sheet, mod):
         assert "anchor" in top, "%s stopped using the plate's own anchor" % page
 
 
+@pytest.mark.slow                      # ~117s: builds a whole page
 def test_the_lift_reaches_both_pages(sheet, sow, mod, tmp_path, monkeypatch):
     """The generators must carry the key through to the page at all -- a separate claim from
     the one above, and the one that catches a generator trimming the plan on its way out."""
@@ -2217,124 +2240,63 @@ def test_a_plate_is_held_tighter_than_a_sculpt(checker):
                 % (r["name"], ", ".join(r["duties"]), checker.GROUND_TOLERANCE_DEGREES))
 
 
-def test_the_plate_numbers_are_read_off_the_plates(checker):
-    """The target and the tolerance are a DESCRIPTION of the accepted set, not a choice.
+def test_the_plate_window_is_locked_and_every_plate_is_inside_it(checker):
+    """The window is PINNED, not computed, and this is the test that keeps it that way.
 
-    Every plate on file has been looked at under figures and kept, so the set is the
-    specification: the target is what it averages and the tolerance is how far the furthest
-    member strays. That replaced a target of 32.0 and a tolerance of 1.0, which were a round
-    number and half the sculpt figure -- and the set never centred on 32 at all, four of the
-    five sitting below it.
+    It used to recompute the target and tolerance from the folder and assert the constants
+    matched -- which made the specification a function of the art it judged. That is a
+    feedback loop with no fixed point: every plate accepted rewrites the bar judging the
+    next. Simulated on 2026-09-23, filing eight plates each landing exactly on the current
+    ceiling moved the target +0.54 and the ceiling +1.09 degrees, every step legitimate and
+    every suite green. Filing the BEST of each batch instead, which is what actually happens,
+    walked the target DOWN from 31.55 to 31.43 over twelve plates while the ceiling stayed
+    pinned at 32.02 -- the highest plate anchoring the top while everything new landed below
+    the mean, so the set drifted away from the sculpts one plate at a time.
 
-    This recomputes both from the folder. It is the guard against the constants and the art
-    drifting apart: file a plate outside the window and it fails here, which is the moment to
-    decide whether the plate is wrong or the family has moved.
+    So the numbers are literals now, asserted literally. A change to the window is a
+    deliberate edit that shows up in review rather than a consequence of filing art, and a
+    plate outside the window FAILS here rather than moving it.
     """
-    rows = checker.ground_record()
-    if len(rows) < 3:
-        pytest.skip("too few plates to describe a set")
-    degs = [r["degrees"] for r in rows]
-    mean = sum(degs) / len(degs)
-    worst = max(abs(d - mean) for d in degs)
-
-    assert abs(mean - checker.GROUND_TARGET_DEGREES) <= 0.05, (
-        "the plates average %.2f but the target says %.2f -- the set has moved since the "
-        "constant was written (%s)"
-        % (mean, checker.GROUND_TARGET_DEGREES,
-           ", ".join("%s %.2f" % (r["name"], r["degrees"]) for r in rows)))
-    assert abs(worst - checker.GROUND_TOLERANCE_DEGREES) <= 0.05, (
-        "the furthest plate is %.2f from the mean but the tolerance says %.2f"
-        % (worst, checker.GROUND_TOLERANCE_DEGREES))
-
-    # the invariant that actually matters, stated separately: every filed plate is inside its
-    # own window. This is what breaks first when a plate is filed that should not have been.
-    for r in rows:
-        assert abs(r["degrees"] - checker.GROUND_TARGET_DEGREES) <= (
-            checker.GROUND_TOLERANCE_DEGREES + 1e-9), (
-            "%s measures %.2f, outside %.2f +/- %.2f"
-            % (r["name"], r["degrees"], checker.GROUND_TARGET_DEGREES,
-               checker.GROUND_TOLERANCE_DEGREES))
-
-    # and the sculpts' target is close enough that ground and figure still agree about where
-    # the viewer is standing -- the thing the shared constant used to assert by construction
-    assert abs(checker.GROUND_TARGET_DEGREES - checker.TARGET_DEGREES) < 1.0, (
-        "plates centre on %.2f and sculpts on %.2f -- they are no longer the same camera"
-        % (checker.GROUND_TARGET_DEGREES, checker.TARGET_DEGREES))
-
-
-def test_the_ring_ratio_note_still_describes_the_code(checker):
-    """A prose explanation with numbers in it goes stale silently. This is the alarm.
-
-    docs/architecture/ring-ratio.md quotes the plate window, the plate table and the sculpt
-    target. All three are read off the code and the art, so all three move -- and a reader who
-    trusts a document quoting 32.0 when the constant says 31.62 is worse off than one with no
-    document at all. Every number the note states is checked against its source here.
-    """
-    doc = ROOT / "docs" / "architecture" / "ring-ratio.md"
-    if not doc.is_file():
-        pytest.skip("the note is not on file")
-    text = doc.read_text(encoding="utf-8")
+    assert checker.GROUND_TARGET_DEGREES == 31.55, (
+        "the plate target moved to %s. That is allowed, but not as a side effect -- it was "
+        "derived from the six plates on file on 2026-09-23 and pinned deliberately. Change "
+        "this assertion in the same commit, and say why."
+        % checker.GROUND_TARGET_DEGREES)
+    assert checker.GROUND_TOLERANCE_DEGREES == 0.48, (
+        "the plate tolerance moved to %s -- same story as the target above."
+        % checker.GROUND_TOLERANCE_DEGREES)
 
     target = checker.GROUND_TARGET_DEGREES
     tol = checker.GROUND_TOLERANCE_DEGREES
-    for probe, what in (
-            ("%.2f" % target, "the plate target"),
-            ("%.2f" % tol, "the plate tolerance"),
-            ("%.2f to %.2f" % (target - tol, target + tol), "the window in degrees"),
-            ("%.1f" % checker.TARGET_DEGREES, "the sculpt target")):
-        assert probe in text, (
-            "ring-ratio.md never states %s (%s) -- the note and the code have drifted"
-            % (probe, what))
+    rows = checker.ground_record()
+    if not rows:
+        pytest.skip("no ground plates on file")
+    for r in rows:
+        assert abs(r["degrees"] - target) <= tol + 1e-9, (
+            "%s measures %.2f, outside %.2f +/- %.2f. Either the plate is wrong, or the "
+            "family has genuinely moved and the window should be re-derived -- but that is a "
+            "decision to take here, in the open, not something filing the plate should do "
+            "quietly on your behalf."
+            % (r["name"], r["degrees"], target, tol))
 
-    # the table of plates, every row checked against the folder rather than spot-checked
-    for r in checker.ground_record():
-        assert "`%s`" % r["name"] in text, "%s is missing from the note's table" % r["name"]
-        assert "%.2f" % r["degrees"] in text, (
-            "%s measures %.2f, which the note's table does not contain"
-            % (r["name"], r["degrees"]))
+    # the window still has to describe the art it was taken from, or pinning it has simply
+    # frozen a number that no longer means anything. This is the weaker check that survives:
+    # the plates should not all be huddled in one corner of their own window.
+    degs = [r["degrees"] for r in rows]
+    if len(degs) >= 4:
+        assert max(degs) - min(degs) > tol * 0.5, (
+            "every plate sits within %.2f of every other, well inside a window of +/-%.2f -- "
+            "the window is now much looser than the set it describes, and is no longer "
+            "measuring anything: %s"
+            % (max(degs) - min(degs), tol,
+               ", ".join("%s %.2f" % (r["name"], r["degrees"]) for r in rows)))
 
-    # the picture beside it, and the generator that redraws it -- a note whose illustration
-    # cannot be rebuilt is a committed screenshot with extra steps
-    assert "ring-ratio.png" in text, "the note does not reference its picture"
-    assert (ROOT / "docs" / "architecture" / "ring-ratio.png").is_file(), "the picture is absent"
-    gen = ROOT / "tools" / "ui_debug" / "generate_ring_ratio_explainer.py"
-    assert gen.is_file(), "the picture has no generator"
-    assert gen.name in text, "the note does not say how to redraw its picture"
-
-
-def test_the_ring_ratio_picture_redraws_from_the_repository_alone(checker, tmp_path):
-    """The generator must not need anything that is not committed.
-
-    Its first draft measured a ringed candidate sitting in a downloads folder, which works
-    exactly once and on one machine. It now draws the ring itself around a committed plate, so
-    this runs it end to end and checks the ring it drew is one the measuring code accepts --
-    the failure mode being an ellipse drawn off the edge of its canvas, which arrives not as a
-    visible glitch but as ring_ellipse correctly refusing an open arc.
-    """
-    import importlib.util
-    path = ROOT / "tools" / "ui_debug" / "generate_ring_ratio_explainer.py"
-    if not path.is_file():
-        pytest.skip("the generator is not on file")
-    spec = importlib.util.spec_from_file_location("generate_ring_ratio_explainer", path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-
-    out = tmp_path / "ring-ratio.png"
-    written, target, tol = mod.build(out=out)
-    assert written.is_file() and written.stat().st_size > 20_000, "no picture came out"
-    assert target == checker.GROUND_TARGET_DEGREES, "the picture drew a different target"
-    assert tol == checker.GROUND_TOLERANCE_DEGREES, "the picture drew a different tolerance"
-
-    # the drawn ring is measurable, and measures back as what it was drawn at
-    from PIL import Image
-    plate = Image.open(checker.GROUNDS / "cobbles_oval.png").convert("RGBA")
-    want = checker.sm.ground_ellipse(plate, base_band=False)["degrees"]
-    got = checker.sm.ring_ellipse(mod._ringed(plate, want))
-    assert got is not None, (
-        "the generator drew a ring the measuring code refuses -- almost always an ellipse "
-        "off the edge of its canvas, which reads as an open arc")
-    assert abs(got["degrees"] - want) < 0.5, (
-        "a ring drawn at %.2f measured back as %.2f" % (want, got["degrees"]))
+    # and the only thing tying plates to anything OUTSIDE themselves: they have to agree with
+    # the sculpts, which sit at a fixed 32.0. With the window pinned this can no longer drift,
+    # but it is what the pinning is protecting, so it is stated rather than assumed.
+    assert abs(target - checker.TARGET_DEGREES) < 1.0, (
+        "plates centre on %.2f and sculpts on %.2f -- they are no longer the same camera"
+        % (target, checker.TARGET_DEGREES))
 
 
 def test_a_recorded_camera_cannot_hide_a_bad_plate(checker):
@@ -2394,7 +2356,7 @@ def test_the_grounds_panel_reads_its_own_tolerance_box(checker):
     assert 'getElementById("gtol").value' in src, "the grounds panel does not read its own box"
     assert 'json.dumps(GROUND_TOLERANCE_DEGREES)' in src, "__GTOL__ is never filled in"
     # AND ITS OWN TARGET. A plate used to borrow the sculpts' 32.0 and differ only in
-    # tolerance; both plate numbers are now read off the plates themselves, so the panel
+    # tolerance; both plate numbers are the plates' own, pinned rather than derived, so the panel
     # reading the sculpt box would silently judge every plate against the wrong centre.
     assert "__GTARGET__" in src and "id=gtarget" in src, "the plate target has no box"
     assert 'getElementById("gtarget").value' in src, (

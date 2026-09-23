@@ -21,12 +21,20 @@ the page says so rather than guessing.
 WHAT IT WILL AND WILL NOT GIVE A VERDICT ON
 
 A sculpt's plinth is a turned disc, so its bottom outline IS an ellipse and the camera angle off
-it is exact -- the four figures in the set agree to within a degree. A ground plate's edge is
-ragged cobble or stepped stone, the outline is not an ellipse, and the same measurement
-under-reads: the two plates on record come out 25 and 17.8 degrees by outline against 38.5 by
-bounding box. So a plate gets numbers and a drawing of where they landed, and no verdict on its
-angle. The honest reading of a plate is the aspect of a square paving stone on its surface, and
-that still wants an eye. Generating plates with a circular outline makes them measurable.
+it is exact. The nine figures on record span 31.1 to 33.5 degrees, all inside a 2.5 tolerance.
+
+A GROUND PLATE IS HARDER, and the fix is the measuring ring rather than an eye. A plate's edge
+is ragged cobble, stepped stone or plank ends; the outline is not an ellipse, and fitting one to
+it is a best guess that visibly misses -- on planks_rough the fit reads 30.66 where the ring
+reads 31.14. So the briefs ask the generator to draw a green ring around the tile, a known
+circle on the same ground, and sculpt_metrics measures that and then strips it. Plates now get a
+verdict like sculpts do, against a window locked at 31.55 +/- 0.48.
+
+This paragraph said something else until 2026-09-23 -- that a plate could not be judged, that
+two plates read 25 and 17.8 degrees by outline against 38.5 by bounding box, and that plates
+with circular outlines would fix it. All of that is superseded: the ring made ragged plates
+measurable without changing the art, and the bounding-box figure was itself the bug, since
+bounding a ring measures its outer edge and over-reads by up to 0.7 degrees.
 
 EVERY NUMBER COMES WITH THE PICTURE THAT SHOWS WHERE IT LANDED
 
@@ -145,10 +153,12 @@ TOLERANCE_DEGREES = 2.5
 # across with nothing standing on it: the reading is far steadier, and what it has to agree with
 # is the whole set of figures at once.
 #
-# BOTH NUMBERS BELOW ARE READ OFF THE PLATES THEMSELVES, not chosen. Every plate on file has
-# been looked at under figures and accepted, so the set IS the specification: its mean is what
-# a plate should measure, and the furthest any accepted plate strays from that mean is how far
-# a new one may stray before it is a different kind of picture. Measured 2026-09-23 --
+# THE PLATE WINDOW IS LOCKED. These two numbers are constants, not a formula over the
+# folder, and a plate that falls outside them fails rather than widening them.
+#
+# They were DERIVED ONCE, on 2026-09-23, from the six plates then on file -- every one of
+# which had been looked at under figures and kept, so the set was the best description of
+# what "right" meant:
 #
 #     slate_irregular       31.07   -0.47
 #     planks_rough          31.14   -0.40      (from its ring; its outline reads 30.66)
@@ -157,27 +167,31 @@ TOLERANCE_DEGREES = 2.5
 #     limestone_irregular   31.89   +0.35
 #     flagstones_slab       32.02   +0.48
 #
-#     mean 31.55, largest deviation 0.48, so the window is 31.07 to 32.03
+#     mean 31.55, largest deviation 0.48  ->  window 31.07 to 32.03
 #
-# This REPLACED a target of 32.0 with a tolerance of 1.0, which were both picked rather than
-# measured: 32 was a round number the board settled on and 1.0 was half the sculpt figure.
-# The set never actually centred on 32 -- five of the six sit below it.
+# That replaced a target of 32.0 with a tolerance of 1.0, which were both picked rather than
+# measured, and which the set never centred on: five of its six sat below 32.
 #
-# IT IS ABOUT HALF THE OLD WINDOW AND THAT IS THE POINT, not a side effect. Against the batch
-# of five that produced the current cobbles plate it passes exactly one, the one that was
-# chosen by eye: 31.6 passes, and 32.2, 32.9, 34.4 and 35.9 do not. One in five is what this
-# work has actually cost all along, and a tolerance that admitted four of them was not
-# describing the thing being accepted. The briefs' 0.530 ceiling needs no change: sin(32.03)
-# is 0.530, so the ceiling already sits on the window's upper edge.
+# WHY THE RULE THAT PRODUCED THEM IS NOT THE RULE THAT KEEPS THEM. A window defined as the
+# accepted set's mean and largest deviation is defined by the thing it judges, so every plate
+# accepted rewrites the bar judging the next, and nothing anchors it. Simulated: filing eight
+# plates each landing exactly on the current ceiling -- all legitimate, all green -- moves the
+# target +0.54 and the ceiling +1.09 degrees.
 #
-# THE RULE IS A RATCHET AND IT IS WORTH KNOWING. Accept a plate and the window follows it, so
-# each accepted outlier loosens the bar that judges the next one. planks_rough was the first
-# test of that and cost nothing at all -- the window TIGHTENED, 0.55 to 0.48 -- because it was
-# filed at its ring's 31.14 rather than its outline's 30.66, which would have cost 0.52 to
-# 0.80, a 54% wider window on the strength of one plate. Filing a plate near the edge is
-# cheap; filing one past it is how the specification stops meaning anything.
-GROUND_TARGET_DEGREES = 31.55
-GROUND_TOLERANCE_DEGREES = 0.48
+# The realistic path is worse because it is invisible. Filing the BEST of each batch rather
+# than an edge case, over twelve plates, the target slides DOWN from 31.55 to 31.43 while the
+# ceiling stays pinned at 32.02, because the highest plate on file anchors the top and
+# everything new lands below the mean. The set drifts away from the sculpts one plate at a
+# time, and every individual step looks like tightening the standard.
+#
+# The tolerance was also decided by exactly ONE plate, whichever sat furthest out -- slab
+# today, slate before the plank correction. Add a plate 0.48 past the ceiling and that
+# statistic jumps 72% where two standard deviations would move 31%.
+#
+# So the numbers stay where the measurement put them. Changing them is now a deliberate edit
+# to two literals that shows up in review, rather than a side effect of filing art.
+GROUND_TARGET_DEGREES = 31.55       # LOCKED 2026-09-23; see above before changing
+GROUND_TOLERANCE_DEGREES = 0.48     # LOCKED 2026-09-23; window 31.07 to 32.03
 BASE_TOLERANCE_PCT = 24.0        # chunkier than the set's median
 BASE_THIN_PCT = 12.0             # thinner than it
 
@@ -1207,7 +1221,7 @@ def main():
               % (b["lo"], b["hi"], b["mid"]))
     print("  target %.0f deg, tolerance %.1f  (height is not checked)"
           % (TARGET_DEGREES, TOLERANCE_DEGREES))
-    print("  ground plates: %.2f deg target, tolerance %.2f -- both read off the accepted set"
+    print("  ground plates: %.2f deg target, tolerance %.2f -- LOCKED, not derived per run"
           % (GROUND_TARGET_DEGREES, GROUND_TOLERANCE_DEGREES))
     print("                 (window %.2f to %.2f; a sculpt's tolerance is %.1f)"
           % (GROUND_TARGET_DEGREES - GROUND_TOLERANCE_DEGREES,
@@ -1359,14 +1373,16 @@ var INGAME = __INGAME__;
   if (SCULPT_PROMPTS.length) {
     var ph = ["<div id=prompts><span class=lab>copy the brief:</span>"];
     SCULPT_PROMPTS.forEach(function(p, i){
-      ph.push("<button class=cp data-i='" + PROMPTS.indexOf(p) + "'>&#128203;&nbsp; "
-              + p.name + "</button>");
-      // The image the brief tells you to attach, right beside it. "use the same base and angle
-      // as in the attached image" is only an instruction if the attachment is the right file.
+      // THE ATTACHMENT COMES FIRST, then the brief. "use the same base and angle as in the
+      // attached image" is only an instruction if the attachment is the right file -- and the
+      // order you do it in is attach, then paste. A link sitting after the button read as an
+      // afterthought and was easy to copy the brief without.
       (p.attach || []).forEach(function(a, k){
         ph.push("<a class=att download='" + a.name + "' href='" + a.uri + "'>"
                 + "&#128206;&nbsp; " + (k + 1) + ". " + a.name + "</a>");
       });
+      ph.push("<button class=cp data-i='" + PROMPTS.indexOf(p) + "'>&#128203;&nbsp; "
+              + p.name + "</button>");
     });
     ph.push("<span class=note id=cpsay>the brief that produced the sculpt of the same name, "
             + "verbatim from tools/ui_debug/prompts/</span></div>");
@@ -1560,9 +1576,10 @@ function show(name, ok, res){
   // A PLATE HAS ITS OWN TARGET AS WELL AS ITS OWN TOLERANCE. It used to borrow the sculpts'
   // 32.0 and differ only in tolerance, on the reasoning that ground and figure must agree
   // about where you are standing -- which is true, and is still checked, but is not the same
-  // as the two being judged by one number. Both plate numbers are now read off the plates
-  // themselves: 31.55 is what the accepted set averages and 0.48 is how far the furthest
-  // accepted plate strays from that. The sculpts keep 32.0, and the gap between the two --
+  // as the two being judged by one number. Both plate numbers were derived once from the
+  // plates on file and then LOCKED: 31.55 is what that set averaged and 0.48 is how far
+  // its furthest member sat from that. Derived once, then fixed, so filing a plate cannot
+  // move the bar the next one is judged by. The sculpts keep 32.0, and the gap between the two --
   // four tenths of a degree, well inside either tolerance -- is itself the agreement.
   var TARGET = +document.getElementById("gtarget").value;
   var TOL = +document.getElementById("gtol").value;   // a plate's own, tighter than a sculpt's
@@ -1582,12 +1599,12 @@ function show(name, ok, res){
   if (GROUND_PROMPTS.length) {
     var gp = ["<div id=prompts><span class=lab>copy the brief:</span>"];
     GROUND_PROMPTS.forEach(function(p){
-      gp.push("<button class=cp data-i='" + PROMPTS.indexOf(p) + "'>&#128203;&nbsp; "
-              + p.name + "</button>");
       (p.attach || []).forEach(function(a, k){
         gp.push("<a class=att download='" + a.name + "' href='" + a.uri + "'>"
                 + "&#128206;&nbsp; " + (k + 1) + ". " + a.name + "</a>");
       });
+      gp.push("<button class=cp data-i='" + PROMPTS.indexOf(p) + "'>&#128203;&nbsp; "
+              + p.name + "</button>");
     });
     gp.push("<span class=note>the brief that produced the plate of the same name, verbatim "
             + "from tools/ui_debug/prompts/</span></div>");
