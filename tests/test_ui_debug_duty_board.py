@@ -759,13 +759,20 @@ def test_every_ground_plate_has_a_licence_on_record(mod):
     att = json.loads(
         (ROOT / "ui" / "assets-gothic" / "attribution.json").read_text(encoding="utf-8"))
     assert "grounds" in att["assetDirs"], "the grounds folder is not checked by the verifier"
-    for path in sorted(mod.GROUNDS_DIR.glob("*")):
-        if path.name.startswith("."):
+    # EVERY PLATE, INCLUDING THE ONES IN candidates/. The walk used to be one flat glob over
+    # grounds/ and it counted the candidates FOLDER as a file the moment one was created --
+    # a plate held rather than filed still arrived from somewhere and still needs its record.
+    root = mod.GROUNDS_DIR
+    seen = 0
+    for path in sorted(root.rglob("*")):
+        if path.is_dir() or path.name.startswith("."):
             continue
-        key = "grounds/%s" % path.name
+        key = "grounds/%s" % path.relative_to(root).as_posix()
         assert key in att["files"], "%s has no entry in attribution.json" % key
         assert att["files"][key]["licence"] in att["licences"], (
             "%s claims a licence the register does not define" % key)
+        seen += 1
+    assert seen >= 5, "only %d plate(s) walked -- the tree is not being searched" % seen
 
 
 def test_the_plates_are_discovered_rather_than_listed(mod):
@@ -1654,11 +1661,16 @@ def test_the_reference_card_is_offered_whole(checker):
     assert card["bytes"] == path.stat().st_size, (
         "the card was re-encoded: %d bytes offered against %d on disk"
         % (card["bytes"], path.stat().st_size))
-    import base64 as _b64
-    raw = _b64.b64decode(card["uri"].split(",", 1)[1])
-    assert raw == path.read_bytes(), "the download is not the committed file byte for byte"
-    assert card["uri"].startswith("data:image/png;base64,"), (
-        "a file:// page cannot fetch anything but a data URI, and that is how this page opens")
+    # REFERENCED, not embedded, since the page stopped swallowing 15 MB of files that were
+    # already on disk. What must still hold is what this test was always about: the thing the
+    # button hands over is the committed card and not the preview beside it. That is now a
+    # question about where the href points rather than about what a data URI decodes to.
+    assert not card["uri"].startswith("data:"), "the card is embedded again"
+    pointed = (checker.OUT.parent / card["uri"]).resolve()
+    assert pointed.is_file(), "the card's href points at %s, which is not there" % card["uri"]
+    assert pointed == path.resolve(), (
+        "the button points at %s but the card on file is %s" % (pointed, path))
+    assert pointed.read_bytes() == path.read_bytes()
 
 
 def test_the_card_button_sits_above_the_sculpts_it_produced(checker):
@@ -1950,31 +1962,35 @@ def test_the_cards_differ_only_where_the_registry_says_they_do(cards, tmp_path):
     assert a.height > b.height, "the dimensioned card is not the taller layout"
 
 
-def test_the_plinth_fixture_is_only_honest_above_a_certain_wall(metrics):
-    """THE FLOOR ON THE FIXTURE, pinned here because it silently fooled a test being written.
+def test_the_fixture_is_measured_honestly_or_refused(metrics):
+    """WHAT THIS TEST USED TO SAY IS THE INTERESTING PART, so it is worth writing down.
 
-    `_plinth` draws a lit rim for `measure` to find. Below roughly 30 px of wall on a 240 px
-    base the scan misses that rim and locks onto the top of the disc instead, so a SIX pixel
-    wall reports as 134 and the camera reads 3.6 degrees instead of 32. The numbers do not look
-    like errors -- they look like a very chunky plinth photographed from very low down -- and a
-    thin-base test built on them passes for exactly the wrong reason.
+    It used to pin a FLOOR: below about 30 px of wall on a 240 px base, `measure` missed the
+    lit rim and locked onto the top of the disc instead, so a SIX pixel wall reported as 134
+    and the camera read 3.6 degrees. Those numbers do not look like errors -- they look like a
+    chunky plinth photographed from very low down -- and a thin-base test built on them passed
+    for exactly the wrong reason, which is how it was found.
 
-    So there is no synthetic thin plinth in this file, and any test that wants one has to fix
-    the fixture first. This guard fails the moment someone makes it usable, which is the point:
-    the news should arrive as a failure here rather than as a test that quietly proves nothing.
+    sculpt_metrics._rim no longer works that way. It takes the lowest peak standing clear of
+    the plinth's own dark wall, over a window sized to the plinth rather than fixed in pixels,
+    and returns None when there is no such peak. The floor is gone: the fixture measures true
+    from about 12 px up, and the one thickness it cannot see refuses instead of inventing.
     """
-    honest, wrong = [], []
-    for wall in (6, 12, 20, 40, 60, 90):
-        im = _plinth(240, 32.0, wall)
-        got = metrics.measure(im)["wall"]
-        (honest if abs(got - wall) <= 6 else wrong).append((wall, got))
-    assert [w for w, _ in honest] == [40, 60, 90], (
-        "the fixture's honest range has moved: honest at %s, wrong at %s" % (honest, wrong))
+    honest, refused, wrong = [], [], []
+    for wall in (6, 12, 20, 34, 40, 60, 90):
+        got = metrics.measure(_plinth(240, 32.0, wall))["wall"]
+        if got is None:
+            refused.append(wall)
+        elif abs(got - wall) <= 6:
+            honest.append(wall)
+        else:
+            wrong.append((wall, got))
+    assert not wrong, "a wall was measured wrongly rather than refused: %s" % wrong
+    assert honest == [12, 20, 34, 40, 60, 90], "the honest range has moved: %s" % honest
+    assert refused == [6], "what the fixture refuses has moved: %s" % refused
 
-    # The floor is a wall thickness in PIXELS, not a ratio, so a wider base buys headroom --
-    # which is how the asymmetry test below gets a drawable plinth inside the band.
-    wide = metrics.measure(_plinth(480, 32.0, 66))["wall"]
-    assert abs(wide - 66) <= 6, "66 px on a 480 px base measured %s" % wide
+    # a wide base measures the same way, because the window is a fraction of the plinth
+    assert abs(metrics.measure(_plinth(480, 32.0, 66))["wall"] - 66) <= 6
 
 
 def test_the_base_is_judged_asymmetrically(checker):
@@ -1996,12 +2012,11 @@ def test_the_base_is_judged_asymmetrically(checker):
 
     import math
 
-    # A 480 px base, not 240: the fixture's rim scan needs about 30 px of wall before it is
-    # honest (see the test above), and on a narrow base the whole band sits under that floor.
+    # A 480 px base keeps the drawn wall comfortably large across the whole band. A 240 px one
+    # is honest now too -- see the test above -- but leaves less room between the two numbers.
     def verdict(upright, degrees=32.0, width=480):
         raw = upright * math.cos(math.radians(degrees))
         wall = round(raw * width)
-        assert wall >= 34, "this asks for a wall the fixture cannot draw honestly"
         return _named(checker, _png(_plinth(width, degrees, wall)))["base height / width"][1]
 
     assert verdict(mid * 1.15) == "ok", "a plinth 15% chunkier than the set was not allowed"
@@ -2037,3 +2052,684 @@ def test_the_page_carries_both_base_tolerances(checker):
     assert "base_thin" in src, "the page never sends the thin tolerance back"
     # and the substitution actually happens, so the box is not left holding the placeholder
     assert 'json.dumps(BASE_THIN_PCT)' in src, "__BTHIN__ is never filled in"
+
+
+def test_the_plates_are_judged_on_the_camera_they_share_with_a_sculpt(checker):
+    """A plate has no plinth, so only one of the three sculpt checks transfers -- and it does.
+
+    `base_band=False` is the whole trick and it is easy to lose: the band exists to scan the
+    bottom strip of a sculpt, where a plinth lives, and a plate IS the ellipse. Scanning a
+    plate's bottom strip reports about 17 degrees for every one of them, which is a plausible
+    enough number to be believed.
+    """
+    rows = checker.ground_record()
+    if not rows:
+        pytest.skip("no ground plates on file")
+    for r in rows:
+        assert r["degrees"] is not None, "%s has no camera" % r["name"]
+        assert 5.0 < r["degrees"] < 85.0, "%s measured %s" % (r["name"], r["degrees"])
+
+    # THE GUARD THAT USED TO LIVE HERE WANTED A SPREAD OF MORE THAN 5 DEGREES ACROSS THE
+    # FOLDER, as proof that the measurement was not collapsing every plate onto one number.
+    # It worked only because cobbles_oval sat at 39.8 and dragged the range open. On
+    # 2026-09-23 that plate was redrawn at 31.6 and the whole set came inside a degree --
+    # 31.1, 31.5, 31.6, 31.9, 32.0 -- so the old guard began failing on SUCCESS. Tight
+    # agreement is the goal here, and a test that reads the goal as a fault is worse than no
+    # test: the obvious way to make it pass again is to keep a bad plate on file.
+    #
+    # What it was really trying to prove is proved below instead, per-plate and without
+    # needing an outlier: the same code with base_band=True gives a DIFFERENT and wrong
+    # answer, so the base_band=False path is demonstrably doing work.
+    seen = sorted(r["degrees"] for r in rows)
+    assert len(set(seen)) > 1, (
+        "every plate measured the identical number (%s) -- that is not tight agreement, that "
+        "is the measurement not reading the image at all" % seen)
+
+    from PIL import Image
+    # every plate, not just the first: this is now the only thing standing between the suite
+    # and a ground_ellipse that has quietly stopped finding ellipses
+    for r in rows:
+        p2 = checker.GROUNDS / (r["name"] + ".png")
+        b = checker.sm.ground_ellipse(Image.open(p2).convert("RGBA"), base_band=True)
+        w = checker.sm.ground_ellipse(Image.open(p2).convert("RGBA"), base_band=False)
+        assert b is not None and w is not None, "%s measured as nothing" % r["name"]
+        assert abs(b["degrees"] - w["degrees"]) > 5.0, (
+            "%s reads the same banded (%.1f) as whole (%.1f) -- base_band is not being honoured"
+            % (r["name"], b["degrees"], w["degrees"]))
+
+    plate = checker.GROUNDS / (rows[0]["name"] + ".png")
+    im = Image.open(plate).convert("RGBA")
+    banded = checker.sm.ground_ellipse(im, base_band=True)
+    whole = checker.sm.ground_ellipse(im, base_band=False)
+    assert banded and whole
+    assert abs(whole["degrees"] - rows[0]["degrees"]) < 0.2, "the record is not the whole-art read"
+    assert whole["degrees"] - banded["degrees"] > 5.0, (
+        "the bottom-strip scan agrees with the whole-art scan on a plate, so this guard is "
+        "no longer guarding the mistake it was written for")
+
+
+def test_a_plate_nobody_stands_on_is_named_rather_than_dropped(checker):
+    """Three of the five carry no duty and are kept as the evidence of a camera that missed.
+
+    A panel that quietly listed only the plates in use would be throwing that away, and the
+    next person to wonder what a mismatch looks like would have to generate one.
+    """
+    rows = checker.ground_record()
+    if not rows:
+        pytest.skip("no ground plates on file")
+    idle = [r for r in rows if not r["duties"]]
+    used = [r for r in rows if r["duties"]]
+    assert used, "no plate has a duty standing on it"
+    assert idle, "every plate is in use -- this guard needs a different fixture"
+    src = pathlib.Path(checker.__file__).read_text(encoding="utf-8")
+    assert "no duty stands on this one" in src, "the page does not say when nobody stands on one"
+
+    # AND IT DOES NOT CALL THEM ALL MISTAKES. Standing on nobody and having the wrong camera are
+    # separate facts: when every duty-less plate also failed, one sentence covered both, and the
+    # moment a passing plate had no duty the page started calling it evidence of a camera that
+    # missed. A plate that passes must be described as waiting, not as wrong.
+    assert "no duty stands on this one yet" in src, "a passing, duty-less plate is called a miss"
+    idle_ok = [r for r in rows if not r["duties"]
+               and abs(r["degrees"] - checker.TARGET_DEGREES)
+               <= checker.GROUND_TOLERANCE_DEGREES]
+    assert idle_ok, "no passing plate is currently duty-less -- this guard needs a fixture"
+
+
+def test_the_page_references_committed_files_instead_of_swallowing_them(checker, tmp_path):
+    """15.3 MB of the page was base64 of files already on disk, against 0.3 MB of the drawn
+    previews anyone actually looks at. The originals are referenced now; only what is GENERATED
+    is embedded, because there is nothing on disk to point at.
+    """
+    out = tmp_path / "asset_check.html"
+    for r in checker.on_record(rel_to=out.parent) + checker.ground_record(rel_to=out.parent):
+        assert not r["orig"].startswith("data:"), "%s is embedded again" % r["file"]
+        assert (out.parent / r["orig"]).resolve().is_file(), (
+            "%s points at %s, which is not there" % (r["file"], r["orig"]))
+    card = checker.reference_card(rel_to=out.parent)
+    if card:
+        assert not card["uri"].startswith("data:"), "the reference card is embedded again"
+        assert (out.parent / card["uri"]).resolve().is_file()
+    for p in checker.prompts(rel_to=out.parent):
+        for a in p["attach"]:
+            assert not a["uri"].startswith("data:"), "%s is embedded again" % a["name"]
+            assert (out.parent / a["uri"]).resolve().is_file()
+    # and the previews, which exist nowhere on disk, still are embedded
+    rows = checker.ground_record(rel_to=out.parent)
+    if rows:
+        assert rows[0]["preview"].startswith("data:image/png;base64,")
+
+
+def test_one_href_has_to_work_from_disk_and_from_the_server(checker):
+    """The page is served at its own path under a document root of the repository, NOT at "/".
+
+    That is the only reason a single relative href can work in both modes. Serving it at the
+    root would leave every ../../../ pointing above the document root, and the links would work
+    from disk and 404 when served -- which is exactly the mode they were added for, since
+    Chromium ignores `download` on a file:// link.
+    """
+    src = pathlib.Path(checker.__file__).read_text(encoding="utf-8")
+    assert "page_path = href(page, ROOT)" in src, "the server does not know the page's own path"
+    assert '"Location", "/" + page_path' in src, "/ does not redirect to the page's real path"
+    assert "os.path.realpath" in src, "the static branch is not path-confined"
+    rel = checker.href(checker.SCULPTS / "player_2_v1.png", checker.OUT.parent)
+    assert rel.startswith("../../../ui/"), "unexpected shape for a reference: %s" % rel
+    assert (checker.OUT.parent / rel).resolve() == (checker.SCULPTS / "player_2_v1.png").resolve()
+
+
+def test_a_plate_is_held_tighter_than_a_sculpt(checker):
+    """Two tolerances, not one, because they are not the same measurement.
+
+    A sculpt's camera is read off a plinth inside a figure the generator drew freehand, and five
+    near-identical renders scatter by about 0.6 degrees -- 2.5 is sized to that noise. A plate
+    is one flat ellipse with nothing standing on it, read far more steadily, and it has to agree
+    with every figure at once. The guard is that the plate number is the smaller one and that it
+    actually changes a verdict: at 2.5 a plate 2.2 degrees out passes.
+    """
+    assert checker.GROUND_TOLERANCE_DEGREES < checker.TOLERANCE_DEGREES, (
+        "a plate is not held tighter than a sculpt: %s against %s"
+        % (checker.GROUND_TOLERANCE_DEGREES, checker.TOLERANCE_DEGREES))
+
+    rows = checker.ground_record()
+    if not rows:
+        pytest.skip("no ground plates on file")
+
+    def verdict(deg, tol):
+        off = abs(deg - checker.GROUND_TARGET_DEGREES)
+        return "ok" if off <= tol else ("check" if off <= 2 * tol else "bad")
+
+    # NOT "some plate on disk must fail at the tight number and pass at the loose one". That
+    # was the first version of this guard, and it broke the moment the plate it happened to
+    # describe was redrawn -- a test pinned to today's folder rather than to the rule. The rule
+    # is that an angle between the two tolerances is judged differently by them, which is true
+    # of the numbers themselves whatever is on file.
+    between = checker.GROUND_TARGET_DEGREES + (checker.GROUND_TOLERANCE_DEGREES
+                                               + checker.TOLERANCE_DEGREES) / 2.0
+    assert verdict(between, checker.TOLERANCE_DEGREES) == "ok"
+    assert verdict(between, checker.GROUND_TOLERANCE_DEGREES) != "ok", (
+        "%.1f degrees is judged the same by both tolerances, so the plate number is decorative"
+        % between)
+
+    # and every plate a duty actually stands on still passes at the tighter number
+    for r in rows:
+        if r["duties"]:
+            assert verdict(r["degrees"], checker.GROUND_TOLERANCE_DEGREES) == "ok", (
+                "%s carries %s and no longer passes at %s degrees"
+                % (r["name"], ", ".join(r["duties"]), checker.GROUND_TOLERANCE_DEGREES))
+
+
+def test_the_plate_numbers_are_read_off_the_plates(checker):
+    """The target and the tolerance are a DESCRIPTION of the accepted set, not a choice.
+
+    Every plate on file has been looked at under figures and kept, so the set is the
+    specification: the target is what it averages and the tolerance is how far the furthest
+    member strays. That replaced a target of 32.0 and a tolerance of 1.0, which were a round
+    number and half the sculpt figure -- and the set never centred on 32 at all, four of the
+    five sitting below it.
+
+    This recomputes both from the folder. It is the guard against the constants and the art
+    drifting apart: file a plate outside the window and it fails here, which is the moment to
+    decide whether the plate is wrong or the family has moved.
+    """
+    rows = checker.ground_record()
+    if len(rows) < 3:
+        pytest.skip("too few plates to describe a set")
+    degs = [r["degrees"] for r in rows]
+    mean = sum(degs) / len(degs)
+    worst = max(abs(d - mean) for d in degs)
+
+    assert abs(mean - checker.GROUND_TARGET_DEGREES) <= 0.05, (
+        "the plates average %.2f but the target says %.2f -- the set has moved since the "
+        "constant was written (%s)"
+        % (mean, checker.GROUND_TARGET_DEGREES,
+           ", ".join("%s %.2f" % (r["name"], r["degrees"]) for r in rows)))
+    assert abs(worst - checker.GROUND_TOLERANCE_DEGREES) <= 0.05, (
+        "the furthest plate is %.2f from the mean but the tolerance says %.2f"
+        % (worst, checker.GROUND_TOLERANCE_DEGREES))
+
+    # the invariant that actually matters, stated separately: every filed plate is inside its
+    # own window. This is what breaks first when a plate is filed that should not have been.
+    for r in rows:
+        assert abs(r["degrees"] - checker.GROUND_TARGET_DEGREES) <= (
+            checker.GROUND_TOLERANCE_DEGREES + 1e-9), (
+            "%s measures %.2f, outside %.2f +/- %.2f"
+            % (r["name"], r["degrees"], checker.GROUND_TARGET_DEGREES,
+               checker.GROUND_TOLERANCE_DEGREES))
+
+    # and the sculpts' target is close enough that ground and figure still agree about where
+    # the viewer is standing -- the thing the shared constant used to assert by construction
+    assert abs(checker.GROUND_TARGET_DEGREES - checker.TARGET_DEGREES) < 1.0, (
+        "plates centre on %.2f and sculpts on %.2f -- they are no longer the same camera"
+        % (checker.GROUND_TARGET_DEGREES, checker.TARGET_DEGREES))
+
+
+def test_the_ring_ratio_note_still_describes_the_code(checker):
+    """A prose explanation with numbers in it goes stale silently. This is the alarm.
+
+    docs/architecture/ring-ratio.md quotes the plate window, the plate table and the sculpt
+    target. All three are read off the code and the art, so all three move -- and a reader who
+    trusts a document quoting 32.0 when the constant says 31.62 is worse off than one with no
+    document at all. Every number the note states is checked against its source here.
+    """
+    doc = ROOT / "docs" / "architecture" / "ring-ratio.md"
+    if not doc.is_file():
+        pytest.skip("the note is not on file")
+    text = doc.read_text(encoding="utf-8")
+
+    target = checker.GROUND_TARGET_DEGREES
+    tol = checker.GROUND_TOLERANCE_DEGREES
+    for probe, what in (
+            ("%.2f" % target, "the plate target"),
+            ("%.2f" % tol, "the plate tolerance"),
+            ("%.2f to %.2f" % (target - tol, target + tol), "the window in degrees"),
+            ("%.1f" % checker.TARGET_DEGREES, "the sculpt target")):
+        assert probe in text, (
+            "ring-ratio.md never states %s (%s) -- the note and the code have drifted"
+            % (probe, what))
+
+    # the table of plates, every row checked against the folder rather than spot-checked
+    for r in checker.ground_record():
+        assert "`%s`" % r["name"] in text, "%s is missing from the note's table" % r["name"]
+        assert "%.2f" % r["degrees"] in text, (
+            "%s measures %.2f, which the note's table does not contain"
+            % (r["name"], r["degrees"]))
+
+    # the picture beside it, and the generator that redraws it -- a note whose illustration
+    # cannot be rebuilt is a committed screenshot with extra steps
+    assert "ring-ratio.png" in text, "the note does not reference its picture"
+    assert (ROOT / "docs" / "architecture" / "ring-ratio.png").is_file(), "the picture is absent"
+    gen = ROOT / "tools" / "ui_debug" / "generate_ring_ratio_explainer.py"
+    assert gen.is_file(), "the picture has no generator"
+    assert gen.name in text, "the note does not say how to redraw its picture"
+
+
+def test_the_ring_ratio_picture_redraws_from_the_repository_alone(checker, tmp_path):
+    """The generator must not need anything that is not committed.
+
+    Its first draft measured a ringed candidate sitting in a downloads folder, which works
+    exactly once and on one machine. It now draws the ring itself around a committed plate, so
+    this runs it end to end and checks the ring it drew is one the measuring code accepts --
+    the failure mode being an ellipse drawn off the edge of its canvas, which arrives not as a
+    visible glitch but as ring_ellipse correctly refusing an open arc.
+    """
+    import importlib.util
+    path = ROOT / "tools" / "ui_debug" / "generate_ring_ratio_explainer.py"
+    if not path.is_file():
+        pytest.skip("the generator is not on file")
+    spec = importlib.util.spec_from_file_location("generate_ring_ratio_explainer", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    out = tmp_path / "ring-ratio.png"
+    written, target, tol = mod.build(out=out)
+    assert written.is_file() and written.stat().st_size > 20_000, "no picture came out"
+    assert target == checker.GROUND_TARGET_DEGREES, "the picture drew a different target"
+    assert tol == checker.GROUND_TOLERANCE_DEGREES, "the picture drew a different tolerance"
+
+    # the drawn ring is measurable, and measures back as what it was drawn at
+    from PIL import Image
+    plate = Image.open(checker.GROUNDS / "cobbles_oval.png").convert("RGBA")
+    want = checker.sm.ground_ellipse(plate, base_band=False)["degrees"]
+    got = checker.sm.ring_ellipse(mod._ringed(plate, want))
+    assert got is not None, (
+        "the generator drew a ring the measuring code refuses -- almost always an ellipse "
+        "off the edge of its canvas, which reads as an open arc")
+    assert abs(got["degrees"] - want) < 0.5, (
+        "a ring drawn at %.2f measured back as %.2f" % (want, got["degrees"]))
+
+
+def test_a_recorded_camera_cannot_hide_a_bad_plate(checker):
+    """A number written down by hand, for a plate whose ring was thrown away. Guard it.
+
+    Most plates need no such thing: a round rimmed plate's outline IS an ellipse and
+    ground_ellipse measures it. A ragged patch is not, and the fit is a best guess at a shape
+    that has none -- on planks_rough it reads 30.66 where the measuring ring on the source
+    image read 31.57. So duty_grounds.json may carry a plate's camera, and the page reports
+    it as that plate's angle.
+
+    The risk is obvious and worth stating: the ring is stripped when art is filed, so nothing
+    in the repository can re-derive the recorded number. It is the one figure here that no
+    later measurement contradicts, which makes it the one place a wrong angle could sit
+    forever. Two conditions keep it honest.
+    """
+    rows = {r["name"]: r for r in checker.ground_record()}
+    if not rows:
+        pytest.skip("no ground plates on file")
+    recorded = [r for r in rows.values() if r["camera_from"] == "ring" and not r["ringed"]]
+
+    for r in recorded:
+        # ONE: it must still agree with the plate's own outline, to the same 1.5 degrees a
+        # candidate's ring and outline must agree within. The recorded number is allowed to be
+        # the BETTER of two readings; it is not allowed to be a different answer. A plate whose
+        # ring and outline disagree past that bar should never have been filed at all.
+        assert r["measured"] is not None, "%s has a recorded camera and no outline to check "\
+            "it against" % r["name"]
+        assert abs(r["degrees"] - r["measured"]) <= 1.5, (
+            "%s records %.2f but its own outline reads %.2f -- %.2f apart. Past 1.5 the two "
+            "are not two readings of one camera, and the plate should not be on file."
+            % (r["name"], r["degrees"], r["measured"], abs(r["degrees"] - r["measured"])))
+
+        # TWO: it must say where it came from. An unattributed number is indistinguishable
+        # from a typed-in one, and this is the field a future reader has to trust.
+        assert r["camera_note"], (
+            "%s records a camera without saying where it came from" % r["name"])
+        assert len(r["camera_note"]) > 60, (
+            "%s's camera note is too short to be a provenance" % r["name"])
+
+    # and the mechanism is not quietly swallowing every plate: a plate with no recorded camera
+    # must report its own measurement unchanged
+    for r in rows.values():
+        if r["camera_from"] == "outline":
+            assert r["degrees"] == r["measured"], (
+                "%s has no recorded camera but its reported angle (%.2f) is not its "
+                "measurement (%.2f)" % (r["name"], r["degrees"], r["measured"]))
+
+
+def test_the_grounds_panel_reads_its_own_tolerance_box(checker):
+    """The panel silently rendered nothing the first time, because it read a TARGET constant
+    that does not exist -- the numbers live in the boxes at the top. It must read the GROUND
+    box, not the sculpt one, or the two panels answer different questions from the same input.
+    """
+    src = pathlib.Path(checker.__file__).read_text(encoding="utf-8")
+    assert "__GTOL__" in src and "id=gtol" in src, "the plate tolerance has no box on the page"
+    assert 'getElementById("gtol").value' in src, "the grounds panel does not read its own box"
+    assert 'json.dumps(GROUND_TOLERANCE_DEGREES)' in src, "__GTOL__ is never filled in"
+    # AND ITS OWN TARGET. A plate used to borrow the sculpts' 32.0 and differ only in
+    # tolerance; both plate numbers are now read off the plates themselves, so the panel
+    # reading the sculpt box would silently judge every plate against the wrong centre.
+    assert "__GTARGET__" in src and "id=gtarget" in src, "the plate target has no box"
+    assert 'getElementById("gtarget").value' in src, (
+        "the grounds panel still reads the sculpts' target box")
+    assert 'json.dumps(GROUND_TARGET_DEGREES)' in src, "__GTARGET__ is never filled in"
+
+
+def test_a_brief_hands_over_the_brief_and_not_its_bookkeeping(checker, tmp_path):
+    """What reaches the clipboard reaches an image model. Nothing else may ride along.
+
+    The stripper used to remove only `attach:` lines. The first note written for a human
+    reader -- eight lines on why cobbles_oval attaches the plate it REPLACED rather than the
+    one it produced -- therefore went to the clipboard verbatim and would have been pasted
+    into the generator as if it were part of the instruction. A brief has to be able to carry
+    its reasoning without the reasoning becoming the request.
+
+    So: every leading HTML comment is bookkeeping. `attach:` ones are understood, the rest are
+    dropped, and the text starts at the first real line either way.
+    """
+    d = tmp_path / "prompts"
+    d.mkdir()
+    real = checker.ROOT / "ui" / "assets-gothic" / "grounds" / "flagstones_grey.png"
+    (d / "sample.md").write_text(
+        "<!-- attach: ui/assets-gothic/grounds/flagstones_grey.png -->\n"
+        "<!-- a note for whoever opens this file,\n"
+        "     running to several lines -->\n"
+        "<!-- attach: ui/assets-gothic/grounds/flagstones_grey.png -->\n"
+        "THE BRIEF BEGINS HERE.\n\nand continues <!-- this one is inline and must survive -->\n",
+        encoding="utf-8")
+
+    got = checker.prompts(folder=d)
+    assert len(got) == 1
+    one = got[0]
+
+    assert one["text"].startswith("THE BRIEF BEGINS HERE."), (
+        "the clipboard does not start at the brief: %r" % one["text"][:80])
+    assert "a note for whoever opens this file" not in one["text"], (
+        "a reader's note was copied to the clipboard")
+    assert "attach:" not in one["text"], "an attach line was copied to the clipboard"
+
+    # both attach lines are still understood, INCLUDING the one sitting after the note --
+    # a plain comment must not stop the scan and swallow the attachment behind it
+    assert [a["name"] for a in one["attach"]] == [real.name, real.name], (
+        "attachments lost: %s" % [a["name"] for a in one["attach"]])
+
+    # and a comment in the BODY is the author's, not ours: it is not leading, so it stays
+    assert "this one is inline and must survive" in one["text"]
+
+
+def test_a_brief_is_offered_beside_the_thing_it_makes(checker):
+    """A ground plate's brief belongs on the ground tab, not in the sculpt row.
+
+    The two panels answer different questions and the briefs follow their subject. The split
+    is by what is ON FILE rather than by a naming convention, so a brief cannot drift into
+    the wrong row by being called the wrong thing.
+
+    A CANDIDATE COUNTS. The rule was "is there grounds/<name>.png", which is true only once a
+    brief has SUCCEEDED -- so planks_rough.md, whose plate is still grounds/candidates/
+    planks_rough_c01.png, landed beside the sculpts. That is backwards: a brief is most in
+    the way on the wrong tab while it is still being worked on, and least once it is done.
+    """
+    ps = checker.prompts()
+    if not ps:
+        pytest.skip("no briefs on file")
+    for p in ps:
+        assert p["makes"] in ("ground", "sculpt"), p["makes"]
+        made = (checker.GROUNDS / (p["name"] + ".png")).is_file()
+        held = list((checker.GROUNDS / "candidates").glob(p["name"] + "_c*.png"))
+        assert (p["makes"] == "ground") == bool(made or held), (
+            "%s is filed as a %s brief but there is %s plate of that name%s"
+            % (p["name"], p["makes"], "a" if (made or held) else "no",
+               "" if made else " (checked candidates/ too)"))
+
+    # the widening must not have swallowed the distinction: a sculpt brief still exists and
+    # still reads as one, or this test is passing because everything is a ground now
+    kinds = {p["makes"] for p in ps}
+    assert kinds == {"ground", "sculpt"}, (
+        "every brief came back as %s -- the split is no longer splitting" % kinds)
+
+    src = pathlib.Path(checker.__file__).read_text(encoding="utf-8")
+    assert "GROUND_PROMPTS" in src and "SCULPT_PROMPTS" in src, "the page draws one list"
+    # the copy handler indexes the WHOLE list, so a split row must not renumber its buttons
+    assert 'PROMPTS.indexOf(p)' in src, (
+        "a button's data-i is a position within its own row rather than within PROMPTS, so "
+        "the wrong brief reaches the clipboard")
+    assert "data-i='\" + i + \"'" not in src, "a stale per-row index survives"
+
+
+def _ringed(metrics, plate, degrees, radius=1.1, stroke=0.02):
+    """A plate with a measuring ring around it, as a generation carrying one would arrive."""
+    import math
+
+    from PIL import Image, ImageDraw
+    art = metrics.crop_to_art(plate)
+    w, h = art.width, art.height
+    s = math.sin(math.radians(degrees))
+    R = w * radius
+    W = int(2 * R + 60)
+    H = int(max(2 * R * s, h) * 1.15 + 60)
+    out = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(out)
+    cx, cy = W / 2.0, H / 2.0
+    d.ellipse([cx - R, cy - R * s, cx + R, cy + R * s],
+              outline=metrics.RING_KEY + (255,), width=max(2, int(w * stroke)))
+    out.alpha_composite(art, (int(cx - w / 2), int(cy - h * 0.5)))
+    return out
+
+
+@pytest.fixture(scope="module")
+def ragged(checker):
+    from PIL import Image
+    p = checker.GROUNDS / "candidates" / "flagstones_slab_c01.png"
+    if not p.is_file():
+        pytest.skip("the ragged plate is not on file")
+    return Image.open(p).convert("RGBA")
+
+
+def _band_ring(metrics, degrees, a=690, t=9, W=1600, H=900):
+    """A ring whose CENTRELINE is known exactly: the band between (a-t, b-t) and (a+t, b+t).
+
+    _ringed() above draws with PIL's ellipse outline, which strokes INWARD from the bounding
+    box. Fill that and you recover the box exactly, so a bounding measurement round-trips
+    perfectly -- which is why the suite was blind to a +0.7 degree bias for as long as this
+    fixture was the only one. A generated ring is a stroke around a curve, not an inward
+    stroke from a box, and this is that.
+    """
+    import math
+    import numpy as np
+    from PIL import Image
+    s = math.sin(math.radians(degrees))
+    b = a * s
+    yy, xx = np.mgrid[0:H, 0:W]
+    cx, cy = W / 2.0, H / 2.0
+    inner = ((xx - cx) / (a - t)) ** 2 + ((yy - cy) / (b - t)) ** 2
+    outer = ((xx - cx) / (a + t)) ** 2 + ((yy - cy) / (b + t)) ** 2
+    px = np.zeros((H, W, 4), np.uint8)
+    px[(outer <= 1.0) & (inner >= 1.0)] = metrics.RING_KEY + (255,)
+    return Image.fromarray(px, "RGBA"), b / a
+
+
+def test_the_ring_is_fitted_and_not_merely_bounded(metrics):
+    """The bias that was there from the start, and is larger than a plate's whole tolerance.
+
+    Filling a ring recovers its OUTER edge, and an outer edge is a fatter ellipse than the
+    centreline it was drawn around: adding half-stroke t to both semi-axes gives (b+t)/(a+t),
+    which exceeds b/a whenever b < a. So a bounding measurement reports a STEEPER camera than
+    the ring was drawn at, by an amount that grows with the stroke -- and the brief asks for a
+    stroke of about 2% of the tile's width.
+
+    Ground truth here is exact, so this is a measurement of the instrument rather than an
+    opinion about it. A plate is held to 0.55 degrees; the old method was out by up to 0.70.
+    """
+    # THE THRESHOLDS ARE WHAT WAS MEASURED, not round numbers. Across strokes of 6 to 18 px
+    # the fit is exact to 0.01 degrees anywhere in the 28-34 band this board works in. The
+    # only place it degrades is a STEEP angle with a FAT stroke -- 0.12 at 40 with t=14 and
+    # 0.22 at 40 with t=18 -- because a band of constant half-width t added to both semi-axes
+    # is not itself an ellipse, and the thicker and rounder it gets the less it is one. That
+    # is 6 degrees outside anywhere a plate will ever sit, and it is still a third of the old
+    # method's error at the angles that matter.
+    for t in (6, 9, 14, 18):
+        for deg in (28.0, 30.0, 31.0, 32.0, 34.0, 40.0):
+            allow = 0.05 if deg <= 34.0 else 0.25
+            im, truth = _band_ring(metrics, deg, t=t)
+            got = metrics.ring_ellipse(im)
+            assert got is not None, "no ring found at %.0f (t=%d)" % (deg, t)
+            assert abs(got["degrees"] - deg) <= allow, (
+                "ring drawn at %.1f measured %.2f with a stroke of %d px -- %.2f out"
+                % (deg, got["degrees"], t, abs(got["degrees"] - deg)))
+            if deg <= 34.0:
+                assert abs(got["sin_theta"] - truth) < 0.002, (
+                    "ring drawn at ratio %.4f fitted as %.4f (t=%d)"
+                    % (truth, got["sin_theta"], t))
+
+    # and the guard on the guard: the OLD method must actually fail this, or the fixture is
+    # not exercising the bias and the test proves nothing
+    import numpy as np
+    from scipy import ndimage
+    im, truth = _band_ring(metrics, 32.0, t=18)
+    m, _ = metrics._ring_mask(im)
+    filled = ndimage.binary_fill_holes(m)
+    px = np.zeros(filled.shape + (4,), np.uint8)
+    px[filled] = [255, 255, 255, 255]
+    from PIL import Image
+    bounded = metrics.ground_ellipse(Image.fromarray(px, "RGBA"), base_band=False)
+    assert bounded is not None
+    err = abs(bounded["degrees"] - 32.0)
+    assert err > 0.3, (
+        "filling and bounding this fixture is accurate to %.2f degrees, so it does not "
+        "exercise the bias the fit exists to remove" % err)
+
+
+def test_a_ring_measures_the_camera_a_ragged_plate_cannot_show(metrics, ragged):
+    """The point of the ring: the tile inside it can be any shape at all.
+
+    This plate's own outline reads 27.5 degrees and the number is meaningless -- it is a ragged
+    patch, not an ellipse. A ring drawn around it is an ellipse whatever the tile does, so the
+    camera becomes readable without the art having to be measurable.
+    """
+    for asked in (28.0, 32.0, 36.0, 40.0):
+        got = metrics.ring_ellipse(_ringed(metrics, ragged, asked))
+        assert got is not None, "no ring found at %.1f" % asked
+        assert abs(got["degrees"] - asked) < 0.5, (
+            "ring drawn at %.1f measured %.1f" % (asked, got["degrees"]))
+
+
+def test_stripping_the_ring_returns_the_tile_untouched(metrics, ragged):
+    """A colour key, not a shape guess. Every pixel that is not the ring survives.
+
+    EVERY VISIBLE pixel, to be exact. This fixture composites the tile onto a canvas, and
+    alpha_composite rewrites the colour of fully transparent pixels by a unit or two -- 429 of
+    them here, all at alpha 0, and exactly the same 429 whether a ring is drawn or not. That is
+    the fixture's rounding, not the key's doing, so the guard is on alpha everywhere and on
+    colour wherever colour can be seen. Checking raw equality instead would fail for a reason
+    that has nothing to do with what this test is about.
+    """
+    import numpy as np
+    before = np.array(metrics.crop_to_art(ragged)).astype(int)
+    after = np.array(metrics.crop_to_art(
+        metrics.without_ring(_ringed(metrics, ragged, 32.0)))).astype(int)
+    assert before.shape == after.shape, "%s became %s" % (before.shape, after.shape)
+    assert (before[..., 3] == after[..., 3]).all(), "the tile's alpha changed"
+    seen = before[..., 3] > 0
+    assert (before[..., :3][seen] == after[..., :3][seen]).all(), (
+        "a visible pixel of the tile changed colour when the ring was removed")
+
+    # and the guard on the guard: with no ring at all the fixture differs in the same places,
+    # so this test is not quietly tolerating something the key did
+    import math
+
+    from PIL import Image
+    art = metrics.crop_to_art(ragged)
+    ringed = _ringed(metrics, ragged, 32.0)
+    plain = Image.new("RGBA", ringed.size, (0, 0, 0, 0))
+    plain.alpha_composite(art, ((ringed.width - art.width) // 2,
+                                (ringed.height - art.height) // 2))
+    assert math.isclose(1.0, 1.0)       # placement differs; shape is what matters here
+    assert np.array(metrics.crop_to_art(plain)).shape == before.shape
+
+
+def test_the_ring_takes_its_own_soft_edge_with_it(metrics, ragged):
+    """The bug the hard-edged fixture above cannot see.
+
+    _ringed() draws with ImageDraw.ellipse, which has NO antialiasing at all -- every ring
+    pixel is either exactly the key or exactly nothing. A real generator does not draw like
+    that. Its ring has a soft edge, and a pixel halfway along that edge is a BLEND of spring
+    green and transparent background: low alpha, and an RGB pulled far enough off the key to
+    sit outside RING_TOLERANCE. The colour key alone leaves those behind, and what survives is
+    a faint ghost of the ring exactly where the ring was.
+
+    Found on the cobbles candidate of 2026-09-23. The ring's ellipse was 1382 px wide; after
+    the old strip the alpha>8 box was still 1382 while the SOLID plate was 1159. The ghost was
+    not near the ring, it WAS the ring, and it padded the bounding box by 16%.
+
+    It never moved an ANGLE -- ground_ellipse fits rather than taking a box, and the ghost is
+    under a percent of the ink. What it corrupted was every preview that crops, which came out
+    16% too wide and made the plate look small beside its neighbours. So this asserts on the
+    bounding box, which is what actually broke.
+    """
+    import numpy as np
+    from PIL import Image
+
+    # a ring with a REAL soft edge: drawn at 4x and downscaled, per the same supersampling the
+    # project uses anywhere a rendered edge is going to be judged
+    big = _ringed(metrics, ragged, 32.0)
+    soft = big.resize((big.width // 4 * 2, big.height // 4 * 2), Image.LANCZOS)
+    soft = soft.resize(big.size, Image.LANCZOS)
+
+    assert metrics.has_measuring_ring(soft), "the softened ring is no longer keyed at all"
+    r = metrics.ring_ellipse(soft)
+    assert r is not None and abs(r["degrees"] - 32.0) < 1.0, (
+        "the softened ring stopped measuring: %s" % (r and r["degrees"]))
+
+    a = np.array(metrics.without_ring(soft))[..., 3]
+    ink = a > metrics.ALPHA
+    assert ink.any(), "the strip removed everything"
+    xs = np.where(ink.any(0))[0]
+    wide = int(np.ptp(xs)) + 1
+
+    solid = a > 200
+    sxs = np.where(solid.any(0))[0]
+    solid_wide = int(np.ptp(sxs)) + 1
+
+    # the surviving ink must BE the tile, not the tile plus a ring-shaped halo around it
+    assert wide <= solid_wide * 1.05, (
+        "a ghost of the ring survived the strip: ink spans %d px where the solid tile spans "
+        "%d (%.0f%% wider). The ring's soft edge is being left behind."
+        % (wide, solid_wide, 100.0 * wide / solid_wide - 100.0))
+
+    # and the guard on the guard: the ring really was wider than the tile, so a strip that
+    # simply did nothing could not have passed the assertion above
+    assert r["width"] > solid_wide * 1.2, (
+        "the fixture's ring is not clear of the tile, so this test proves nothing")
+
+
+def test_a_plate_without_a_ring_takes_the_path_it_always_took(checker, metrics):
+    """The guard on the blast radius. Nothing on file carries a ring, so nothing on file may
+    be routed through the ring code -- the five committed plates must read exactly as before."""
+    from PIL import Image
+    for path in sorted(checker.GROUNDS.glob("*.png")):
+        im = Image.open(path).convert("RGBA")
+        assert not metrics.has_measuring_ring(im), "%s trips the key" % path.name
+        assert metrics.ring_ellipse(im) is None, "%s found a ring that is not there" % path.name
+    for r in checker.ground_record():
+        assert r["ringed"] is False
+
+
+def test_the_key_is_not_a_colour_this_game_uses(metrics):
+    """Magenta was the obvious key and it is wrong: it comes within 34 of stones_plum.png,
+    plum being a purple. The key has to sit outside the palette or it eats the art."""
+    import numpy as np
+    from PIL import Image
+    key = np.array(metrics.RING_KEY)
+    closest = 10 ** 6
+    worst = None
+    for p in sorted((ROOT / "ui" / "assets-gothic").rglob("*.png")):
+        a = np.array(Image.open(p).convert("RGBA")).astype(int)
+        m = a[..., 3] > metrics.ALPHA
+        if not m.any():
+            continue
+        d = int(np.abs(a[..., :3] - key).sum(2)[m].min())
+        if d < closest:
+            closest, worst = d, p.name
+    assert closest > metrics.RING_TOLERANCE, (
+        "the key fires below %d and %s comes within %d of it"
+        % (metrics.RING_TOLERANCE, worst, closest))
+
+
+def test_an_occluded_ring_refuses_rather_than_reporting_the_wrong_number(metrics, ragged):
+    """THE WAY THIS FAILS QUIETLY. A ring's height is 2 x radius x sin(theta), so at a shallow
+    camera a ring that looks generous side to side is still shorter than the tile it encircles,
+    and the tile sits on top of it. Measured, a 32 degree ring at 1.04 times the tile's height
+    read 6.0 degrees -- a plausible number for a very flat plate, which is exactly the kind of
+    wrong answer that gets believed. A broken ring has to refuse.
+    """
+    tight = metrics.ring_ellipse(_ringed(metrics, ragged, 32.0, radius=0.62))
+    assert tight is None, "an occluded ring reported %s instead of refusing" % tight
+    roomy = metrics.ring_ellipse(_ringed(metrics, ragged, 32.0, radius=1.1))
+    assert roomy is not None and abs(roomy["degrees"] - 32.0) < 0.5

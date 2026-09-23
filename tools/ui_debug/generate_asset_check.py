@@ -42,6 +42,7 @@ import importlib.util
 import io
 import json
 import math
+import os
 import pathlib
 import re
 import statistics
@@ -50,6 +51,25 @@ import sys
 HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 OUT = HERE / "generated" / "asset_check.html"
+
+
+def href(path, rel_to=None):
+    """Where the PAGE should point at a committed file, as a path and not as ten megabytes.
+
+    THE SAME STRING HAS TO WORK IN BOTH MODES, which is the only reason this is a function.
+    Opened from disk the page sits in tools/ui_debug/generated/, so a file three levels up is
+    ../../../ui/... ; served, the page is handed out at that same path under a document root of
+    the repository, so the identical relative href resolves to the identical file. Serving the
+    page at "/" would have broken every one of these.
+
+    Embedding was the alternative and it was measured: the originals and the attachments came to
+    15.3 MB of base64 against 0.3 MB of the drawn previews that actually appear on screen -- 98%
+    of the page was link targets nobody looks at. What embedding buys is a one-click download
+    from a file:// page, because Chromium ignores the `download` attribute on a file:// link and
+    navigates to the image instead. That is the whole trade, and --serve wins it back.
+    """
+    rel = os.path.relpath(str(path), str((rel_to or OUT.parent)))
+    return rel.replace(os.sep, "/")
 
 sys.path.insert(0, str(HERE))
 import numpy as np                                                      # noqa: E402
@@ -62,6 +82,8 @@ except ModuleNotFoundError:                                             # pragma
 
 CONCEPT = ROOT / "ui" / "concept"
 SCULPTS = ROOT / "ui" / "assets-gothic" / "sculpts"
+GROUNDS = ROOT / "ui" / "assets-gothic" / "grounds"
+GROUND_PLAN = ROOT / "ui" / "assets-gothic" / "metadata" / "duty_grounds.json"
 PLAYERS = ("player_1", "player_2", "player_3", "player_4")
 
 # THE ANGLE THE SET IS BEING REDRAWN TO. A constant rather than a file because exactly one thing
@@ -114,6 +136,48 @@ TOLERANCE_DEGREES = 2.5
 # which is 43% under and nowhere near this limit. A base below the set reads as a sliver and
 # takes the camera down with it -- the anti-correlation between base thickness and camera height
 # runs at r = +0.92 -- so there is no case for loosening that side to match this one.
+# A GROUND PLATE IS HELD TIGHTER THAN A SCULPT, and it is a different number rather than the
+# same one because the two are not the same measurement.
+#
+# A sculpt's camera is read off a plinth perhaps 150 px wide inside a figure the generator drew
+# freehand, and five near-identical renders of one monk scatter by about 0.6 degrees -- so 2.5
+# is a tolerance sized to the noise in the instrument. A plate is a single flat ellipse 1500 px
+# across with nothing standing on it: the reading is far steadier, and what it has to agree with
+# is the whole set of figures at once.
+#
+# BOTH NUMBERS BELOW ARE READ OFF THE PLATES THEMSELVES, not chosen. Every plate on file has
+# been looked at under figures and accepted, so the set IS the specification: its mean is what
+# a plate should measure, and the furthest any accepted plate strays from that mean is how far
+# a new one may stray before it is a different kind of picture. Measured 2026-09-23 --
+#
+#     slate_irregular       31.07   -0.47
+#     planks_rough          31.14   -0.40      (from its ring; its outline reads 30.66)
+#     flagstones_grey       31.52   -0.02
+#     cobbles_oval          31.63   +0.09
+#     limestone_irregular   31.89   +0.35
+#     flagstones_slab       32.02   +0.48
+#
+#     mean 31.55, largest deviation 0.48, so the window is 31.07 to 32.03
+#
+# This REPLACED a target of 32.0 with a tolerance of 1.0, which were both picked rather than
+# measured: 32 was a round number the board settled on and 1.0 was half the sculpt figure.
+# The set never actually centred on 32 -- five of the six sit below it.
+#
+# IT IS ABOUT HALF THE OLD WINDOW AND THAT IS THE POINT, not a side effect. Against the batch
+# of five that produced the current cobbles plate it passes exactly one, the one that was
+# chosen by eye: 31.6 passes, and 32.2, 32.9, 34.4 and 35.9 do not. One in five is what this
+# work has actually cost all along, and a tolerance that admitted four of them was not
+# describing the thing being accepted. The briefs' 0.530 ceiling needs no change: sin(32.03)
+# is 0.530, so the ceiling already sits on the window's upper edge.
+#
+# THE RULE IS A RATCHET AND IT IS WORTH KNOWING. Accept a plate and the window follows it, so
+# each accepted outlier loosens the bar that judges the next one. planks_rough was the first
+# test of that and cost nothing at all -- the window TIGHTENED, 0.55 to 0.48 -- because it was
+# filed at its ring's 31.14 rather than its outline's 30.66, which would have cost 0.52 to
+# 0.80, a 54% wider window on the strength of one plate. Filing a plate near the edge is
+# cheap; filing one past it is how the specification stops meaning anything.
+GROUND_TARGET_DEGREES = 31.55
+GROUND_TOLERANCE_DEGREES = 0.48
 BASE_TOLERANCE_PCT = 24.0        # chunkier than the set's median
 BASE_THIN_PCT = 12.0             # thinner than it
 
@@ -506,7 +570,7 @@ def arrangement_picture(folder=SCULPTS, place=None, colour=False, plain=False):
             "plate": plate_path.stem, "anchor": round(anchor*100)}
 
 
-def on_record(folder=SCULPTS):
+def on_record(folder=SCULPTS, rel_to=None):
     """The sculpts a newcomer is being judged against, drawn rather than summarised."""
     out = []
     if not folder.is_dir():
@@ -517,6 +581,14 @@ def on_record(folder=SCULPTS):
             m = sm.measure(im)
             g = sm.ground_ellipse(im)
             out.append({"name": path.stem,
+                        # THE ORIGINAL, not the drawn preview beside it. Same reason the
+                        # reference card is offered whole: this file is what you attach to a
+                        # v2 brief, and the previews above it are 520 px with measurements
+                        # burnt in -- handing one of those over under the sculpt's name would
+                        # be handing over a different instruction that looks identical.
+                        "file": path.name,
+                        "kb": round(path.stat().st_size / 1024),
+                        "orig": href(path, rel_to),
                         "degrees": round(g["degrees"], 1) if g else None,
                         "base": round(_upright(m["wall_ratio"], g["degrees"]) or 0, 3) if g
                         else None,
@@ -531,7 +603,111 @@ def on_record(folder=SCULPTS):
     return out
 
 
-def prompts(folder=None):
+def ground_record(folder=GROUNDS, rel_to=None):
+    """The ground plates, judged on the ONE check they share with a sculpt.
+
+    A plate has no plinth and no figure, so two of the three sculpt checks have nothing to
+    measure. The camera does transfer, and it is the check that matters: a circle on the ground
+    seen from theta above draws an ellipse of sin(theta) x its width, which is the same
+    arithmetic whether the circle is a figurine's base or the ground the figurine stands on. If
+    the plate and the figure disagree about where you are standing, the tile is wrong however
+    good either one looks alone.
+
+    `base_band=False` is not a detail. The band exists to scan the bottom strip of a sculpt,
+    where a plinth lives; a plate IS the ellipse, and scanning its bottom strip reports about
+    17 degrees for everything.
+
+    ANCHOR IS REPORTED AGAINST THE FILE AND NOT RECONCILED WITH IT. The widest row of the art is
+    where the standing line falls, and duty_grounds.json carries a hand-set value per plate. The
+    two differ by a point or so, consistently in one direction, which reads as deliberate -- feet
+    set a little forward of the widest row -- rather than as drift. Two numbers side by side let
+    that stay a judgement; one number would quietly make it an error.
+    """
+    out = []
+    if not folder.is_dir():
+        return out
+    plan = {}
+    if GROUND_PLAN.is_file():
+        try:
+            plan = json.loads(GROUND_PLAN.read_text(encoding="utf-8"))
+        except ValueError as exc:
+            print("  could not read %s: %s" % (GROUND_PLAN.name, exc))
+    settings = plan.get("grounds") or {}
+    by_duty = plan.get("by_duty") or {}
+    for path in sorted(folder.glob("*.png")):
+        try:
+            im = Image.open(path).convert("RGBA")
+            # A PLATE WITH NO RING TAKES THE PATH IT ALWAYS TOOK. The ring is something a fresh
+            # generation carries so its camera can be read off a clean ellipse instead of off
+            # its own edge; nothing on file has one, and nothing on file is re-measured.
+            ringed = sm.has_measuring_ring(im)
+            ring = sm.ring_ellipse(im) if ringed else None
+            if ringed:
+                im = sm.without_ring(im)
+            g = ring or sm.ground_ellipse(im, base_band=False)
+            art = sm.crop_to_art(im)
+            # A RECORDED CAMERA, for a plate whose own outline cannot be trusted to give one.
+            # ground_ellipse fits an ellipse; on a round rimmed plate that is what it is
+            # looking at, and the fit tracks the rim all the way round. On a ragged patch it
+            # is a best fit to a shape that is not an ellipse, and it visibly misses -- on
+            # planks_rough the fit bulges past the timber on one side and falls inside it on
+            # the other. That plate's measuring ring, which IS a circle, fits at 31.14 where its
+            # outline read 30.66.
+            #
+            # So duty_grounds.json may carry the camera for such a plate, and this reports it
+            # as the plate's angle. THE MEASURED OUTLINE IS STILL REPORTED ALONGSIDE and never
+            # replaced, because a recorded number is exactly the kind of thing that goes
+            # quietly wrong: the ring it came from was stripped when the art was filed, so
+            # nothing here can re-derive it. Two guards keep it honest -- a test refuses a
+            # recorded camera further than the ring/outline agreement bar from the plate's own
+            # outline, and another refuses one that does not say where it came from.
+            rec = (settings.get(path.stem) or {}).get("camera") or {}
+            measured = round(g["degrees"], 2) if g else None
+            recorded = rec.get("degrees")
+            import numpy as np
+            rows = (np.asarray(art)[:, :, 3] > 128).sum(1)
+            widest = int(rows.argmax()) if rows.size else 0
+            duties = sorted(d for d, name in by_duty.items() if name == path.stem)
+            out.append({
+                "name": path.stem,
+                "file": path.name,
+                "kb": round(path.stat().st_size / 1024),
+                "orig": href(path, rel_to),
+                "degrees": round(float(recorded), 2) if recorded is not None else measured,
+                "measured": measured,
+                "camera_from": (rec.get("from") if recorded is not None
+                                else ("ring" if ringed else "outline")),
+                "camera_note": rec.get("why"),
+                "ringed": bool(ringed),
+                "anchor": round(100.0 * widest / max(1, art.height), 1),
+                "anchor_set": (settings.get(path.stem) or {}).get("anchor"),
+                "duties": duties,
+                "w": art.width, "h": art.height,
+                "preview": preview(art, 360),
+            })
+        except Exception as exc:                                        # noqa: BLE001
+            print("  could not read %s: %s" % (path.name, exc))
+    return out
+
+
+def preview(art, width):
+    """A plate, small, as a data URI. The ONLY thing embedded now, and deliberately.
+
+    The originals are referenced -- see href() -- but a preview is generated here and exists
+    nowhere on disk, so there is nothing to reference. At 360 px across, five of them cost
+    about as much as one paragraph of the page's own prose.
+    """
+    k = min(1.0, float(width) / max(1, art.width))
+    small = art.resize((max(1, round(art.width * k)), max(1, round(art.height * k))),
+                       Image.LANCZOS)
+    back = Image.new("RGBA", small.size, (23, 19, 13, 255))
+    back.alpha_composite(small)
+    buf = io.BytesIO()
+    back.convert("RGB").save(buf, "PNG", optimize=True)
+    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+def prompts(folder=None, rel_to=None):
     """The briefs that produced the art on file, offered to the clipboard.
 
     A prompt is an INPUT, exactly as the reference card is, and it has the same problem: the one
@@ -562,25 +738,40 @@ def prompts(folder=None):
         attach = []
         # AS MANY AS THE BRIEF NAMES, in the order it names them, because that is the order they
         # are attached in and the briefs say "the first attached image" and "the second".
+        # ANY leading HTML comment is bookkeeping, not brief. It used to be only `attach:`
+        # lines, and the first note written for a human reader -- an eight-line explanation of
+        # why cobbles_oval attaches the plate it REPLACED -- went straight to the clipboard and
+        # into the image model. A brief has to be able to carry a reason without the reason
+        # becoming part of the instruction.
         while True:
-            m = re.match(r"\s*<!--\s*attach:\s*(.+?)\s*-->\s*\n", text)
+            m = re.match(r"\s*<!--(.*?)-->[ \t]*\n", text, re.S)
             if not m:
                 break
             text = text[m.end():]
-            target = ROOT / m.group(1)
+            body = m.group(1).strip()
+            if not body.lower().startswith("attach:"):
+                continue                     # a note to whoever reads the file; not copied
+            target = ROOT / body[len("attach:"):].strip()
             if not target.is_file():
                 print("  %s names an attachment that is not there: %s"
-                      % (path.name, m.group(1)))
+                      % (path.name, target))
                 continue
-            raw = target.read_bytes()
-            attach.append({"name": target.name, "bytes": len(raw),
-                           "uri": "data:image/png;base64,"
-                                  + base64.b64encode(raw).decode("ascii")})
-        out.append({"name": path.stem, "text": text, "attach": attach})
+            attach.append({"name": target.name, "bytes": target.stat().st_size,
+                           "uri": href(target, rel_to)})
+        # A brief belongs beside the thing it makes: one named after a plate in
+        # grounds/ is offered on the ground-tiles tab, the rest with the sculpts.
+        # A BRIEF FOR A PLATE THAT IS STILL A CANDIDATE IS STILL A GROUND BRIEF. The rule was
+        # "is there grounds/<name>.png", which is true only AFTER a brief has succeeded --
+        # so the brief for a plate being worked on showed up beside the sculpts, which is
+        # exactly when it is most in the way. Candidates are named <name>_cNN.png.
+        made = (GROUNDS / (path.stem + ".png")).is_file()
+        held = any((GROUNDS / "candidates").glob(path.stem + "_c*.png"))
+        out.append({"name": path.stem, "text": text, "attach": attach,
+                    "makes": "ground" if (made or held) else "sculpt"})
     return out
 
 
-def reference_card(path=None):
+def reference_card(path=None, rel_to=None):
     """The card the next batch should be generated FROM, offered as a download.
 
     WHICH card is a live decision, not a constant of nature. Cards are appended rather than
@@ -604,10 +795,9 @@ def reference_card(path=None):
                     / "base_scale_reference_27_wall_127.png")
     if not path.is_file():
         return None
-    raw = path.read_bytes()
-    im = Image.open(io.BytesIO(raw))
-    return {"name": path.name, "w": im.width, "h": im.height, "bytes": len(raw),
-            "uri": "data:image/png;base64," + base64.b64encode(raw).decode("ascii")}
+    im = Image.open(path)
+    return {"name": path.name, "w": im.width, "h": im.height, "bytes": path.stat().st_size,
+            "uri": href(path, rel_to)}
 
 
 def without_background(im):
@@ -723,7 +913,10 @@ def judge(raw, target, tol, base_tol=BASE_TOLERANCE_PCT, thin_tol=BASE_THIN_PCT)
         m = sm.measure(im)
         row.update({"plinth": m["plinth"], "wall": m["wall"],
                     "h_plinth": round(m["h_plinth"], 3),
-                    "wall_ratio": round(m["wall_ratio"], 3),
+                    # None when no rim was found -- sculpt_metrics._rim refuses to invent one,
+                    # and a verdict computed from an invented wall is worse than no verdict.
+                    "wall_ratio": (round(m["wall_ratio"], 3)
+                                   if m["wall_ratio"] is not None else None),
                     "ripple": round(m["ripple"], 2)})
         if g:
             off = abs(g["degrees"] - target)
@@ -739,7 +932,11 @@ def judge(raw, target, tol, base_tol=BASE_TOLERANCE_PCT, thin_tol=BASE_THIN_PCT)
         # figure. Ten nuns measured 0.22 against ten monks at 0.13 -- bases two thirds thicker,
         # with both batches passing every other check they were given.
         base = _upright(m["wall_ratio"], deg)
-        if band and "base_ratio" in band and base is not None:
+        if m["wall_ratio"] is None:
+            checks.append(["base height / width", "no rim found", "check",
+                           "the plinth's lit rim is not a peak anywhere it could be -- the "
+                           "wall was not measured, and a number was not invented for it"])
+        elif band and "base_ratio" in band and base is not None:
             b = band["base_ratio"]
             row["base_ratio"] = round(base, 3)
             off = 100.0 * (base - b["mid"]) / b["mid"] if b["mid"] else 0.0
@@ -803,7 +1000,22 @@ def judge(raw, target, tol, base_tol=BASE_TOLERANCE_PCT, thin_tol=BASE_THIN_PCT)
 
 
 def serve(page, port, open_it):
-    """Serve the page and measure what it posts. Bound to 127.0.0.1 and nothing else."""
+    """Serve the page and measure what it posts. Bound to 127.0.0.1 and nothing else.
+
+    THE DOCUMENT ROOT IS THE REPOSITORY, and the page is handed out at its own path within it
+    rather than at "/". That looks like a detail and is the thing that makes one href work in
+    both modes: the page references a committed file as ../../../ui/assets-gothic/..., which
+    resolves from tools/ui_debug/generated/ whether that folder is a directory on disk or a
+    path on this server. Serving the page at "/" would have left every one of those pointing
+    above the root.
+
+    Serving files at all is what buys back the one-click download that referencing costs --
+    Chromium ignores `download` on a file:// link and navigates to the image instead, so from
+    disk the page can show you a file but not hand it over. Here it can.
+
+    Read-only, and confined: a GET resolves under the repository or it is refused. Nothing is
+    written, nothing outside is reachable, and it listens on the loopback address only.
+    """
     import http.server
 
     class Handler(http.server.BaseHTTPRequestHandler):
@@ -816,10 +1028,29 @@ def serve(page, port, open_it):
             self.wfile.write(raw)
 
         def do_GET(self):                                               # noqa: N802
-            if self.path in ("/", "/index.html"):
-                self._send(200, page.read_bytes(), "text/html; charset=utf-8")
-            else:
-                self._send(404, json.dumps({"error": "not found"}))
+            import mimetypes
+            import urllib.parse
+
+            want = urllib.parse.unquote(self.path.split("?", 1)[0].split("#", 1)[0])
+            if want in ("/", "/index.html"):
+                self.send_response(302)
+                self.send_header("Location", "/" + page_path)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            # CONFINED. realpath first, then ask whether it is still inside the repository --
+            # checking the string before resolving it would be fooled by a symlink, and
+            # checking after resolving cannot be.
+            target = pathlib.Path(os.path.realpath(str(ROOT / want.lstrip("/"))))
+            root = pathlib.Path(os.path.realpath(str(ROOT)))
+            if root != target and root not in target.parents:
+                return self._send(403, json.dumps({"error": "outside the repository"}))
+            if not target.is_file():
+                return self._send(404, json.dumps({"error": "not found"}))
+            kind = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+            if target == pathlib.Path(os.path.realpath(str(page))):
+                kind = "text/html; charset=utf-8"
+            self._send(200, target.read_bytes(), kind)
 
         def do_POST(self):                                              # noqa: N802
             if self.path != "/measure":
@@ -845,9 +1076,11 @@ def serve(page, port, open_it):
         def log_message(self, *a):
             return
 
+    page_path = href(page, ROOT)
     srv = http.server.HTTPServer(("127.0.0.1", port), Handler)
-    url = "http://127.0.0.1:%d/" % srv.server_address[1]
+    url = "http://127.0.0.1:%d/%s" % (srv.server_address[1], page_path)
     print("  serving %s -- drop PNGs on it" % url)
+    print("  document root is the repository, so the download links work here")
     print("  ctrl-c to stop")
     if open_it:
         import webbrowser
@@ -951,10 +1184,13 @@ def main():
             .replace("__TOL__", json.dumps(TOLERANCE_DEGREES))
             .replace("__BTOL__", json.dumps(BASE_TOLERANCE_PCT))
             .replace("__BTHIN__", json.dumps(BASE_THIN_PCT))
+            .replace("__GTARGET__", json.dumps(GROUND_TARGET_DEGREES))
+            .replace("__GTOL__", json.dumps(GROUND_TOLERANCE_DEGREES))
             .replace("__BAND__", json.dumps(band))
-            .replace("__ONRECORD__", json.dumps(on_record()))
-            .replace("__CARD__", json.dumps(reference_card()))
-            .replace("__PROMPTS__", json.dumps(prompts()))
+            .replace("__ONRECORD__", json.dumps(on_record(rel_to=out.parent)))
+            .replace("__GROUNDS__", json.dumps(ground_record(rel_to=out.parent)))
+            .replace("__CARD__", json.dumps(reference_card(rel_to=out.parent)))
+            .replace("__PROMPTS__", json.dumps(prompts(rel_to=out.parent)))
             .replace("__ARRANGE__", json.dumps(arrangement_picture()))
             .replace("__INGAME__", json.dumps(
                 arrangement_picture(colour=True, plain=True))))
@@ -971,6 +1207,11 @@ def main():
               % (b["lo"], b["hi"], b["mid"]))
     print("  target %.0f deg, tolerance %.1f  (height is not checked)"
           % (TARGET_DEGREES, TOLERANCE_DEGREES))
+    print("  ground plates: %.2f deg target, tolerance %.2f -- both read off the accepted set"
+          % (GROUND_TARGET_DEGREES, GROUND_TOLERANCE_DEGREES))
+    print("                 (window %.2f to %.2f; a sculpt's tolerance is %.1f)"
+          % (GROUND_TARGET_DEGREES - GROUND_TOLERANCE_DEGREES,
+             GROUND_TARGET_DEGREES + GROUND_TOLERANCE_DEGREES, TOLERANCE_DEGREES))
     if band and "base_ratio" in band:
         m = band["base_ratio"]["mid"]
         print("  base %.3f to %.3f  (median %.3f, %.0f%% thinner to %.0f%% chunkier)"
@@ -1034,6 +1275,15 @@ td.why{color:#403a31}
 #prompts .att{font:inherit;color:#8b8071;background:#17130d;border:1px solid #332c20;
   border-radius:3px;padding:6px 10px;text-decoration:none;white-space:nowrap}
 #prompts .att:hover{border-color:#5a4c36;color:#c9b27a}
+#tabs{margin:18px 0 0;display:flex;gap:6px}
+#tabs .tab{font:inherit;color:#8b8071;background:#17130d;border:1px solid #332c20;border-bottom:none;border-radius:3px 3px 0 0;padding:6px 16px;cursor:pointer}
+#tabs .tab.on{color:#d8d0c0;background:#221d14;border-color:#5a4c36}
+#tabs .tab:hover{color:#c9b27a}
+.plate{display:inline-block;vertical-align:top;margin:0 14px 18px 0;max-width:24em}
+.plate img{display:block;max-width:100%;border:1px solid #2a241a}
+.plate .who{font-size:11px;color:#8b8071;margin-top:3px}
+.one .orig,.plate .orig{display:block;margin:5px auto 0;max-width:22em;font:11px/1.5 inherit;color:#8b8071;background:#17130d;border:1px solid #332c20;border-radius:3px;padding:3px 7px;text-decoration:none;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.one .orig:hover,.plate .orig:hover{border-color:#5a4c36;color:#c9b27a}
 #prompts .note{color:#5f574a;max-width:700px;line-height:1.45}
 #prompts .note.ok{color:#8fae6a} #prompts .note.bad{color:#e0705f}
 /* the caption used to set the cell's width -- one long line made the tile cell 528 px and
@@ -1056,14 +1306,19 @@ and drawn back with the measurement on it.</div>
   <label for=tol>tolerance</label><input id=tol value=__TOL__>
   <label for=btol>base, max % chunkier</label><input id=btol value=__BTOL__>
   <label for=bthin>max % thinner</label><input id=bthin value=__BTHIN__>
+  <label for=gtarget>ground target</label><input id=gtarget value=__GTARGET__>
+  <label for=gtol>ground tol</label><input id=gtol value=__GTOL__>
   <span id=ref class=info></span>
 </div>
+<div id=tabs><button class="tab on" data-t=record>sculpts</button><button class=tab data-t=grounds>ground tiles</button></div>
 <div id=record></div>
+<div id=grounds hidden></div>
 <div id=drop>drop PNGs here</div>
 <div id=cards></div>
 <script>
 var BAND = __BAND__;
 var ONRECORD = __ONRECORD__;
+var GROUNDS = __GROUNDS__;
 var CARD = __CARD__;
 var PROMPTS = __PROMPTS__;
 var ARRANGE = __ARRANGE__;
@@ -1100,10 +1355,12 @@ var INGAME = __INGAME__;
   }
   // THE PROMPTS THAT WORKED, beside the card they were used with -- the two halves of one
   // instruction. Copied rather than downloaded: a prompt's destination is a text box.
-  if (PROMPTS && PROMPTS.length) {
+  var SCULPT_PROMPTS = (PROMPTS || []).filter(function(p){ return p.makes !== "ground"; });
+  if (SCULPT_PROMPTS.length) {
     var ph = ["<div id=prompts><span class=lab>copy the brief:</span>"];
-    PROMPTS.forEach(function(p, i){
-      ph.push("<button class=cp data-i='" + i + "'>&#128203;&nbsp; " + p.name + "</button>");
+    SCULPT_PROMPTS.forEach(function(p, i){
+      ph.push("<button class=cp data-i='" + PROMPTS.indexOf(p) + "'>&#128203;&nbsp; "
+              + p.name + "</button>");
       // The image the brief tells you to attach, right beside it. "use the same base and angle
       // as in the attached image" is only an instruction if the attachment is the right file.
       (p.attach || []).forEach(function(a, k){
@@ -1136,7 +1393,12 @@ var INGAME = __INGAME__;
     h.push("<div class=num>" + (r.degrees == null ? "&#8212;" : r.degrees.toFixed(1) + " deg")
            + " &#183; base " + (r.base == null ? "&#8212;" : r.base.toFixed(3))
            + " &#183; height " + (r.proportion == null ? "&#8212;" : r.proportion.toFixed(2))
-           + "</div></div>");
+           + "</div>");
+    if (r.orig) {
+      h.push("<a class=orig download='" + r.file + "' href='" + r.orig + "'>"
+             + "&#8595;&nbsp; " + r.file + " &#183; " + r.kb + " KB</a>");
+    }
+    h.push("</div>");
   }
   order.forEach(function(seat){
     h.push("<div class=row>");
@@ -1287,6 +1549,87 @@ function show(name, ok, res){
   h += '</div>';
   card(name, h);
 }
+
+(function(){
+  // THE PLATES, on the one check they share with a sculpt. A plate nobody stands on is NAMED
+  // rather than hidden: three of the five are kept precisely as the evidence of what a camera
+  // mismatch looks like, and a panel that quietly dropped them would be throwing that away.
+  if (!GROUNDS || !GROUNDS.length) return;
+  // The target and the tolerance live in the boxes at the top, not in a constant -- they are
+  // tunable while the page is open.
+  // A PLATE HAS ITS OWN TARGET AS WELL AS ITS OWN TOLERANCE. It used to borrow the sculpts'
+  // 32.0 and differ only in tolerance, on the reasoning that ground and figure must agree
+  // about where you are standing -- which is true, and is still checked, but is not the same
+  // as the two being judged by one number. Both plate numbers are now read off the plates
+  // themselves: 31.55 is what the accepted set averages and 0.48 is how far the furthest
+  // accepted plate strays from that. The sculpts keep 32.0, and the gap between the two --
+  // four tenths of a degree, well inside either tolerance -- is itself the agreement.
+  var TARGET = +document.getElementById("gtarget").value;
+  var TOL = +document.getElementById("gtol").value;   // a plate's own, tighter than a sculpt's
+  var host = document.getElementById("grounds");
+  var h = ["<h2>The ground plates in <b>ui/assets-gothic/grounds/</b>, judged on the camera and "
+           + "nothing else. A plate has no plinth and no figure, so the base and height checks "
+           + "have nothing to measure &#8212; but the camera is the same arithmetic as a "
+           + "sculpt's base, because a circle on the ground seen from above draws an ellipse of "
+           + "sin(angle) &#215; its width whether it is a figurine's plinth or the floor it "
+           + "stands on. Ground and figure have to agree about where you are standing."
+           + "<br><b>anchor</b> is where down the plate the standing line falls. The measured "
+           + "value is the widest row of the art; the second is what <b>duty_grounds.json</b> "
+           + "sets. They differ by a point or so, always the same way, which reads as feet set "
+           + "deliberately forward of the widest row rather than as drift &#8212; so both are "
+           + "shown and neither is called wrong.</h2>"];
+  var GROUND_PROMPTS = (PROMPTS || []).filter(function(p){ return p.makes === "ground"; });
+  if (GROUND_PROMPTS.length) {
+    var gp = ["<div id=prompts><span class=lab>copy the brief:</span>"];
+    GROUND_PROMPTS.forEach(function(p){
+      gp.push("<button class=cp data-i='" + PROMPTS.indexOf(p) + "'>&#128203;&nbsp; "
+              + p.name + "</button>");
+      (p.attach || []).forEach(function(a, k){
+        gp.push("<a class=att download='" + a.name + "' href='" + a.uri + "'>"
+                + "&#128206;&nbsp; " + (k + 1) + ". " + a.name + "</a>");
+      });
+    });
+    gp.push("<span class=note>the brief that produced the plate of the same name, verbatim "
+            + "from tools/ui_debug/prompts/</span></div>");
+    h.push(gp.join(""));
+  }
+  GROUNDS.forEach(function(r){
+    var off = r.degrees == null ? 99 : Math.abs(r.degrees - TARGET);
+    var cls = off <= TOL ? "ok" : (off <= 2 * TOL ? "check" : "bad");
+    h.push("<div class=plate><div class=nm>" + r.name + "</div>");
+    h.push("<img src='" + r.preview + "' alt=''>");
+    h.push("<div class=num><span class=" + cls + ">"
+           + (r.degrees == null ? "&#8212;" : r.degrees.toFixed(1) + " deg") + "</span>"
+           + " &#183; anchor " + r.anchor.toFixed(1) + "%"
+           + (r.anchor_set == null ? "" : " (file says " + r.anchor_set + ")")
+           + " &#183; " + r.w + "&#215;" + r.h + "</div>");
+    // NOT "kept as evidence of a camera that missed". That was true when every duty-less plate
+    // was also a failed one; two of them now pass and the line was calling them mistakes.
+    // Standing on nobody and being wrong are separate facts, so they are separate sentences.
+    h.push("<div class=who>" + (r.duties.length
+           ? r.duties.length + " dut" + (r.duties.length === 1 ? "y" : "ies") + ": "
+             + r.duties.join(", ")
+           : (cls === "ok"
+              ? "no duty stands on this one yet &#8212; ready for the next one added"
+              : "no duty stands on this one &#8212; kept as evidence of a camera that missed"))
+           + "</div>");
+    h.push("<a class=orig download='" + r.file + "' href='" + r.orig + "'>"
+           + "&#8595;&nbsp; " + r.file + " &#183; " + r.kb + " KB</a>");
+    h.push("</div>");
+  });
+  host.innerHTML = h.join("");
+})();
+(function(){
+  var tabs = document.querySelectorAll("#tabs .tab");
+  Array.prototype.forEach.call(tabs, function(b){
+    b.addEventListener("click", function(){
+      Array.prototype.forEach.call(tabs, function(o){ o.classList.remove("on"); });
+      b.classList.add("on");
+      document.getElementById("record").hidden = b.dataset.t !== "record";
+      document.getElementById("grounds").hidden = b.dataset.t !== "grounds";
+    });
+  });
+})();
 </script>
 """
 

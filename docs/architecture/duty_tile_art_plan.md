@@ -69,16 +69,29 @@ puddle, and the failure is much more visible on the flat side than on the steep 
 
 Two things about the generator are worth writing down, because they are not obvious and both cost
 a round to learn. A single word of style is worth degrees: swapping "limestone" for "slate" in an
-otherwise identical prompt moved a plate 4.4 degrees, against a within-style scatter near 1. And a
-figurine's camera cannot be steered by text at all — every photograph of a miniature ever taken is
-at eye level, and that prior wins. What did work was attaching a diagram of the base alone, drawn
-at the wanted ellipse ratio, with the instruction to keep it exactly as it is; the base pins the
-camera, and the figure follows the base. Drawing any of the FIGURE into that diagram was tried
+otherwise identical prompt moved a plate 4.4 degrees, against a within-style scatter near 1. And
+text steers the camera only weakly and unreliably — every photograph of a miniature ever taken is
+at eye level, and that prior is most of what comes back. What works far better is attaching a
+diagram of the base alone, drawn at the wanted ellipse ratio, with the instruction to keep it
+exactly as it is; the base pins the camera, and the figure follows the base.
+
+**This paragraph said "cannot be steered by text at all" until 2026-09-23, and that was too
+strong.** A single edit to a brief's wording later moved a batch 11 degrees, so the claim was
+false as stated. What survives is the weaker and more useful version: a reference image beats a
+sentence, and a sentence is not worthless. Two further findings sharpen it. The generator hugs a
+stated BOUND and ignores a stated TARGET — the same brief with its ellipse ratio written as a
+ceiling produced 31.8 to 33.5, where written as a target it produced 50.8 to 68.3 — and given a
+RANGE it aims at the floor. And a bound stated in DEGREES is ignored where the same bound stated
+as a ratio binds: told "never higher than 32 degrees" the generator delivered 25.9. Drawing any of the FIGURE into that diagram was tried
 three times and produced two traffic cones and a lampshade, so the reference carries the base and
 the empty room above it and nothing else.
 
-`tools/ui_debug/generate_asset_check.py` holds the target as `TARGET_DEGREES`, with a test that
-fails if it drifts. It moves when a composite says to, not when a batch misses it.
+`tools/ui_debug/generate_asset_check.py` holds the sculpt target as `TARGET_DEGREES`, with a test
+that fails if it drifts. It moves when a composite says to, not when a batch misses it. Ground
+plates have their own pair, `GROUND_TARGET_DEGREES` and `GROUND_TOLERANCE_DEGREES`, which are not
+chosen at all but read off the accepted plates — see
+[`ring-ratio.md`](ring-ratio.md), which also explains what the measurement is and the two ways it
+has fooled us.
 
 The reference card reads 27 degrees, and that is deliberate rather than a leftover. It was set to
 27 to correct a measured bias while the target was still 29; what the two batches then showed is

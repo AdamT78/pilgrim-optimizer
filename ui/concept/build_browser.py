@@ -335,6 +335,13 @@ SUBJECTS.append({
 # the figures, so the same plate can sit on any face. Which duty stands on which is in
 # ui/assets-gothic/metadata/duty_grounds.json, not here -- this page is the archive of what exists.
 #
+# ALL SIX PLATES, not the two that happened to be here. The table is declared rather than
+# globbed on purpose, which is exactly why it drifts: a plate added to the folder is simply
+# invisible on this page until someone types it in, and nothing fails. Three were missing
+# when planks_rough was filed on 2026-09-23 -- flagstones_grey, limestone_irregular and
+# slate_irregular, two of which duties actually stand on -- so the whole set was entered.
+# Candidates are deliberately NOT listed: they are not part of the set on file.
+#
 # They are drawn on the tile ground rather than on nothing, because they are cut out and half of
 # each file is transparent: on the page's own background the stones would float.
 SUBJECTS.append({
@@ -345,8 +352,16 @@ SUBJECTS.append({
     "kinds": [
         {"kind": "cobbles_oval", "title": "Cobbles, oval", "root": "assets",
          "rel": "ui/assets-gothic/grounds/cobbles_oval.png", "ground": TOKEN_GROUND},
+        {"kind": "flagstones_grey", "title": "Flagstones, warm grey", "root": "assets",
+         "rel": "ui/assets-gothic/grounds/flagstones_grey.png", "ground": TOKEN_GROUND},
         {"kind": "flagstones_slab", "title": "Flagstones, slab", "root": "assets",
          "rel": "ui/assets-gothic/grounds/flagstones_slab.png", "ground": TOKEN_GROUND},
+        {"kind": "limestone_irregular", "title": "Limestone, irregular flags", "root": "assets",
+         "rel": "ui/assets-gothic/grounds/limestone_irregular.png", "ground": TOKEN_GROUND},
+        {"kind": "planks_rough", "title": "Timber planks, rough", "root": "assets",
+         "rel": "ui/assets-gothic/grounds/planks_rough.png", "ground": TOKEN_GROUND},
+        {"kind": "slate_irregular", "title": "Slate, irregular flags", "root": "assets",
+         "rel": "ui/assets-gothic/grounds/slate_irregular.png", "ground": TOKEN_GROUND},
     ],
 })
 

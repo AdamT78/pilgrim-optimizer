@@ -52,75 +52,35 @@ generate_asset_check.py reports comes out above the marked value on both counts.
 therefore drawn at the value wanted upright, times cos(the camera actually expected), divided by
 the over-copy -- not at the value wanted.
 
-AND 0.127 IS A CLIFF EDGE, NOT A DIAL
+EVERYTHING THIS SECTION USED TO SAY ABOUT THE BASE WAS A MEASUREMENT BUG
 
-Four cards, five monks each, nothing else changed:
+It read: 0.127 is a cliff edge, below it the card stops being read, a ceiling without a floor
+costs the plinth, and four batches were tabulated as evidence. The tabulated bases were wrong.
 
-    wall 0.067 (undimensioned) -- 3 of 5 copied it, at 0.068-0.077; 2 ignored it
-    wall 0.127                 -- 5 of 5 copied it, at 0.132-0.141   camera 34.3
-    wall 0.120                 -- 1 of 5 copied it; 4 at 0.217-0.227  camera 23.2
-    wall 0.110                 -- 1 of 5 copied it; 4 at 0.247-0.279  camera 27.9
+sculpt_metrics.measure() found the plinth's lit rim by taking the brightest row in a band fixed
+at 35 to 150 PIXELS above the bottom edge. That band cannot fail -- when the brightest thing in
+view was a lit robe hem, argmax returned the last row searched, and the caller got the window's
+own boundary back as a wall about twice the real one. Re-measured after the fix, the batches
+that were called a collapse of the base are:
 
-0.110 was arithmetically right -- 0.142 upright, times cos of the camera the model actually
-uses, divided by the over-copy -- and it failed. 0.120 was then drawn on the theory that there
-was a legibility floor somewhere near 0.12 and that 0.110 had fallen through it. THAT THEORY IS
-FALSE. 0.120 failed the same way and took the camera down further, which is the anti-correlation
-between base thickness and camera height (r = +0.92) doing what it always does. There is no
-gradient to walk down: below 0.127 the drawn wall stops being read as a specification at all and
-the model substitutes its own default plinth, and a card at 0.120 is as ignored as one at 0.110.
+    card 0.110            5 of 5 bases in band   (reported as 1 of 5)
+    card 0.120            4 of 5                 (reported as 1 of 5)
+    cues + ceiling 0.53   4 of 5, and 4 passing both  (reported as 0 of 5)
+    v2, first batch      10 of 10, all passing both   (reported as 3 of 10)
 
-WHAT WAS ACTUALLY WRONG WAS THE RULER. The 0.127 monks were rejected for measuring 0.159-0.171
-against a set median of 0.141. Levelled onto a common plinth width -- which is what
-tools/ui_debug/make_tray_figures.py does to every figure before it reaches a tile -- they are
-indistinguishable from the nun at 0.140 and player_3 at 0.136, while the one sculpt that passed
-that band, at 0.130 off the 0.120 card, reads as a sliver on a visibly lower camera and does not
-belong to the set at all. The band had been fitted before any monk existed. It moved; the card
-did not. See BASE_TOLERANCE_PCT and BASE_THIN_PCT in generate_asset_check.py.
+So there was no cliff, no anti-correlation being exploited, and no plinth cost. THE BASE WAS
+ALMOST NEVER THE PROBLEM: eleven of fourteen monk batches have four in five or better once
+measured correctly. What actually varied was the camera, and the card's wall value barely
+moved it.
 
-So 0.127 is the value, and the two cards below it are kept only as the record of what was tried.
+WHAT SURVIVES is the narrower claim this file opened with, which was measured on the drawing
+rather than on the output: dimensioning the wall changed the model from interpreting the card
+to copying it. The committed sculpts still reproduce their recorded numbers exactly under the
+fixed measurement -- twenty-two of twenty-two -- so the art on file and the cards beside it are
+unaffected. It is the conclusions drawn from the failures that were built on a broken ruler.
 
-Health warning on all of the above: both monk batches came back as near-duplicates -- mean
-pairwise silhouette overlap 0.968 and 0.972, against 0.925 for a gesture-varied batch and 0.876
-for four genuinely different characters. Five images from one of those batches is closer to two
-independent samples than to five. The briefs now ask for varied rotation and gesture for exactly
-this reason.
-
-THE CAMERA OBEYS A RATIO AND IGNORES A DEGREE
-
-Measured on the monk, one batch per row, everything but the brief's CAMERA section held fixed:
-
-    section names 27, five clauses arguing the elevation should be obvious   camera 33-34
-    same, but bounded "never more than 0.53 of its width"                    camera 30.5, sd 0.63
-    same, but bounded "never higher than 32 degrees"                         camera 25.9
-    no clauses, bounded "between 0.40 and 0.50 of its width"                 camera 21.9
-
-The ratio bound was obeyed to within two hundredths, five times running, at a spread tighter
-than any batch this project has produced. The bound in degrees was ignored: told never to exceed
-32, it rendered 25.9, tracking the 27 the section names rather than the limit. This is the same
-lesson as the side wall -- what the brief dimensions gets copied, what it merely describes gets
-invented -- and the unit the model measures in is the base's own width, never an angle.
-
-The second row is how a camera gets set now: name the wanted value as a fraction of the base's
-width, and put it where the section can see it.
-
-AND A CEILING WITHOUT A FLOOR COSTS THE PLINTH
-
-The same four batches, scored on whether the base copied the card's dimensioned wall:
-
-    clauses + a FLOOR ("if it reads as a sliver the camera is too low")      7 of 10 copied
-    no clauses + BOTH bounds (0.40 to 0.50)                                  5 of 5 copied
-    clauses + a CEILING only (0.53)                                          0 of 5
-    clauses + a CEILING only (32 degrees)                                    0 of 4
-
-Both configurations that kept the base gave the model a lower bound; both that lost it gave an
-upper bound and nothing else, and in each case the bases went to 0.25-0.30 -- the model's own
-plinth, not the card's. The reading that fits: base thickness and camera height are
-anti-correlated in what this generator produces (r = +0.92), so "do not go too high" can be
-satisfied by making the piece read lower, and thickening the plinth does that. A floor closes
-that route. Bound the camera on both sides or not at all.
-
-Health warning on the whole grid: one batch per cell, and silhouette overlap within a batch runs
-0.97, so each row is nearer one sample than five.
+The lesson worth keeping is not about cards at all: a measurement that cannot return "I did not
+find it" will return something, and something is indistinguishable from a reading.
 
 THE SCALE LINE, AND WHAT IT ACTUALLY PRODUCES
 

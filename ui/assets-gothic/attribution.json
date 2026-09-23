@@ -1162,9 +1162,19 @@
       "collection": "Pilgrim gothic v2",
       "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
       "licence": "openai-generated",
+      "modifications": "the measuring ring was stripped and the result cropped to the tile's own ink. The ring is a spring-green ellipse the brief asks for so the camera can be read off a known circle rather than off a ragged outline; it is a jig, not artwork, and sculpt_metrics.without_ring() removes it by colour together with its antialiased edge. Nothing else was touched",
+      "title": "cobbles, rounded river stones",
+      "role": "duty tile ground plate -- rounded medieval river cobbles set in packed earth, the only plate of the set with a ragged edge and no rim, which is why its anchor is 58% where the rimmed plates sit near 48%. Camera measured 31.6 degrees, inside the 1.0 degree tolerance a plate is held to, and the measuring ring drawn on the same image independently read 31.5 -- a 0.1 degree agreement, the tightest on file. REPLACED the plate of the same name on 2026-09-23: that one measured 39.8 and is kept at candidates/cobbles_oval_c01.png. Generated from tools/ui_debug/prompts/cobbles_oval.md, which attaches the previous cobbles_oval.png for the camera. Fifteen candidates over three batches; attaching the plate's own prior art is what worked, after two batches briefed in words alone came back at 35.2 and 28.5 degrees mean. No duty stands on this plate yet"
+    },
+    "grounds/candidates/flagstones_slab_c01.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
       "modifications": "none; used as generated",
-      "title": "cobbles oval",
-      "role": "duty tile ground plate -- the surface acolytes stand on, drawn over the tile face"
+      "title": "flagstones, loose slabs, candidate",
+      "role": "held as a CANDIDATE, not part of the set on file: it is not read by the ground panel or the duty tiles. The plate that was flagstones_slab.png until 2026-09-23 -- a ragged patch of loose slabs with no rim, so not the same kind of object as the four round rimmed plates beside it, which is why its anchor was 61 where theirs are near 48. Its ellipse fit read 27.5 degrees, but on an outline that is not an ellipse that number means little. Kept because it is the only ground art in the set with an irregular edge, which may be wanted for a duty that should not read as a built floor"
     },
     "grounds/flagstones_slab.png": {
       "state": "present",
@@ -1173,8 +1183,18 @@
       "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
       "licence": "openai-generated",
       "modifications": "none; used as generated",
-      "title": "flagstones slab",
-      "role": "duty tile ground plate -- the surface acolytes stand on, drawn over the tile face"
+      "title": "flagstones, large slabs",
+      "role": "duty tile ground plate -- warm pale limestone in large rectangular slabs, a regular bond with staggered joints. Camera measured 32.0 degrees, dead on target and inside the 1.0 degree tolerance a plate is held to; anchor 47.9%, and duty_grounds.json was moved from 61 to 48 to follow it. REPLACED the plate of the same name on 2026-09-23: that one was a ragged patch of loose slabs with no rim, a different kind of object from the rest of the set, and it is kept at candidates/flagstones_slab_c01.png. Generated from tools/ui_debug/prompts/flagstones_slab.md, which attaches flagstones_grey.png for the geometry and states the ellipse as a CEILING rather than a target: five came back at 31.8, 31.9, 32.0, 32.2 and 33.5, where the same brief with the ratio stated as a target had produced 50.8 to 68.3. No duty stands on this plate yet"
+    },
+    "sculpts/player_1_v1.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "modifications": "none; used as generated",
+      "title": "player 1 acolyte, bald monk with book, v1",
+      "role": "duty tile acolyte, seat 1 -- monastic habit, hood and mantle worn down, bald head, knotted rope cincture, a clasped book held to the chest. Camera measured 31.8 degrees and base wall/width 0.161 upright against a 0.142 median: the closest camera of the 34 seat-1 candidates measured, and one of only three to pass both checks. Height 2.85, above the 2.70-2.74 the rest of the set sits at, which the toolchain reports and does not judge. Generated from tools/ui_debug/prompts/player_1_v1.md with the base-and-scale card whose side wall is dimensioned at 0.127 x W. The same bytes are kept at sculpts/candidates/player_1_c01.png, beside the batch it came from."
     },
     "sculpts/player_2_v1.png": {
       "state": "present",
@@ -1404,7 +1424,7 @@
       "licence": "openai-generated",
       "modifications": "none; used as generated",
       "title": "slate, irregular flags",
-      "role": "duty tile ground plate -- broken polygonal flags in dark blue-grey, the only plate of the set that is not grey-cream. Camera measured 34.2 degrees; rim 2.3 degrees flatter than the outline, about 1.5x too thick"
+      "role": "duty tile ground plate -- broken polygonal flags in dark blue-grey, the only plate of the set that is not grey-cream. Camera measured 31.1 degrees, inside the 1.0 degree tolerance a plate is held to, and between the two plates in use: flagstones_grey at 31.5 and limestone_irregular at 31.9. Anchor measures 48.0%, which is the value duty_grounds.json already carried for this slot, so nothing needed retuning. REPLACED the plate of the same name on 2026-09-23: that one measured 34.2 and was the set's documented near miss, one of six candidates generated from tools/ui_debug/prompts/slate_irregular.md and the only one inside tolerance -- the other five landed at 30.1, 30.1, 30.4, 33.6 and 34.3. The superseded file is in git history rather than beside this one; no duty stands on this plate yet"
     },
     "grounds/limestone_irregular.png": {
       "state": "present",
@@ -1445,7 +1465,7 @@
       "collection": "Pilgrim gothic v2",
       "source": "no upstream: a drawn diagram of a plinth at a stated ellipse ratio, with the side wall and the figure's height both marked as measurements, written by a script in this repository",
       "licence": "project-generated",
-      "role": "drawn to test whether there was a legibility floor near 0.12 that the 0.110 card had fallen through. THERE IS NOT, and this card is the evidence: five monks on 2026-09-22 came back with one copying the wall and four ignoring it at 0.217-0.227, the camera falling to 23.2 degrees -- worse than the 0.110 card it was meant to improve on. Nothing generated from it is on file. It is kept because a card that produced nothing usable is still part of the record of what was asked, and because the failure is the reason BASE_TOLERANCE_PCT moved rather than the card: levelled onto a common plinth width, the 0.127 monks belong to the set and this card's one in-band sculpt does not. No brief attaches it.",
+      "role": "drawn to test whether there was a legibility floor near 0.12 that the 0.110 card had fallen through. The batch it produced was first reported as four of five ignoring the wall; re-measured after a bug in sculpt_metrics was fixed, four of the five are in band and the real failure was the camera at 23.2 degrees. Nothing generated from it is on file. It is kept because a card that produced nothing usable is still part of the record of what was asked, and because the failure is kept as the record of a value that was tried. No brief attaches it.",
       "modifications": "none; used as generated",
       "reproducibleBy": "python3 tools/ui_debug/generate_sculpt_reference.py --only base_scale_reference_27_wall_120 -- deterministic, md5 4adcc71c8d3757b6127c1a47938b277c"
     },
@@ -1468,6 +1488,36 @@
       "modifications": "none; used as generated",
       "title": "player 2 nun, costume reference drawing",
       "role": "attached to the image model as the IDENTITY reference when a seat 2 acolyte is generated: habit, veil, collar, belt, hanging sleeves and clasped hands. It is a flat drawing at eye level and is NOT the camera -- the brief says so explicitly, because an earlier run that asked to preserve its composition pulled the camera down to 21.6 degrees. The base-and-scale card decides the camera and the base; this decides what she wears. Named by tools/ui_debug/prompts/player_2_v1.md."
+    },
+    "grounds/candidates/cobbles_oval_c01.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "modifications": "none; used as generated",
+      "title": "cobbles oval, candidate",
+      "role": "held as a CANDIDATE, not part of the set on file: it is not read by the ground panel or the duty tiles. The plate that was cobbles_oval.png until 2026-09-23. Its camera measured 39.8 degrees against a board settled at 32, and for a while it was kept deliberately as the set's worked example of what a mismatched camera looks like beside four plates that match. Superseded once a replacement finally came in at 31.6"
+    },
+    "grounds/candidates/planks_rough_c01.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "modifications": "none; used as generated",
+      "title": "rough timber planks, candidate",
+      "role": "held as a CANDIDATE, not part of the set on file: it is not read by the ground panel or the duty tiles. A ragged patch of heavy split oak baulks in a running bond, and the only timber ground in the project -- every other plate is stone. Kept for two jobs. It is the look tools/ui_debug/prompts/planks_rough.md exists to reproduce at the board's camera, and it is the clearest example on file of the two things the stone briefs kept failing to get in words: a stepped ragged perimeter with no rim, and pieces thick enough that each shows a top face and a dark side face rather than reading as a pattern printed flat. IT CARRIES NO USABLE CAMERA and the brief attaches it for material only: the ink is 1181x855, h/w 0.724, which is 46.4 degrees if the patch is square in plan, 32.9 if 3:4 and 74.9 if 4:3 -- a rectangle's foreshortening and its plan proportions are not separable. ground_ellipse returns 21.8 on it and that number is meaningless; 14% of its rows are within 2% of the widest, so it is not an ellipse at all"
+    },
+    "grounds/planks_rough.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "modifications": "the measuring ring was stripped and the result cropped to the tile's own ink. Nothing else was touched",
+      "title": "rough timber planks",
+      "role": "duty tile ground plate -- heavy split oak baulks in a running bond on packed earth, the only timber ground in the set and the only one that is not stone. Ragged edge, no rim, so it reads as bare working ground rather than as a built floor the way the rimmed plates do; its anchor is 51% against their 46-48% for that reason. CAMERA 31.14 degrees, taken from its measuring ring rather than from its outline and recorded in duty_grounds.json (first recorded as 31.57 and corrected the same day, when the ring measurement was found to be biased: filling a ring measures its OUTER edge and so reports a steeper camera than it was drawn at, by up to 0.70 degrees) -- a ragged plank patch is not an ellipse and the outline fit misses, reading 30.66. The two agree to 0.48, inside the 1.5 bar. Generated from tools/ui_debug/prompts/planks_rough.md, which attaches cobbles_oval for the camera and candidates/planks_rough_c01.png for the material. Fifteen candidates over two batches, ring means 39.34 and 33.45 with within-batch scatter of 2.7 and 2.8 -- far noisier than the cobbles runs, which held 0.49 to 1.4. No duty stands on this plate yet"
     }
   },
   "assetDirs": [
