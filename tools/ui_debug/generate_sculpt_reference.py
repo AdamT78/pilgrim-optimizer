@@ -150,7 +150,7 @@ CARDS = (
      "made": "player_3_lantern_at_waist.png and the two sculpts beside it"},
     {"name": "base_scale_reference_27_wall_127.png",
      "wall": 0.127, "dimension_wall": True,
-     "made": "player_2_v1.png, player_2_v2_a.png, player_2_v2_b.png"},
+     "made": "player_2_v1.png, and the two sculpts filed as player_2_v2_a.png and player_2_v2_b.png until 2026-09-23 -- now at sculpts/candidates/player_2_v2_a_c01.png and player_2_v2_b_c01.png"},
     {"name": "base_scale_reference_27_wall_120.png",
      "wall": 0.120, "dimension_wall": True,
      "made": "nothing usable. Five monks, 2026-09-22: one copied the wall, four ignored it at 0.217-0.227, and the camera fell to 23.2 -- the worst of the four cards. Kept as the record that the legibility floor it was drawn to test does not exist"},

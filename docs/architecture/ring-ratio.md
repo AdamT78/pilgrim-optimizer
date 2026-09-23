@@ -37,9 +37,13 @@ agreement, measured rather than asserted, and a test fails if it opens past a de
 
 ## Where the plate numbers come from
 
-They are **read off the plates**, not chosen. Every plate on file has been looked at under
-figures and kept, so the set is the specification: its mean is the target, and the furthest
-any accepted member strays from that mean is the tolerance.
+The window is **locked**: target 31.55°, tolerance 0.48°, so 31.07 to 32.03. They are
+constants, not a formula over the folder, and a plate outside them fails rather than
+widening them.
+
+They were derived once, on 2026-09-23, from the six plates then on file — every one of which
+had been looked at under figures and kept, so the set was the best description available of
+what "right" meant:
 
 | plate | degrees | from the mean | |
 |---|---|---|---|
@@ -50,51 +54,45 @@ any accepted member strays from that mean is the tolerance.
 | `limestone_irregular` | 31.89 | +0.35 | |
 | `flagstones_slab` | 32.02 | +0.48 | |
 
-Mean 31.55, largest deviation 0.48, so the window is **31.07 to 32.03** — as ratios, 0.5161
-to 0.5304.
+Mean 31.55, largest deviation 0.48 — as ratios, 0.5161 to 0.5304.
 
-This replaced a target of 32.0 with a tolerance of 1.0, and both of those had been picked
-rather than measured: 32 was a round number the board had settled on, and 1.0 was half the
-sculpt figure. The set never actually centred on 32 — five of the six sit below it.
+That replaced a target of 32.0 with a tolerance of 1.0, both of which had been picked rather
+than measured, and which the set never centred on: five of its six sat below 32. The window
+is about half as wide, deliberately. Against the batch of five that produced the current
+cobbles plate it admits exactly the one that was chosen by eye: 31.6 passes, and 32.2, 32.9,
+34.4 and 35.9 do not. One usable plate in five is what this work has actually cost all along.
 
-The new window is half as wide, deliberately. Run it against the batch of five that produced
-the current cobbles plate and it admits exactly the one that was chosen by eye: 31.6 passes,
-and 32.2, 32.9, 34.4 and 35.9 do not. One usable plate in five is what this work has cost
-all along, and a tolerance that admitted four of them was not describing what was being
-accepted.
+### Why the rule that produced the numbers is not the rule that keeps them
 
-`test_the_plate_numbers_are_read_off_the_plates` recomputes the mean and the worst deviation
-from the folder and fails if the constants have drifted from the art. File a plate outside
-the window and it fails, which is the moment to decide whether the plate is wrong or the
-family has moved.
+For a few hours the window *was* the formula — recomputed from the folder, with a test
+asserting the constants matched. That makes the specification a function of the thing it
+judges, and it has no fixed point. Every plate accepted rewrites the bar that judges the next.
 
-**The rule is a ratchet, and that is worth knowing before leaning on it.** Accept a plate and
-the window follows it, so each accepted outlier loosens the bar that judges the next one.
-`planks_rough` was the first test of that. Filed at its outline's 30.66 it would have moved
-the tolerance from 0.52 to 0.80 — a 54% wider window on the strength of one plate. Filed at
-its ring's 31.14, which is the better of its two readings for the reason below, the window
-actually *tightened*, 0.55 to 0.48. Filing a plate near the edge is cheap; filing one past it is how the specification
-stops meaning anything.
+Simulated before locking it. File eight plates each landing exactly on the current ceiling —
+the worst thing that still passes, every step legitimate, every suite green — and the target
+moves +0.54° while the ceiling moves +1.09°.
 
-### A plate may carry its own camera
+The realistic path is worse, because it is invisible. We do not file edge cases; we file the
+best of each batch. Simulating that over twelve plates, the target slides **down** from 31.55
+to 31.43 while the ceiling stays pinned at 32.02. The reason is an asymmetry nobody would
+predict: `flagstones_slab` at 32.02 is the highest plate on file and anchors the top of the
+window, so everything new lands below the mean, drags the mean down, and widens the tolerance
+downward. The set drifts away from the sculpts one plate at a time, and every individual step
+looks like tightening the standard.
 
-Most do not, and should not. A round rimmed plate's outline **is** an ellipse, `ground_ellipse`
-measures it directly, and nothing needs writing down.
+The tolerance was also decided by exactly one plate — whichever sat furthest out, `slab`
+today, `slate` before the plank correction. A statistic one member controls is fragile in both
+directions: add a plate 0.48° past the ceiling and it jumps 72%, where two standard deviations
+would move 31%. And redrawing the current extreme closer in silently tightens the bar on
+everything else.
 
-A ragged patch is not an ellipse, and the fit is a best guess at a shape that has none. On
-`planks_rough` it visibly misses — bulging past the timber on one side and falling inside it on
-the other — and reads 30.66, where the measuring ring drawn on the source image, which really
-is a circle, fits at 31.14. So `duty_grounds.json` carries that plate's camera under
-`grounds.planks_rough.camera`, and the asset page reports it as the plate's angle.
+So the numbers stay where the measurement put them. `test_the_plate_window_is_locked_and_every_plate_is_inside_it`
+asserts both literals and then checks every filed plate is inside the window. Changing the
+window is now a deliberate edit that shows up in review; filing a plate outside it fails, which
+is the moment to decide whether the plate is wrong or the family has genuinely moved.
 
-The measured outline is still shown beside it and never replaced. A recorded number is exactly
-the kind of thing that rots: the ring is stripped when the art is filed, so nothing in the
-repository can re-derive it, which makes it the one figure here that no later measurement
-contradicts. Two tests guard it. `test_a_recorded_camera_cannot_hide_a_bad_plate` refuses a
-recorded camera further than 1.5° from the plate's own outline — the same bar a candidate's
-ring and outline must agree within, and a plate failing it should never have been filed — and
-refuses one that does not say where it came from. `planks_rough` is the first and so far only
-plate with one.
+It keeps one check in the other direction: if every plate ends up huddled in a corner of its
+own window, the window has stopped describing the set and is no longer measuring anything.
 
 ## The measuring ring
 
