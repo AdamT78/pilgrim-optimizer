@@ -12,7 +12,7 @@ A circle lying flat on the ground, seen from an angle θ above the horizon, proj
 ellipse whose height is `sin(θ)` times its width. That fraction — height divided by width —
 is the **ring ratio**, and it is the only thing in this project that measures a camera.
 
-Everything else follows. 0.500 is 30°, 0.523 is 31.55°, 0.530 is 32°, 1.000 is straight
+Everything else follows. 0.500 is 30°, 0.523 is 31.545°, 0.530 is 32°, 1.000 is straight
 down. Nothing about the subject changes the arithmetic: a figurine's plinth, a paved floor
 and a drawn guide ring are all circles on the same ground, so all three give the same answer
 when the camera is the same. That is the whole reason the number is worth having — it is
@@ -27,7 +27,7 @@ pasted onto it, and nobody can say why. The failure is real and hard to name by 
 is exactly the kind of thing worth turning into a number.
 
 So both halves are measured the same way and held to a window. `TARGET_DEGREES` (32.0,
-tolerance 2.5) governs sculpts; `GROUND_TARGET_DEGREES` (31.55, tolerance 0.48) governs
+tolerance 2.5) governs sculpts; `GROUND_TARGET_DEGREES` (31.545, tolerance 0.48) governs
 plates. Both live in `tools/ui_debug/generate_asset_check.py` and both are shown on the
 asset-check page, where they are editable boxes rather than constants so a judgement can be
 re-run against a different window without editing code.
@@ -37,7 +37,7 @@ agreement, measured rather than asserted, and a test fails if it opens past a de
 
 ## Where the plate numbers come from
 
-The window is **locked**: target 31.55°, tolerance 0.48°, so 31.07 to 32.03. They are
+The window is **locked**: target 31.545°, tolerance 0.48°, so 31.065 to 32.025. They are
 constants, not a formula over the folder, and a plate outside them fails rather than
 widening them.
 
@@ -47,14 +47,27 @@ what "right" meant:
 
 | plate | degrees | from the mean | |
 |---|---|---|---|
-| `slate_irregular` | 31.07 | −0.47 | |
-| `planks_rough` | 31.14 | −0.40 | recorded from its ring; its outline reads 30.66 |
-| `flagstones_grey` | 31.52 | −0.02 | |
-| `cobbles_oval` | 31.63 | +0.09 | |
-| `limestone_irregular` | 31.89 | +0.35 | |
-| `flagstones_slab` | 32.02 | +0.48 | |
+| `slate_irregular` | 31.07 | −0.475 | |
+| `planks_rough` | 31.14 | −0.405 | recorded from its ring; its outline reads 30.66 |
+| `flagstones_grey` | 31.52 | −0.025 | |
+| `cobbles_oval` | 31.63 | +0.085 | |
+| `limestone_irregular` | 31.89 | +0.345 | |
+| `flagstones_slab` | 32.02 | +0.475 | |
 
-Mean 31.55, largest deviation 0.48 — as ratios, 0.5161 to 0.5304.
+Mean 31.545, largest deviation 0.475 — as ratios, 0.5160 to 0.5303. The tolerance is that
+deviation **rounded up**, to 0.48.
+
+**Corrected 2026-09-24, and the correction is the useful part.** The target was 31.55 and
+this table read −0.47 for slate and +0.48 for slab, which has the two transposed: the mean is
+31.545 exactly and the two extreme plates sit 0.475 either side of it, equidistant. Rounding
+the target to two decimals moved it five thousandths toward slab, which put `slate_irregular`
+at exactly 0.48 from target against a tolerance of exactly 0.48. Equal decimals are not equal
+in binary — `abs(31.55 - 31.07)` evaluates to 0.48000000000000043 against a literal 0.48 of
+0.47999999999999998 — so the plate carrying the `construct` duty was judged `check` on the
+asset-check page and failed `test_a_plate_is_held_tighter_than_a_sculpt`, entirely on
+representation error. Note what the fix is *not*: setting the tolerance to the exact largest
+deviation of 0.475 would put **both** extreme plates on the boundary instead of one. Rounding
+the tolerance up is what buys margin, and there is now five thousandths of a degree of it.
 
 That replaced a target of 32.0 with a tolerance of 1.0, both of which had been picked rather
 than measured, and which the set never centred on: five of its six sat below 32. The window
@@ -131,6 +144,25 @@ only at 40° with a fat stroke, where a constant-width band is least like an ell
 plate will ever sit there.
 
 The fill is still used, for what it is actually good at: deciding whether the loop is closed.
+
+**The ring is filed now, not discarded — for a plate that records a camera.** The ring is a
+jig, and for a plate whose own outline is an ellipse there is nothing to keep once it has been
+measured. That reasoning was applied to `planks_rough` too, and it was wrong there: its
+recorded 31.14 *is* the ring's reading, so discarding the ring discarded the measurement and
+left a number nothing in the repository could check. It was recovered on 2026-09-24 from the
+session that generated it, three weeks later and after the file had been cleared from disk, and
+is filed at `grounds/candidates/planks_rough_ringed.png` — in `candidates/` because the ground
+panel globs `grounds/*.png` and would otherwise report a ring-bearing image as a seventh plate.
+
+The identity is proven rather than asserted: strip that file's ring, crop to ink, and the
+result is byte-for-byte identical to the committed `grounds/planks_rough.png`. Nine other
+images from the same batch were checked as controls — one matched on size and differed in
+content, fitting 33.49 rather than 31.14, which is exactly the near-miss the check exists for.
+
+So a `camera` block now carries a `ring_source`, and
+`test_a_recorded_camera_keeps_the_ring_it_was_read_from` asserts four things that can each rot
+separately: the block names a source, the source is on file, the ring still fits the recorded
+angle to 0.01°, and the stripped art still is the filed plate.
 
 **Why the suite did not catch it.** The fixture drew its ring with PIL's `ellipse` outline,
 which strokes *inward* from the bounding box — so filling it recovered the box exactly and the

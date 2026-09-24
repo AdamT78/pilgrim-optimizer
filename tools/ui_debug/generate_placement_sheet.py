@@ -198,9 +198,31 @@ def save_grounds(board, sent):
     if grounds is not None:
         if not isinstance(grounds, dict):
             raise ValueError("grounds is %r, want an object keyed by plate name" % grounds)
-        clean = {}
+        # MERGED INTO THE STORED ROW, NOT BUILT FRESH, and merged plate by plate rather than
+        # replacing the map. This function writes five sliders; the file holds more than five
+        # things, and what it does not understand is not its to throw away.
+        #
+        # It did throw it away until 2026-09-24. `planks_rough` carries a `camera` block
+        # recording 31.14 degrees read off the measuring ring drawn on its source image, with
+        # the method, the source file, and a note that the ring was STRIPPED when the art was
+        # filed -- so the number cannot be re-derived from the committed PNG, and it is one of
+        # the six the locked plate window was derived from. Sending the file's own contents
+        # straight back, which is what pressing Save with nothing changed does, returned six
+        # plates with every slider and all the top-level prose intact and that block gone.
+        #
+        # The second half matters as much. Assigning a freshly built map also DELETED any
+        # plate the page did not send. That was caught only when the dropped plate happened to
+        # carry a duty, by the by_duty consistency check at the foot of this function, and
+        # then with a message about the duty rather than about the deletion. flagstones_slab
+        # carries no duty, so dropping it was silent.
+        #
+        # The cost of merging is that a plate can no longer be retired through the page: doing
+        # that is now a hand edit of the file. That is the right way round for a tool whose job
+        # is to tune sliders, and it is a deliberate trade rather than an oversight.
+        clean = dict(merged.get("grounds") or {})
         for name, g in grounds.items():
-            row = {}
+            stored = clean.get(name)
+            row = dict(stored) if isinstance(stored, dict) else {}
             for key, lo, hi in (("anchor", 0, 100), ("scale", 1, 300), ("dim", 0, 100),
                                 ("saturate", 0, 100), ("opacity", 0, 100)):
                 value = (g or {}).get(key)
