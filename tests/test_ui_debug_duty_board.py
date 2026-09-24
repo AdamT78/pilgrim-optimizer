@@ -20,6 +20,7 @@ is where the work actually is. It cannot tell you a page still renders, so it is
 substitute for the full run -- it is what you use between full runs.
 """
 
+import copy
 import importlib.util
 import json
 import pathlib
@@ -855,6 +856,124 @@ def test_the_grounds_save_merges_and_validates(sheet, mod, tmp_path, monkeypatch
     assert mod.ground_plan([])["grounds"]["flagstones_slab"]["dim"] == 40
     with pytest.raises(ValueError):
         sheet.save_grounds(board, {"by_duty": {"produce": "missing"}, "grounds": {}})
+
+
+def test_saving_the_grounds_unchanged_changes_nothing(sheet, mod, tmp_path, monkeypatch):
+    """Press Save having edited nothing, and the file has to come back the same.
+
+    It did not. save_grounds rebuilt every plate's row from the five sliders it validates and
+    then replaced the whole map, so anything else stored against a plate was dropped on a save
+    that changed nothing -- and `planks_rough` carries a `camera` block whose own note says the
+    measuring ring was stripped when the art was filed, so the number cannot be re-derived from
+    the committed PNG. It is also one of the six the locked plate window came from. A tool that
+    destroys an irreproducible record on a no-op save is worse than one that refuses to write.
+
+    This is written as a whole-file round trip rather than a check for `camera` specifically,
+    so it goes on holding when the next unrecognised key is added by someone who never reads
+    this test.
+    """
+    path = tmp_path / "duty_grounds.json"
+    path.write_text(mod.GROUND_PLAN.read_text(encoding="utf-8"), encoding="utf-8")
+    board = sheet._board_module()
+    monkeypatch.setattr(board, "GROUND_PLAN", path)
+    before = json.loads(path.read_text(encoding="utf-8"))
+
+    saved = sheet.save_grounds(board, {"by_duty": copy.deepcopy(before["by_duty"]),
+                                       "grounds": copy.deepcopy(before["grounds"]),
+                                       "lift": before["lift"]})
+    assert saved == before, (
+        "a save that changed nothing changed the file: %s"
+        % ", ".join(sorted(set(json.dumps(before, sort_keys=True).split())
+                           ^ set(json.dumps(saved, sort_keys=True).split()))[:8]))
+    assert json.loads(path.read_text(encoding="utf-8")) == before, "and on disk too"
+
+    # named once, because it is the record that made this worth a test of its own
+    assert saved["grounds"]["planks_rough"]["camera"] == before["grounds"]["planks_rough"]["camera"]
+
+
+def test_a_plate_the_page_did_not_send_is_left_alone(sheet, mod, tmp_path, monkeypatch):
+    """Sending a subset must tune that subset, not delete the rest.
+
+    Replacing the map meant a plate missing from the payload was deleted. It was caught only
+    when that plate carried a duty, by the consistency check at the foot of save_grounds, and
+    then with a message about the duty rather than about the deletion. flagstones_slab carries
+    no duty today, so dropping it was silent -- which is why the plate used here is chosen for
+    carrying none.
+    """
+    path = tmp_path / "duty_grounds.json"
+    path.write_text(mod.GROUND_PLAN.read_text(encoding="utf-8"), encoding="utf-8")
+    board = sheet._board_module()
+    monkeypatch.setattr(board, "GROUND_PLAN", path)
+    before = json.loads(path.read_text(encoding="utf-8"))
+    spare = [n for n in before["grounds"]
+             if n not in set((before.get("by_duty") or {}).values())]
+    if not spare:
+        pytest.skip("every plate on file carries a duty, so the silent case cannot arise")
+
+    keep = spare[0]
+    partial = {n: copy.deepcopy(g) for n, g in before["grounds"].items() if n != keep}
+    one = next(iter(partial))
+    partial[one]["dim"] = (before["grounds"][one]["dim"] + 7) % 101
+
+    saved = sheet.save_grounds(board, {"grounds": partial})
+    assert keep in saved["grounds"], "%s was not sent and has been deleted" % keep
+    assert saved["grounds"][keep] == before["grounds"][keep], (
+        "%s was not sent and was edited" % keep)
+    assert saved["grounds"][one]["dim"] == partial[one]["dim"], (
+        "the plate that WAS sent did not take")
+
+
+def test_a_recorded_camera_keeps_the_ring_it_was_read_from(checker, metrics):
+    """A hand-recorded angle has to keep its evidence, or it is only testimony.
+
+    A plate may record a camera read off the measuring ring its generation carried, because a
+    ragged patch of plank ends is not an ellipse and fitting one to it is a guess. The ring is
+    then stripped and the art filed -- and for a while the ring went in the bin with it, on the
+    reasoning that it is a jig rather than artwork. True of a plate whose own outline can be
+    measured; false of one whose recorded camera IS the ring's reading, where throwing the ring
+    away throws away the measurement and leaves a number nothing can check.
+
+    planks_rough sat in that state and was recovered only because its generating session could
+    still be found, three weeks on and after the file had been cleared from disk. So: the block
+    names its source, the source is on file, the ring still fits the recorded angle, and the
+    stripped art still IS the filed plate. Each of those four can rot on its own.
+    """
+    from PIL import Image
+    import numpy as np
+
+    plan = json.loads(checker.GROUND_PLAN.read_text(encoding="utf-8"))
+    recorded = {name: g["camera"] for name, g in (plan.get("grounds") or {}).items()
+                if (g or {}).get("camera", {}).get("degrees") is not None}
+    if not recorded:
+        pytest.skip("no plate records a camera")
+
+    for name, cam in sorted(recorded.items()):
+        src = cam.get("ring_source")
+        assert src, ("%s records a camera of %s and does not say which image it was read from. "
+                     "File the ring-bearing generation and name it here." % (name, cam["degrees"]))
+        # relative to the asset tree, the way attribution.json's keys are written, not to the
+        # repository root -- one convention for "where a file is" in this tree, not two
+        path = checker.GROUNDS.parent / src
+        assert path.is_file(), "%s names %s as its ring source, which is not on file" % (name, src)
+
+        im = Image.open(path).convert("RGBA")
+        assert metrics.has_measuring_ring(im), (
+            "%s is named as %s's ring source and carries no measuring ring" % (src, name))
+        ring = metrics.ring_ellipse(im)
+        assert ring is not None, "%s's ring does not fit -- an open or occluded loop" % src
+        assert abs(ring["degrees"] - cam["degrees"]) <= 0.01, (
+            "%s records %.2f but its ring now fits %.4f" % (name, cam["degrees"], ring["degrees"]))
+
+        # AND IT MUST BE THIS PLATE'S ring, not some other generation that happens to carry one.
+        # Byte equality, because stripping is deterministic and anything less would let a
+        # near-miss stand in for the real source.
+        filed = Image.open(checker.GROUNDS / ("%s.png" % name)).convert("RGBA")
+        art = metrics.crop_to_art(metrics.without_ring(im))
+        assert art.size == filed.size, (
+            "%s stripped is %s, but %s.png is %s" % (src, art.size, name, filed.size))
+        assert np.array_equal(np.asarray(art), np.asarray(filed)), (
+            "%s stripped is not byte-identical to %s.png, so it is not the source of it"
+            % (src, name))
 
 
 def test_switching_view_hides_everything_the_other_view_owns(sheet):
@@ -2257,11 +2376,16 @@ def test_the_plate_window_is_locked_and_every_plate_is_inside_it(checker):
     deliberate edit that shows up in review rather than a consequence of filing art, and a
     plate outside the window FAILS here rather than moving it.
     """
-    assert checker.GROUND_TARGET_DEGREES == 31.55, (
+    assert checker.GROUND_TARGET_DEGREES == 31.545, (
         "the plate target moved to %s. That is allowed, but not as a side effect -- it was "
         "derived from the six plates on file on 2026-09-23 and pinned deliberately. Change "
         "this assertion in the same commit, and say why."
         % checker.GROUND_TARGET_DEGREES)
+    # 31.545 and not 31.55: the six plates' mean is 31.545 exactly, and rounding it to two
+    # decimals pushed slate_irregular to exactly 0.48 from target against a tolerance of 0.48
+    # -- a comparison of equal decimals that binary floating point loses, which failed
+    # test_a_plate_is_held_tighter_than_a_sculpt below on a plate carrying a live duty.
+    # Corrected 2026-09-24. Both extreme plates now sit 0.475 out with 0.005 to spare.
     assert checker.GROUND_TOLERANCE_DEGREES == 0.48, (
         "the plate tolerance moved to %s -- same story as the target above."
         % checker.GROUND_TOLERANCE_DEGREES)
@@ -2305,13 +2429,18 @@ def test_a_recorded_camera_cannot_hide_a_bad_plate(checker):
     Most plates need no such thing: a round rimmed plate's outline IS an ellipse and
     ground_ellipse measures it. A ragged patch is not, and the fit is a best guess at a shape
     that has none -- on planks_rough it reads 30.66 where the measuring ring on the source
-    image read 31.57. So duty_grounds.json may carry a plate's camera, and the page reports
+    image reads 31.14. So duty_grounds.json may carry a plate's camera, and the page reports
     it as that plate's angle.
 
-    The risk is obvious and worth stating: the ring is stripped when art is filed, so nothing
-    in the repository can re-derive the recorded number. It is the one figure here that no
-    later measurement contradicts, which makes it the one place a wrong angle could sit
-    forever. Two conditions keep it honest.
+    (31.14 and not the 31.57 this docstring quoted until 2026-09-24: that first figure came
+    from filling the ring and bounding it, which measures the ring's outer edge. It was
+    corrected in duty_grounds.json the same day it was taken and the correction never reached
+    the prose here.)
+
+    The risk was obvious and worth stating: the ring used to be discarded when art was filed,
+    so for a while nothing in the repository could re-derive the recorded number, which made it
+    the one place a wrong angle could sit forever. That hole is closed by the test below, which
+    requires the ring-bearing generation to be on file. Two conditions keep this one honest.
     """
     rows = {r["name"]: r for r in checker.ground_record()}
     if not rows:
@@ -2663,15 +2792,27 @@ def test_a_plate_without_a_ring_takes_the_path_it_always_took(checker, metrics):
         assert r["ringed"] is False
 
 
-def test_the_key_is_not_a_colour_this_game_uses(metrics):
+def test_the_key_is_not_a_colour_this_game_uses(metrics, checker):
     """Magenta was the obvious key and it is wrong: it comes within 34 of stones_plum.png,
-    plum being a purple. The key has to sit outside the palette or it eats the art."""
+    plum being a purple. The key has to sit outside the palette or it eats the art.
+
+    The files a plate's `camera` block names as its ring source are skipped, and only those:
+    they carry the key on purpose, which is the whole reason they are on file. Skipping them by
+    reading the plan rather than by naming a filename means the exclusion cannot outlive the
+    thing it excuses -- delete the block and the file is judged like any other art again.
+    """
     import numpy as np
     from PIL import Image
+    plan = json.loads(checker.GROUND_PLAN.read_text(encoding="utf-8"))
+    ringed = {(checker.GROUNDS.parent / g["camera"]["ring_source"]).resolve()
+              for g in (plan.get("grounds") or {}).values()
+              if (g or {}).get("camera", {}).get("ring_source")}
     key = np.array(metrics.RING_KEY)
     closest = 10 ** 6
     worst = None
     for p in sorted((ROOT / "ui" / "assets-gothic").rglob("*.png")):
+        if p.resolve() in ringed:
+            continue
         a = np.array(Image.open(p).convert("RGBA")).astype(int)
         m = a[..., 3] > metrics.ALPHA
         if not m.any():

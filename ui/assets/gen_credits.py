@@ -40,9 +40,21 @@ def _shipped(states=("present",)):
     return sorted(out, key=lambda r: (r[1]["collection"] or "", r[1]["title"] or ""))
 
 
+def _is_url(s):
+    """A whole URL, not merely something that begins with one.
+
+    The prefix test alone was not enough, and the near-miss ships rather than failing. A source of
+    "https://thenounproject.com/ -- icon 7392556, downloaded 2026-09-07" starts with https:// and
+    so passed, then went verbatim into an href and put a malformed link in the credits screen a
+    player reads. Prose appended to a URL is the shape this actually arrives in, because `source`
+    reads like a free-text provenance field and the one thing it is not is free text.
+    """
+    return s.startswith(("http://", "https://")) and not any(c.isspace() for c in s)
+
+
 def _check_sources():
     bad = ["%s: %r" % (path, a["source"]) for path, a, _ in _shipped()
-           if a["source"] and not a["source"].startswith(("http://", "https://"))]
+           if a["source"] and not _is_url(a["source"])]
     if bad:
         raise SystemExit("a credited file's `source` must be a URL, because it is written into "
                          "an href; put anything else in a field of its own:\n  "

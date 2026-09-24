@@ -142,12 +142,17 @@ def panel_range(target, tol, w=1400, h=340):
         col = GOLD if abs(deg - target) < 1e-6 else (RED if abs(deg - 30.0) < 1e-6 else GREEN)
         d.ellipse([(cx - R) * S, (base - R * s) * S, (cx + R) * S, (base + R * s) * S],
                   outline=col, width=(4 if hot else 3) * S)
-        txt(d, (cx, base + R + 16), "%.2f°" % deg if hot else "%.0f°" % deg,
+        # THE TARGET IS QUOTED TO THREE DECIMALS because two hide the digit it turns on:
+        # 31.545 printed as 31.55 is the number this window was corrected AWAY from, and it
+        # would sit here beside a window of 31.065 to 32.025 looking like a contradiction.
+        # Trailing zeros are stripped so the round 30 does not become 30.000.
+        txt(d, (cx, base + R + 16),
+            ("%.3f" % deg).rstrip("0").rstrip(".") + "°" if hot else "%.0f°" % deg,
             14, col, bold=hot, anchor="ma")
         txt(d, (cx, base + R + 36), "%.3f" % s, 15, col, bold=hot, anchor="ma")
         if note:
             txt(d, (cx, base + R + 56), note, 11, col if hot else DIM, anchor="ma")
-    txt(d, (w - 26, 16), "window %.2f to %.2f°" % (target - tol, target + tol),
+    txt(d, (w - 26, 16), "window %.3f to %.3f°" % (target - tol, target + tol),
         13, GOLD, bold=True, anchor="ra")
     txt(d, (w - 26, 36), "ratios %.4f to %.4f"
         % (math.sin(math.radians(target - tol)), math.sin(math.radians(target + tol))),
@@ -341,4 +346,4 @@ def build(out=OUT):
 if __name__ == "__main__":
     p, t, tl = build()
     print("wrote %s  (%.0f KB)" % (p, p.stat().st_size / 1024))
-    print("  drawn against the plates on file: target %.2f deg, tolerance %.2f" % (t, tl))
+    print("  drawn against the plates on file: target %.3f deg, tolerance %.2f" % (t, tl))

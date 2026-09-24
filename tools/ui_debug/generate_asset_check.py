@@ -28,7 +28,7 @@ is ragged cobble, stepped stone or plank ends; the outline is not an ellipse, an
 it is a best guess that visibly misses -- on planks_rough the fit reads 30.66 where the ring
 reads 31.14. So the briefs ask the generator to draw a green ring around the tile, a known
 circle on the same ground, and sculpt_metrics measures that and then strips it. Plates now get a
-verdict like sculpts do, against a window locked at 31.55 +/- 0.48.
+verdict like sculpts do, against a window locked at 31.545 +/- 0.48.
 
 This paragraph said something else until 2026-09-23 -- that a plate could not be judged, that
 two plates read 25 and 17.8 degrees by outline against 38.5 by bounding box, and that plates
@@ -160,14 +160,27 @@ TOLERANCE_DEGREES = 2.5
 # which had been looked at under figures and kept, so the set was the best description of
 # what "right" meant:
 #
-#     slate_irregular       31.07   -0.47
-#     planks_rough          31.14   -0.40      (from its ring; its outline reads 30.66)
-#     flagstones_grey       31.52   -0.02
-#     cobbles_oval          31.63   +0.09
-#     limestone_irregular   31.89   +0.35
-#     flagstones_slab       32.02   +0.48
+#     slate_irregular       31.07   -0.475
+#     planks_rough          31.14   -0.405     (from its ring; its outline reads 30.66)
+#     flagstones_grey       31.52   -0.025
+#     cobbles_oval          31.63   +0.085
+#     limestone_irregular   31.89   +0.345
+#     flagstones_slab       32.02   +0.475
 #
-#     mean 31.55, largest deviation 0.48  ->  window 31.07 to 32.03
+#     mean 31.545, largest deviation 0.475  ->  window 31.065 to 32.025
+#
+# THE TARGET IS THE UNROUNDED MEAN AND THE TOLERANCE IS THE DEVIATION ROUNDED UP, and both
+# halves of that matter. Corrected 2026-09-24, from a target of 31.55 and this same table
+# quoting -0.47 for slate and +0.48 for slab -- which had the two transposed. The six plates'
+# mean is 31.545 exactly, and slate and slab sit 0.475 either side of it, equidistant.
+# Rounding the target to 31.55 moved it five thousandths toward slab, which put slate at
+# exactly 0.48 out. With the tolerance also 0.48 that plate then sat precisely ON the
+# boundary, where `abs(31.55 - 31.07) <= 0.48` is FALSE in binary floating point by four parts
+# in 10^16 -- so slate_irregular, which carries the construct duty, was judged `check` by the
+# page and failed test_a_plate_is_held_tighter_than_a_sculpt, for no reason that exists in the
+# art. The tolerance is NOT set to the exact largest deviation for the same reason: at 0.475
+# both extreme plates would sit on the boundary instead of one. Rounding the tolerance up is
+# what buys them any margin, and it is now five thousandths of a degree rather than zero.
 #
 # That replaced a target of 32.0 with a tolerance of 1.0, which were both picked rather than
 # measured, and which the set never centred on: five of its six sat below 32.
@@ -190,8 +203,8 @@ TOLERANCE_DEGREES = 2.5
 #
 # So the numbers stay where the measurement put them. Changing them is now a deliberate edit
 # to two literals that shows up in review, rather than a side effect of filing art.
-GROUND_TARGET_DEGREES = 31.55       # LOCKED 2026-09-23; see above before changing
-GROUND_TOLERANCE_DEGREES = 0.48     # LOCKED 2026-09-23; window 31.07 to 32.03
+GROUND_TARGET_DEGREES = 31.545      # LOCKED 2026-09-23, corrected 2026-09-24; see above
+GROUND_TOLERANCE_DEGREES = 0.48     # LOCKED 2026-09-23; window 31.065 to 32.025
 BASE_TOLERANCE_PCT = 24.0        # chunkier than the set's median
 BASE_THIN_PCT = 12.0             # thinner than it
 
@@ -483,7 +496,8 @@ def arrangement_picture(folder=SCULPTS, place=None, colour=False, plain=False):
 
     W, H, drop = frame["w"], frame["h"], frame["drop"]
     pad, top = 22, 16
-    card = Image.new("RGBA", (W + 2*pad, H + pad + top + 48), (23, 19, 13, 255))
+    # 62 rather than 48: a fourth caption line, the live width limit, sits at H + 45.
+    card = Image.new("RGBA", (W + 2*pad, H + pad + top + 62), (23, 19, 13, 255))
     floor = H - drop
 
     plate = trim(Image.open(plate_path).convert("RGBA"))
@@ -550,6 +564,16 @@ def arrangement_picture(folder=SCULPTS, place=None, colour=False, plain=False):
           for (dx, _), i in zip(slots, pick, strict=True) for s in (-1, 1)]
     span = round(max(xs) - min(xs))
     low = round(max(cy + b for _, cy, _, b in ells) - floor)
+    # THE WIDTH LIMIT IS A FUNCTION, NOT A CONSTANT, and quoting it from memory is how it went
+    # wrong: `2 * spread + widest <= frame.w` leaves the widest figure frame.w - 2*spread px, so
+    # the limit on a figure's width IN UNITS OF ITS OWN BASE is that over the levelled plinth --
+    # and the plinth moves whenever the art does, because the set is levelled on the narrowest
+    # base and then scaled until the tallest reaches the nominal size. A flat 1.136 was carried
+    # around for a day; it was derived against an 88 px plinth this folder no longer produces.
+    # Computed from the figures just drawn, so it cannot drift from them.
+    plinth = built[0]["pw"] if built else 0.0
+    limit = (W - 2*spread) / plinth if plinth else 0.0
+    broad = max(b["im"].width / plinth for b in built) if plinth else 0.0
     # THREE SHORT LINES, not one long one: the card is only W + 2*pad wide and a single line ran
     # off its right edge, which the page happily rendered with the verdict missing.
     ok = (120, 220, 150, 255)
@@ -563,7 +587,9 @@ def arrangement_picture(folder=SCULPTS, place=None, colour=False, plain=False):
         return {"uri": "data:image/webp;base64,"
                        + base64.b64encode(buf.getvalue()).decode("ascii"),
                 "span": span, "frame": W, "clashes": len(clash), "low": low, "drop": drop,
-                "plate": plate_path.stem, "anchor": round(anchor * 100)}
+                "plate": plate_path.stem, "anchor": round(anchor * 100),
+                "limit": round(limit, 3), "widest": round(broad, 3),
+                "plinth": round(plinth)}
     d.text((pad, top + H + 6),
            "five sculpts, spread %d, middle forward %d, rank %d"
            % (spread, round(forward), rank),
@@ -577,11 +603,21 @@ def arrangement_picture(folder=SCULPTS, place=None, colour=False, plain=False):
     d.text((pad + 168, top + H + 19),
            "no plinths overlap" if not clash else "%d plinth clash(es)" % len(clash),
            fill=ok if not clash else (255, 120, 120, 255))
+    # SHORT, and split across the line like the row above it, for the reason stated there: one
+    # long line runs off the card's right edge and the page renders it with the verdict missing.
+    d.text((pad, top + H + 32 + 13),
+           "widest %.3f of its own base" % broad,
+           fill=ok if broad <= limit else (255, 120, 120, 255))
+    d.text((pad + 168, top + H + 32 + 13),
+           "limit %.3f at plinth %d" % (limit, round(plinth)),
+           fill=ok if broad <= limit else (255, 120, 120, 255))
     buf = io.BytesIO()
     card.convert("RGB").save(buf, "WEBP", quality=86, method=6)
     return {"uri": "data:image/webp;base64," + base64.b64encode(buf.getvalue()).decode("ascii"),
             "span": span, "frame": W, "clashes": len(clash), "low": low, "drop": drop,
-            "plate": plate_path.stem, "anchor": round(anchor*100)}
+            "plate": plate_path.stem, "anchor": round(anchor*100),
+            "limit": round(limit, 3), "widest": round(broad, 3),
+            "plinth": round(plinth)}
 
 
 def on_record(folder=SCULPTS, rel_to=None):
@@ -671,10 +707,14 @@ def ground_record(folder=GROUNDS, rel_to=None):
             # So duty_grounds.json may carry the camera for such a plate, and this reports it
             # as the plate's angle. THE MEASURED OUTLINE IS STILL REPORTED ALONGSIDE and never
             # replaced, because a recorded number is exactly the kind of thing that goes
-            # quietly wrong: the ring it came from was stripped when the art was filed, so
-            # nothing here can re-derive it. Two guards keep it honest -- a test refuses a
-            # recorded camera further than the ring/outline agreement bar from the plate's own
-            # outline, and another refuses one that does not say where it came from.
+            # quietly wrong, so three guards keep it honest. Two refuse a recorded camera
+            # further than the ring/outline agreement bar from the plate's own outline, and one
+            # that does not say where it came from. The third is newer: the ring-bearing
+            # generation has to be ON FILE, named by the block's `ring_source`, and the ring has
+            # to still re-derive the recorded angle. Until 2026-09-24 it could not be, because
+            # the ring was discarded once the art was stripped -- planks_rough's original was
+            # recovered from its generating session, and stripping it reproduces the committed
+            # plate byte for byte.
             rec = (settings.get(path.stem) or {}).get("camera") or {}
             measured = round(g["degrees"], 2) if g else None
             recorded = rec.get("degrees")
@@ -1280,6 +1320,13 @@ td.why{color:#403a31}
   background:#1c1811;color:#c9b27a;text-decoration:none;white-space:nowrap}
 #card .dl:hover{border-color:#8fae6a;background:#201c13}
 #card .note{color:#5f574a;max-width:720px;line-height:1.45}
+#allsculpts{margin:0 0 10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+#allsculpts .dlall{font:inherit;color:#c9b27a;background:#1c1811;border:1px solid #4a5a3a;
+  border-radius:3px;padding:6px 12px;cursor:pointer;white-space:nowrap}
+#allsculpts .dlall:hover{border-color:#8fae6a;background:#201c13}
+#allsculpts .dlall[disabled]{color:#5f574a;border-color:#332c20;cursor:not-allowed}
+#allsculpts .note{color:#5f574a;max-width:720px;line-height:1.45}
+#allsculpts .note b{color:#8b8071;font-weight:400}
 /* The briefs, on the same shelf as the card they were used with. */
 #prompts{margin:0 0 12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 #prompts .lab{color:#3f3930;letter-spacing:.06em;text-transform:uppercase}
@@ -1367,6 +1414,30 @@ var INGAME = __INGAME__;
            + "committed file byte for byte. Attach it when generating the next seat.</span>"
            + "</div>");
   }
+  // EVERY FILED SCULPT AT ONCE, as the committed originals rather than the previews. Each cell
+  // below already offers its own file; this is the same nine links without nine visits.
+  //
+  // IT REFUSES ON A file:// PAGE INSTEAD OF MISBEHAVING. Chromium ignores the `download`
+  // attribute on a file:// link and NAVIGATES to the image, so firing nine of them would throw
+  // the page away and leave you looking at a PNG with no way back but the back button. Served,
+  // the identical hrefs download -- which is the trade href() already documents.
+  (function(){
+    var filed = (ONRECORD || []).filter(function(r){
+      return r.orig && /^player_\d+/.test(r.name);
+    });
+    if (!filed.length) return;
+    var kb = filed.reduce(function(a, r){ return a + (r.kb || 0); }, 0);
+    var served = location.protocol === "http:" || location.protocol === "https:";
+    h.push("<div id=allsculpts><button class=dlall" + (served ? "" : " disabled")
+           + ">&#8595;&nbsp; download all sculpts</button>"
+           + "<span class=note>" + filed.length + " committed files, "
+           + (kb / 1024).toFixed(1) + " MB, byte for byte &#183; "
+           + (served
+              ? "the browser asks once to allow multiple downloads"
+              : "<b>needs --serve</b>: from a file:// page the browser navigates to the image "
+                + "instead of saving it, so the button is disabled here")
+           + "</span><span class=note id=allsay></span></div>");
+  })();
   // THE PROMPTS THAT WORKED, beside the card they were used with -- the two halves of one
   // instruction. Copied rather than downloaded: a prompt's destination is a text box.
   var SCULPT_PROMPTS = (PROMPTS || []).filter(function(p){ return p.makes !== "ground"; });
@@ -1476,6 +1547,34 @@ var INGAME = __INGAME__;
     document.body.removeChild(ta);
     return ok;
   }
+  // ONE LINK AT A TIME, spaced out. A browser that is handed nine simultaneous downloads drops
+  // most of them silently; 150 ms apart it keeps all nine. The count is reported when it is done
+  // so a batch that was quietly refused does not look like a batch that arrived.
+  (function(){
+    var b = host.querySelector("#allsculpts .dlall");
+    if (!b || b.disabled) return;
+    b.onclick = function(){
+      var filed = (ONRECORD || []).filter(function(r){
+        return r.orig && /^player_\d+/.test(r.name);
+      });
+      var say = document.getElementById("allsay"), i = 0;
+      b.disabled = true;
+      say.textContent = "";
+      (function next(){
+        if (i >= filed.length) {
+          b.disabled = false;
+          say.textContent = "asked the browser for " + filed.length + " files \u2014 check the "
+                            + "downloads list, and allow multiple downloads if it asked";
+          return;
+        }
+        var r = filed[i++];
+        var a = document.createElement("a");
+        a.href = r.orig; a.download = r.file;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(next, 150);
+      })();
+    };
+  })();
   host.querySelectorAll("#prompts .cp").forEach(function(b){
     b.onclick = function(){
       var p = PROMPTS[+b.dataset.i], say = document.getElementById("cpsay");
@@ -1577,8 +1676,10 @@ function show(name, ok, res){
   // 32.0 and differ only in tolerance, on the reasoning that ground and figure must agree
   // about where you are standing -- which is true, and is still checked, but is not the same
   // as the two being judged by one number. Both plate numbers were derived once from the
-  // plates on file and then LOCKED: 31.55 is what that set averaged and 0.48 is how far
-  // its furthest member sat from that. Derived once, then fixed, so filing a plate cannot
+  // plates on file and then LOCKED: 31.545 is what that set averaged and 0.48 is how far
+  // its furthest member sat from that, rounded up -- at the exact 0.475 the two extreme
+  // plates would sit on the boundary, where a binary comparison of equal decimals is a
+  // coin toss. Derived once, then fixed, so filing a plate cannot
   // move the bar the next one is judged by. The sculpts keep 32.0, and the gap between the two --
   // four tenths of a degree, well inside either tolerance -- is itself the agreement.
   var TARGET = +document.getElementById("gtarget").value;

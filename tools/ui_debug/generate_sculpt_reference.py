@@ -147,7 +147,10 @@ PROPORTION = 2.4
 CARDS = (
     {"name": "base_scale_reference_27.png",
      "wall": 24.0 / 360.0, "dimension_wall": False,
-     "made": "player_3_lantern_at_waist.png and the two sculpts beside it"},
+     "made": "the three seat-3 sculpts filed as player_3_lantern_at_waist.png, "
+             "player_3_lantern_and_strap.png and player_3_staff_and_lantern.png until "
+             "2026-09-24 -- now at sculpts/candidates/, each with _c01 appended, and replaced "
+             "by player_3_v1.png, player_3_v2.png and player_3_v3.png"},
     {"name": "base_scale_reference_27_wall_127.png",
      "wall": 0.127, "dimension_wall": True,
      "made": "player_2_v1.png, and the two sculpts filed as player_2_v2_a.png and player_2_v2_b.png until 2026-09-23 -- now at sculpts/candidates/player_2_v2_a_c01.png and player_2_v2_b_c01.png"},
