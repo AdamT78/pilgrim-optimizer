@@ -12,7 +12,7 @@ method.
 ## What a painted miniature is
 
 A **finish**, not a sculpt. `ui/assets-gothic/sculpts/player_3_v1.png` is the geometry — grey
-resin, 1.5% of its pixels saturated. `ui/assets-gothic/sculpts/painted/player_3_v1_a.png` is
+resin, 1.5% of its pixels saturated. `ui/assets-gothic/sculpts/painted/candidates/player_3_v1_a.png` is
 the same figure painted. They are the same object at the same camera on the same base, and
 the file names say so: a painted file is named after the sculpt it paints.
 
@@ -22,45 +22,57 @@ painting, because more than one came back worth keeping.
 
 ## Where it stands
 
-Twenty-seven files, all passing every check in `generate_asset_check.judge`.
+Twenty-seven files, all passing every check in `generate_asset_check.judge`. **Nine of them sit
+in `sculpts/painted/` under a bare pose name and are the ones the board draws; the other
+eighteen are in `sculpts/painted/candidates/` and keep their `_a`, `_b`, `_c` letter.** The
+folder is the statement — what is in `painted/` is in use, the same way `sculpts/` already
+works — so nothing downstream has to know which letter won.
+
+**Seat 1 moved onto the v-convention on 2026-09-24.** It was filed under pose names where seats
+2 and 3 used numbers, so `reading` became `player_1_v1`, `quarterstaff` became `player_1_v2` and
+`book_and_palm` became `player_1_v3`, in the order they were generated. The description now
+lives in the attribution title, exactly as `player_2_v3` is titled "veiled nun with a lantern".
+The briefs moved with the art: `prompts/player_1_v3.md` is now `player_1_v1.md`, because it is
+the one that produced the reading monk, and the seat's founding brief became
+`prompts/player_1_c01.md` after the retired figure it made.
 
 | file | camera | w/plinth | note |
 |---|---|---|---|
-| `painted/player_3_v3_a.png` | 31.54 | 1.121 | the one used as the colour reference since |
-| `painted/player_3_v3_b.png` | 31.97 | 1.121 | best silhouette match to v3, 0.980 |
-| `painted/player_3_v3_c.png` | 30.65 | 1.116 | |
-| `painted/player_3_v1_a.png` | 32.33 | 1.032 | |
-| `painted/player_3_v1_b.png` | 32.23 | 1.040 | gap 1.157 |
-| `painted/player_3_v1_c.png` | 31.98 | 1.037 | gap 0.910, the smallest of the three — the row above said that of `_b` until 2026-09-24, wrongly |
-| `painted/player_3_v2_a.png` | 31.17 | 1.111 | 0.72 from the furthest plate — the closest any painted figure has come |
-| `painted/player_3_v2_b.png` | 32.13 | 1.104 | |
-| `painted/player_3_v2_c.png` | 30.50 | 1.115 | |
-| `painted/player_2_v1_a.png` | 31.47 | 1.000 | 0.40 from the furthest plate |
-| `painted/player_2_v1_b.png` | 31.37 | 1.000 | |
-| `painted/player_2_v1_c.png` | 30.50 | 1.000 | |
-| `painted/player_2_v2_a.png` | 31.44 | 1.000 | |
-| `painted/player_2_v2_b.png` | 31.78 | 1.000 | |
-| `painted/player_2_v2_c.png` | 30.15 | 1.000 | marginal — the two estimators straddle the bar on this one |
-| `painted/player_2_v3_a.png` | 31.73 | 1.006 | 0.66 from the furthest plate |
-| `painted/player_2_v3_b.png` | 31.21 | 1.002 | |
-| `painted/player_2_v3_c.png` | 31.82 | 1.003 | |
-| `painted/player_1_reading_a.png` | 31.80 | 1.000 | |
-| `painted/player_1_reading_b.png` | 32.14 | 1.000 | |
-| `painted/player_1_reading_c.png` | 32.16 | 1.000 | eight of eight inside the bar, the only pose that managed it |
-| `painted/player_1_quarterstaff_a.png` | 31.56 | 1.000 | 0.49 from the furthest plate — the closest painted figure on file |
-| `painted/player_1_quarterstaff_b.png` | 31.32 | 1.000 | |
-| `painted/player_1_quarterstaff_c.png` | 31.21 | 1.000 | |
-| `painted/player_1_book_and_palm_a.png` | 31.26 | 1.122 | capacity box 320.0 of a 320 px frame — no margin left |
-| `painted/player_1_book_and_palm_b.png` | 31.72 | 1.126 | 0.65 against `_a`'s 0.63; the order of the two is inside the noise |
-| `painted/player_1_book_and_palm_c.png` | 30.58 | 1.124 | |
+| `painted/player_3_v3.png` | 31.54 | 1.121 | the one used as the colour reference since |
+| `painted/candidates/player_3_v3_b.png` | 31.97 | 1.121 | best silhouette match to v3, 0.980 |
+| `painted/candidates/player_3_v3_c.png` | 30.65 | 1.116 | |
+| `painted/candidates/player_3_v1_a.png` | 32.33 | 1.032 | |
+| `painted/candidates/player_3_v1_b.png` | 32.23 | 1.040 | gap 1.157 |
+| `painted/player_3_v1.png` | 31.98 | 1.037 | gap 0.910, the smallest of the three — the row above said that of `_b` until 2026-09-24, wrongly |
+| `painted/player_3_v2.png` | 31.17 | 1.111 | 0.72 from the furthest plate — the closest any painted figure has come |
+| `painted/candidates/player_3_v2_b.png` | 32.13 | 1.104 | |
+| `painted/candidates/player_3_v2_c.png` | 30.50 | 1.115 | |
+| `painted/player_2_v1.png` | 31.47 | 1.000 | 0.40 from the furthest plate |
+| `painted/candidates/player_2_v1_b.png` | 31.37 | 1.000 | |
+| `painted/candidates/player_2_v1_c.png` | 30.50 | 1.000 | |
+| `painted/player_2_v2.png` | 31.44 | 1.000 | |
+| `painted/candidates/player_2_v2_b.png` | 31.78 | 1.000 | |
+| `painted/candidates/player_2_v2_c.png` | 30.15 | 1.000 | marginal — the two estimators straddle the bar on this one |
+| `painted/player_2_v3.png` | 31.73 | 1.006 | 0.66 from the furthest plate |
+| `painted/candidates/player_2_v3_b.png` | 31.21 | 1.002 | |
+| `painted/candidates/player_2_v3_c.png` | 31.82 | 1.003 | |
+| `painted/player_1_v1.png` | 31.80 | 1.000 | |
+| `painted/candidates/player_1_v1_b.png` | 32.14 | 1.000 | |
+| `painted/candidates/player_1_v1_c.png` | 32.16 | 1.000 | eight of eight inside the bar, the only pose that managed it |
+| `painted/player_1_v2.png` | 31.56 | 1.000 | 0.49 from the furthest plate — the closest painted figure on file |
+| `painted/candidates/player_1_v2_b.png` | 31.32 | 1.000 | |
+| `painted/candidates/player_1_v2_c.png` | 31.21 | 1.000 | |
+| `painted/candidates/player_1_v3_a.png` | 31.26 | 1.122 | capacity box 320.0 of a 320 px frame — no margin left |
+| `painted/player_1_v3.png` | 31.72 | 1.126 | 0.65 against `_a`'s 0.63; the order of the two is inside the noise |
+| `painted/candidates/player_1_v3_c.png` | 30.58 | 1.124 | |
 
-All three seats the board draws are complete: three poses each, three keepers per pose,
-twenty-seven files. Seat 4 has no filed sculpts at all and is never drawn on a duty tile
+All three seats the board draws are complete: three poses each, three paintings kept per pose,
+twenty-seven files, nine of them promoted. Seat 4 has no filed sculpts at all and is never drawn on a duty tile
 (`FIGURE_SEATS` is `(1, 2, 3)`). None of the twenty-seven is recoloured on disk; see the colour
 section.
 
 The `w/plinth` column is worth reading rather than skimming. Every seat-1 figure except
-`book_and_palm` is no wider than its own base, and `book_and_palm` is the only figure in the
+`player_1_v3` is no wider than its own base, and `v3` is the only figure in the
 folder where seat 1 rather than seat 3 sets the five-figure capacity box. That box lands at
 319.6 to 320.0 against a 320 px frame, so it fits and nothing more. The limit those widths are
 measured against is a function, `(320 - 2 x 110) / plinth`, not the constant 1.136 this document
@@ -105,7 +117,7 @@ Ten separate images, not a contact sheet.
 Attach, in this order:
 
 1. `ui/assets-gothic/sculpts/player_3_v1.png` — the sculpt to paint
-2. `ui/assets-gothic/sculpts/painted/player_3_v3_a.png` — an already-painted figure, for the colour and the angle
+2. `ui/assets-gothic/sculpts/painted/player_3_v3.png` — an already-painted figure, for the colour and the angle
 
 ```
 Based on the first attached image, please provide ten versions with
@@ -191,8 +203,8 @@ bodies of 89 to 96, so they are darker than the figure rather than lighter.
 
 ### The seat 1 paint — 2026-09-24, four images at a time, three kept per pose (all three poses)
 
-Attach the sculpt and nothing else: `ui/assets-gothic/sculpts/player_1_reading.png`,
-`player_1_book_and_palm.png`, or `player_1_quarterstaff.png`.
+Attach the sculpt and nothing else: `ui/assets-gothic/sculpts/player_1_v1.png`,
+`player_1_v3.png`, or `player_1_v2.png`.
 
 ```
 Based on the attached image, please provide four versions with fully
@@ -216,8 +228,9 @@ and nothing hanging over the rim.
 Four separate images, not a contact sheet.
 ```
 
-The text above is what `reading` and `book_and_palm` were painted with, unchanged. For
-**quarterstaff**, which holds no book, the book clause becomes "the staff in pale weathered
+The text above is what **v1** (reading from an open book) and **v3** (the book at the chest
+with one palm open) were painted with, unchanged. For **v2**, the quarterstaff, which holds no
+book, the book clause becomes "the staff in pale weathered
 wood" and nothing else moves.
 
 No boots clause, as for seat 2 — the habit reaches the base. The rope cincture is named because
@@ -225,9 +238,9 @@ it is the one thing on the figure that is not cloth, not skin and not leather, a
 rope came back as another fold of habit in early seat-3 work.
 
 **This brief produced the best cameras of the exercise and the worst single session of the
-afternoon, and the difference was not in the text.** `reading` went eight of eight across two
+afternoon, and the difference was not in the text.** `v1` went eight of eight across two
 sessions at means of 32.41 and 32.13, with standard deviations of 0.17 and 0.26 against a
-previous best of 0.33 in thirteen batches. `quarterstaff` went seven of eight. `book_and_palm`
+previous best of 0.33 in thirteen batches. `v2` went seven of eight. `v3`
 then split: four of four at 31.00 in one session and none of three at 28.41 in the next, four
 minutes later, on identical text and the same attachment. Nineteen of twenty-three images
 landed, and every miss is in that one session.
@@ -291,7 +304,7 @@ one.** `2 × spread + widest ≤ FRAME.w` leaves the widest figure 100 px, so th
 `w/plinth` is 100 divided by the tray's plinth at 210 — and that plinth moves whenever the art
 does, because `make_tray_figures.py` levels the set on the narrowest plinth and then scales
 until the tallest hits 210. Today it is 90.6 px, giving 1.104. With the filed sculpts for seats
-1–3 in, `player_1_reading` is taller, the shared plinth falls to 88.5, and the limit rises to
+1–3 in, `player_1_v1` is taller, the shared plinth falls to 88.5, and the limit rises to
 1.130. The 1.136 quoted throughout 2026-09-24, including into `attribution.json`, came from an
 88 px plinth — which is what levelling the whole `sculpts/` folder gives, not what the tray
 gives. So the number was never wrong so much as detached from the set it described, which is
@@ -347,12 +360,12 @@ Eighteen batches in under four hours, and the camera is the thing that moves.
 | 15:23 | seat 2 v3 | the sculpt alone, four images | 28.94 | 1.75 | 1 of 4 |
 | 15:29 | seat 2 v3 | unchanged | 30.95 | 1.30 | 3 of 4 |
 | 15:33 | seat 2 v3 | unchanged | 29.64 | 1.25 | 1 of 4 |
-| 15:47 | seat 1 reading | the sculpt alone, four images | 32.41 | 0.17 | 4 of 4 |
-| 15:49 | seat 1 reading | unchanged | 32.13 | 0.26 | 4 of 4 |
-| 16:02 | seat 1 quarterstaff | the sculpt alone, four images | 31.55 | 0.48 | 4 of 4 |
-| 16:05 | seat 1 quarterstaff | unchanged | 30.78 | 0.96 | 3 of 4 |
-| 16:12 | seat 1 book_and_palm | the sculpt alone, four images | 31.00 | 0.47 | 4 of 4 |
-| 16:16 | seat 1 book_and_palm | unchanged | 28.41 | 1.57 | 0 of 3 |
+| 15:47 | seat 1 v1 | the sculpt alone, four images | 32.41 | 0.17 | 4 of 4 |
+| 15:49 | seat 1 v1 | unchanged | 32.13 | 0.26 | 4 of 4 |
+| 16:02 | seat 1 v2 | the sculpt alone, four images | 31.55 | 0.48 | 4 of 4 |
+| 16:05 | seat 1 v2 | unchanged | 30.78 | 0.96 | 3 of 4 |
+| 16:12 | seat 1 v3 | the sculpt alone, four images | 31.00 | 0.47 | 4 of 4 |
+| 16:16 | seat 1 v3 | unchanged | 28.41 | 1.57 | 0 of 3 |
 
 The 15:06 batch is the clearest case in the set: the same text that produced 30.92 twenty
 minutes earlier returned 20.14, nine and a half degrees below the sculpt's own 31.51, with all
@@ -471,19 +484,19 @@ seat, 19,683 across the board.
 
 | seat | | | |
 |---|---|---|---|
-| 1 acolyte | `reading_a` | `quarterstaff_a` | `book_and_palm_b` |
-| 2 nun | `v1_a` | `v2_a` | `v3_a` |
-| 3 pilgrim | `v1_c` | `v2_a` | `v3_a` |
+| 1 acolyte | `player_1_v1` | `player_1_v2` | `player_1_v3` |
+| 2 nun | `player_2_v1` | `player_2_v2` | `player_2_v3` |
+| 3 pilgrim | `player_3_v1` | `player_3_v2` | `player_3_v3` |
 
 Worst gap 0.910, cameras spanning 0.810 of a degree across all nine. Taking the `_a` file
 everywhere instead gives 1.264 and 1.164.
 
-**Two of the nine are not the `_a` file, and one reason is a filing mistake.** `player_3_v1_c`
+**Two of the nine are not the `_a` file, and one reason is a filing mistake.** `player_3_v1`
 has a gap of 0.910 against `_a`'s 1.264 and `_b`'s 1.157 — seat 3's v1 is the only pose where
 the suffixes do not run in gap order, because `_a` there was picked before the gap was the
 criterion. **The `_a` suffix means "the one I would have picked on the day", not "the smallest
 gap", and for `player_3_v1` those differ.** Read the numbers, not the letter. The other
-substitution is `player_1_book_and_palm_b`: 0.651 against `_a`'s 0.627 is a coin flip on gap,
+substitution is `player_1_v3`: 0.651 against `_a`'s 0.627 is a coin flip on gap,
 but it pulls seat 1's three cameras into a 0.25 degree spread where `_a` gives 0.54.
 
 **What actually discriminates, and what does not.**
@@ -502,7 +515,7 @@ is thin everywhere and no pick buys it back.
 *Colour does not either, which is the recolour working.* After recolouring each seat to its
 plastic pawn, the worst within-seat disagreement in the chosen sets is 1.87 dE for seat 1, 1.48
 for seat 2 and 0.42 for seat 3, against a bar of about 2 and a seat separation of 28. Seat 1
-could be squeezed to 0.97 by taking `quarterstaff_b`, at the cost of doubling its camera
+could be squeezed to 0.97 by taking `candidates/player_1_v2_b`, at the cost of doubling its camera
 spread. Camera is the scarce property; colour is set downstream.
 
 *Silhouette distinctness does not, because it is a property of the sculpt.* Best pairwise
@@ -529,7 +542,7 @@ are written as one letter per pose in the order the seat's poses are listed abov
 | 3 | cbb | 1.056 | 0.154 | 1.00 | 0.804 |
 | 3 | cba | 1.056 | 0.589 | 0.29 | 0.804 |
 
-Seat 1 is forced at `reading_a`: the other two readings sit at 1.073 and 1.094 where `_a` is at
+Seat 1 is forced at the reading pose's `_a`: its other two paintings sit at 1.073 and 1.094 where that one is at
 0.733, so any combination reaching 0.733 starts with it. Seat 2 has no forced pick and four
 combinations within 0.02 of each other.
 
@@ -577,7 +590,7 @@ can be matched to whichever plate a duty stands on, but adds nothing to a tile.
 
 **The capacity box has run out of margin, and one pose is why.** With a painted figure in every
 seat the five-figure arrangement measures 319.6 to 320.0 against a 320 px frame. Every seat-1
-pose except `book_and_palm` is no wider than its own base; `book_and_palm` holds a book against
+pose except `v3` is no wider than its own base; `v3` holds a book against
 the chest and an open palm out to the side, and that palm makes seat 1 rather than seat 3 the
 widest figure on the board — the only pose in the folder where that is true. The three filed
 run 1.122 to 1.126 of their own base against a limit of 1.130. Levelled as nine, every one of
