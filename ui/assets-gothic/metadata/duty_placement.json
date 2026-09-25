@@ -49,13 +49,18 @@
       }
     },
     "150_painted": {
-      "spread": 75,
+      "spread": 71,
       "back": 20,
       "rank": 49,
       "frame": {
-        "w": 195,
-        "h": 183,
+        "w": 269,
+        "h": 199,
         "drop": -1
+      },
+      "depth": {
+        "mode": "haze",
+        "amount": 70,
+        "full_at": 52
       }
     }
   },

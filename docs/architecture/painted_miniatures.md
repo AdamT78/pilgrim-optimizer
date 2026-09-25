@@ -681,10 +681,41 @@ a download has to *be* the document. The two copies are pinned against each othe
 runs the JavaScript in node and compares it with the Python, so the day they diverge is the day
 a test fails rather than the day a save quietly loses a set's tuning.
 
-On the sheet, the set buttons move every slider, a line beside them says whether you are looking
-at the base, a set's own numbers or a set still inheriting, and **use the base** drops a row you
-did not want. Unsaved edits are kept per set, so flipping between two sets to compare them shows
-each as you left it.
+On the sheet, choosing a set moves every slider, a line beside the control says whether you are
+looking at the base, a set's own numbers or a set still inheriting, and **use the base** drops a
+row you did not want. Unsaved edits are kept per set, so flipping between two sets to compare them
+shows each as you left it.
+
+### Choosing a set, and what `sizes` means now
+
+The control is a dropdown (`duty_set_picker.js`, shared by the sheet and the sow page so the two
+present the same list in the same order). It lists **every set the tray has rendered**, grouped
+into the ones `sizes` names and the rest, each marked `· base` or `· own numbers`.
+
+`sizes` used to decide which sets the sow page offered at all, and that hid real work: the file
+named two sets, the tray had rendered ten, and `150_painted` — tuned on the sheet, with its own
+spread, set-back, rank, frame and lift — was unreachable on the sow page with nothing to say it
+existed. A control that silently omits the thing you just tuned is worse than a long list. So
+`sizes` groups rather than filters. A set it names but the tray has never rendered is still
+dropped, with a note: there is nothing to draw.
+
+### Calculate width across ranks
+
+A checkbox on the sheet, off by default, and per set. It decides what `spread` measures once
+there are two ranks:
+
+Off, `spread` is the gap between neighbours **within a rank**. Four and five acolytes stand in two
+ranks with the back one offset into the front rank's gaps, which keeps the group narrow and makes
+it read denser than two or three at the same spread. On, `spread` is the gap between any two
+neighbours whichever rank they stand on, so nothing sits in a neighbour's horizontal gap — at
+roughly twice the width. One, two and three never move: with one rank there is nothing to
+interleave.
+
+It is a setting rather than a decision because it depends on the ground plate. Spacing across
+ranks was briefly made the only behaviour on 2026-09-25 and reverted the same day: on the tuned
+plates the group burst out of its frame and past the tile, with the outer acolytes hanging over
+the neighbouring cell. A wide plate can carry it; a narrow one cannot. Hence per set — the sets
+whose plates can carry it are the ones that get it.
 
 ## Which pose a tile draws
 

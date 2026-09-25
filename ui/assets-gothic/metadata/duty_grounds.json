@@ -124,7 +124,23 @@
       }
     },
     "150_painted": {
-      "lift": 43
+      "lift": 38,
+      "grounds": {
+        "cobbles_oval": {
+          "anchor": 47,
+          "scale": 100,
+          "dim": 55,
+          "saturate": 65,
+          "opacity": 100
+        },
+        "limestone_irregular": {
+          "anchor": 42,
+          "scale": 100,
+          "dim": 55,
+          "saturate": 65,
+          "opacity": 100
+        }
+      }
     }
   },
   "per_set_note": "How one sculpt set stands its plates. The plate ART is the same whatever size the sculpts are; how it is STOOD is not -- `lift` is a distance in real pixels between the floor line and the ground, and `scale` sizes the plate against figures that are 90 px tall in one set and 210 in another. A set may restand one plate and leave the others alone; each plate's row is merged on its own and is a whole row. `by_duty` is deliberately not splittable: which duty stands on which plate is a fact about the board, and letting it split would put one duty on two different grounds depending on which sculpts were loaded. The 210_painted anchors here were tuned on 2026-09-25 and landed in the base slot by mistake."

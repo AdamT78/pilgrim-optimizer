@@ -2191,10 +2191,21 @@ belong to the set `tuned_at` names; any other set stores only what it changes un
 which duty stands on which plate is a fact about the board, not about how big the sculpts are.
 `order` and `mark` do not split either, for the same reason.
 
-On the placement sheet the set buttons move every slider, a line beside them says whether you
-are looking at the base, a set's own numbers, or a set still inheriting, and **use the base**
+Which set is on screen is chosen from a dropdown (`duty_set_picker.js`, shared by the sheet and
+the sow page). It lists every set the tray has rendered, grouped into the ones `sizes` names and
+the rest, each marked `· base` or `· own numbers`. `sizes` groups rather than filters: it used to
+decide what the sow page offered at all, which hid a set that had been tuned next door.
+
+On the placement sheet, choosing a set moves every slider, a line beside the control says whether
+you are looking at the base, a set's own numbers, or a set still inheriting, and **use the base**
 drops a row again. Unsaved edits are kept per set, so flipping between two sets to compare them
 shows each as you left it.
+
+**calculate width across ranks** is a checkbox there, off by default and per set. Off, `spread` is
+the gap between neighbours within a rank and the back rank sits in the front rank's gaps. On, it
+is the gap between any two neighbours whichever rank they stand on, at roughly twice the width.
+One, two and three acolytes never move either way. It is off by default because a narrow ground
+plate cannot carry the wide version — the group runs off the tile.
 
 Two rules pull against each other and the file says which wins. A piece is a plinth standing on a
 tile, so the players are levelled on the plinth first, targeting the narrowest so nothing is ever

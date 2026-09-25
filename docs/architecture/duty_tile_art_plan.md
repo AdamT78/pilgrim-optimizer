@@ -7,14 +7,21 @@ sheet grew a wheel view, a frame and a ground picker.
 ## What exists today
 
 Three pages share one set of rules. `tools/ui_debug/duty_sculpt_rules.js` owns the formation, the
-seat order, the depth cue and the tile layout; `generate_duty_board_check.py` owns the art loading
-and the validators; `generate_placement_sheet.py` tunes and saves; `generate_duty_sow.py` plays on
-what was saved and has no settings of its own.
+seat order, the depth cue and the tile layout; `duty_set_picker.js` owns the dropdown that chooses
+which sculpt set is on screen; `duty_settings_split.js` owns the save button's half of the
+base/override split, pinned against the server's copy by a test. `generate_duty_board_check.py`
+owns the art loading, the validators and the per-set resolver; `generate_placement_sheet.py` tunes
+and saves; `generate_duty_sow.py` plays on what was saved and has no settings of its own.
 
 Two files carry every decision. `ui/assets-gothic/metadata/duty_placement.json` holds spread,
 set-back, rank gap, seating order, the marking, the depth cue and the frame.
 `ui/assets-gothic/metadata/duty_grounds.json` holds which duty stands on which plate and how each
 plate is toned down. Both are written by the sheet's save button and read by everything else.
+
+Since 2026-09-25 both are **base plus overrides**: the top-level keys belong to the set `tuned_at`
+names, and any other sculpt set stores only what it changes under `per_set`. `by_duty`, `order`
+and `mark` deliberately do not split — see 'Each set carries its own numbers' in
+`painted_miniatures.md`.
 
 Numbers worth not re-deriving, all in real device pixels at the 210 px sculpt size:
 
@@ -25,6 +32,9 @@ Numbers worth not re-deriving, all in real device pixels at the 210 px sculpt si
 | a tile's share of the wheel | 633 square |
 | spare, so how far the wheel could tighten | 224 per tile |
 | the frame, provisional | 320 by 390, base 40 below the floor |
+
+Those are the BASE, which belongs to `210_plastic`. `210_painted` and `150_painted` carry numbers
+of their own; the placement sheet prints every set's on each run.
 
 ## A standing rule for new assets
 
