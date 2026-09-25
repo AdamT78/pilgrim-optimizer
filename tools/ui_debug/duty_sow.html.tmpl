@@ -150,7 +150,12 @@ var HAZE_STEPS = DUTY_HAZE.steps, HAZE_MAX = DUTY_HAZE.max;
 
 var DPR = devicePixelRatio || 1, px = function(v){ return (v / DPR) + "px"; };
 var POS = CELLS.map(function(c){ return c.pos; });
+// A set LABEL -- `210_painted` -- not a pixel height: two sets can be 210 tall, so the height
+// stopped being able to say which sculpts are on screen.
 var SIZE = SIZES.indexOf(OPENING) >= 0 ? OPENING : SIZES[SIZES.length - 1];
+// Which of a seat's poses is drawn. The painted set carries three and the plastic one carries
+// one; dutyPose() answers for either. 0 everywhere until the column rule lands.
+var POSE = 0;
 var SEAT = 0, shadow = true, GAUGE = false;
 
 // THE FORMATION ONLY KNOWS FIVE. A tile already holding five is not lit, because there is no
@@ -212,7 +217,12 @@ var BUD = 0, CELL = 0, FIELD = 0, TIGHT = 0, CAP = null, TOTALH = 0, FOOTW = 0;
 function build(){
   BUD = Math.floor(Math.min(innerWidth, innerHeight) * DPR);
   CELL = BUD / 3;
-  var FIG = FIGS[String(SIZE)], figH = Math.max.apply(null, FIG.map(function(f){ return f.h; }));
+  // Over every seat AND every pose: the field has to clear whatever might be drawn in it, and a
+  // height taken off one pose would clip another the moment a tile asked for it.
+  var FIG = FIGS[SIZE] || [], figH = dutySetHeight(FIG);
+  // The footprint marks are sized off the FIRST SEAT as drawn, because they are a mark on
+  // the floor rather than a figure -- one size for the whole tile, not one per occupant.
+  var FOOTW = (dutyPose(FIG[0], POSE) || {w: 0}).w;
   // Where the parts of a tile sit comes from the shared rules, not from here: this was one of
   // two copies that had already drifted apart on the gap above the banner.
   var L = dutyTileLayout(CELL, figH, RANK, BACK, {icons: false});
@@ -228,9 +238,9 @@ function build(){
   TIGHT = total > CELL ? Math.ceil((total - CELL) / DPR) : 0;
   // One capacity box for the whole board: the formation and the sculpt set are the same on
   // every tile, so the room a full tile needs is the same on every tile too.
-  CAP = dutyCapacityBox(SLOTS, SPREAD, BACK, RANK,
-                        Math.max.apply(null, FIG.map(function(f){ return f.w; })),
-                        Math.max.apply(null, FIG.map(function(f){ return f.h; })));
+  // Over every seat AND every pose, for the same reason the field height is: the box has to
+  // hold the worst case the set can produce, not the case pose 1 happens to be.
+  CAP = dutyCapacityBox(SLOTS, SPREAD, BACK, RANK, dutySetWidth(FIG), dutySetHeight(FIG));
   var lit = legal();
 
   var h = "";
@@ -264,9 +274,9 @@ function build(){
         .sort(function(a, b){ return a.x - b.x; })
         .forEach(function(s, j){
           h += '<div class="mark foot ' + (j === nextIdx ? "next" : "later") + '" style="left:'
-             + px(CELL / 2 + s.x - FIG[0].w * 0.42) + ';top:'
-             + px(top + FIELD - s.y - FIG[0].w * 0.20) + ';width:' + px(FIG[0].w * 0.84)
-             + ';height:' + px(FIG[0].w * 0.30) + '"></div>';
+             + px(CELL / 2 + s.x - FOOTW * 0.42) + ';top:'
+             + px(top + FIELD - s.y - FOOTW * 0.20) + ';width:' + px(FOOTW * 0.84)
+             + ';height:' + px(FOOTW * 0.30) + '"></div>';
         });
     }
     // `gild` draws no geometry at all -- the banner lights, from CSS.
@@ -279,7 +289,8 @@ function build(){
                    .sort(function(a, b){ return a.x - b.x; })
                    .map(function(p, j){ return {x: p.x, y: p.y, seat: q[j]}; });
     placed.slice().sort(function(a, b){ return b.y - a.y || a.x - b.x; }).forEach(function(p){
-      var f = FIG[p.seat];
+      var f = dutyPose(FIG[p.seat], POSE);
+      if (!f) return;                     // no art for this seat in this set: draws empty
       h += '<div class=fig style="left:' + px(CELL / 2 + p.x - f.w / 2) + ';top:'
          + px(FIELD - f.h - p.y) + ';width:' + px(f.w) + ';height:' + px(f.h)
          + ';filter:' + figFilter(p.y) + '"><img src="' + f.uri + '"></div>';
@@ -344,7 +355,7 @@ function build(){
 
 // ---- the hand ---------------------------------------------------------------------------------
 function drawHand(){
-  var el = document.getElementById("hand"), f = FIGS[String(SIZE)][SEAT];
+  var el = document.getElementById("hand"), f = dutyPose((FIGS[SIZE] || [])[SEAT], POSE);
   el.classList.toggle("empty", HAND === 0);
   var sq = BUD / DPR, left = (innerWidth - sq) / 2;
   el.style.left = Math.max(8, left - 108) + "px";
@@ -430,7 +441,7 @@ function say(){
     && (EDGES[POS[AT]] || []).length > names.length;
   document.getElementById("note").innerHTML =
     "SOW BY HAND, true size at <b>" + DPR.toFixed(2) + "x</b>\n"
-  + "sculpt  <b>" + FIGS[String(SIZE)][0].h + "</b> real px\n"
+  + "sculpt  <b>" + dutyPose((FIGS[SIZE] || [])[0], POSE).h + "</b> real px\n"
   + "seat    <b>p" + (SEAT + 1) + "</b>, <b>" + mine + "</b> on the wheel\n\n"
   + (HAND === 0
       ? "click one of your tiles to lift\nits acolytes into the hand."
@@ -486,7 +497,7 @@ function pressAll(){
     });
 }
 buttons(document.getElementById("szb"), SIZES, null,
-        function(v){ return String(v); },
+        function(v){ return String(v).replace("_", " "); },
         function(v){ SIZE = v; build(); });
 buttons(document.getElementById("seatb"), [0, 1, 2], null,
         function(v){ return "p" + (v + 1); },

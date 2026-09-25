@@ -83,9 +83,15 @@ one.
 WHAT IS EMBEDDED AND WHAT CAN GO MISSING
 
 Banners, icons and the title face are committed, so they are always there and are inlined. The
-sculpts come from `generated/figure_player_<seat>_<px>.png`, which `make_tray_figures.py` renders
-DOWN from the full-resolution originals -- git-ignored debug input, so a fresh clone has none of
-it and a missing size costs that size rather than the page.
+sculpts come from `generated/figure_player_<seat>_p<pose>_<px>_<label>.png`, which
+`make_tray_figures.py` renders DOWN from the full-resolution originals -- git-ignored debug
+input, so a fresh clone has none of it and a missing set costs that set rather than the page.
+
+A SET IS NAMED, NOT MEASURED. `210_plastic` and `210_painted` are both 210 px tall and are not
+the same art, so the pixel height stopped being enough to say which sculpts are on screen. What
+the pages switch between is a LABEL -- `<px>_<kind>` -- and the pixel height is a fact about the
+label rather than the identity of it. The sets are discovered from the folder rather than
+declared here: a second copy of make_tray_figures.py's kind table is how the two drift apart.
 
 The action icons are this project's own primitives, not a third-party set, so nothing here adds
 an attribution obligation. THE CITY HAS NO ACTION ICON and that is a fact about the duty rather
@@ -143,8 +149,24 @@ SLUGS = ("allocation", "clerical", "construct", "build_roads", "city",
          "ordination", "produce", "taxation", "give_alms")
 
 FIGURE_DIR = HERE / "generated"
-FIGURE_SIZES = (90, 120, 150, 180, 210)
 FIGURE_SEATS = (1, 2, 3)
+
+# figure_player_<seat>_p<pose>_<px>_<label>.png, written by make_tray_figures.py. The set label a
+# page shows is the last two fields joined -- `210_painted` -- so the px stays readable off the
+# front of it without a second table saying which labels exist.
+FIGURE_NAME = re.compile(r"^figure_player_(\d+)_p(\d+)_(\d+)_([a-z][a-z0-9_]*)\.png$")
+
+
+def set_px(label):
+    """The pixel height behind a set label. `210_painted` -> 210."""
+    return int(str(label).split("_", 1)[0])
+
+
+def set_sort(label):
+    """Sets in a settled order: by height, then by name. Used wherever buttons are laid out."""
+    text = str(label)
+    head, _, tail = text.partition("_")
+    return (int(head) if head.isdigit() else 0, tail, text)
 
 # THE ARRANGEMENT RULES LIVE IN A FILE, NOT HERE.
 #
@@ -164,7 +186,7 @@ RULES_JS = HERE / "duty_sculpt_rules.js"
 
 # Only if the file is missing. A page built from these instead of from the file would look right
 # and be wrong, so it says so in the run output rather than quietly standing in.
-FALLBACK = {"tuned_at": 210, "spread": 77, "back": 21, "rank": 52, "order": "grouped",
+FALLBACK = {"tuned_at": "210_plastic", "spread": 77, "back": 21, "rank": 52, "order": "grouped",
             "frame": {"w": 320, "h": 390, "drop": 40},
             "mark": "floor", "depth": {"mode": "haze", "amount": 60, "full_at": 52}}
 
@@ -251,22 +273,34 @@ def placement(notes):
         if not isinstance(data[key], int) or isinstance(data[key], bool) or data[key] < 0:
             raise SystemExit("%s: %s is %r -- want a non-negative whole number of real device "
                              "pixels" % (_short(PLACEMENT), key, data[key]))
-    # WHICH SIZES ARE ON OFFER, not which sizes have their own numbers. There is still exactly
-    # one spread, one set-back and one rank gap, used at every size -- this list only says which
-    # sculpt sizes a page should put a button on. A per-size TABLE is the thing that was taken
+    # WHICH SETS ARE ON OFFER, not which sets have their own numbers. There is still exactly
+    # one spread, one set-back and one rank gap, used by every set -- this list only says which
+    # sculpt sets a page should put a button on. A per-size TABLE is the thing that was taken
     # out and is not coming back: it was four rows of upkeep for sizes nobody tunes against.
+    #
+    # A LABEL, NOT A NUMBER, since `210_plastic` and `210_painted` are both 210. The pattern is
+    # checked rather than the membership: which labels exist is a fact about the tray folder,
+    # and a name this file cannot parse is the one mistake worth stopping for.
     if "sizes" in data:
         sizes = data["sizes"]
         if not isinstance(sizes, list) or not sizes:
-            raise SystemExit("%s: sizes is %r, want a non-empty list of sculpt sizes"
+            raise SystemExit("%s: sizes is %r, want a non-empty list of sculpt set labels"
                              % (_short(PLACEMENT), sizes))
-        for px in sizes:
-            if isinstance(px, bool) or not isinstance(px, int) or px <= 0:
-                raise SystemExit("%s: sizes holds %r, want positive whole numbers of pixels"
-                                 % (_short(PLACEMENT), px))
+        for label in sizes:
+            if not isinstance(label, str) or not re.match(r"^\d+_[a-z][a-z0-9_]*$", label):
+                raise SystemExit("%s: sizes holds %r, want labels like '210_painted' -- a pixel "
+                                 "height, an underscore and the set's name"
+                                 % (_short(PLACEMENT), label))
         if len(set(sizes)) != len(sizes):
             raise SystemExit("%s: sizes repeats a value (%r) -- one button each"
                              % (_short(PLACEMENT), sizes))
+    # `tuned_at` names which set opens, so it is a label too. The numbers below it are still
+    # tuned against 210 real px, which every set named so far happens to share.
+    tuned = data.get("tuned_at")
+    if tuned is not None and not (isinstance(tuned, str)
+                                  and re.match(r"^\d+_[a-z][a-z0-9_]*$", tuned)):
+        raise SystemExit("%s: tuned_at is %r, want a set label like '210_plastic'"
+                         % (_short(PLACEMENT), tuned))
     if data.get("order") not in ("grouped", "arrival"):
         raise SystemExit("%s: order is %r, want 'grouped' or 'arrival'"
                          % (_short(PLACEMENT), data.get("order")))
@@ -306,7 +340,7 @@ def placement(notes):
     return data
 
 
-DEFAULTS = {"size": 210}
+DEFAULTS = {"size": "210_plastic"}
 
 
 def shapes():
@@ -468,7 +502,17 @@ def ground_check(plan, plates, notes):
 
 
 def figures(fig_dir, notes):
-    """Every sculpt size that has art, inlined. Shared with generate_placement_sheet.py.
+    """Every sculpt SET that has art, inlined. Shared with generate_placement_sheet.py.
+
+    Returns `figs[label][seat_index][pose_index]`, where `label` is `<px>_<kind>` and a seat's
+    row is a LIST OF POSES -- length 1 for a one-pose set like `210_plastic`, length 3 for
+    `210_painted`. One pose is a list of one rather than a special case, so a page can index
+    `row[n % row.length]` and the two sets stay interchangeable without branching on which is
+    loaded.
+
+    DISCOVERED, NOT DECLARED. Which sets exist is a fact about what the tray has rendered, and
+    this file listing them too would be a second copy of make_tray_figures.py's kind table --
+    the copy that goes stale the first time a kind is added there and not here.
 
     Extracted rather than copied: this function is where "never upscale", "lossless because
     these are the true-size reference" and "name the cause, not the symptom" live, and a second
@@ -482,30 +526,58 @@ def figures(fig_dir, notes):
     if _Img is None:
         notes.append("Pillow is not installed, so the sculpts cannot be re-encoded for "
                      "embedding -- no sculpts on the page (pip3 install --user Pillow)")
-    else:
-        for px in FIGURE_SIZES:
-            row = []
-            for seat in FIGURE_SEATS:
-                path = fig_dir / ("figure_player_%d_%d.png" % (seat, px))
-                if not path.is_file():
-                    notes.append("%3d px  missing %s, size left out" % (px, path.name))
-                    row = []
-                    break
-                im = _Img.open(path).convert("RGBA")
+        return figs
+
+    # label -> {seat: {pose: path}}, filled from whatever the folder holds.
+    found = {}
+    for path in sorted(fig_dir.glob("figure_player_*.png")) if fig_dir.is_dir() else []:
+        m = FIGURE_NAME.match(path.name)
+        if not m:
+            continue            # an older naming, or art for something that is not the tray
+        seat, pose, px, kind = int(m.group(1)), int(m.group(2)), int(m.group(3)), m.group(4)
+        if seat not in FIGURE_SEATS:
+            continue            # seat 4 is rendered and this page seats three -- see above
+        found.setdefault("%d_%s" % (px, kind), {}).setdefault(seat, {})[pose] = path
+
+    for label in sorted(found, key=set_sort):
+        seats = found[label]
+        # A SET IS WHOLE OR IT IS NOT OFFERED. Half a set draws a board with a seat missing,
+        # which reads as a rule about the arrangement rather than as art that never rendered.
+        gap = [s for s in FIGURE_SEATS if s not in seats]
+        if gap:
+            notes.append("%-12s no art for seat%s %s, set left out"
+                         % (label, "" if len(gap) == 1 else "s",
+                            ", ".join(str(s) for s in gap)))
+            continue
+        # Poses must be 1..n for every seat and the SAME n, or `row[i % row.length]` would pick
+        # a different pose per seat from the same index and the column rule would mean nothing.
+        wanted = sorted(seats[FIGURE_SEATS[0]])
+        if (wanted != list(range(1, len(wanted) + 1))
+                or any(sorted(seats[s]) != wanted for s in FIGURE_SEATS)):
+            notes.append("%-12s poses do not line up across the seats (%s), set left out"
+                         % (label, "; ".join("seat %d: %s" % (s, sorted(seats[s]))
+                                             for s in FIGURE_SEATS)))
+            continue
+        row = []
+        for seat in FIGURE_SEATS:
+            poses = []
+            for pose in wanted:
+                im = _Img.open(seats[seat][pose]).convert("RGBA")
                 buf = io.BytesIO()
                 # LOSSLESS. These are the true-size reference the whole page is built to judge;
                 # a lossy re-encode would put its artefacts on the thing being looked at. The
                 # art is small enough that it costs little. (`quality` is ignored when lossless,
                 # so it is not passed -- carrying one would only suggest it did something.)
                 im.save(buf, "WEBP", method=6, lossless=True)
-                row.append({"uri": "data:image/webp;base64,"
-                                   + base64.b64encode(buf.getvalue()).decode("ascii"),
-                            "w": im.width, "h": im.height})
-            if row:
-                figs[str(px)] = row
-        if not figs:
-            notes.append("no sculpts embedded -- run tools/ui_debug/make_tray_figures.py "
-                         "first; the page still builds and shows the tiles empty")
+                poses.append({"uri": "data:image/webp;base64,"
+                                     + base64.b64encode(buf.getvalue()).decode("ascii"),
+                              "w": im.width, "h": im.height})
+            row.append(poses)
+        figs[label] = row
+
+    if not figs:
+        notes.append("no sculpts embedded -- run tools/ui_debug/make_tray_figures.py "
+                     "first; the page still builds and shows the tiles empty")
     return figs
 
 
@@ -568,8 +640,8 @@ def main():
     ap.add_argument("--out", default=None,
                     help="where to write the page (default: %s)" % OUT.relative_to(ROOT))
     ap.add_argument("--figures", default=None,
-                    help="folder holding figure_player_<seat>_<px>.png (default: %s)"
-                         % FIGURE_DIR.relative_to(ROOT))
+                    help="folder holding figure_player_<seat>_p<pose>_<px>_<label>.png "
+                         "(default: %s)" % FIGURE_DIR.relative_to(ROOT))
     # OPENING IS THE DEFAULT. These pages exist to be looked at; a run that writes one and says
     # nothing is a run you have to follow with a second command, and the flag was easy to forget.
     # `--open` is still accepted so it stays in anyone's fingers and in any note that mentions it.
@@ -624,7 +696,9 @@ def main():
             .replace("__ICONS__", json.dumps(icons))
             .replace("__FIGS__", json.dumps(figs))
             .replace("__SHAPES__", json.dumps(SHAPES))
-            .replace("__SIZES__", json.dumps(list(FIGURE_SIZES)))
+            # Every set the tray has rendered, not a declared list: this page is the one whose
+            # job is comparing them, so it offers whatever is there.
+            .replace("__SIZES__", json.dumps(sorted(figs, key=set_sort)))
             .replace("__BANNERTOP__", json.dumps(BANNER_TOP))
             .replace("__BANNERFS__", json.dumps(BANNER_FS))
             .replace("__BANNERTRACK__", json.dumps(BANNER_TRACK))
@@ -641,13 +715,16 @@ def main():
     print("  %d shapes, %d of them telling the seating rules apart"
           % (len(SHAPES), sum(1 for s in SHAPES
                               if s["queues"]["grouped"] != s["queues"]["arrival"])))
-    print("  placement from %s: spread %d, set-back %d, rank gap %d  (tuned at %s px, used at "
-          "every size)" % (PLACEMENT.name, PLACE["spread"], PLACE["back"], PLACE["rank"],
-                           PLACE.get("tuned_at", "?")))
+    tuned = PLACE.get("tuned_at")
+    print("  placement from %s: spread %d, set-back %d, rank gap %d  (tuned against %s, %s px, "
+          "used by every set)" % (PLACEMENT.name, PLACE["spread"], PLACE["back"], PLACE["rank"],
+                                  tuned or "?", set_px(tuned) if tuned else "?"))
     print("  order %s  ·  mark %s  ·  depth %s %d%%"
           % (PLACE["order"], PLACE["mark"], PLACE["depth"]["mode"], PLACE["depth"]["amount"]))
     print("  sculpts %s  ·  banners %d  ·  icons %d across %d duties"
-          % (", ".join(sorted(figs, key=int)) or "none", len(banner_art),
+          % (", ".join("%s [%d pose%s]"
+                        % (k, len(figs[k][0]), "" if len(figs[k][0]) == 1 else "s")
+                        for k in sorted(figs, key=set_sort)) or "none", len(banner_art),
              sum(len(i) for i in icons), sum(1 for i in icons if i)))
     for note in notes:
         print("  %s" % note)

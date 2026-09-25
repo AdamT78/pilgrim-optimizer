@@ -601,8 +601,41 @@ levelling that lands on a smaller plinth, pushes it out. `generate_asset_check` 
 live limit and the widest figure on its arrangement card so this is visible rather than
 remembered.
 
-**The tray does not read any of this yet.** `make_tray_figures.py` draws from
-`ui/concept/<seat>/sculpt_plastic.png` with a hardcoded `--kind`, so neither the filed sculpts
-nor the painted ones reach `generate_duty_sow.py`. Wiring that up is its own piece of work —
-the intent is one settings set per miniature type in the placement sheet, and a picker for
-which set to draw.
+## The tray reads the painted set
+
+`make_tray_figures.py --kind painted` renders the filed set the same way it renders the concept
+art, and the duty pages now switch between the two. Three things had to change together, and
+the order they are listed in is the order they stop making sense in isolation.
+
+**A set is named, not measured.** The pages used to key their art by pixel height — `FIGS["210"]`
+— which worked for exactly as long as there was one 210. `210_plastic` and `210_painted` are both
+210 px tall and are not the same art, so the key became a label: a pixel height, an underscore,
+and the kind it was rendered from. The height is still recoverable off the front of the label and
+several drawings still want it, but it is now a fact about the set rather than the name of it.
+The rendered files follow: `figure_player_<seat>_p<pose>_<px>_<label>.png`.
+
+**A seat is a list of poses.** The painted set carries three poses a seat and the concept set
+carries one, and the shape is a list either way — length 1 rather than a bare figure. That is the
+decision that keeps the two interchangeable: a page indexes `dutyPose(row, n)` and never asks
+which set is loaded, because a set with one pose *has* no other pose and its only figure is the
+right answer to every `n`. A bare figure for the one-pose case would have put a branch at every
+drawing site, and the branch is where the two sets would have started to differ.
+
+**Everything that sizes a tile measures every pose.** This is not tidiness. Seat 1's three
+painted poses are 89, 89 and 100 px wide at 210, and the capacity box is `2 × spread + widest`
+against a frame of 320 — which at a spread of 110 comes to exactly 320 on pose 3 and 308 on
+pose 1. A box measured off pose 1 would have passed and then clipped the moment a tile drew the
+third painting. `dutySetWidth` and `dutySetHeight` in `duty_sculpt_rules.js` take the whole set.
+
+Which sets a page offers comes from `ui/assets-gothic/metadata/duty_placement.json`: `sizes`
+names them and `tuned_at` says which opens. Both hold labels now. The placement sheet ignores
+`sizes` and shows every set the tray has rendered, because comparing them is what it is for;
+the sow page is played on one set and asks which.
+
+Old-named files left in `generated/` are ignored rather than half-read — the discovery is a
+pattern match, so a folder holding both namings offers only the sets that match the new one.
+
+**Which pose a tile draws is not decided yet.** Every page passes pose 0 today. The rule Adam
+asked for — `_v1` in the first grid column, `_v2` in the second, `_v3` in the third, keyed off
+`grid_index % 3` and never off the duty's name, because the duty tiles are randomised onto grid
+positions at setup — is the next commit. `dutyPose` is the seam it hooks into.

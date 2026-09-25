@@ -2163,9 +2163,27 @@ renaming a duty needs no new asset — which it has already had to, twice.
 ## The tray pieces, and judging a new sculpt
 
 `make_tray_figures.py` renders the pieces that page drags around, at every size in `SIZES`, from
-the full-resolution originals in `ui/concept/`.
+the full-resolution originals — `ui/concept/` for the concept kinds, `ui/assets-gothic/sculpts/painted/`
+for the filed set.
 
-    python3 tools/ui_debug/make_tray_figures.py
+    python3 tools/ui_debug/make_tray_figures.py                  # --kind sculpt_plastic
+    python3 tools/ui_debug/make_tray_figures.py --kind painted
+
+Output is `figure_player_<seat>_p<pose>_<px>_<label>.png`, and what the pages switch between is
+the last two fields joined: `210_plastic`, `210_painted`. A LABEL rather than a pixel height,
+because those two are both 210 tall and the height stopped being able to say which. The height
+is still readable off the front of it and several drawings still want it.
+
+A seat is a list of poses — three for `painted`, one for the concept kinds, and a list either
+way. Pages pick with `dutyPose(row, n)`, which answers `n % row.length`, so a one-pose set
+answers every `n` with its only figure and the two sets are interchangeable with no branch.
+Anything that SIZES a tile — the field height, the capacity box — measures every pose, because
+seat 1's painted poses are 89, 89 and 100 px wide at 210 and a box measured off the first would
+clip the third.
+
+Which sets the sow page offers is named in `ui/assets-gothic/metadata/duty_placement.json`
+(`sizes`, and `tuned_at` for which opens); the placement sheet ignores that and shows every set
+the tray has rendered, because comparing them is its job.
 
 Two rules pull against each other and the file says which wins. A piece is a plinth standing on a
 tile, so the players are levelled on the plinth first, targeting the narrowest so nothing is ever

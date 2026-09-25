@@ -61,61 +61,98 @@ bbox, plinth, resize, down, fringe = (
     sm.bbox, sm.plinth_width, sm.resize, sm.down, sm.fringe)
 
 SIZES = (90, 120, 150, 180, 210)
-PLAYERS = ("player_1", "player_2", "player_3", "player_4")
 CONCEPT = ROOT / "ui" / "concept"
+PAINTED = ROOT / "ui" / "assets-gothic" / "sculpts" / "painted"
+
+# A KIND IS A SET OF ART, AND IT DECIDES THREE THINGS AT ONCE: where the art comes from, which
+# seats it covers, and how many poses each seat has. They are kept together here because they
+# only make sense together -- `painted` has three poses and no seat 4, `sculpt_plastic` has one
+# pose and four seats, and pairing the wrong source with the wrong shape is how a tray ends up
+# silently one row short.
+#
+# `label` is what the size becomes on the page: 210 rendered from `painted` is `210_painted`.
+# It is derived here rather than passed in, so a run cannot label itself as a set it did not draw.
+KINDS = {
+    "sculpt_plastic": {"label": "plastic", "seats": (1, 2, 3, 4), "poses": 1},
+    "figure":         {"label": "figure",  "seats": (1, 2, 3, 4), "poses": 1},
+    "painted":        {"label": "painted", "seats": (1, 2, 3),    "poses": 3},
+}
 
 ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-ap.add_argument("--kind", default="sculpt_plastic", choices=("sculpt_plastic", "figure"),
+ap.add_argument("--kind", default="sculpt_plastic", choices=tuple(KINDS),
                 help="which art a player row is drawn from (default: %(default)s)")
 ap.add_argument("--out", default=None, help="where to write (default: %s)" % OUT.relative_to(ROOT))
 args = ap.parse_args()
 OUT = pathlib.Path(args.out).expanduser() if args.out else OUT
 OUT.mkdir(parents=True, exist_ok=True)
+KIND = KINDS[args.kind]
+
+
+def source_path(seat: int, pose: int) -> pathlib.Path:
+    """Where one seat's one pose lives, which differs per kind rather than per seat.
+
+    The concept kinds are one file per seat and ignore the pose; `painted` is the filed set,
+    three poses a seat, named for the pose rather than for what the figure is doing -- see
+    docs/architecture/painted_miniatures.md for why seat 1 moved onto that convention.
+    """
+    if args.kind == "painted":
+        return PAINTED / ("player_%d_v%d.png" % (seat, pose))
+    return CONCEPT / ("player_%d" % seat) / ("%s.png" % args.kind)
 
 
 made = []
 
+# Keyed by (seat, pose) so the levelling below sees every piece at once. That matters more for
+# `painted` than it ever did for the concept art: nine figures drawn in separate sessions do not
+# share a plinth, and levelling a subset would leave the columns standing at different scales.
 src = {}
-for name in PLAYERS:
-    p = CONCEPT / name / ("%s.png" % args.kind)
-    if not p.is_file():
-        raise SystemExit("%s is missing -- the player art comes from ui/concept/" % p)
-    im = Image.open(p).convert("RGBA")
-    src[name] = im.crop(bbox(im))
-print("player rows from %s.png" % args.kind)
+for seat in KIND["seats"]:
+    for pose in range(1, KIND["poses"] + 1):
+        p = source_path(seat, pose)
+        if not p.is_file():
+            raise SystemExit("%s is missing -- %s art for seat %d pose %d"
+                             % (p, args.kind, seat, pose))
+        im = Image.open(p).convert("RGBA")
+        src[(seat, pose)] = im.crop(bbox(im))
+print("%d pieces from %s (%d seats x %d pose%s)"
+      % (len(src), args.kind, len(KIND["seats"]), KIND["poses"],
+         "" if KIND["poses"] == 1 else "s"))
 
-target = min(plinth(src[n]) for n in PLAYERS)
-lev = {n: target / plinth(src[n]) for n in PLAYERS}
+target = min(plinth(src[n]) for n in src)
+lev = {n: target / plinth(src[n]) for n in src}
 assert all(v <= 1.0 + 1e-9 for v in lev.values()), \
     "levelling would UPSCALE one of them, which the narrowest-target rule exists to prevent: %s" % lev
-tallest = max(src[n].height * lev[n] for n in PLAYERS)
+tallest = max(src[n].height * lev[n] for n in src)
 print("plinth target %d px (the narrowest)  ·  tallest levelled figure %.0f px" % (target, tallest))
 
 for px in SIZES:
     k = px / tallest                                               # one k for the whole set
-    for n in PLAYERS:
-        f = lev[n] * k
-        made.append((("%s_%d" % (n, px)),
-                     down(src[n], round(src[n].width * f), round(src[n].height * f),
-                          "%s at %d" % (n, px)), px))
+    for (seat, pose) in sorted(src):
+        f = lev[(seat, pose)] * k
+        im = src[(seat, pose)]
+        made.append((("player_%d_p%d_%d_%s" % (seat, pose, px, KIND["label"])),
+                     down(im, round(im.width * f), round(im.height * f),
+                          "player_%d pose %d at %d" % (seat, pose, px)), px))
 
 print()
-print("%-26s %-10s %-8s %-11s %s" % ("file", "w × h", "plinth", "of nominal", "rim vs body"))
-worst = 0.0
+print("%-34s %-10s %-8s %-11s %s"
+      % ("file", "w × h", "plinth", "of nominal", "rim vs body"))
+worst = None
 for name, im, px in made:
     f = OUT / ("figure_%s.png" % name)
     im.save(f)
     g = fringe(im)
-    worst = max(worst, g)
-    print("%-26s %-10s %-8d %-11s %+.1f" % (f.name, "%d × %d" % im.size, plinth(im),
+    worst = g if worst is None else max(worst, g)
+    print("%-34s %-10s %-8d %-11s %+.1f" % (f.name, "%d × %d" % im.size, plinth(im),
                                             "%d%%" % round(100 * im.height / px), g))
 
 # A light rim is invisible against a pale tile and glaring against a dark one, so it cannot be
 # left to the eye on whichever tile colour happens to be selected. The art's own edges are
 # shaded and come out around -20; anything positive is the pipeline inventing light pixels.
 print()
-print("worst rim %+.1f luminance against the body (the source art runs about -20)" % worst)
-assert worst < 6.0, (
+print("worst rim %+.1f luminance against the body (the source art runs about -20)"
+      % (0.0 if worst is None else worst))
+assert worst is not None and worst < 6.0, (
     "a part-transparent rim %+.1f lighter than the body means light pixels are being invented "
     "somewhere in the resize -- do not ship these, and do not paper over it by recolouring the "
     "edge to suit one tile, which only hides it on that tile." % worst)

@@ -467,7 +467,9 @@ def arrangement_picture(folder=SCULPTS, place=None, colour=False, plain=False):
         return None
     P = json.loads(place.read_text(encoding="utf-8"))
     frame, spread = P["frame"], P["spread"]
-    back, rank, size = P["back"], P["rank"], P["tuned_at"]
+    # `tuned_at` names a SET (`210_plastic`) and what this drawing wants is the pixel height
+    # behind it. The two were the same value until two different sets were both 210 tall.
+    back, rank, size = P["back"], P["rank"], _board().set_px(P["tuned_at"])
     # NAMED, not sorted()[0] -- which picked cobbles_oval, the one plate on file still at the
     # old 39.8 degree camera, and put the new sculpts on a ground drawn from somewhere else.
     plate_path = grounds / "flagstones_grey.png"
@@ -1041,14 +1043,19 @@ def judge(raw, target, tol, base_tol=BASE_TOLERANCE_PCT, thin_tol=BASE_THIN_PCT)
         board = _board()
         place = board.placement([])
         art = board.figures(board.FIGURE_DIR, [])
-        size = str(place.get("tuned_at", 210))
-        widest = max((f["w"] for f in art.get(size, [])), default=0)
+        label = place.get("tuned_at", "210_plastic")
+        # EVERY POSE, not the first of each seat. A painted seat is three poses and they are
+        # not one width, so a capacity read off pose 1 would pass a set whose pose 3 overflows.
+        widest = max((f["w"] for row in art.get(label, []) for f in row), default=0)
+        poses = max((len(row) for row in art.get(label, [])), default=0)
         cap = 2 * place["spread"] + widest
         frame_w = (place.get("frame") or {}).get("w", 320)
         checks.append(["five sculpts fit", "need %d of %d px" % (cap, frame_w),
                        "info" if not widest else ("ok" if cap <= frame_w else "bad"),
-                       "spread %d and the widest of the %d seats drawn (%d px), against the "
-                       "frame" % (place["spread"], len(board.FIGURE_SEATS), widest)])
+                       "spread %d and the widest of the %d seats drawn (%d px, %d pose%s each) "
+                       "in %s, against the frame"
+                       % (place["spread"], len(board.FIGURE_SEATS), widest, poses,
+                          "" if poses == 1 else "s", label)])
 
     return {"row": row, "checks": checks, "notes": notes, "overlay": overlay(im, g, kind)}
 

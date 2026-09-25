@@ -190,8 +190,7 @@ def test_page_survives_missing_sculpt_art(mod, tmp_path, monkeypatch, capsys):
 def test_page_embeds_the_sculpt_table_when_the_art_is_there(mod, tmp_path, monkeypatch):
     """The other half of the pair. Without this, an empty figure table would satisfy the
     missing-art test above and nothing would notice the art had stopped being embedded."""
-    if not any((mod.FIGURE_DIR / ("figure_player_1_%d.png" % s)).is_file()
-               for s in mod.FIGURE_SIZES):
+    if not any(mod.FIGURE_NAME.match(f.name) for f in mod.FIGURE_DIR.glob("figure_*.png")):
         pytest.skip("no rendered sculpts in %s; run make_tray_figures.py"
                     % mod.FIGURE_DIR.relative_to(ROOT))
     out = tmp_path / "duty_board_check.html"
@@ -200,9 +199,18 @@ def test_page_embeds_the_sculpt_table_when_the_art_is_there(mod, tmp_path, monke
     mod.main()
     page = out.read_text(encoding="utf-8")
     assert not re.search(r"FIGS\s*=\s*\{\}", page), "the sculpt table came out empty"
-    for size in mod.FIGURE_SIZES:
-        if (mod.FIGURE_DIR / ("figure_player_1_%d.png" % size)).is_file():
-            assert '"%d"' % size in page, "size %d rendered but never reached the page" % size
+    # Every SET the tray has rendered reaches the page, by label. Read off the folder rather
+    # than off a table here: which sets exist is a fact about what has been rendered, and a
+    # second list in the test would pass while the page quietly dropped one.
+    want = set()
+    for f in mod.FIGURE_DIR.glob("figure_*.png"):
+        m = mod.FIGURE_NAME.match(f.name)
+        if m and int(m.group(1)) in mod.FIGURE_SEATS:
+            want.add("%s_%s" % (m.group(3), m.group(4)))
+    assert want, "the skip guard let a run through with no art"
+    for label in sorted(want):
+        assert '"%s"' % label in page, (
+            "%s rendered but never reached the page" % label)
 
 
 def test_the_empty_tile_is_guarded(mod):
@@ -298,8 +306,8 @@ def test_sheet_reads_the_placement_file(sheet, mod, tmp_path, monkeypatch):
     out = tmp_path / "placement_sheet.html"
     monkeypatch.setattr(sys, "argv",
                         ["generate_placement_sheet.py", "--no-open", "--out", str(out)])
-    if not any((board.FIGURE_DIR / ("figure_player_1_%d.png" % s)).is_file()
-               for s in board.FIGURE_SIZES):
+    if not any(board.FIGURE_NAME.match(f.name)
+               for f in board.FIGURE_DIR.glob("figure_*.png")):
         pytest.skip("no rendered sculpts; run make_tray_figures.py")
     sheet.main()
     page = out.read_text(encoding="utf-8")
@@ -312,16 +320,18 @@ def test_the_one_set_is_used_at_every_size(mod):
 
     This used to be spelled `"sizes" not in place`, which guarded the absence of a KEY rather
     than the thing the key used to mean. `sizes` now exists and is a plain list of the sculpt
-    sizes the sow page offers a button for -- it carries no numbers of its own. So the guard is
-    written against what would actually break the contract: a size growing its own spread.
+    SETS the sow page offers a button for -- it carries no numbers of its own. So the guard is
+    written against what would actually break the contract: a set growing its own spread.
     """
     place = mod.placement([])
     for key in ("spread", "back", "rank"):
         assert isinstance(place[key], int), "%s is no longer a single number" % key
     for value in (place.get("sizes") or []):
-        assert isinstance(value, int), "sizes holds %r; it is a list of sizes, not a table" % value
-    assert place.get("tuned_at") in mod.FIGURE_SIZES, (
-        "tuned_at should name a size the tray can actually show")
+        assert isinstance(value, str) and re.match(r"^\d+_[a-z][a-z0-9_]*$", value), (
+            "sizes holds %r; it is a list of set labels, not a table" % value)
+    assert isinstance(place.get("tuned_at"), str), (
+        "tuned_at names a SET now, not a pixel height -- two sets can be 210 tall")
+    assert mod.set_px(place["tuned_at"]) > 0, "tuned_at carries no readable pixel height"
 
 
 def test_the_formation_lives_in_exactly_one_file(sheet):
@@ -567,21 +577,41 @@ def test_the_sizes_on_offer_come_from_the_file(sow):
     is dropped with a note rather than offered, because a button that draws an empty board is
     worse than a button that is absent."""
     notes = []
-    art = {"210": [], "180": []}
-    assert sow.offered({"sizes": [210], "tuned_at": 210}, art, notes) == [210]
-    assert sow.offered({"sizes": [210, 180], "tuned_at": 210}, art, notes) == [180, 210]
+    art = {"210_plastic": [], "180_plastic": [], "210_painted": []}
+    one = {"sizes": ["210_plastic"], "tuned_at": "210_plastic"}
+    assert sow.offered(one, art, notes) == ["210_plastic"]
+    # Sorted by height then by name, so the row keeps a settled order as sets are added --
+    # and 180 comes before 210 whatever order the file lists them in.
+    assert sow.offered({"sizes": ["210_plastic", "180_plastic"],
+                        "tuned_at": "210_plastic"}, art, notes) == \
+        ["180_plastic", "210_plastic"]
+    assert sow.offered({"sizes": ["210_plastic", "210_painted"],
+                        "tuned_at": "210_plastic"}, art, notes) == \
+        ["210_painted", "210_plastic"]
     assert notes == []
-    assert sow.offered({"sizes": [210, 240], "tuned_at": 210}, art, notes) == [210]
-    assert any("240" in n for n in notes), "a named size with no art vanished without a word"
-    # No list at all: the size the numbers were tuned at is the one you get.
-    assert sow.offered({"tuned_at": 210}, art, []) == [210]
+    assert sow.offered({"sizes": ["210_plastic", "240_plastic"],
+                        "tuned_at": "210_plastic"}, art, notes) == ["210_plastic"]
+    assert any("240_plastic" in n for n in notes), \
+        "a named set with no art vanished without a word"
+    # TWO SETS AT THE SAME HEIGHT ARE TWO SETS. Before labels this pair collapsed into one
+    # button, which is the whole reason the key stopped being a number.
+    assert len(sow.offered({"sizes": ["210_plastic", "210_painted"],
+                            "tuned_at": "210_plastic"}, art, [])) == 2
+    # No list at all: the set the numbers were tuned against is the one you get.
+    assert sow.offered({"tuned_at": "210_plastic"}, art, []) == ["210_plastic"]
 
 
 def test_placement_refuses_a_broken_size_list(mod, tmp_path, monkeypatch):
-    """`sizes` is a list of sizes, not a table of numbers and not a free-for-all."""
+    """`sizes` is a list of set LABELS, not a table of numbers and not a free-for-all.
+
+    The bare integers are in this list on purpose: they are what the key used to hold, so a
+    file left on the old spelling has to be refused rather than half-read.
+    """
     import json as _json
     good = _json.loads(mod.PLACEMENT.read_text(encoding="utf-8"))
-    for bad in ([], [210, 210], [0], [-90], [210, True], "210", {"210": {}}):
+    for bad in ([], ["210_plastic", "210_plastic"], [210], [0], [-90], [210, True],
+                "210_plastic", {"210_plastic": {}}, ["210"], ["plastic"], ["210_"],
+                ["210_Plastic"], [None]):
         doctored = dict(good)
         doctored["sizes"] = bad
         path = tmp_path / "duty_placement.json"
@@ -598,8 +628,8 @@ def test_sow_page_builds_and_reads_the_placement_file(sow, mod, tmp_path, monkey
     checked the only way that means anything: put an unmistakable value in and look for it."""
     import json as _json
     board = sow._board_module()
-    if not any((board.FIGURE_DIR / ("figure_player_1_%d.png" % s)).is_file()
-               for s in board.FIGURE_SIZES):
+    if not any(board.FIGURE_NAME.match(f.name)
+               for f in board.FIGURE_DIR.glob("figure_*.png")):
         pytest.skip("no rendered sculpts; run make_tray_figures.py")
     doctored = tmp_path / "duty_placement.json"
     place = _json.loads(mod.PLACEMENT.read_text(encoding="utf-8"))
@@ -639,6 +669,127 @@ def _in_node(expression):
     )
     done = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True)
     return json.loads(done.stdout)
+
+
+# ---------------------------------------------------------------- sets, and a seat's poses
+
+
+def test_a_set_label_carries_its_pixel_height_and_sorts_by_it(mod):
+    """`210_painted` is a NAME with a number on the front, and both halves are load-bearing.
+
+    The height still has to come out, because the placement numbers are tuned in real pixels and
+    several drawings need to know which. The sort has to be by height FIRST, or the button row
+    reads 120, 150, 180, 210, 90 -- which is what plain string order gives you and what a page
+    would have shipped with.
+    """
+    assert mod.set_px("210_painted") == 210
+    assert mod.set_px("90_plastic") == 90
+    labels = ["210_plastic", "90_painted", "120_plastic", "210_painted", "90_plastic"]
+    assert sorted(labels, key=mod.set_sort) == [
+        "90_painted", "90_plastic", "120_plastic", "210_painted", "210_plastic"]
+    # The pair that made the label necessary: same height, different art, two entries that a
+    # sort by height alone would be free to collapse or swap between runs.
+    assert mod.set_sort("210_painted") != mod.set_sort("210_plastic")
+
+
+def test_a_seat_is_a_list_of_poses_whichever_set_it_came_from(mod):
+    """The shape the pages are written against: figs[label][seat][pose].
+
+    One pose is a list of ONE rather than a bare figure, which is the decision that lets a page
+    index the plastic set and the painted set with the same expression. A bare figure for the
+    one-pose case would have put a branch in every drawing site, and the branch is where the two
+    sets would have started to differ.
+    """
+    figs = mod.figures(mod.FIGURE_DIR, [])
+    if not figs:
+        pytest.skip("no rendered sculpts; run make_tray_figures.py")
+    for label, rows in figs.items():
+        assert len(rows) == len(mod.FIGURE_SEATS), (
+            "%s has %d seats, wanted %d" % (label, len(rows), len(mod.FIGURE_SEATS)))
+        widths = {len(row) for row in rows}
+        assert len(widths) == 1, (
+            "%s gives its seats different numbers of poses (%s) -- a column rule keyed off the "
+            "index would then mean a different pose per seat" % (label, sorted(widths)))
+        for row in rows:
+            assert row, "%s has a seat with no poses at all" % label
+            for fig in row:
+                assert fig["w"] > 0 and fig["h"] > 0, "%s embedded a zero-sized figure" % label
+                assert fig["uri"].startswith("data:image/webp;base64,")
+
+
+def test_a_half_rendered_set_is_left_out_rather_than_drawn_short(mod, tmp_path):
+    """Half a set draws a board with a seat missing, which reads as a RULE about the arrangement
+    rather than as art that never rendered. So it is dropped, with a note naming the seat.
+
+    Built from real files rather than from a stub, because the thing being tested is what
+    happens between the folder and the dict."""
+    figs = mod.figures(mod.FIGURE_DIR, [])
+    if not figs:
+        pytest.skip("no rendered sculpts; run make_tray_figures.py")
+    label = sorted(figs, key=mod.set_sort)[0]
+    px, kind = label.split("_", 1)
+    for f in mod.FIGURE_DIR.glob("figure_player_*_%s_%s.png" % (px, kind)):
+        m = mod.FIGURE_NAME.match(f.name)
+        if m and int(m.group(1)) == mod.FIGURE_SEATS[-1]:
+            continue                      # leave the last seat behind: that is the hole
+        shutil.copy2(f, tmp_path / f.name)
+    notes = []
+    short = mod.figures(tmp_path, notes)
+    assert label not in short, "a set missing a seat was offered anyway"
+    assert any(label in n and str(mod.FIGURE_SEATS[-1]) in n for n in notes), (
+        "the set vanished without a note naming the seat: %r" % notes)
+
+
+@needs_node
+def test_one_pose_answers_every_pose_and_three_poses_cycle():
+    """dutyPose is the single place that turns "I want pose n" into a figure.
+
+    The modulo is not a fallback for a one-pose set -- a set with one pose HAS no other, so its
+    only figure is the right answer to every n. That is what lets the plastic set and the
+    painted set be swapped under a page that asks for pose 2 without the page knowing which is
+    loaded. A negative n is the exception: JS keeps the sign through %, so it is folded rather
+    than allowed to index off the front of the row.
+    """
+    three = "[{n:0},{n:1},{n:2}]"
+    one = "[{n:0}]"
+    assert _in_node("[0,1,2,3,4].map(function(i){ return dutyPose(%s, i).n; })" % three) \
+        == [0, 1, 2, 0, 1]
+    assert _in_node("[0,1,2,3,9].map(function(i){ return dutyPose(%s, i).n; })" % one) \
+        == [0, 0, 0, 0, 0]
+    assert _in_node("dutyPose([], 0)") is None
+    assert _in_node("dutyPose(null, 0)") is None
+    assert _in_node("dutyPose(%s, -1).n" % three) == 2, "a negative pose ran off the front"
+
+
+@needs_node
+def test_a_set_is_measured_over_every_pose_not_just_the_first():
+    """The field height and the capacity box both have to hold the worst case a set can put on a
+    tile. Measured off pose 1 alone they would be wrong for this project's real art: seat 1's
+    painted poses are 89, 89 and 100 px wide, so a box sized on pose 1 is eleven pixels short of
+    what pose 3 needs -- and the frame it is checked against is 320 with a capacity of exactly
+    320 at the widest. That is the case that would have passed and then clipped.
+    """
+    rows = "[[{w:89,h:209},{w:89,h:209},{w:100,h:210}],[{w:91,h:205}]]"
+    assert _in_node("dutySetWidth(%s)" % rows) == 100, "the widest pose was not seen"
+    assert _in_node("dutySetHeight(%s)" % rows) == 210, "the tallest pose was not seen"
+    assert _in_node("dutySetWidth([])") == 0
+    assert _in_node("dutySetHeight(null)") == 0
+
+
+def test_no_page_indexes_the_art_by_a_bare_pixel_height():
+    """`FIGS[String(SIZE)]` was correct for exactly as long as a size was a number.
+
+    Left behind anywhere it would silently return undefined once SIZE became `210_painted`, and
+    an undefined row draws an empty tile rather than throwing -- so nothing would have said so.
+    """
+    for page in ("duty_board_check.html.tmpl", "duty_sow.html.tmpl"):
+        src = (ROOT / "tools" / "ui_debug" / page).read_text(encoding="utf-8")
+        assert "String(SIZE)" not in src, "%s still keys the art by a pixel height" % page
+        assert "dutyPose(" in src, "%s draws a seat without choosing a pose" % page
+    sheet_src = (ROOT / "tools" / "ui_debug" / "generate_placement_sheet.py").read_text(
+        encoding="utf-8")
+    assert "ART[String(SIZE)]" not in sheet_src, "the sheet still keys the art by a height"
+    assert "dutyPose(" in sheet_src, "the sheet draws a seat without choosing a pose"
 
 
 def test_the_tile_layout_lives_in_exactly_one_file():
@@ -1000,8 +1151,8 @@ def test_the_sow_page_plays_on_what_the_sheet_saved(sow, mod, tmp_path, monkeypa
     them in the page.
     """
     board = sow._board_module()
-    if not any((board.FIGURE_DIR / ("figure_player_1_%d.png" % s)).is_file()
-               for s in board.FIGURE_SIZES):
+    if not any(board.FIGURE_NAME.match(f.name)
+               for f in board.FIGURE_DIR.glob("figure_*.png")):
         pytest.skip("no rendered sculpts; run make_tray_figures.py")
 
     place = json.loads(mod.PLACEMENT.read_text(encoding="utf-8"))
@@ -1130,8 +1281,8 @@ def test_the_generator_hands_the_page_the_keys_it_merges_by(sheet, mod, tmp_path
     stale copy is the same bug wearing the fix.
     """
     board = sheet._board_module()
-    if not any((board.FIGURE_DIR / ("figure_player_1_%d.png" % s)).is_file()
-               for s in board.FIGURE_SIZES):
+    if not any(board.FIGURE_NAME.match(f.name)
+               for f in board.FIGURE_DIR.glob("figure_*.png")):
         pytest.skip("no rendered sculpts; run make_tray_figures.py")
     out = tmp_path / "placement_sheet.html"
     monkeypatch.setattr(sys, "argv",
@@ -1252,8 +1403,8 @@ def test_the_sow_names_every_plate_it_stands_a_duty_on(sow, mod, tmp_path, monke
     two disagree you can see it without opening the page.
     """
     board = sow._board_module()
-    if not any((board.FIGURE_DIR / ("figure_player_1_%d.png" % s)).is_file()
-               for s in board.FIGURE_SIZES):
+    if not any(board.FIGURE_NAME.match(f.name)
+               for f in board.FIGURE_DIR.glob("figure_*.png")):
         pytest.skip("no rendered sculpts; run make_tray_figures.py")
 
     plan = json.loads(mod.GROUND_PLAN.read_text(encoding="utf-8"))
@@ -1346,8 +1497,8 @@ def test_the_lift_reaches_both_pages(sheet, sow, mod, tmp_path, monkeypatch):
     """The generators must carry the key through to the page at all -- a separate claim from
     the one above, and the one that catches a generator trimming the plan on its way out."""
     board = sheet._board_module()
-    if not any((board.FIGURE_DIR / ("figure_player_1_%d.png" % s)).is_file()
-               for s in board.FIGURE_SIZES):
+    if not any(board.FIGURE_NAME.match(f.name)
+               for f in board.FIGURE_DIR.glob("figure_*.png")):
         pytest.skip("no rendered sculpts; run make_tray_figures.py")
     plan = json.loads(mod.GROUND_PLAN.read_text(encoding="utf-8"))
     path = tmp_path / "duty_grounds.json"

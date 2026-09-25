@@ -27,7 +27,9 @@ Spread, set-back, rank gap, seating order, the marking and the whole depth cue c
 `ui/assets-gothic/metadata/duty_placement.json`, which is tuned next door in the placement sheet
 and saved from it. A control here would be a second place to set the same numbers, and the two
 would disagree the first time one was nudged. The only controls are which seat you are playing
-and which sculpt size is on screen -- and the sizes on offer are the ones the file names.
+and which sculpt SET is on screen -- and the sets on offer are the ones the file names. A set
+is a label (`210_plastic`, `210_painted`) rather than a pixel height, because two sets can be
+210 tall; the height is a fact about the label rather than the name of it.
 
 NOTHING IS COPIED FROM ITS NEIGHBOURS
 
@@ -115,25 +117,26 @@ def graph():
 
 
 def offered(place, figs, notes):
-    """Which sculpt sizes get a button.
+    """Which sculpt SETS get a button.
 
-    The file names them. Today that is one size and the row is a label with a border round it,
-    which is the honest way to draw a choice of one. When the file names another, the button
-    appears here with no change to the page -- which is the whole reason the list is in the file
-    rather than in this script.
+    The file names them, by label -- `210_plastic`, `210_painted` -- rather than by pixel
+    height, because two sets can be 210 tall and the height stopped being able to say which.
+    When the file names another, the button appears here with no change to the page, which is
+    the whole reason the list is in the file rather than in this script.
 
-    A size the file names but the tray has never rendered is dropped with a note rather than
+    A set the file names but the tray has never rendered is dropped with a note rather than
     offered: a button that produces an empty board is worse than a button that is absent.
     """
+    board = _board_module()
     declared = place.get("sizes") or [place.get("tuned_at")]
     have = []
-    for px in declared:
-        if str(px) in figs:
-            have.append(px)
+    for label in declared:
+        if label in figs:
+            have.append(label)
         else:
-            notes.append("%s px is named by the placement file but has no art -- left out "
-                         "(run tools/ui_debug/make_tray_figures.py)" % px)
-    return sorted(have)
+            notes.append("%s is named by the placement file but has no art -- left out "
+                         "(run tools/ui_debug/make_tray_figures.py)" % label)
+    return sorted(have, key=board.set_sort)
 
 
 def main():
@@ -164,7 +167,7 @@ def main():
 
     sizes = offered(place, figs, notes)
     if not sizes:
-        raise SystemExit("the placement file names no sculpt size that has art -- nothing to "
+        raise SystemExit("the placement file names no sculpt set that has art -- nothing to "
                          "draw (run tools/ui_debug/make_tray_figures.py)")
 
     edges = graph()
@@ -176,8 +179,11 @@ def main():
     plates = board.ground_art(notes)
 
     # Only the seats the page can actually draw: the sculpt rows are p1..p3 and so is the sow.
-    art = {str(px): [{"uri": f["uri"], "w": f["w"], "h": f["h"]} for f in figs[str(px)]]
-           for px in sizes}
+    # A seat is a LIST OF POSES -- one for the plastic set, three for the painted one -- and the
+    # page picks with dutyPose(), so the two stay interchangeable with no branch on which loaded.
+    art = {label: [[{"uri": f["uri"], "w": f["w"], "h": f["h"]} for f in row]
+                   for row in figs[label]]
+           for label in sizes}
 
     page = TEMPLATE.read_text(encoding="utf-8")
     for key, value in (
@@ -211,8 +217,10 @@ def main():
     branch = sorted(p for p in board_grid() if len(edges.get(p, [])) > 1)
     print("  board from %s: %d positions, %d of them a choice (%s)"
           % (BOARD_JSON.name, len(board_grid()), len(branch), ", ".join(branch)))
-    print("  sculpt sizes offered: %s  (named by %s)"
-          % (", ".join(str(s) for s in sizes), board.PLACEMENT.name))
+    print("  sculpt sets offered: %s  (named by %s)"
+          % (", ".join("%s [%d pose%s]"
+                       % (s, len(figs[s][0]), "" if len(figs[s][0]) == 1 else "s")
+                       for s in sizes), board.PLACEMENT.name))
     frame = place.get("frame") or {}
     if frame:
         print("  frame %d x %d real px, base %d below the floor"

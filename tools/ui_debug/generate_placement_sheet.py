@@ -347,7 +347,10 @@ def main():
         raise SystemExit("no sculpt art -- run tools/ui_debug/make_tray_figures.py first; "
                          "this page is nothing but arrangements of it")
 
-    sizes = sorted(int(k) for k in figs)   # figures() keys by string; work in ints
+    # A SET LABEL, not a pixel height: `210_plastic` and `210_painted` are both 210 tall, so
+    # int() stopped being able to name one. Sorted by height then by name, so the buttons keep a
+    # settled order as sets are added.
+    sizes = sorted(figs, key=board.set_sort)
     orders = ["grouped", "arrival"]
 
     # The CASES and the art are data; the arrangement is computed in the page, because the
@@ -359,8 +362,11 @@ def main():
         raise SystemExit("%s is missing -- it is where the drawing rules live"
                          % board._short(RULES_JS))
 
-    art_uris = {str(px): [{"uri": f["uri"], "w": f["w"], "h": f["h"]}
-                          for f in figs[str(px)]] for px in sizes}
+    # A seat is a LIST OF POSES -- one for the plastic set, three for the painted one -- and
+    # the page picks with dutyPose(), so the two are interchangeable with no branch on which is
+    # loaded.
+    art_uris = {label: [[{"uri": f["uri"], "w": f["w"], "h": f["h"]} for f in row]
+                        for row in figs[label]] for label in sizes}
     page = TEMPLATE
     for key, val in (("__FONT__", font), ("__GROUND__", GROUND),
                      ("__FORMATION__", RULES_JS.read_text(encoding="utf-8")),
@@ -368,6 +374,11 @@ def main():
                      ("__RULE__", json.dumps({k: place[k] for k in ("spread", "back", "rank")})),
                      ("__ART__", json.dumps(art_uris)),
                      ("__SIZES__", json.dumps(sizes)), ("__ORDERS__", json.dumps(orders)),
+                     # WHICH SET OPENS. The file's own `tuned_at`, so the sheet opens on what
+                     # the numbers below it were tuned against. It is checked against SIZES in
+                     # the page rather than here, because a set the tray has not rendered is a
+                     # thing the page can fall back from and this script cannot.
+                     ("__OPENSET__", json.dumps(place.get("tuned_at", "210_plastic"))),
                      ("__CELLS__", json.dumps(cells)),
                      ("__PLATES__", json.dumps(plates)),
                      ("__GROUNDPLAN__", json.dumps(plan)),
@@ -399,8 +410,11 @@ def main():
     out.write_text(page, encoding="utf-8")
     print("wrote %s  (%.0f KB)" % (out, len(page) / 1024))
     frame = place.get("frame") or {}
-    print("  %d cases, %d sizes, both orders -- arranged live in the page"
-          % (len(CASES), len(sizes)))
+    print("  %d cases, %d set(s) (%s), both orders -- arranged live in the page"
+          % (len(CASES), len(sizes),
+             ", ".join("%s [%d pose%s]"
+                       % (s, len(figs[s][0]), "" if len(figs[s][0]) == 1 else "s")
+                       for s in sizes)))
     if frame:
         print("  frame %d x %d real px (%.2f:1), base %d below the floor"
               % (frame["w"], frame["h"], frame["w"] / frame["h"], frame.get("drop", 0)))
@@ -413,9 +427,11 @@ def main():
         print("  NOT SERVED -- the save button can only download. Add --serve to write "
               "%s and %s in place."
               % (board.PLACEMENT.name, board.GROUND_PLAN.name))
-    print("  spread %d, set-back %d, rank gap %d  (from %s, tuned at %s px and used at every "
-          "size)" % (place["spread"], place["back"], place["rank"], board.PLACEMENT.name,
-                     place.get("tuned_at", "?")))
+    tuned = place.get("tuned_at")
+    print("  spread %d, set-back %d, rank gap %d  (from %s, tuned against %s at %s px and used "
+          "by every set)" % (place["spread"], place["back"], place["rank"],
+                             board.PLACEMENT.name, tuned or "?",
+                             board.set_px(tuned) if tuned else "?"))
     for note in notes:
         print("  %s" % note)
     if args.serve is not None:
@@ -573,7 +589,11 @@ __FORMATION__
 var CASES = __CASES__, RULE = __RULE__, ART = __ART__, SIZES = __SIZES__, ORDERS = __ORDERS__;
 var DEPTH = __DEPTH__, MODE = DEPTH.mode, SHADE = DEPTH.amount;
 var FULL_AT = DEPTH.full_at || 52;
-var SIZE = SIZES.indexOf(210) >= 0 ? 210 : SIZES[SIZES.length - 1], ORDER = __OPENORDER__;
+// A set LABEL -- `210_painted` -- not a pixel height. The opening pick is the file's own
+// `tuned_at` when the tray has rendered it, and otherwise the last set on offer.
+var SIZE = SIZES.indexOf(__OPENSET__) >= 0 ? __OPENSET__ : SIZES[SIZES.length - 1];
+// Which of a seat's poses is drawn. 0 everywhere until the column rule lands.
+var POSE = 0, ORDER = __OPENORDER__;
 var SPREAD = RULE.spread, BACK = RULE.back, RANK = RULE.rank;
 var CELLS = __CELLS__, FRAME = __FRAME__, VIEW = "arrangements";
 var PLATES = __PLATES__, PLAN = __GROUNDPLAN__;
@@ -632,9 +652,10 @@ function draw(){
 // draws the formation's own envelope inside it and turns the frame red when the sculpts no longer
 // fit. The file decides; the page measures and says when the decision has been outgrown.
 function drawWheel(){
-  var art = ART[String(SIZE)], shadowOn = document.body.classList.contains("shadow");
-  var figH = Math.max.apply(null, art.map(function(f){ return f.h; }));
-  var widest = Math.max.apply(null, art.map(function(f){ return f.w; }));
+  var art = ART[SIZE] || [], shadowOn = document.body.classList.contains("shadow");
+  // Over every seat AND every pose: the field and the capacity box both have to hold the worst
+  // case the set can produce, not the case pose 1 happens to be.
+  var figH = dutySetHeight(art), widest = dutySetWidth(art);
   // The panel is a fixed column down the left now, so it takes width rather than height.
   var panel = document.getElementById("ui").getBoundingClientRect().width;
   var headH = document.getElementById("head").getBoundingClientRect().height;
@@ -695,7 +716,8 @@ function drawWheel(){
       .map(function(p, j){ return {x: p.x, y: p.y, seat: who[j]}; })
       .sort(function(a, b){ return b.y - a.y || a.x - b.x; })
       .forEach(function(p){
-        var f = art[p.seat];
+        var f = dutyPose(art[p.seat], POSE);
+        if (!f) return;                 // no art for this seat in this set: draws empty
         h += '<div class=fig style="left:' + px(CELL / 2 + p.x - f.w / 2) + ';top:'
            + px(L.field - f.h - p.y) + ';width:' + px(f.w) + ';height:' + px(f.h)
            + ';filter:' + figFilter(p.y, shadowOn) + '"><img src="' + f.uri + '"></div>';
@@ -833,7 +855,7 @@ function setGround(key, value){
 }
 
 function drawCases(){
-  var art = ART[String(SIZE)], shadowOn = document.body.classList.contains("shadow");
+  var art = ART[SIZE] || [], shadowOn = document.body.classList.contains("shadow");
   // Measured across every case at the CURRENT settings, so a cell is never sized to a formation
   // it is not drawing -- the sliders can outgrow any constant put here.
   var widest = 0, tallest = 0, cells = [];
@@ -843,7 +865,7 @@ function drawCases(){
                   .sort(function(a, b){ return a.x - b.x; });
     var who = dutySeatOrder(c.counts, ORDER);
     var figs = slots.map(function(p, i){
-      var a = art[who[i]];
+      var a = dutyPose(art[who[i]], POSE) || {w: 0, h: 0};
       return {x: p.x, y: p.y, seat: who[i], w: a.w, h: a.h};
     });
     figs.forEach(function(f){
@@ -857,7 +879,8 @@ function drawCases(){
   document.getElementById("head").innerHTML =
       "Every arrangement the rules produce, read from <b>__FILE__</b>.  spread <b>" + SPREAD
     + "</b>, set-back <b>" + BACK + "</b>, rank gap <b>" + RANK + "</b>, order <b>" + ORDER
-    + "</b> -- one set, used at every size.  Showing <b>" + SIZE + "</b> px, depth <b>"
+    + "</b> -- one set, used at every size.  Showing <b>" + SIZE.replace("_", " ")
+    + "</b>, depth <b>"
     + (SHADE ? MODE + " " + SHADE + "% , full at " + FULL_AT : "off")
     + "</b>.  Drawn at true size, so a sculpt here is the size it is on the board.";
 
@@ -871,7 +894,7 @@ function drawCases(){
         h += '<div class=fig style="left:' + px(W/2 + f.x - f.w/2) + ';top:'
            + px(H - 10 - f.h - f.y) + ';width:' + px(f.w) + ';height:' + px(f.h)
            + ';filter:' + figFilter(f.y, shadowOn)
-           + '"><img src="' + art[f.seat].uri + '"></div>';
+           + '"><img src="' + dutyPose(art[f.seat], POSE).uri + '"></div>';
       });
     h += '<div class=floor style="top:' + px(H - 10) + '"></div>';
     h += '</div>';
@@ -882,11 +905,14 @@ function drawCases(){
   document.getElementById("grid").innerHTML = h;
 }
 
-function buttons(host, list, get, set){
+// `label` is optional and only changes what a button SAYS: a set is stored as `210_painted`
+// and reads better as `210 painted`. The value on the button is untouched, so the round trip
+// through dataset.v still hands back the label the art is keyed by.
+function buttons(host, list, get, set, label){
   var h = "";
   list.forEach(function(v){
     h += '<button data-v="' + v + '" aria-pressed="' + (v === get() ? "true" : "false")
-       + '">' + v + '</button>';
+       + '">' + (label ? label(v) : v) + '</button>';
   });
   host.innerHTML = h;
   [].forEach.call(host.querySelectorAll("button"), function(b){
@@ -907,7 +933,7 @@ function slider(id, value, set){
 buttons(document.getElementById("viewb"), ["arrangements", "wheel"],
         function(){ return VIEW; }, function(v){ VIEW = v; });
 buttons(document.getElementById("szb"), SIZES, function(){ return SIZE; },
-        function(v){ SIZE = v; });
+        function(v){ SIZE = v; }, function(v){ return String(v).replace("_", " "); });
 buttons(document.getElementById("ordb"), ORDERS, function(){ return ORDER; },
         function(v){ ORDER = v; });
 buttons(document.getElementById("dmb"), ["haze", "dark", "off"], function(){ return MODE; },

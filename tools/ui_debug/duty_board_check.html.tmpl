@@ -90,10 +90,15 @@ var BANNER_TOP = __BANNERTOP__, BANNER_FS = __BANNERFS__,
 var DPR = devicePixelRatio || 1;
 function px(v){ return (v / DPR) + "px"; }
 
-// Only sizes that actually got embedded can be offered. A button for a size whose art never
-// rendered would silently draw an empty board.
-var HAVE = SIZES.filter(function(s){ return FIGS[String(s)]; });
-var SIZE = HAVE.indexOf(D.size) >= 0 ? D.size : (HAVE[0] || 0);
+// Only sets that actually got embedded can be offered. A button for a set whose art never
+// rendered would silently draw an empty board. A set is a LABEL -- `210_painted` -- not a pixel
+// height, because two sets can be 210 tall and the height stopped being able to say which.
+var HAVE = SIZES.filter(function(s){ return FIGS[s]; });
+var SIZE = HAVE.indexOf(D.size) >= 0 ? D.size : (HAVE[0] || "");
+// Which of a seat's poses is drawn. The art carries three for the painted set and one for the
+// plastic one; dutyPose() takes this and the row and answers for either. It is 0 everywhere
+// today -- the rule that makes it depend on the grid column is the next thing to land.
+var POSE = 0;
 // ONE SET, USED AT EVERY SIZE. The file is tuned at the working size and the other sizes take
 // the same numbers, so changing size changes the sculpts and nothing else.
 var SPREAD = PLACE.spread, BACK = PLACE.back, RANK = PLACE.rank;
@@ -195,8 +200,10 @@ function build(){
   // given. Height binds on a laptop, which is why nothing chrome-like sits above the board.
   BUD = Math.floor(Math.min(innerWidth, innerHeight) * DPR);
   CELL = BUD / 3;
-  var FIG = FIGS[String(SIZE)] || [];
-  var figH = FIG.length ? Math.max.apply(null, FIG.map(function(f){ return f.h; })) : 0;
+  var FIG = FIGS[SIZE] || [];
+  // Over every seat AND every pose: the field has to clear whatever might be drawn in it, and a
+  // height measured off one pose would clip another the moment a tile asked for it.
+  var figH = dutySetHeight(FIG);
   // Shared with the sow page and the placement sheet. The field here used to be figH + RANK,
   // which ignores the set-back and would clip the middle of three the moment a set-back larger
   // than the rank gap was tried; the shared version clears the deeper of the two.
@@ -217,8 +224,8 @@ function build(){
     h += '<div class=figs data-t="' + i + '" style="top:' + px(groupTop) + ';left:0;width:'
        + px(CELL) + ';height:' + px(Math.max(fieldH, 1)) + '">';
     slots.forEach(function(p, jj){
-      var seat = FIG[q[jj]];
-      if (!seat) return;                        // no art for this size: the tile draws empty
+      var seat = dutyPose(FIG[q[jj]], POSE);
+      if (!seat) return;                        // no art for this set: the tile draws empty
       var pin = PINNED[i + ":" + jj], at = pin || p;
 
       h += '<div class="fig' + (pin ? " moved" : "") + '" data-t="' + i + '" data-j="' + jj
@@ -334,14 +341,14 @@ function press(sel, test){
 (function sizeButtons(){
   var host = $("szbtns"), h = "";
   HAVE.forEach(function(s){
-    h += '<button class=sz data-px="' + s + '" aria-pressed="' + (s === SIZE) + '">'
-       + s + '</button>';
+    h += '<button class=sz data-set="' + s + '" aria-pressed="' + (s === SIZE) + '">'
+       + s.replace("_", " ") + '</button>';
   });
   host.innerHTML = h || '<span class=lab>no sculpt art</span>';
   [].forEach.call(document.querySelectorAll(".sz"), function(b){
     b.onclick = function(){
-      SIZE = +b.dataset.px;
-      press(".sz", function(x){ return +x.dataset.px === SIZE; });
+      SIZE = b.dataset.set;
+      press(".sz", function(x){ return x.dataset.set === SIZE; });
       build();
     };
   });
@@ -420,7 +427,7 @@ addEventListener("keydown", function(e){
   var n = parseInt(e.key, 10);
   if (n >= 1 && n <= HAVE.length){
     SIZE = HAVE[n - 1];
-    press(".sz", function(x){ return +x.dataset.px === SIZE; });
+    press(".sz", function(x){ return x.dataset.set === SIZE; });
     build(); return;
   }
   if (e.key === "f")

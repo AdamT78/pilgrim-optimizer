@@ -1,11 +1,13 @@
 {
   "note": "How acolyte sculpts are arranged on a duty tile. Read by tools/ui_debug/generate_duty_board_check.py, generate_placement_sheet.py and generate_duty_sow.py. Edit the numbers here rather than in a page.",
-  "tuned_at": 210,
+  "tuned_at": "210_plastic",
+  "tuned_at_note": "Which set the pages open on, and the set the numbers above were tuned against. A label, so the pixel height comes off the front of it -- 210. That mattered the day two sets were both 210 tall and the height alone could no longer say which sculpts were on screen.",
   "one_set_on_purpose": "These are absolute distances in real device pixels and they are used at EVERY sculpt size, not scaled per size. 210 is the working size, so 210 is what they are tuned against. The consequence, stated rather than discovered: at 90 px the same numbers leave the figures standing well apart, because a spread of 110 is wider than a 90 px figure is tall. That is expected, not a fault - the smaller sizes are there to glance at, not to tune against.",
   "sizes": [
-    210
+    "210_plastic",
+    "210_painted"
   ],
-  "sizes_note": "Which sculpt sizes the sow page offers a button for. The placement sheet ignores this and shows every size the tray has rendered, because comparing them is what it is for; the sow page is played at one size and asks which. NOT a per-size table of numbers -- there is still one spread, one set-back and one rank gap, used whatever is on screen. Name another size here and its button appears; the tray has to have rendered it first (tools/ui_debug/make_tray_figures.py).",
+  "sizes_note": "Which sculpt SETS the sow page offers a button for, by label rather than by pixel height: 210_plastic and 210_painted are both 210 px tall, so the height stopped being able to name one. The placement sheet ignores this list and shows every set the tray has rendered, because comparing them is what it is for; the sow page is played on one set and asks which. NOT a per-set table of numbers -- there is still one spread, one set-back and one rank gap, used whatever is on screen. Name another set here and its button appears; the tray has to have rendered it first (tools/ui_debug/make_tray_figures.py --kind <kind>). A set carries one pose per seat or three; the pages pick with dutyPose() and never branch on which.",
   "spread": 110,
   "back": 21,
   "rank": 52,

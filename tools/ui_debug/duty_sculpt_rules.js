@@ -209,3 +209,40 @@ function dutyFilter(y, opts) {
         + (1 - 0.40 * k).toFixed(3) + ") ";
   return f + (opts.shadow ? "drop-shadow(3px 5px 4px rgba(0,0,0,.55))" : "none");
 }
+
+// ---------------------------------------------------------------- which pose
+// A seat's art is a LIST OF POSES -- one for the plastic set, three for the painted one. This
+// is the single place that turns "I want pose n" into an actual figure, so the two sets are
+// interchangeable and no page has to know which is loaded.
+//
+// The modulo is what makes that true. A one-pose row answers every n with its only pose, which
+// is the right answer rather than a fallback: a set with one pose HAS no other. A three-pose row
+// cycles. Nothing here decides WHICH n -- that is the caller's rule, and today every caller
+// passes 0 while the column rule is still being built.
+function dutyPose(row, n) {
+  if (!row || !row.length) return null;
+  var i = Math.floor(n || 0) % row.length;
+  return row[i < 0 ? i + row.length : i];     // JS % keeps the sign; a negative index is null
+}
+
+// The tallest figure in a set, over every seat AND every pose. Used for the field height, which
+// has to clear whatever might be drawn in it -- measuring pose 1 alone would clip pose 3 the
+// first time a column asked for it.
+function dutySetHeight(rows) {
+  var h = 0, i, j;
+  for (i = 0; i < (rows || []).length; i++)
+    for (j = 0; j < (rows[i] || []).length; j++)
+      if (rows[i][j] && rows[i][j].h > h) h = rows[i][j].h;
+  return h;
+}
+
+// The widest figure in a set, over every seat AND every pose. The companion to dutySetHeight,
+// and wanted for the same reason: the capacity box has to hold the worst case a set can put on
+// a tile, not the case pose 1 happens to be.
+function dutySetWidth(rows) {
+  var w = 0, i, j;
+  for (i = 0; i < (rows || []).length; i++)
+    for (j = 0; j < (rows[i] || []).length; j++)
+      if (rows[i][j] && rows[i][j].w > w) w = rows[i][j].w;
+  return w;
+}
