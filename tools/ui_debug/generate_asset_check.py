@@ -204,6 +204,16 @@ TOLERANCE_DEGREES = 2.5
 # So the numbers stay where the measurement put them. Changing them is now a deliberate edit
 # to two literals that shows up in review, rather than a side effect of filing art.
 GROUND_TARGET_DEGREES = 31.545      # LOCKED 2026-09-23, corrected 2026-09-24; see above
+
+
+def _trim(x):
+    """A number at three decimals with trailing zeros removed: 31.545, 0.48, 32.025.
+
+    Two decimals is not enough for these -- it turns the target back into the 31.55 it was moved
+    off -- and a fixed three turns a tolerance of 0.48 into "0.480", which reads as a precision
+    that was not measured. So: three, then stripped.
+    """
+    return ("%.3f" % x).rstrip("0").rstrip(".")
 GROUND_TOLERANCE_DEGREES = 0.48     # LOCKED 2026-09-23; window 31.065 to 32.025
 BASE_TOLERANCE_PCT = 24.0        # chunkier than the set's median
 BASE_THIN_PCT = 12.0             # thinner than it
@@ -1046,8 +1056,10 @@ def judge(raw, target, tol, base_tol=BASE_TOLERANCE_PCT, thin_tol=BASE_THIN_PCT)
         label = place.get("tuned_at", "210_plastic")
         # EVERY POSE, not the first of each seat. A painted seat is three poses and they are
         # not one width, so a capacity read off pose 1 would pass a set whose pose 3 overflows.
-        widest = max((f["w"] for row in art.get(label, []) for f in row), default=0)
-        poses = max((len(row) for row in art.get(label, [])), default=0)
+        # `seat` rather than `row`: there is a `row` dict two lines up, and a generator's own
+        # scope is the only reason shadowing it here was harmless. Not a thing to leave standing.
+        widest = max((f["w"] for seat in art.get(label, []) for f in seat), default=0)
+        poses = max((len(seat) for seat in art.get(label, [])), default=0)
         cap = 2 * place["spread"] + widest
         frame_w = (place.get("frame") or {}).get("w", 320)
         checks.append(["five sculpts fit", "need %d of %d px" % (cap, frame_w),
@@ -1268,11 +1280,15 @@ def main():
               % (b["lo"], b["hi"], b["mid"]))
     print("  target %.0f deg, tolerance %.1f  (height is not checked)"
           % (TARGET_DEGREES, TOLERANCE_DEGREES))
-    print("  ground plates: %.2f deg target, tolerance %.2f -- LOCKED, not derived per run"
-          % (GROUND_TARGET_DEGREES, GROUND_TOLERANCE_DEGREES))
-    print("                 (window %.2f to %.2f; a sculpt's tolerance is %.1f)"
-          % (GROUND_TARGET_DEGREES - GROUND_TOLERANCE_DEGREES,
-             GROUND_TARGET_DEGREES + GROUND_TOLERANCE_DEGREES, TOLERANCE_DEGREES))
+    # THREE DECIMALS, TRAILING ZEROS STRIPPED. At two this printed "31.55", which is the value
+    # the target was deliberately moved AWAY from -- rounding it there is what put slate exactly
+    # on the boundary, and a readout that shows the rounded number undoes the correction every
+    # time someone reads it. The ring picture was fixed the same way on 2026-09-24.
+    print("  ground plates: %s deg target, tolerance %s -- LOCKED, not derived per run"
+          % (_trim(GROUND_TARGET_DEGREES), _trim(GROUND_TOLERANCE_DEGREES)))
+    print("                 (window %s to %s; a sculpt's tolerance is %.1f)"
+          % (_trim(GROUND_TARGET_DEGREES - GROUND_TOLERANCE_DEGREES),
+             _trim(GROUND_TARGET_DEGREES + GROUND_TOLERANCE_DEGREES), TOLERANCE_DEGREES))
     if band and "base_ratio" in band:
         m = band["base_ratio"]["mid"]
         print("  base %.3f to %.3f  (median %.3f, %.0f%% thinner to %.0f%% chunkier)"

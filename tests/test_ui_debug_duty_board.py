@@ -2553,6 +2553,28 @@ def test_a_plate_is_held_tighter_than_a_sculpt(checker):
                 % (r["name"], ", ".join(r["duties"]), checker.GROUND_TOLERANCE_DEGREES))
 
 
+def test_the_plate_target_is_never_printed_as_the_value_it_was_moved_off(checker, capsys):
+    """31.545 and 31.55 are a corrected value and the mistake it replaced, and at two decimals
+    they are the same string.
+
+    The run summary printed "31.55 deg target" beside a window of "31.07 to 32.02", which is the
+    rounded number the target was deliberately moved away from -- see the assertion below for
+    why rounding it is what put slate on the boundary. A readout showing the old number undoes
+    the correction for whoever reads it, which is the same failure the ring picture had and was
+    fixed for on 2026-09-24.
+    """
+    assert checker._trim(31.545) == "31.545", "the target rounds away again"
+    # Trailing zeros stripped, so a tolerance does not gain a digit it was never measured to.
+    assert checker._trim(0.48) == "0.48"
+    assert checker._trim(0.480) == "0.48"
+    assert checker._trim(32.025) == "32.025"
+    src = (ROOT / "tools" / "ui_debug" / "generate_asset_check.py").read_text(encoding="utf-8")
+    window = src[src.index("ground plates: "):src.index("ground plates: ") + 600]
+    assert "%.2f" not in window, (
+        "the plate target or its window is printed at two decimals again, where 31.545 reads "
+        "as 31.55")
+
+
 def test_the_plate_window_is_locked_and_every_plate_is_inside_it(checker):
     """The window is PINNED, not computed, and this is the test that keeps it that way.
 
