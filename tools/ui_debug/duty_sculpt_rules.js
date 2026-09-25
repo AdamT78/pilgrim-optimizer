@@ -246,3 +246,23 @@ function dutySetWidth(rows) {
       if (rows[i][j] && rows[i][j].w > w) w = rows[i][j].w;
   return w;
 }
+
+// Which pose a GRID POSITION asks for. The grid is row-major, 0..8, so `% 3` is the column and
+// the column is the answer: first column v1, second v2, third v3.
+//
+// KEYED OFF THE POSITION, NEVER OFF THE DUTY. The duty tiles are randomised onto grid positions
+// at setup, so `allocation` is not in a fixed column, and a table from duty name to pose would
+// mean a different thing every game -- the same duty would change its acolytes' pose between
+// deals, which is the one thing a pose must not signify. The position is fixed for the whole
+// game; the duty standing on it is not.
+//
+// This says which pose is WANTED. What a set can supply is dutyPose's business: a one-pose set
+// answers all three columns with its only figure, so the rule is safe to apply whatever is
+// loaded and no page has to ask which.
+//
+// It is deliberately not a rule ABOUT anything -- a pose carries no meaning a player could read
+// off it. It exists so that nine tiles holding one seat are not nine copies of one painting.
+function dutyPoseForColumn(gridIndex) {
+  var i = Math.floor(gridIndex || 0) % 3;
+  return i < 0 ? i + 3 : i;
+}

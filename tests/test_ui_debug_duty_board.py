@@ -776,6 +776,49 @@ def test_a_set_is_measured_over_every_pose_not_just_the_first():
     assert _in_node("dutySetHeight(null)") == 0
 
 
+@needs_node
+def test_the_pose_comes_from_the_column_and_nothing_else():
+    """First column v1, second v2, third v3, on a row-major grid of nine.
+
+    Adam's rule, and the reason it is the GRID POSITION rather than the duty: the duty tiles are
+    randomised onto grid positions at setup, so a table from duty name to pose would put a duty
+    in a different pose every deal -- the same duty's acolytes changing pose between games, which
+    is the one thing a pose must not appear to signify. The position is fixed for the whole game.
+    """
+    got = _in_node("[0,1,2,3,4,5,6,7,8].map(dutyPoseForColumn)")
+    assert got == [0, 1, 2, 0, 1, 2, 0, 1, 2], (
+        "the pose no longer follows the column: %r" % got)
+    # Three tiles down a column agree, three across a row differ. Stated as the two claims the
+    # rule actually makes, because the list above satisfies both only by accident of order.
+    for column in (0, 1, 2):
+        down = {got[column], got[column + 3], got[column + 6]}
+        assert len(down) == 1, "column %d does not hold one pose" % column
+    for row in (0, 3, 6):
+        assert len(set(got[row:row + 3])) == 3, "row at %d repeats a pose" % row
+    assert _in_node("dutyPoseForColumn(-1)") == 2, "a negative index ran off the front"
+
+
+def test_no_page_chooses_a_tile_pose_for_itself():
+    """The rule is in one file, and a page that kept its own `POSE` for a tile would look right
+    and be wrong -- every tile drawing the same painting, which is what this whole commit exists
+    to stop, and which nothing on screen would announce.
+
+    The placement sheet is allowed a POSE, and only there: its arrangements view is a table of
+    formations with no grid at all, so there is no column to read. Its WHEEL view draws nine
+    positions and must take the column like everyone else.
+    """
+    for page in ("duty_board_check.html.tmpl", "duty_sow.html.tmpl"):
+        src = (ROOT / "tools" / "ui_debug" / page).read_text(encoding="utf-8")
+        assert "dutyPoseForColumn(" in src, "%s does not ask for the column's pose" % page
+        assert not re.search(r"^var POSE\b", src, re.M), (
+            "%s keeps a pose of its own again" % page)
+    sheet_src = (ROOT / "tools" / "ui_debug" / "generate_placement_sheet.py").read_text(
+        encoding="utf-8")
+    assert "dutyPoseForColumn(" in sheet_src, "the sheet's wheel ignores the column"
+    # The one POSE that is allowed, and the view it belongs to.
+    assert "var POSE = 0, ORDER" in sheet_src, "the sheet lost its arrangements-view pose"
+
+
 def test_no_page_indexes_the_art_by_a_bare_pixel_height():
     """`FIGS[String(SIZE)]` was correct for exactly as long as a size was a number.
 

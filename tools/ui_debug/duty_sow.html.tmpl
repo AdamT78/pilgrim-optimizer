@@ -153,9 +153,9 @@ var POS = CELLS.map(function(c){ return c.pos; });
 // A set LABEL -- `210_painted` -- not a pixel height: two sets can be 210 tall, so the height
 // stopped being able to say which sculpts are on screen.
 var SIZE = SIZES.indexOf(OPENING) >= 0 ? OPENING : SIZES[SIZES.length - 1];
-// Which of a seat's poses is drawn. The painted set carries three and the plastic one carries
-// one; dutyPose() answers for either. 0 everywhere until the column rule lands.
-var POSE = 0;
+// WHICH POSE A TILE DRAWS is a property of where it sits -- dutyPoseForColumn in the shared
+// rules -- so it is read per tile inside build() rather than held here. The HAND is the one
+// place with no grid position of its own; see drawHand.
 var SEAT = 0, shadow = true, GAUGE = false;
 
 // THE FORMATION ONLY KNOWS FIVE. A tile already holding five is not lit, because there is no
@@ -220,9 +220,10 @@ function build(){
   // Over every seat AND every pose: the field has to clear whatever might be drawn in it, and a
   // height taken off one pose would clip another the moment a tile asked for it.
   var FIG = FIGS[SIZE] || [], figH = dutySetHeight(FIG);
-  // The footprint marks are sized off the FIRST SEAT as drawn, because they are a mark on
-  // the floor rather than a figure -- one size for the whole tile, not one per occupant.
-  var FOOTW = (dutyPose(FIG[0], POSE) || {w: 0}).w;
+  // The footprint marks are sized off the FIRST SEAT, because they are a mark on the floor
+  // rather than a figure -- one size for the whole tile, not one per occupant. Measured over
+  // the set rather than at one pose, so the mark does not change size from column to column.
+  var FOOTW = dutySetWidth([FIG[0] || []]);
   // Where the parts of a tile sit comes from the shared rules, not from here: this was one of
   // two copies that had already drifted apart on the gap above the banner.
   var L = dutyTileLayout(CELL, figH, RANK, BACK, {icons: false});
@@ -289,7 +290,7 @@ function build(){
                    .sort(function(a, b){ return a.x - b.x; })
                    .map(function(p, j){ return {x: p.x, y: p.y, seat: q[j]}; });
     placed.slice().sort(function(a, b){ return b.y - a.y || a.x - b.x; }).forEach(function(p){
-      var f = dutyPose(FIG[p.seat], POSE);
+      var f = dutyPose(FIG[p.seat], dutyPoseForColumn(i));
       if (!f) return;                     // no art for this seat in this set: draws empty
       h += '<div class=fig style="left:' + px(CELL / 2 + p.x - f.w / 2) + ';top:'
          + px(FIELD - f.h - p.y) + ';width:' + px(f.w) + ';height:' + px(f.h)
@@ -355,7 +356,10 @@ function build(){
 
 // ---- the hand ---------------------------------------------------------------------------------
 function drawHand(){
-  var el = document.getElementById("hand"), f = dutyPose((FIGS[SIZE] || [])[SEAT], POSE);
+  // THE HAND HAS NO COLUMN. It is a figure in your hand rather than a figure on a tile, so
+  // there is no grid position to ask -- it shows the first pose and changes when the tile it
+  // lands on decides. Anything else would promise the hand's pose predicts where it is going.
+  var el = document.getElementById("hand"), f = dutyPose((FIGS[SIZE] || [])[SEAT], 0);
   el.classList.toggle("empty", HAND === 0);
   var sq = BUD / DPR, left = (innerWidth - sq) / 2;
   el.style.left = Math.max(8, left - 108) + "px";
@@ -441,7 +445,7 @@ function say(){
     && (EDGES[POS[AT]] || []).length > names.length;
   document.getElementById("note").innerHTML =
     "SOW BY HAND, true size at <b>" + DPR.toFixed(2) + "x</b>\n"
-  + "sculpt  <b>" + dutyPose((FIGS[SIZE] || [])[0], POSE).h + "</b> real px\n"
+  + "sculpt  <b>" + dutySetHeight(FIGS[SIZE] || []) + "</b> real px\n"
   + "seat    <b>p" + (SEAT + 1) + "</b>, <b>" + mine + "</b> on the wheel\n\n"
   + (HAND === 0
       ? "click one of your tiles to lift\nits acolytes into the hand."

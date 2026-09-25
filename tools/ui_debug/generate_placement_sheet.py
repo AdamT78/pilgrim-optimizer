@@ -528,6 +528,7 @@ body{padding-left:243px}
   <span class=lab>view</span><span id=viewb class=wide></span>
   <span class=lab>sculpt</span><span id=szb class=wide></span>
   <span class=lab>order</span><span id=ordb class=wide></span>
+  <span class=lab>pose</span><span id=posb class=wide></span>
 
   <div class=ttl>how the sculpts stand</div>
   <span class=lab>spread</span>
@@ -592,7 +593,13 @@ var FULL_AT = DEPTH.full_at || 52;
 // A set LABEL -- `210_painted` -- not a pixel height. The opening pick is the file's own
 // `tuned_at` when the tray has rendered it, and otherwise the last set on offer.
 var SIZE = SIZES.indexOf(__OPENSET__) >= 0 ? __OPENSET__ : SIZES[SIZES.length - 1];
-// Which of a seat's poses is drawn. 0 everywhere until the column rule lands.
+// ONLY THE ARRANGEMENTS VIEW HAS A POSE CONTROL, and the split is the point. The wheel draws
+// nine grid positions and takes its pose from the column, exactly as the board and the sow do
+// -- a control there would let this page show an arrangement the game cannot produce. The
+// arrangements view has no grid at all: it is a table of formations, so there is no column to
+// read and the pose has to be asked for. It is also where comparing the three paintings side
+// by side is actually useful, which is why the control lives on the tuning page and nowhere
+// else. A one-pose set ignores it, because dutyPose folds it away.
 var POSE = 0, ORDER = __OPENORDER__;
 var SPREAD = RULE.spread, BACK = RULE.back, RANK = RULE.rank;
 var CELLS = __CELLS__, FRAME = __FRAME__, VIEW = "arrangements";
@@ -716,7 +723,7 @@ function drawWheel(){
       .map(function(p, j){ return {x: p.x, y: p.y, seat: who[j]}; })
       .sort(function(a, b){ return b.y - a.y || a.x - b.x; })
       .forEach(function(p){
-        var f = dutyPose(art[p.seat], POSE);
+        var f = dutyPose(art[p.seat], dutyPoseForColumn(i));
         if (!f) return;                 // no art for this seat in this set: draws empty
         h += '<div class=fig style="left:' + px(CELL / 2 + p.x - f.w / 2) + ';top:'
            + px(L.field - f.h - p.y) + ';width:' + px(f.w) + ';height:' + px(f.h)
@@ -880,7 +887,9 @@ function drawCases(){
       "Every arrangement the rules produce, read from <b>__FILE__</b>.  spread <b>" + SPREAD
     + "</b>, set-back <b>" + BACK + "</b>, rank gap <b>" + RANK + "</b>, order <b>" + ORDER
     + "</b> -- one set, used at every size.  Showing <b>" + SIZE.replace("_", " ")
-    + "</b>, depth <b>"
+    + "</b> pose <b>v" + (POSE + 1) + "</b>"
+    + ((ART[SIZE] || [[]])[0].length > 1 ? "" : " (this set has one)")
+    + ", depth <b>"
     + (SHADE ? MODE + " " + SHADE + "% , full at " + FULL_AT : "off")
     + "</b>.  Drawn at true size, so a sculpt here is the size it is on the board.";
 
@@ -936,6 +945,12 @@ buttons(document.getElementById("szb"), SIZES, function(){ return SIZE; },
         function(v){ SIZE = v; }, function(v){ return String(v).replace("_", " "); });
 buttons(document.getElementById("ordb"), ORDERS, function(){ return ORDER; },
         function(v){ ORDER = v; });
+// Three buttons whatever the set holds, so the row does not change shape when the set does.
+// A set with fewer poses answers them all with what it has rather than losing a button --
+// which keeps the row a statement about the CONVENTION (first column v1, and so on) rather
+// than an inventory of the art currently loaded.
+buttons(document.getElementById("posb"), [0, 1, 2], function(){ return POSE; },
+        function(v){ POSE = v; }, function(v){ return "v" + (v + 1); });
 buttons(document.getElementById("dmb"), ["haze", "dark", "off"], function(){ return MODE; },
         function(v){ MODE = v;
                      if (v === "off") SHADE = 0;

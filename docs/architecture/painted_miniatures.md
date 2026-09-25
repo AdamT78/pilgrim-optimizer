@@ -635,7 +635,32 @@ the sow page is played on one set and asks which.
 Old-named files left in `generated/` are ignored rather than half-read — the discovery is a
 pattern match, so a folder holding both namings offers only the sets that match the new one.
 
-**Which pose a tile draws is not decided yet.** Every page passes pose 0 today. The rule Adam
-asked for — `_v1` in the first grid column, `_v2` in the second, `_v3` in the third, keyed off
-`grid_index % 3` and never off the duty's name, because the duty tiles are randomised onto grid
-positions at setup — is the next commit. `dutyPose` is the seam it hooks into.
+## Which pose a tile draws
+
+The first grid column draws `_v1`, the second `_v2`, the third `_v3` — `dutyPoseForColumn` in
+`duty_sculpt_rules.js`, which is `grid_index % 3` on a row-major grid of nine.
+
+**Keyed off the position, never off the duty.** The duty tiles are randomised onto grid positions
+at setup, so `allocation` is not in a fixed column. A table from duty name to pose would put the
+same duty in a different pose every deal — a duty's acolytes visibly changing pose between games —
+which is the one thing a pose must not appear to signify. The position is fixed for the whole
+game; the duty standing on it is not.
+
+It is also not a rule *about* anything. A pose carries no information a player could read off it.
+It exists so that nine tiles holding one seat are not nine copies of one painting.
+
+There is no control for it on the board or the sow page, because it is not a choice. The
+placement sheet has one, and only in its **arrangements** view: that view is a table of
+formations with no grid at all, so there is no column to read, and it is where comparing the
+three paintings side by side is actually useful. The sheet's **wheel** view takes the column like
+everyone else — a control there could show an arrangement the game cannot produce.
+
+A one-pose set is unaffected, because `dutyPose` folds the column away: all three columns ask,
+and the plastic set answers each with its only figure. The pose buttons stay three wide whatever
+is loaded, so the row states the convention rather than inventorying the art.
+
+Verified on the built page rather than argued: with one seat-1 acolyte on all nine tiles, the sow
+board draws three distinct paintings, the same one down each column and three different ones
+across each row; the plastic set under the same treatment draws one painting nine times. On the
+sheet, the three columns and three seats reach all nine paintings with no column disagreeing with
+itself.

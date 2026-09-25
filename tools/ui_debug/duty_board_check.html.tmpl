@@ -95,10 +95,9 @@ function px(v){ return (v / DPR) + "px"; }
 // height, because two sets can be 210 tall and the height stopped being able to say which.
 var HAVE = SIZES.filter(function(s){ return FIGS[s]; });
 var SIZE = HAVE.indexOf(D.size) >= 0 ? D.size : (HAVE[0] || "");
-// Which of a seat's poses is drawn. The art carries three for the painted set and one for the
-// plastic one; dutyPose() takes this and the row and answers for either. It is 0 everywhere
-// today -- the rule that makes it depend on the grid column is the next thing to land.
-var POSE = 0;
+// WHICH POSE A TILE DRAWS IS A PROPERTY OF WHERE IT SITS, not a setting: dutyPoseForColumn in
+// the shared rules turns a grid position into a pose, so nine tiles holding one seat are not
+// nine copies of one painting. There is no control for it because it is not a choice.
 // ONE SET, USED AT EVERY SIZE. The file is tuned at the working size and the other sizes take
 // the same numbers, so changing size changes the sculpts and nothing else.
 var SPREAD = PLACE.spread, BACK = PLACE.back, RANK = PLACE.rank;
@@ -224,7 +223,7 @@ function build(){
     h += '<div class=figs data-t="' + i + '" style="top:' + px(groupTop) + ';left:0;width:'
        + px(CELL) + ';height:' + px(Math.max(fieldH, 1)) + '">';
     slots.forEach(function(p, jj){
-      var seat = dutyPose(FIG[q[jj]], POSE);
+      var seat = dutyPose(FIG[q[jj]], dutyPoseForColumn(i));
       if (!seat) return;                        // no art for this set: the tile draws empty
       var pin = PINNED[i + ":" + jj], at = pin || p;
 
