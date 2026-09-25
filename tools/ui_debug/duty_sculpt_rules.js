@@ -56,10 +56,22 @@ function dutyFormation(n, spread, back, rank) {
   if (n === 3) return [{x: -spread, y: 0}, {x: 0, y: back}, {x: spread, y: 0}];
   // Four and five split into two ranks, the back one offset half a step so nobody stands
   // directly behind anybody.
-  if (n === 4) return [{x: -spread * 0.75, y: rank}, {x: spread * 0.25, y: rank},
-                       {x: -spread * 0.25, y: 0},    {x: spread * 0.75, y: 0}];
-  return [{x: -spread / 2, y: rank}, {x: spread / 2, y: rank},
-          {x: -spread, y: 0}, {x: 0, y: back}, {x: spread, y: 0}];
+  //
+  // SPREAD IS THE HORIZONTAL STEP, and it has to be the same step here as at two and three.
+  // It was not: the back rank was offset into the FRONT RANK'S GAPS, which keeps each rank's
+  // own neighbours `spread` apart -- true to the letter of what the file calls this number --
+  // while putting a figure every `spread / 2` across the silhouette. Measured on the page at
+  // spread 40, two and three figures stepped 40 and four and five stepped 20, so the setting
+  // that spaced three acolytes properly left four in a heap, and raising it to fix the heap
+  // threw the three apart. One slider cannot mean two things.
+  //
+  // So the ranks are spaced to keep the STEP at `spread`, and each rank's own neighbours end
+  // up 2 x spread apart -- which is the cost, and it is the right way round: what you are
+  // looking at is the silhouette, not one rank at a time.
+  if (n === 4) return [{x: -spread * 1.5, y: rank}, {x: spread * 0.5, y: rank},
+                       {x: -spread * 0.5, y: 0},    {x: spread * 1.5, y: 0}];
+  return [{x: -spread, y: rank}, {x: spread, y: rank},
+          {x: -spread * 2, y: 0}, {x: 0, y: back}, {x: spread * 2, y: 0}];
 }
 
 // Which seat stands in each slot, left to right.

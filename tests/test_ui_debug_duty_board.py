@@ -1251,6 +1251,60 @@ def test_the_tile_layout_lives_in_exactly_one_file():
 
 
 @needs_node
+def test_spread_is_the_same_horizontal_step_in_every_formation():
+    """One slider cannot mean two things, and this one did.
+
+    Four and five acolytes stand in two ranks with the back one offset into the front rank's
+    gaps. That keeps each rank's OWN neighbours `spread` apart -- true to the letter of what the
+    file called this number -- while putting a figure every `spread / 2` across the silhouette.
+    Measured on the placement sheet at spread 40: two and three figures stepped 40, four and
+    five stepped 20. So the value that spaced three acolytes properly left four in a heap, and
+    raising it to fix the heap threw the three apart.
+
+    Checked across the whole group rather than within a rank, because the silhouette is what is
+    being looked at -- a per-rank check is exactly what passed while the board looked wrong.
+    """
+    for spread in (40, 100, 137):
+        for n in range(2, 6):
+            xs = sorted(p["x"] for p in
+                        _in_node("dutyFormation(%d, %d, 20, 49)" % (n, spread)))
+            steps = [round(b - a) for a, b in zip(xs, xs[1:])]
+            assert steps == [spread] * (n - 1), (
+                "at spread %d, %d sculpts step %s -- every formation must step by the spread"
+                % (spread, n, steps))
+
+
+@needs_node
+def test_nobody_stands_directly_behind_anybody_at_four_and_five():
+    """The other half of the arrangement, and the reason the ranks interleave at all. Making the
+    step uniform must not be done by stacking the back rank straight behind the front one."""
+    for n in (4, 5):
+        slots = _in_node("dutyFormation(%d, 80, 20, 49)" % n)
+        ranks = {}
+        for p in slots:
+            ranks.setdefault(p["y"], []).append(p["x"])
+        assert len(ranks) >= 2, "%d sculpts no longer stand in two ranks" % n
+        front = ranks[min(ranks)]
+        for y, xs in ranks.items():
+            if y == min(ranks):
+                continue
+            for x in xs:
+                assert all(abs(x - f) > 1e-6 for f in front), (
+                    "%d sculpts: one at x=%s stands directly behind another" % (n, x))
+
+
+@needs_node
+def test_five_sculpts_need_four_steps_of_room(mod):
+    """The cost of a uniform step, stated rather than discovered: five acolytes span four steps
+    plus one figure, where they used to span two. A frame tuned before this is half the width it
+    needs, and the page draws them over its edge without comment."""
+    box = _in_node("dutyCapacityBox(5, 80, 20, 49, 71, 150)")
+    assert round(box["w"]) == 4 * 80 + 71, (
+        "five sculpts claim %s px at a step of 80 and a figure of 71; four steps plus the "
+        "figure is %d" % (box["w"], 4 * 80 + 71))
+
+
+@needs_node
 def test_the_field_clears_the_deeper_of_the_set_back_and_the_rank_gap():
     """The board checker took only the rank gap, which clips the middle of three the moment a
     set-back larger than the rank gap is tried. Latent rather than broken at 21 against 52 --

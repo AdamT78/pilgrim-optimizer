@@ -11,7 +11,7 @@
   "spread": 110,
   "back": 21,
   "rank": 52,
-  "spread_note": "Distance between neighbouring sculpts in a rank, centre to centre. The sculpts are not one width: measured at 210 px tall, three of the four are 91 px across and the fourth is 108, so any spread means two different things depending on who is standing there. At 110 the three narrow figures stand about a fifth of a width apart and the wide one just touches its neighbour -- 110 is roughly where overlap stops for every seat rather than for most of them.",
+  "spread_note": "The HORIZONTAL STEP between adjacent sculpts, centre to centre, measured across the whole silhouette rather than within one rank. Corrected 2026-09-25: it used to be the gap between neighbours in a rank, which sounds like the same thing and is not. Four and five acolytes stand in two ranks with the back one offset into the front rank's gaps, so each rank's own neighbours sat `spread` apart while a figure appeared every `spread / 2` across the group. Measured on the placement sheet at spread 40, two and three figures stepped 40 and four and five stepped 20 -- so the value that spaced three acolytes properly left four in a heap, and raising it to fix the heap threw the three apart. The ranks are now spaced to keep the step equal, which costs width at four and five: five acolytes span 4 x spread plus one figure, where they used to span 2 x spread. The sculpts are not one width -- measured at 210 px tall, three of the four are 91 px across and the fourth is 108 -- so any step means two different things depending on who is standing there.",
   "back_note": "How far the middle of three is set back from the other two. A flat row of three identical silhouettes is the hardest case to read, and lifting the centre one breaks the repeat.",
   "rank_note": "How far a back rank stands behind the front one, used at four and five sculpts.",
   "frame": {
@@ -37,13 +37,23 @@
       "rank": 65,
       "frame": {
         "w": 350,
-        "h": 318,
-        "drop": 40
+        "h": 326,
+        "drop": 35
       },
       "depth": {
         "mode": "haze",
         "amount": 60,
         "full_at": 50
+      }
+    },
+    "150_painted": {
+      "spread": 75,
+      "back": 20,
+      "rank": 49,
+      "frame": {
+        "w": 195,
+        "h": 183,
+        "drop": -1
       }
     }
   },
