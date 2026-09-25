@@ -593,33 +593,48 @@ def test_the_haze_ladder_is_described_once():
         assert "DUTY_HAZE.steps" in src, "%s sets the ladder's size itself again" % page
 
 
-def test_the_sizes_on_offer_come_from_the_file(sow):
-    """The rule Adam asked for: the file names the sizes, the buttons follow. A size with no art
-    is dropped with a note rather than offered, because a button that draws an empty board is
-    worse than a button that is absent."""
+def test_the_file_names_which_sets_are_played_at_not_which_exist(sow):
+    """SUPERSEDED CONTRACT, rewritten rather than deleted, because the change is the point.
+
+    This used to assert that `sizes` decided which sets the page offered at all. It did, and
+    that hid real work: the file named two sets, the tray had rendered ten, and a set tuned in
+    the placement sheet was unreachable here with nothing on screen to say it existed. So
+    `sizes` now says which sets are GROUPED as the played ones, and everything rendered is
+    reachable. What survives from the old contract is the part that was always right: a set the
+    file names but the tray has never rendered is dropped with a note, because there is nothing
+    to draw and silence is how you spend an afternoon wondering.
+    """
     notes = []
     art = {"210_plastic": [], "180_plastic": [], "210_painted": []}
-    one = {"sizes": ["210_plastic"], "tuned_at": "210_plastic"}
-    assert sow.offered(one, art, notes) == ["210_plastic"]
-    # Sorted by height then by name, so the row keeps a settled order as sets are added --
+    have, played = sow.offered({"sizes": ["210_plastic"], "tuned_at": "210_plastic"},
+                               art, notes)
+    assert played == ["210_plastic"]
+    assert have == ["180_plastic", "210_painted", "210_plastic"], (
+        "a set the file does not name has stopped being reachable again")
+    # Sorted by height then by name, so both groups keep a settled order as sets are added --
     # and 180 comes before 210 whatever order the file lists them in.
-    assert sow.offered({"sizes": ["210_plastic", "180_plastic"],
-                        "tuned_at": "210_plastic"}, art, notes) == \
-        ["180_plastic", "210_plastic"]
-    assert sow.offered({"sizes": ["210_plastic", "210_painted"],
-                        "tuned_at": "210_plastic"}, art, notes) == \
-        ["210_painted", "210_plastic"]
+    _, played = sow.offered({"sizes": ["210_plastic", "180_plastic"],
+                             "tuned_at": "210_plastic"}, art, notes)
+    assert played == ["180_plastic", "210_plastic"]
+    _, played = sow.offered({"sizes": ["210_plastic", "210_painted"],
+                             "tuned_at": "210_plastic"}, art, notes)
+    assert played == ["210_painted", "210_plastic"]
     assert notes == []
-    assert sow.offered({"sizes": ["210_plastic", "240_plastic"],
-                        "tuned_at": "210_plastic"}, art, notes) == ["210_plastic"]
+    # A named set with no art is not played at, and is not silently absent either.
+    have, played = sow.offered({"sizes": ["210_plastic", "240_plastic"],
+                                "tuned_at": "210_plastic"}, art, notes)
+    assert played == ["210_plastic"] and "240_plastic" not in have
     assert any("240_plastic" in n for n in notes), \
         "a named set with no art vanished without a word"
     # TWO SETS AT THE SAME HEIGHT ARE TWO SETS. Before labels this pair collapsed into one
-    # button, which is the whole reason the key stopped being a number.
-    assert len(sow.offered({"sizes": ["210_plastic", "210_painted"],
-                            "tuned_at": "210_plastic"}, art, [])) == 2
-    # No list at all: the set the numbers were tuned against is the one you get.
-    assert sow.offered({"tuned_at": "210_plastic"}, art, []) == ["210_plastic"]
+    # entry, which is the whole reason the key stopped being a number.
+    _, played = sow.offered({"sizes": ["210_plastic", "210_painted"],
+                             "tuned_at": "210_plastic"}, art, [])
+    assert len(played) == 2
+    # No list at all: the set the numbers were tuned against is the played one, and everything
+    # rendered is still reachable.
+    have, played = sow.offered({"tuned_at": "210_plastic"}, art, [])
+    assert played == ["210_plastic"] and len(have) == 3
 
 
 def test_placement_refuses_a_broken_size_list(mod, tmp_path, monkeypatch):
@@ -690,6 +705,109 @@ def _in_node(expression):
     )
     done = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True)
     return json.loads(done.stdout)
+
+
+# ---------------------------------------------------------------- choosing a set
+
+
+PICKER_JS = ROOT / "tools" / "ui_debug" / "duty_set_picker.js"
+
+
+def test_every_rendered_set_is_reachable_on_the_sow_page(sow, mod):
+    """`sizes` stopped filtering on 2026-09-25 and started grouping, because filtering hid work.
+
+    The file named two sets, the tray had rendered ten, and 150_painted -- tuned in the
+    placement sheet, with its own spread, set-back, rank, frame and lift -- did not appear on
+    the sow page at all, with nothing on screen to say it existed. A control that silently omits
+    the thing you just tuned is worse than a long list.
+    """
+    place = mod.placement([])
+    figs = mod.figures(mod.FIGURE_DIR, [])
+    if not figs:
+        pytest.skip("no rendered sculpts; run make_tray_figures.py")
+    notes = []
+    have, played = sow.offered(place, figs, notes)
+    assert set(have) == set(figs), (
+        "the sow page cannot reach %s" % sorted(set(figs) - set(have)))
+    assert set(played) <= set(have), "a played set is not among the reachable ones"
+    # every set that carries numbers of its own is reachable, whatever `sizes` says
+    for label in (place.get("per_set") or {}):
+        if label in figs:
+            assert label in have, (
+                "%s carries its own numbers and cannot be selected -- the exact failure that "
+                "made this a grouping instead of a filter" % label)
+
+
+def test_a_named_set_with_no_art_is_dropped_from_the_played_group_with_a_note(sow, mod):
+    """It can still be named in the file and simply not rendered yet. There is nothing to draw,
+    so it is not offered -- but silently is how you spend an afternoon wondering."""
+    figs = mod.figures(mod.FIGURE_DIR, [])
+    if not figs:
+        pytest.skip("no rendered sculpts; run make_tray_figures.py")
+    notes = []
+    place = dict(mod.placement([]), sizes=sorted(figs)[:1] + ["999_nosuch"])
+    have, played = sow.offered(place, figs, notes)
+    assert "999_nosuch" not in played and "999_nosuch" not in have
+    assert any("999_nosuch" in n for n in notes), "it vanished without a word"
+
+
+@needs_node
+def test_the_picker_groups_the_played_sets_first_and_hides_nothing():
+    """The control itself, run against the real file rather than against a description of it."""
+    script = ("const fs = require('fs');\n"
+              "global.document = null;\n"
+              "eval(fs.readFileSync(%r, 'utf8'));\n"
+              "process.stdout.write(JSON.stringify({\n"
+              "  name: dutySetName('210_painted'),\n"
+              "  base: dutySetNote('210_plastic', '210_plastic', ['210_painted']),\n"
+              "  own: dutySetNote('210_painted', '210_plastic', ['210_painted']),\n"
+              "  plain: dutySetNote('90_plastic', '210_plastic', ['210_painted'])}));\n"
+              % str(PICKER_JS))
+    got = json.loads(subprocess.run(["node", "-e", script], capture_output=True, text=True,
+                                    check=True).stdout)
+    assert got["name"] == "210 painted", "the label still shows the file's underscore"
+    assert got["base"] == "base"
+    assert got["own"] == "own numbers"
+    assert got["plain"] == "", "a set with nothing of its own is being annotated anyway"
+
+
+def test_both_pages_use_the_one_picker_and_order_it_the_same(sow, sheet):
+    """Two pages presenting the same ten sets in two orders is two answers to one question.
+
+    They were within a line of each other of doing exactly that: the sow sorted the played
+    group and the sheet took the file's order, which happens to name 210_plastic first.
+    """
+    for src, who in ((sow.TEMPLATE.read_text(encoding="utf-8"), "the sow page"),
+                     (sheet.TEMPLATE, "the placement sheet")):
+        assert "dutySetPicker(" in src, "%s does not use the shared picker" % who
+        assert "dutySetPickerShow(" in src, (
+            "%s never moves the control to a set it was not clicked onto" % who)
+        assert "__SETPICKER__" in src, "%s does not inline the picker" % who
+    gen = (ROOT / "tools" / "ui_debug" / "generate_placement_sheet.py").read_text(
+        encoding="utf-8")
+    sow_gen = (ROOT / "tools" / "ui_debug" / "generate_duty_sow.py").read_text(encoding="utf-8")
+    for src, who in ((gen, "the sheet"), (sow_gen, "the sow")):
+        assert "set_sort" in src, "%s hands the picker an unsorted list" % who
+
+
+@pytest.mark.slow                      # ~30s: builds a whole page
+def test_the_sow_page_offers_every_set_it_was_built_with(sow, mod, tmp_path, monkeypatch):
+    """Read off the built page, not off the source: a generator that computes the right list and
+    substitutes the wrong one looks identical from here."""
+    board = sow._board_module()
+    figs = board.figures(board.FIGURE_DIR, [])
+    if not figs:
+        pytest.skip("no rendered sculpts; run make_tray_figures.py")
+    out = tmp_path / "duty_sow.html"
+    monkeypatch.setattr(sys, "argv", ["generate_duty_sow.py", "--no-open", "--out", str(out)])
+    sow.main()
+    page = out.read_text(encoding="utf-8")
+    sizes = json.loads(re.search(r"SIZES = (\[[^\]]*\])", page).group(1))
+    played = json.loads(re.search(r"PLAYED = (\[[^\]]*\])", page).group(1))
+    assert set(sizes) == set(figs), (
+        "the page was built without %s" % sorted(set(figs) - set(sizes)))
+    assert set(played) <= set(sizes), "a played set is not in the page's own list"
+    assert sizes == sorted(sizes, key=board.set_sort), "the page's list is not in a settled order"
 
 
 # ---------------------------------------------------------------- one set's own numbers

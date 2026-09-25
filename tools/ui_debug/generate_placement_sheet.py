@@ -94,6 +94,8 @@ RULES_JS = HERE / "duty_sculpt_rules.js"
 # The save button's half of the base/override split, shared with the test that pins it against
 # this file's own _split_base_and_overrides.
 SPLIT_JS = HERE / "duty_settings_split.js"
+# The set dropdown, shared with the sow page so the two group the sets the same way.
+PICKER_JS = HERE / "duty_set_picker.js"
 
 # WHICH KEYS THE BUTTON WRITES, AND INTO WHICH FILE. Handed to the page as well as used here,
 # because the button has two paths -- POST to this generator when served, download when the page
@@ -524,6 +526,9 @@ def main():
     if not SPLIT_JS.is_file():
         raise SystemExit("%s is missing -- it is where the save button's half of the base/"
                          "override split lives" % board._short(SPLIT_JS))
+    if not PICKER_JS.is_file():
+        raise SystemExit("%s is missing -- it is where the set dropdown lives"
+                         % board._short(PICKER_JS))
 
     # A seat is a LIST OF POSES -- one for the plastic set, three for the painted one -- and
     # the page picks with dutyPose(), so the two are interchangeable with no branch on which is
@@ -537,6 +542,19 @@ def main():
                      # them into node and hold them against the Python pair -- a rule that has
                      # to exist twice is a rule that has to be checked twice.
                      ("__SPLITRULES__", SPLIT_JS.read_text(encoding="utf-8")),
+                     ("__SETPICKER__", PICKER_JS.read_text(encoding="utf-8")),
+                     # THE SHEET SHOWS EVERY RENDERED SET, as it always has -- comparing them is
+                     # what it is for -- but it now groups them the way the sow page does, so
+                     # the two present the same list in the same order.
+                     # SORTED, not in the file's order, so this page and the sow list the
+                     # played group identically. They were within one line of each other and
+                     # disagreed: the file happens to name 210_plastic first, and the sow sorts.
+                     ("__PLAYED__", json.dumps(sorted(
+                         (lab for lab in (place.get("sizes") or []) if lab in figs),
+                         key=board.set_sort))),
+                     ("__OWNSETS__", json.dumps(sorted(
+                         set(place.get("per_set") or {}) | set(plan.get("per_set") or {}),
+                         key=board.set_sort))),
                      ("__CASES__", json.dumps(cases)),
                      # EVERY SET'S NUMBERS AND PLATES, resolved here rather than merged in
                      # the page. The sheet switches sets while you work, so it needs an answer
@@ -694,6 +712,20 @@ body{padding-left:243px}
   background:#100d09;border-right:1px solid #1e1811;padding:12px 10px 18px;
   display:grid;grid-template-columns:58px 1fr 32px;gap:7px 7px;align-content:start;
   align-items:center}
+/* The sculpt-set dropdown. Styled to sit with the buttons rather than to look like a form
+   control, since it is the same kind of choice as the ones beside it. */
+.setpick{font:inherit;color:#c9b27a;background:#1c1811;border:1px solid #332c20;
+  border-radius:3px;padding:3px 6px;cursor:pointer;
+  /* Fits whatever column it is put in. A fixed max-width was 176px, which suited the
+     sow page's 252px panel and overflowed the placement sheet's 227px one by 24. */
+  max-width:100%;min-width:0;box-sizing:border-box}
+.setpick:hover{border-color:#5a4c36}
+.setpick optgroup{color:#5f5646;font-style:normal}
+.setpick option{color:#8b8071;background:#1c1811}
+/* Spans the value column and the one after it. The panel is 206px across three columns, and
+   the middle one alone left the dropdown 141px -- four pixels short of its own selected label,
+   so "210 plastic - base" read as "210 plastic - ba...". */
+#ui .full{grid-column:2 / -1}
 #ui .lab{color:#4f483d;text-align:right;white-space:nowrap}
 /* Whose numbers are on screen. Three states worth telling apart at a glance: the base itself,
    a set carrying its own, and a set still following the base. */
@@ -727,7 +759,7 @@ body{padding-left:243px}
 <div id=ui>
   <div class=ttl>what you are looking at</div>
   <span class=lab>view</span><span id=viewb class=wide></span>
-  <span class=lab>sculpt</span><span id=szb class=wide></span>
+  <span class=lab>sculpt</span><span id=szb class=full></span>
   <span class=lab>numbers</span><span class=wide><span id=whose class=whose></span>
     <button id=busebase title="drop this set's own numbers and follow the base again"
             >use the base</button></span>
@@ -790,12 +822,17 @@ body{padding-left:243px}
 <script>
 // ---- the drawing rules, inlined from tools/ui_debug/duty_sculpt_rules.js ----------------
 __FORMATION__
+// ---- the set dropdown, inlined from tools/ui_debug/duty_set_picker.js -------------------
+__SETPICKER__
 // -------------------------------------------------------------------------------------------
 var CASES = __CASES__, ART = __ART__, SIZES = __SIZES__, ORDERS = __ORDERS__;
 // EVERY SET'S NUMBERS AND PLATES, resolved in Python: the base with that set's own laid over
 // it. BASE_SET is the set the base belongs to -- tuning it writes the top of the file, and
 // tuning any other writes only what that set changes.
 var RULES = __RULES__, GPLANS = __GPLANS__, BASE_SET = __BASESET__;
+// Which sets the file calls the played ones, and which carry numbers of their own. Both only
+// change how the dropdown reads -- this page has always shown everything the tray rendered.
+var PLAYED = __PLAYED__, OWN_SETS = __OWNSETS__;
 var MODE, SHADE, FULL_AT;
 // A set LABEL -- `210_painted` -- not a pixel height. The opening pick is the file's own
 // `tuned_at` when the tray has rendered it, and otherwise the last set on offer.
@@ -1205,9 +1242,9 @@ function slider(id, value, set){
 }
 buttons(document.getElementById("viewb"), ["arrangements", "wheel"],
         function(){ return VIEW; }, function(v){ VIEW = v; });
-buttons(document.getElementById("szb"), SIZES, function(){ return SIZE; },
-        function(v){ stashSet(SIZE); SIZE = v; applySet(SIZE); },
-        function(v){ return String(v).replace("_", " "); });
+dutySetPicker(document.getElementById("szb"), {
+  all: SIZES, played: PLAYED, base: BASE_SET, own: OWN_SETS, value: SIZE,
+  choose: function(v){ stashSet(SIZE); SIZE = v; applySet(SIZE); draw(); }});
 buttons(document.getElementById("ordb"), ORDERS, function(){ return ORDER; },
         function(v){ ORDER = v; });
 // Three buttons whatever the set holds, so the row does not change shape when the set does.
@@ -1264,11 +1301,11 @@ function syncControls(){
   setSlider("frw", FRAME.w); setSlider("frh", FRAME.h); setSlider("frd", FRAME.drop);
   setSlider("glift", LIFT);
   pressOne("dmb", MODE);
-  // THE SCULPT ROW TOO. buttons() presses it on click, which covers the common path and misses
-  // every other one -- the keyboard, a set loaded at open, anything driving the page from the
-  // console. A row showing one set while the sliders show another's numbers is worse than no
-  // highlight at all, because it is the exact confusion this change was made to end.
-  pressOne("szb", SIZE);
+  // THE SET CONTROL TOO. Its own onchange covers clicking it and nothing else -- not a set
+  // loaded at open, not the page driven from the console. A control showing one set while the
+  // sliders show another's numbers is worse than no indicator at all, because it is the exact
+  // confusion the per-set split was made to end.
+  dutySetPickerShow(document.getElementById("szb"), SIZE);
   syncGroundSliders();
   showRatio();
 }

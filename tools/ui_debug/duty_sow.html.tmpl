@@ -108,6 +108,16 @@ html,body{margin:0;height:100%;overflow:hidden;background:#0d0b08;color:#8b8071;
 #ui button[aria-pressed=true]{background:#c9b27a;border-color:#c9b27a;color:#1a1610}
 #ui button[aria-disabled=true]{cursor:default;opacity:.85}
 #ui button[aria-disabled=true]:hover{border-color:#c9b27a}
+/* The sculpt-set dropdown. Styled to sit with the buttons rather than to look like a form
+   control, since it is the same kind of choice as the ones beside it. */
+.setpick{font:inherit;color:#c9b27a;background:#1c1811;border:1px solid #332c20;
+  border-radius:3px;padding:3px 6px;cursor:pointer;
+  /* Fits whatever column it is put in. A fixed max-width was 176px, which suited the
+     sow page's 252px panel and overflowed the placement sheet's 227px one by 24. */
+  max-width:100%;min-width:0;box-sizing:border-box}
+.setpick:hover{border-color:#5a4c36}
+.setpick optgroup{color:#5f5646;font-style:normal}
+.setpick option{color:#8b8071;background:#1c1811}
 #ui .lab{color:#4f483d;min-width:46px}
 #ui .hint{color:#3f3930;line-height:1.5}
 </style>
@@ -128,8 +138,13 @@ html,body{margin:0;height:100%;overflow:hidden;background:#0d0b08;color:#8b8071;
 <script>
 // ---- the drawing rules, inlined from tools/ui_debug/duty_sculpt_rules.js -----------------------
 __FORMATION__
+// ---- the set dropdown, inlined from tools/ui_debug/duty_set_picker.js -------------------
+__SETPICKER__
 // -----------------------------------------------------------------------------------------------
 var CELLS = __CELLS__, EDGES = __EDGES__, FIGS = __FIGS__, SIZES = __SIZES__;
+// EVERY RENDERED SET IS REACHABLE; `sizes` only says which are grouped as the played ones.
+// It used to decide which existed here, and a set tuned next door was invisible as a result.
+var PLAYED = __PLAYED__, BASE_SET = __BASESET__, OWN_SETS = __OWNSETS__;
 var PLACE = __PLACEMENT__, OPENING = __OPENING__;
 var FRAME, PLATES = __PLATES__, PLAN = __GROUNDPLAN__;
 // Every offered set's numbers and plates, resolved in Python: the base with that set's own
@@ -509,20 +524,17 @@ function buttons(host, values, current, label, choose){
   host._values = values; host._current = current;
 }
 function pressAll(){
-  [["szb", function(){ return SIZE; }], ["seatb", function(){ return SEAT; }]]
-    .forEach(function(pair){
-      var host = document.getElementById(pair[0]);
-      [].forEach.call(host.children, function(b){
-        b.setAttribute("aria-pressed", b._value === pair[1]() ? "true" : "false");
-        // A row with one button has nothing to switch to. It still names the size, which is
-        // worth saying, so it is drawn and simply does not pretend to be a choice.
-        if (host._values.length < 2) b.setAttribute("aria-disabled", "true");
-      });
-    });
+  // The seat row is still buttons -- three of them, and which seat you are playing is worth
+  // seeing without opening anything. The sculpt set is a select and carries its own state, so
+  // it is moved rather than pressed; dutySetPickerShow says why that is not automatic.
+  var host = document.getElementById("seatb");
+  [].forEach.call(host.children, function(b){
+    b.setAttribute("aria-pressed", b._value === SEAT ? "true" : "false"); });
+  dutySetPickerShow(document.getElementById("szb"), SIZE);
 }
-buttons(document.getElementById("szb"), SIZES, null,
-        function(v){ return String(v).replace("_", " "); },
-        function(v){ SIZE = v; applySet(SIZE); build(); });
+dutySetPicker(document.getElementById("szb"), {
+  all: SIZES, played: PLAYED, base: BASE_SET, own: OWN_SETS, value: SIZE,
+  choose: function(v){ SIZE = v; applySet(SIZE); build(); }});
 buttons(document.getElementById("seatb"), [0, 1, 2], null,
         function(v){ return "p" + (v + 1); },
         function(v){
