@@ -2185,6 +2185,17 @@ Which sets the sow page offers is named in `ui/assets-gothic/metadata/duty_place
 (`sizes`, and `tuned_at` for which opens); the placement sheet ignores that and shows every set
 the tray has rendered, because comparing them is its job.
 
+Each set can carry its own numbers. The top-level keys in `duty_placement.json` are the BASE and
+belong to the set `tuned_at` names; any other set stores only what it changes under `per_set`.
+`duty_grounds.json` splits the same way for `lift` and the per-plate rows, but not `by_duty` —
+which duty stands on which plate is a fact about the board, not about how big the sculpts are.
+`order` and `mark` do not split either, for the same reason.
+
+On the placement sheet the set buttons move every slider, a line beside them says whether you
+are looking at the base, a set's own numbers, or a set still inheriting, and **use the base**
+drops a row again. Unsaved edits are kept per set, so flipping between two sets to compare them
+shows each as you left it.
+
 Two rules pull against each other and the file says which wins. A piece is a plinth standing on a
 tile, so the players are levelled on the plinth first, targeting the narrowest so nothing is ever
 upscaled — the rule `ui/concept/build_browser.py` already uses for this kind. But the nominal size

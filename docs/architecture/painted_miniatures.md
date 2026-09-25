@@ -635,6 +635,57 @@ the sow page is played on one set and asks which.
 Old-named files left in `generated/` are ignored rather than half-read — the discovery is a
 pattern match, so a folder holding both namings offers only the sets that match the new one.
 
+## Each set carries its own numbers
+
+The placement file used to hold one spread, one set-back and one rank gap, used by every set.
+That held while every set was the same sculpts at a different size. It stopped holding the day
+`210_painted` wanted 100 / 0 / 65 against the base's 110 / 21 / 52 — and the way it stopped is
+worth recording, because it is the failure the shape now prevents: those numbers were tuned with
+`210_painted` on screen, the sheet wrote them to the only slot there was, and every other set
+silently started drawing with them.
+
+**Base plus overrides.** The top-level keys are the base, and they belong to the set `tuned_at`
+names. Every other set falls back to them until it is tuned, and is then stored under `per_set`
+as **only what it changes**. The alternative — a complete row for every set — was turned down
+for a reason worth keeping in view: there are ten sets, nobody tunes ten, and nine rows copied
+from a tenth is a file where you can no longer see which number was a decision.
+
+A set names whole values. A `frame` with only `w` in it, or a `depth` with only `full_at`, is
+refused rather than half-merged: a half-frame has no meaning, and guessing which half was meant
+is how a file grows a shape nobody wrote.
+
+Only the sliders split. `order` and `mark` stay on the document, because grouped-versus-arrival
+and which floor mark is drawn are conventions about reading a tile rather than facts about how
+big the sculpts are. In `duty_grounds.json` the same split covers `lift` and the per-plate rows —
+the plate *art* is shared, but how it is *stood* is not, since `lift` is a distance in real
+pixels and `scale` sizes a plate against figures that are 90 px tall in one set and 210 in
+another. `by_duty` deliberately does not split: which duty stands on which plate is a fact about
+the board, and letting it split would put one duty on two different grounds depending on which
+sculpts were loaded.
+
+**One resolver.** `settings_for(place, label)` and `ground_settings_for(plan, label)` live in
+`generate_duty_board_check.py`, and the generators hand each page a finished label→settings
+table. The pages switch sets live, so each would otherwise need its own copy of the merge, and
+three copies of a two-line rule is still three places for it to stop agreeing.
+
+**Saving.** The page sends what every set it is showing is currently tuned to; the server decides
+which slot each goes in, because that decision needs to know which set owns the base and that is
+a fact about the file rather than about the page. A set tuned back onto the base loses its row
+automatically. A set the page never showed is left exactly as it is — the page only knows the
+sets the tray has rendered, and a save from a half-rendered tray must not delete the tuning of a
+set that simply was not on screen.
+
+The offline download is the one place the rule exists twice, in
+`tools/ui_debug/duty_settings_split.js`, because a page opened as a file has no server to ask and
+a download has to *be* the document. The two copies are pinned against each other by a test that
+runs the JavaScript in node and compares it with the Python, so the day they diverge is the day
+a test fails rather than the day a save quietly loses a set's tuning.
+
+On the sheet, the set buttons move every slider, a line beside them says whether you are looking
+at the base, a set's own numbers or a set still inheriting, and **use the base** drops a row you
+did not want. Unsaved edits are kept per set, so flipping between two sets to compare them shows
+each as you left it.
+
 ## Which pose a tile draws
 
 The first grid column draws `_v1`, the second `_v2`, the third `_v3` — `dutyPoseForColumn` in

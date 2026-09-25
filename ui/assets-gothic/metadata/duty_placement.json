@@ -2,7 +2,7 @@
   "note": "How acolyte sculpts are arranged on a duty tile. Read by tools/ui_debug/generate_duty_board_check.py, generate_placement_sheet.py and generate_duty_sow.py. Edit the numbers here rather than in a page.",
   "tuned_at": "210_plastic",
   "tuned_at_note": "Which set the pages open on, and the set the numbers above were tuned against. A label, so the pixel height comes off the front of it -- 210. That mattered the day two sets were both 210 tall and the height alone could no longer say which sculpts were on screen.",
-  "one_set_on_purpose": "These are absolute distances in real device pixels and they are used at EVERY sculpt size, not scaled per size. 210 is the working size, so 210 is what they are tuned against. The consequence, stated rather than discovered: at 90 px the same numbers leave the figures standing well apart, because a spread of 110 is wider than a 90 px figure is tall. That is expected, not a fault - the smaller sizes are there to glance at, not to tune against.",
+  "one_set_on_purpose": "SUPERSEDED 2026-09-25, kept because the reasoning still applies to the base. These are absolute distances in real device pixels, not ratios, so they are not scaled per size: a set that wants different numbers now says so in `per_set` rather than deriving them. The consequence that made one shared set untenable: at 90 px a spread of 110 is wider than the figure is tall, and 210_painted wanted 100/0/65 against the base's 110/21/52 -- one file cannot hold both.",
   "sizes": [
     "210_plastic",
     "210_painted"
@@ -29,5 +29,23 @@
     "amount": 60,
     "full_at": 52
   },
-  "depth_note": "haze blends toward the tile colour and is ground-dependent; dark goes toward black and is not. full_at is the depth in real px at which the cue reaches about 63% of `amount` -- the cue is 1-exp(-y/full_at), so it is absolute and monotonic: a figure never becomes clearer because another moved further away, and a third rank still reads as deeper than a second."
+  "depth_note": "haze blends toward the tile colour and is ground-dependent; dark goes toward black and is not. full_at is the depth in real px at which the cue reaches about 63% of `amount` -- the cue is 1-exp(-y/full_at), so it is absolute and monotonic: a figure never becomes clearer because another moved further away, and a third rank still reads as deeper than a second.",
+  "per_set": {
+    "210_painted": {
+      "spread": 100,
+      "back": 0,
+      "rank": 65,
+      "frame": {
+        "w": 350,
+        "h": 318,
+        "drop": 40
+      },
+      "depth": {
+        "mode": "haze",
+        "amount": 60,
+        "full_at": 50
+      }
+    }
+  },
+  "per_set_note": "Numbers a single sculpt set carries of its own. The keys above are the BASE, and they belong to the set `tuned_at` names; every other set falls back to them until it is tuned. A set here names only what it changes, and names it WHOLE -- a frame with only `w` in it, or a depth with only `full_at`, is refused rather than half-merged, because a half-frame has no meaning and guessing which half was meant is how a file grows a shape nobody wrote. Only spread, back, rank, frame and depth can split: `order` and `mark` are conventions about reading a tile rather than facts about how big the sculpts are. 210_painted's row was tuned on 2026-09-25 and landed in the base slot by mistake, which is what made a per-set block necessary -- see docs/architecture/painted_miniatures.md."
 }

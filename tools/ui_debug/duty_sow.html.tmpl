@@ -131,11 +131,17 @@ __FORMATION__
 // -----------------------------------------------------------------------------------------------
 var CELLS = __CELLS__, EDGES = __EDGES__, FIGS = __FIGS__, SIZES = __SIZES__;
 var PLACE = __PLACEMENT__, OPENING = __OPENING__;
-var FRAME = __FRAME__, PLATES = __PLATES__, PLAN = __GROUNDPLAN__;
+var FRAME, PLATES = __PLATES__, PLAN = __GROUNDPLAN__;
+// Every offered set's numbers and plates, resolved in Python: the base with that set's own
+// laid over it. One merge, shared with the placement sheet that tuned them.
+var RULES = __RULES__, GPLANS = __GPLANS__;
 // How far the ground sits above the floor line, the same on all nine tiles. Tuned in the
 // placement sheet against the banner and saved with the rest of the plan; there is nothing to
 // set here. Positive is upward.
 var LIFT = PLAN.lift || 0;
+// WHICH DUTY STANDS ON WHICH PLATE IS NOT PER SET, so it is held once and every set's plan is
+// handed the SAME object -- restand a plate for one set and the assignment does not fork.
+var BY_DUTY = PLAN.by_duty || {};
 var BANNER_FS = __BANNERFS__, BANNER_TRACK = __BANNERTRACK__;
 var BANNER_TOP = __BANNERTOP__, BANNER_INK = __BANNERINK__;
 
@@ -143,9 +149,21 @@ var BANNER_TOP = __BANNERTOP__, BANNER_INK = __BANNERINK__;
 // purpose: the numbers are tuned next door in the placement sheet, saved, and this page shows
 // what they do to a sow. A control here would be a second place to set them, and the two would
 // disagree the first time one was nudged.
-var SPREAD = PLACE.spread, BACK = PLACE.back, RANK = PLACE.rank;
+// THE NUMBERS FOLLOW THE SET. Read once at load, they made the sculpt button change the
+// sculpts and nothing else -- so a set tuned to stand differently was drawn standing the way
+// the set before it did. `order` and `mark` stay on the document: both are conventions about
+// reading a tile rather than facts about how big the sculpts are.
 var ORDER = PLACE.order, MARK = PLACE.mark;
-var MODE = PLACE.depth.mode, SHADE = PLACE.depth.amount, FULL_AT = PLACE.depth.full_at;
+var SPREAD, BACK, RANK, MODE, SHADE, FULL_AT;
+function applySet(label){
+  var r = RULES[label] || {}, d = r.depth || {};
+  SPREAD = r.spread; BACK = r.back; RANK = r.rank;
+  MODE = d.mode; SHADE = d.amount; FULL_AT = d.full_at;
+  FRAME = r.frame || {w: 320, h: 390, drop: 40};
+  var g = GPLANS[label] || {};
+  PLAN = {by_duty: BY_DUTY, grounds: g.grounds || {}, lift: g.lift || 0};
+  LIFT = PLAN.lift;
+}
 var HAZE_STEPS = DUTY_HAZE.steps, HAZE_MAX = DUTY_HAZE.max;
 
 var DPR = devicePixelRatio || 1, px = function(v){ return (v / DPR) + "px"; };
@@ -153,6 +171,8 @@ var POS = CELLS.map(function(c){ return c.pos; });
 // A set LABEL -- `210_painted` -- not a pixel height: two sets can be 210 tall, so the height
 // stopped being able to say which sculpts are on screen.
 var SIZE = SIZES.indexOf(OPENING) >= 0 ? OPENING : SIZES[SIZES.length - 1];
+// The opening set's numbers in force before anything below reads them.
+applySet(SIZE);
 // WHICH POSE A TILE DRAWS is a property of where it sits -- dutyPoseForColumn in the shared
 // rules -- so it is read per tile inside build() rather than held here. The HAND is the one
 // place with no grid position of its own; see drawHand.
@@ -502,7 +522,7 @@ function pressAll(){
 }
 buttons(document.getElementById("szb"), SIZES, null,
         function(v){ return String(v).replace("_", " "); },
-        function(v){ SIZE = v; build(); });
+        function(v){ SIZE = v; applySet(SIZE); build(); });
 buttons(document.getElementById("seatb"), [0, 1, 2], null,
         function(v){ return "p" + (v + 1); },
         function(v){

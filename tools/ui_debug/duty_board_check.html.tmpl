@@ -81,6 +81,10 @@ __FORMATION__
 // -------------------------------------------------------------------------------------------
 var BANNERS = __BANNERS__, NAMES = __NAMES__, ICONS = __ICONS__, FIGS = __FIGS__;
 var SHAPES = __SHAPES__, SIZES = __SIZES__, D = __DEFAULTS__, PLACE = __PLACEMENT__;
+// EVERY SET'S OWN NUMBERS, already resolved: the base with that set's override laid over it.
+// Merged in Python so this page, the sow and the placement sheet cannot come to different
+// answers about what 210_painted's spread is.
+var RULES = __RULES__;
 var BANNER_TOP = __BANNERTOP__, BANNER_FS = __BANNERFS__,
     BANNER_TRACK = __BANNERTRACK__, BANNER_INK = __BANNERINK__;
 
@@ -98,11 +102,27 @@ var SIZE = HAVE.indexOf(D.size) >= 0 ? D.size : (HAVE[0] || "");
 // WHICH POSE A TILE DRAWS IS A PROPERTY OF WHERE IT SITS, not a setting: dutyPoseForColumn in
 // the shared rules turns a grid position into a pose, so nine tiles holding one seat are not
 // nine copies of one painting. There is no control for it because it is not a choice.
-// ONE SET, USED AT EVERY SIZE. The file is tuned at the working size and the other sizes take
-// the same numbers, so changing size changes the sculpts and nothing else.
-var SPREAD = PLACE.spread, BACK = PLACE.back, RANK = PLACE.rank;
-var SHADE = PLACE.depth.amount, FULL_AT = PLACE.depth.full_at || 52;
-var GROUPED = PLACE.order === "grouped", MODE = PLACE.depth.mode,
+// THE NUMBERS FOLLOW THE SET. They used to be read once at load and kept, so tuning one set
+// and switching to another drew the first set's arrangement under the second set's sculpts --
+// a comparison of two things that were never both true at once.
+//
+// `order` below does NOT follow the set: grouped-versus-arrival is a convention about reading a
+// tile rather than a fact about how big the sculpts are, so it stays on the document.
+var SPREAD, BACK, RANK, SHADE, FULL_AT, MODE;
+function applySet(label){
+  var r = RULES[label] || {}, d = r.depth || {};
+  SPREAD = r.spread; BACK = r.back; RANK = r.rank;
+  MODE = d.mode; SHADE = d.amount; FULL_AT = d.full_at || 52;
+  // The sliders show the numbers in force, so switching set moves them rather than leaving
+  // them reading the set you just left.
+  setSlider("sprd", SPREAD); setSlider("dep", BACK);
+  setSlider("rg", RANK); setSlider("sh", SHADE);
+}
+// Called here as well as on every switch, so the numbers are in force before anything below
+// reads them. setSlider no-ops while the controls do not exist yet; the slider() calls further
+// down then take their opening values from what this set.
+applySet(SIZE);
+var GROUPED = PLACE.order === "grouped",
     BANNER = true, ICON = true, shadow = true;
 var SEED = 1, BUD = 0, CELL = 0, zTop = 60;
 var BOARD = [], PINNED = {};
@@ -347,6 +367,7 @@ function press(sel, test){
   [].forEach.call(document.querySelectorAll(".sz"), function(b){
     b.onclick = function(){
       SIZE = b.dataset.set;
+      applySet(SIZE);
       press(".sz", function(x){ return x.dataset.set === SIZE; });
       build();
     };
@@ -405,12 +426,24 @@ $("breset").onclick = function(){ PINNED = {}; build(); };
 // rather than a retype -- which is where a number you liked on screen quietly fails to become
 // the number in the code.
 $("bdump").onclick  = function(){
-  var out = JSON.parse(JSON.stringify(PLACE));
-  out.spread = SPREAD; out.back = BACK; out.rank = RANK;
-  out.order = GROUPED ? "grouped" : "arrival";
-  out.depth = {mode: MODE, amount: SHADE, full_at: FULL_AT};
-  console.log("// ui/assets-gothic/metadata/duty_placement.json");
-  console.log(JSON.stringify(out, null, 2));
+  var tuned = {spread: SPREAD, back: BACK, rank: RANK,
+               depth: {mode: MODE, amount: SHADE, full_at: FULL_AT}};
+  // WHICH SLOT IT BELONGS IN, not just the numbers. A flat block was safe while every set
+  // shared one; now the same numbers mean different things depending on whether they are the
+  // base or one set's own, and pasting them into the wrong slot is a silent carry-over --
+  // which is the bug this whole split exists to stop.
+  if (SIZE === PLACE.tuned_at){
+    console.log("// duty_placement.json -- the BASE, because tuned_at names " + SIZE);
+    tuned.order = GROUPED ? "grouped" : "arrival";
+    console.log(JSON.stringify(tuned, null, 2));
+  } else {
+    console.log("// duty_placement.json -- under per_set, because the base belongs to "
+              + PLACE.tuned_at);
+    var block = {}; block[SIZE] = tuned;
+    console.log(JSON.stringify({per_set: block}, null, 2));
+    if (GROUPED !== (PLACE.order === "grouped"))
+      console.log("// note: `order` is not per-set. Change it on the document or not at all.");
+  }
 };
 
 addEventListener("keydown", function(e){
@@ -426,6 +459,7 @@ addEventListener("keydown", function(e){
   var n = parseInt(e.key, 10);
   if (n >= 1 && n <= HAVE.length){
     SIZE = HAVE[n - 1];
+    applySet(SIZE);
     press(".sz", function(x){ return x.dataset.set === SIZE; });
     build(); return;
   }

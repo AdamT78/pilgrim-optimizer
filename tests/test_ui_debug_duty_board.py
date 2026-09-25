@@ -360,8 +360,12 @@ def test_save_merges_rather_than_overwrites(sheet, mod, tmp_path, monkeypatch):
     monkeypatch.setattr(board, "PLACEMENT", f)
     before = _json.loads(f.read_text(encoding="utf-8"))
 
-    sheet.save_settings(board, {"spread": 88, "back": 25, "rank": 60, "order": "arrival",
-                                "depth": {"mode": "dark", "amount": 70, "full_at": 40}})
+    # The payload is per set now: the page sends what each set is tuned to and the server
+    # decides which slot each goes in. Tuning the set `tuned_at` names writes the base.
+    base_label = before["tuned_at"]
+    sheet.save_settings(board, {"order": "arrival", "sets": {base_label: {
+        "spread": 88, "back": 25, "rank": 60,
+        "depth": {"mode": "dark", "amount": 70, "full_at": 40}}}})
     after = _json.loads(f.read_text(encoding="utf-8"))
     assert after["spread"] == 88 and after["order"] == "arrival"
     assert after["depth"] == {"mode": "dark", "amount": 70, "full_at": 40}
@@ -376,13 +380,15 @@ def test_save_refuses_what_the_generator_would_refuse(sheet, mod, tmp_path, monk
     f = tmp_path / "duty_placement.json"
     f.write_text(mod.PLACEMENT.read_text(encoding="utf-8"), encoding="utf-8")
     monkeypatch.setattr(board, "PLACEMENT", f)
-    good = {"spread": 80, "back": 20, "rank": 50, "order": "grouped",
+    base_label = json.loads(f.read_text(encoding="utf-8"))["tuned_at"]
+    good = {"spread": 80, "back": 20, "rank": 50,
             "depth": {"mode": "haze", "amount": 60, "full_at": 52}}
 
-    def refuse(**over):
-        sent = dict(good, **over)
+    def refuse(order="grouped", label=None, **over):
+        sets = {base_label: dict(good)}
+        sets[label or base_label] = dict(good, **over)
         with pytest.raises(ValueError) as e:
-            sheet.save_settings(board, sent)
+            sheet.save_settings(board, {"order": order, "sets": sets})
         return str(e.value)
 
     assert "non-negative" in refuse(spread=-1)
@@ -392,6 +398,21 @@ def test_save_refuses_what_the_generator_would_refuse(sheet, mod, tmp_path, monk
     assert "haze, dark or off" in refuse(depth={"mode": "glow", "amount": 60, "full_at": 52})
     assert "0-100" in refuse(depth={"mode": "haze", "amount": 900, "full_at": 52})
     assert "positive whole number" in refuse(depth={"mode": "haze", "amount": 60, "full_at": 0})
+    # AND THE SAME RULES ON AN OVERRIDE. A set's own numbers go through the same door; validated
+    # for the base and waved through for everyone else would put the typo in per_set instead.
+    assert "non-negative" in refuse(label="120_plastic", spread=-1)
+    assert "haze, dark or off" in refuse(label="120_plastic",
+                                         depth={"mode": "glow", "amount": 60, "full_at": 52})
+    # A label that is not a label at all.
+    with pytest.raises(ValueError) as e:
+        sheet.save_settings(board, {"order": "grouped",
+                                    "sets": {base_label: dict(good), "enormous": dict(good)}})
+    assert "set label" in str(e.value)
+    # And a flat payload, which is what the page sent before this split: refused rather than
+    # guessed at, because there is no longer one set for it to have meant.
+    with pytest.raises(ValueError) as e:
+        sheet.save_settings(board, dict(good, order="grouped"))
+    assert "per set" in str(e.value)
     # and none of that reached the disk
     import json as _json
     assert _json.loads(f.read_text(encoding="utf-8"))["spread"] == \
@@ -671,6 +692,266 @@ def _in_node(expression):
     return json.loads(done.stdout)
 
 
+# ---------------------------------------------------------------- one set's own numbers
+
+
+def test_a_set_falls_back_to_the_base_until_it_is_tuned(mod):
+    """The shape Adam asked for: base numbers, plus a per-set row naming only what differs.
+
+    A full row per set was the alternative and was turned down for a reason worth keeping in
+    view -- there are ten sets, nobody tunes ten, and nine rows of numbers copied from a tenth
+    is a file where you cannot see which number was a decision.
+    """
+    place = mod.placement([])
+    base = mod.settings_for(place, "no_such_set")
+    for key in ("spread", "back", "rank", "frame", "depth"):
+        assert base[key] == place[key], "%s did not come through from the base" % key
+    for label, own in (place.get("per_set") or {}).items():
+        got = mod.settings_for(place, label)
+        for key in mod.PER_SET_KEYS:
+            want = own[key] if key in own else place[key]
+            assert got[key] == want, (
+                "%s resolved %s to %r, wanted %r" % (label, key, got[key], want))
+
+
+def test_the_resolver_hands_back_a_copy_rather_than_the_document(mod):
+    """A page holds what it is given and edits it. Handing back the file's own objects would
+    make tuning one set rewrite the base under every other set -- the carry-over this whole
+    change exists to stop, reintroduced one level down where nothing would see it."""
+    place = mod.placement([])
+    first = mod.settings_for(place, "210_painted")
+    first["frame"]["w"] = 9999
+    first["depth"]["full_at"] = 1
+    second = mod.settings_for(place, "210_painted")
+    assert second["frame"]["w"] != 9999, "the resolver handed out the document's own frame"
+    assert second["depth"]["full_at"] != 1, "the resolver handed out the document's own depth"
+    assert place["frame"]["w"] != 9999, "editing a resolved set reached the base"
+
+
+def test_a_set_may_not_carry_a_number_that_does_not_split(mod, tmp_path, monkeypatch):
+    """`order` and `mark` are conventions about reading a tile, not facts about how big the
+    sculpts are, so a set cannot have its own of either.
+
+    Refused rather than ignored. A key here that nothing reads is a number someone moved and
+    believes is in effect, which is worse than a number they know they cannot set.
+    """
+    good = json.loads(mod.PLACEMENT.read_text(encoding="utf-8"))
+    for bad in ({"order": "arrival"}, {"mark": "gild"}, {"sizes": ["210_plastic"]},
+                {"tuned_at": "90_plastic"}, {"per_set": {}}):
+        doctored = copy.deepcopy(good)
+        doctored["per_set"] = {"120_plastic": dict(bad)}
+        path = tmp_path / "duty_placement.json"
+        path.write_text(json.dumps(doctored), encoding="utf-8")
+        monkeypatch.setattr(mod, "PLACEMENT", path)
+        with pytest.raises(SystemExit) as caught:
+            mod.placement([])
+        assert "per_set" in str(caught.value), (
+            "the refusal does not say where the trouble is: %r -> %s" % (bad, caught.value))
+
+
+def test_a_set_may_not_carry_half_a_frame(mod, tmp_path, monkeypatch):
+    """An override carries WHOLE values. A frame with only `w` has no meaning, and guessing
+    which half was meant is how a file grows a shape nobody wrote."""
+    good = json.loads(mod.PLACEMENT.read_text(encoding="utf-8"))
+    for bad in ({"frame": {"w": 350}}, {"frame": {"h": 318}}, {"frame": {}},
+                {"depth": {"full_at": 50}}, {"depth": {"mode": "haze"}},
+                {"spread": -1}, {"rank": "wide"}):
+        doctored = copy.deepcopy(good)
+        doctored["per_set"] = {"120_plastic": dict(bad)}
+        path = tmp_path / "duty_placement.json"
+        path.write_text(json.dumps(doctored), encoding="utf-8")
+        monkeypatch.setattr(mod, "PLACEMENT", path)
+        with pytest.raises(SystemExit):
+            mod.placement([])
+    # ...and a whole one is accepted, so the test above is not passing by refusing everything.
+    doctored = copy.deepcopy(good)
+    doctored["per_set"] = {"120_plastic": {"frame": {"w": 350, "h": 318, "drop": 40}}}
+    path = tmp_path / "duty_placement.json"
+    path.write_text(json.dumps(doctored), encoding="utf-8")
+    monkeypatch.setattr(mod, "PLACEMENT", path)
+    assert mod.settings_for(mod.placement([]), "120_plastic")["frame"]["w"] == 350
+
+
+def test_which_duty_stands_on_which_plate_does_not_split(mod, tmp_path, monkeypatch):
+    """`by_duty` is a fact about the board, not about how tall the sculpts are. Letting it split
+    would put one duty on two different grounds depending on which sculpts were loaded."""
+    good = json.loads(mod.GROUND_PLAN.read_text(encoding="utf-8"))
+    doctored = copy.deepcopy(good)
+    doctored["per_set"] = {"120_plastic": {"by_duty": {"taxation": "slate_irregular"}}}
+    path = tmp_path / "duty_grounds.json"
+    path.write_text(json.dumps(doctored), encoding="utf-8")
+    monkeypatch.setattr(mod, "GROUND_PLAN", path)
+    with pytest.raises(SystemExit) as caught:
+        mod.ground_plan([])
+    assert "by_duty" in str(caught.value), "the refusal does not name the key"
+    assert "GROUND_PER_SET_KEYS" not in str(caught.value) or True
+    assert "by_duty" not in mod.GROUND_PER_SET_KEYS
+
+
+def test_a_set_may_only_restand_a_plate_that_exists(mod, tmp_path, monkeypatch):
+    """Tuning a plate name the base has never heard of is a typo that would sit in the file
+    drawing nothing, so it stops the load instead."""
+    good = json.loads(mod.GROUND_PLAN.read_text(encoding="utf-8"))
+    doctored = copy.deepcopy(good)
+    doctored["per_set"] = {"120_plastic": {"grounds": {"no_such_plate": {
+        "anchor": 25, "scale": 100, "dim": 55, "saturate": 65, "opacity": 100}}}}
+    path = tmp_path / "duty_grounds.json"
+    path.write_text(json.dumps(doctored), encoding="utf-8")
+    monkeypatch.setattr(mod, "GROUND_PLAN", path)
+    with pytest.raises(SystemExit) as caught:
+        mod.ground_plan([])
+    assert "no_such_plate" in str(caught.value)
+
+
+def test_a_set_restands_one_plate_without_touching_the_others(mod):
+    """Per plate, not per file: a set that moves one plate's anchor keeps the base's values for
+    the other five rather than having to repeat them."""
+    plan = mod.ground_plan([])
+    base = mod.ground_settings_for(plan, "no_such_set")
+    for label, own in (plan.get("per_set") or {}).items():
+        got = mod.ground_settings_for(plan, label)
+        tuned = set(own.get("grounds") or {})
+        for name in base["grounds"]:
+            if name in tuned:
+                assert got["grounds"][name] == own["grounds"][name]
+            else:
+                assert got["grounds"][name] == base["grounds"][name], (
+                    "%s: %s drifted from the base without being tuned" % (label, name))
+        assert got["by_duty"] == base["by_duty"], "by_duty forked per set"
+
+
+SPLIT_JS = ROOT / "tools" / "ui_debug" / "duty_settings_split.js"
+
+
+def _split_in_node(fn, args):
+    """Run one of the page's split functions against the real file, in node."""
+    script = ("const fs = require('fs');\n"
+              "eval(fs.readFileSync(%r, 'utf8'));\n"
+              "process.stdout.write(JSON.stringify(%s(%s)));\n"
+              % (str(SPLIT_JS), fn, ", ".join(json.dumps(a) for a in args)))
+    done = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True)
+    return json.loads(done.stdout)
+
+
+def test_the_offline_download_merges_into_the_ground_document_not_the_working_plan(sheet):
+    """The grounds file is as full of prose as the placement file, and it nearly lost all of it.
+
+    PLAN used to BE the ground document; per-set made it the RESOLVED plan for whichever set is
+    on screen -- by_duty, grounds and lift, and nothing else. documents() went on merging into
+    it, so an offline download wrote a grounds file with `note`, `grounds_note`, `lift_note`,
+    `by_duty_note` and the camera notes all gone. Caught by comparing the download against what
+    the server wrote for the same payload, which is the only way it shows: the file is valid,
+    loads fine, and is simply missing every line that says why.
+
+    So the page keeps the document and the working plan as two separate things, and this is the
+    guard on their staying separate.
+    """
+    src = sheet.TEMPLATE
+    assert "var DOC_GROUNDS = __GROUNDPLAN__;" in src, (
+        "the page no longer keeps the ground document apart from the plan it is working on")
+    docs = src[src.index("function documents()"):]
+    docs = docs[:docs.index("\n}")]
+    assert "for (k in DOC_GROUNDS)" in docs, (
+        "documents() builds the grounds file from something other than the document")
+    assert "for (k in PLAN)" not in docs, (
+        "documents() is merging into the resolved per-set plan again, which carries none of "
+        "the file's prose")
+    opened = src[src.index("var OPENED = {"):]
+    opened = opened[:opened.index("};") + 2]
+    assert "DOC_GROUNDS" in opened, (
+        "the before-picture is taken from the working plan, so the `changed` flag compares a "
+        "document against something that is not one")
+
+
+@needs_node
+def test_the_page_and_the_server_split_a_save_the_same_way(sheet, mod):
+    """The one duplication this change accepts, held to account.
+
+    The placement sheet can be opened as a file with no server behind it, and its save button
+    then has to hand over a DOCUMENT rather than the wire payload -- it handed over the payload
+    once, under the placement file's name, in a shape that file never has, and the download went
+    into the repo. So the base/override split has to exist in the page as well as in the server.
+
+    Two copies of a rule agree on the day they are written. This is the day they are checked:
+    the same payload goes through both, and the two documents have to match.
+    """
+    place = mod.placement([])
+    doc = json.loads(mod.PLACEMENT.read_text(encoding="utf-8"))
+    base_label = place["tuned_at"]
+    labels = [base_label] + sorted((place.get("per_set") or {})) + ["120_plastic"]
+    cases = [
+        # nothing changed at all
+        {label: mod.settings_for(place, label) for label in labels},
+        # a set that had no numbers of its own grows some
+        dict({label: mod.settings_for(place, label) for label in labels},
+             **{"120_plastic": dict(mod.settings_for(place, "120_plastic"), spread=88)}),
+        # a set that had its own is tuned back onto the base
+        dict({label: mod.settings_for(place, label) for label in labels},
+             **{lbl: copy.deepcopy(mod.settings_for(place, base_label))
+                for lbl in (place.get("per_set") or {})}),
+        # the base set itself moves, which must move the top of the file
+        dict({label: mod.settings_for(place, label) for label in labels},
+             **{base_label: dict(mod.settings_for(place, base_label), rank=61)}),
+    ]
+    for i, sent in enumerate(cases):
+        mine = sheet._split_base_and_overrides(
+            copy.deepcopy(doc), copy.deepcopy(sent), base_label,
+            mod.PER_SET_KEYS, sheet.PER_SET_NOTE)
+        theirs = _split_in_node("splitBaseAndOverrides",
+                                [doc, sent, base_label, list(mod.PER_SET_KEYS),
+                                 sheet.PER_SET_NOTE])
+        assert mine == theirs, (
+            "case %d: the page and the server disagree.\n  server: %s\n  page:   %s"
+            % (i, json.dumps(mine.get("per_set"), sort_keys=True),
+               json.dumps(theirs.get("per_set"), sort_keys=True)))
+    # And the cases are not all the same case: at least one must produce a different file.
+    assert len({json.dumps(_split_in_node("splitBaseAndOverrides",
+                                          [doc, c, base_label, list(mod.PER_SET_KEYS),
+                                           sheet.PER_SET_NOTE]).get("per_set"),
+                           sort_keys=True) for c in cases}) > 1, (
+        "every case produced the same per_set -- this test is not testing the split")
+
+
+@needs_node
+def test_the_page_and_the_server_split_the_plates_the_same_way(sheet, mod):
+    """The grounds' half of the pair above, where the split is per plate rather than per key."""
+    plan = mod.ground_plan([])
+    base_label = mod.placement([])["tuned_at"]
+    labels = [base_label] + sorted((plan.get("per_set") or {})) + ["120_plastic"]
+    plate = sorted(plan["grounds"])[0]
+
+    def sent(mutate=None):
+        out = {}
+        for label in labels:
+            g = mod.ground_settings_for(plan, label)
+            out[label] = {"lift": g["lift"], "grounds": copy.deepcopy(g["grounds"])}
+        if mutate:
+            mutate(out)
+        return out
+
+    def restand(out):
+        out["120_plastic"]["grounds"][plate]["anchor"] = 33
+
+    def relift(out):
+        out["120_plastic"]["lift"] = plan["lift"] + 11
+
+    for mutate in (None, restand, relift):
+        payload = sent(mutate)
+        doc = json.loads(mod.GROUND_PLAN.read_text(encoding="utf-8"))
+        mine = sheet._split_grounds_overrides(copy.deepcopy(doc), copy.deepcopy(payload),
+                                              base_label)
+        theirs = _split_in_node("splitGroundOverrides",
+                                [doc, payload, base_label, sheet.GROUND_PER_SET_NOTE])
+        assert mine == theirs, (
+            "the page and the server disagree about the plates.\n  server: %s\n  page:   %s"
+            % (json.dumps(mine.get("per_set"), sort_keys=True),
+               json.dumps(theirs.get("per_set"), sort_keys=True)))
+    # restanding one plate must store exactly that plate, or the comparison above is vacuous
+    doc = json.loads(mod.GROUND_PLAN.read_text(encoding="utf-8"))
+    after = sheet._split_grounds_overrides(copy.deepcopy(doc), sent(restand), base_label)
+    assert list(after["per_set"]["120_plastic"]["grounds"]) == [plate]
+
+
 # ---------------------------------------------------------------- sets, and a seat's poses
 
 
@@ -925,10 +1206,11 @@ def test_the_sheet_saves_the_frame_without_losing_the_prose(sheet, mod, tmp_path
     path = tmp_path / "duty_placement.json"
     path.write_text(mod.PLACEMENT.read_text(encoding="utf-8"), encoding="utf-8")
     monkeypatch.setattr(board, "PLACEMENT", path)
-    saved = sheet.save_settings(board, {
-        "spread": 110, "back": 21, "rank": 52, "order": "grouped",
+    base_label = json.loads(path.read_text(encoding="utf-8"))["tuned_at"]
+    saved = sheet.save_settings(board, {"order": "grouped", "sets": {base_label: {
+        "spread": 110, "back": 21, "rank": 52,
         "depth": {"mode": "haze", "amount": 60, "full_at": 52},
-        "frame": {"w": 400, "h": 500, "drop": -10}})
+        "frame": {"w": 400, "h": 500, "drop": -10}}}})
     assert saved["frame"] == {"w": 400, "h": 500, "drop": -10}
     assert "frame_note" in saved, "the explanation of what the frame is was thrown away"
     assert "note" in saved and "one_set_on_purpose" in saved
@@ -947,8 +1229,10 @@ def test_the_sheet_has_the_wheel_view_and_the_frame_controls(sheet):
     for wiring in ('\nslider("frw"', '\nslider("frh"', '\nslider("frd"'):
         assert wiring in src, "%s is not wired to anything" % wiring.strip()
     assert "function drawWheel" in src and "function drawCases" in src
-    assert "FRAME = __FRAME__" in src, (
-        "the frame is hardcoded in the page rather than coming from the file")
+    assert "__RULES__" in src and "loadVars(" in src, (
+        "the frame is hardcoded in the page rather than arriving with each set's numbers")
+    assert "__FRAME__" not in src, (
+        "the frame is still handed over once for the whole page; it is per set now")
 
 
 def test_the_wheel_view_does_not_grow_its_own_copy_of_the_nine_tiles(sheet):
@@ -1233,8 +1517,16 @@ def test_the_sheet_can_pick_a_ground(sheet):
         assert control in src, "%s is missing" % control
     for wiring in ("\nfunction setGround", "\nfunction syncGroundSliders"):
         assert wiring in src, "%s is not there" % wiring.strip()
-    assert "PLATES = __PLATES__" in src and "PLAN = __GROUNDPLAN__" in src, (
-        "the plates or the plan are hardcoded rather than read")
+    # The plan arrives as the ground DOCUMENT and is then resolved per set -- `PLAN` is the
+    # working copy for whichever set is on screen, `DOC_GROUNDS` is the file. Both spellings are
+    # checked, because the page needs each for a different job and losing either is a bug:
+    # without the document an offline download drops the file's prose, and without the working
+    # copy every set stands its plates the same way.
+    assert "PLATES = __PLATES__" in src, "the plates are hardcoded rather than read"
+    assert "DOC_GROUNDS = __GROUNDPLAN__" in src, (
+        "the ground document is hardcoded rather than read")
+    assert "PLAN = " in src and "GPLANS" in src, (
+        "the plan is no longer resolved per set, so every set stands its plates the same way")
 
 
 # ---------------------------------------------------------------- the button that did not save
@@ -1277,15 +1569,23 @@ def test_the_offline_button_downloads_only_what_moved(sheet):
     So the offline path compares each document against what the page opened with and hands over
     only the ones that moved.
 
-    The before-picture has to be frozen at load: PLAN is mutated while you work, because
-    settingsFor() writes a new plate's defaults into it, so it cannot be its own baseline.
+    The before-picture has to be a FROZEN COPY OF THE DOCUMENT, and both halves of that matter.
+    Frozen, because the working plan is mutated while you work -- settingsFor() writes a new
+    plate's defaults into it -- so a baseline that aliased it could never differ. Of the
+    document, because since the numbers went per set the working plan is no longer the document:
+    it is the resolved by_duty/grounds/lift for whichever set is on screen, and comparing a
+    document against that reports every line of the file's prose as a change.
     """
     src = sheet.TEMPLATE
     assert "var OPENED = " in src, "nothing records what the two files looked like on opening"
     opened = src[src.index("var OPENED = "):]
     opened = opened[:opened.index(";\n")]
-    assert "JSON.parse(JSON.stringify(PLAN))" in opened, (
-        "the baseline aliases PLAN, which is mutated as you work -- it could never differ")
+    for doc in ("DOC_PLACEMENT", "DOC_GROUNDS"):
+        assert "JSON.parse(JSON.stringify(%s))" % doc in opened, (
+            "the baseline for %s is not a frozen copy of the document" % doc)
+    assert "JSON.stringify(PLAN)" not in opened, (
+        "the baseline aliases the working plan, which is both mutated as you work and no "
+        "longer the document")
     docs = src[src.index("function documents()"):]
     docs = docs[:docs.index("\n}")]
     assert docs.count("changed:") == 2, "not every document is compared against its baseline"
@@ -1308,12 +1608,17 @@ def test_the_two_save_paths_merge_the_same_keys(sheet):
         "the page has no copy of the placement document to merge into, so it cannot build it")
     docs = src[src.index("function documents()"):]
     docs = docs[:docs.index("\n}")]
-    for key in ("SAVE_KEYS.placement[i]", "SAVE_KEYS.grounds[i]",
-                "SAVE_KEYS.placement_file", "SAVE_KEYS.grounds_file"):
+    for key in ("SAVE_KEYS.per_set", "SAVE_KEYS.placement_file", "SAVE_KEYS.grounds_file",
+                "SAVE_KEYS.per_set_note", "SAVE_KEYS.ground_per_set_note"):
         assert key in docs, "documents() does not go through %s" % key
     for literal in ("spread", "back", "rank", "by_duty"):
         assert '"%s"' % literal not in docs, (
             "documents() names %r itself instead of taking the generator's list" % literal)
+    # THE SPLIT ITSELF IS THE OTHER HALF, and it is a second copy of the server's -- see
+    # test_the_page_and_the_server_split_a_save_the_same_way, which holds the two together.
+    assert "splitBaseAndOverrides(" in docs and "splitGroundOverrides(" in docs, (
+        "documents() no longer applies the base/override split, so an offline download would "
+        "write a flat file the reader cannot make sense of")
 
 
 @pytest.mark.slow                      # ~29s: builds a whole page
@@ -1362,17 +1667,27 @@ def test_save_settings_writes_exactly_the_keys_it_advertises(sheet, mod, tmp_pat
     original = json.loads(mod.PLACEMENT.read_text(encoding="utf-8"))
     path.write_text(json.dumps(original), encoding="utf-8")
     monkeypatch.setattr(board, "PLACEMENT", path)
-    sent = {"spread": 97, "back": 13, "rank": 41, "order": "arrival",
-            "depth": {"mode": "dark", "amount": 33, "full_at": 44},
-            "frame": {"w": 301, "h": 402, "drop": -7}}
+    base_label = original["tuned_at"]
+    sent = {"order": "arrival", "sets": {base_label: {
+        "spread": 97, "back": 13, "rank": 41,
+        "depth": {"mode": "dark", "amount": 33, "full_at": 44},
+        "frame": {"w": 301, "h": 402, "drop": -7}}}}
     saved = sheet.save_settings(board, sent)
     moved = {k for k in saved if saved[k] != original.get(k)}
-    assert moved <= set(sheet.PLACEMENT_KEYS), (
-        "%s moved but is not named by PLACEMENT_KEYS" % sorted(moved - set(sheet.PLACEMENT_KEYS)))
-    assert moved == set(sheet.PLACEMENT_KEYS), (
+    # `per_set` may also move, because dropping a row that now matches the base is part of what
+    # a save does. It is named here rather than added to PLACEMENT_KEYS, which is the list of
+    # things a SET carries -- per_set is the container those live in, not one of them.
+    allowed = set(sheet.PLACEMENT_KEYS) | {"per_set"}
+    assert moved <= allowed, (
+        "%s moved but nothing names it" % sorted(moved - allowed))
+    assert set(sheet.PLACEMENT_KEYS) <= moved, (
         "%s is named by PLACEMENT_KEYS but a save does not move it"
         % sorted(set(sheet.PLACEMENT_KEYS) - moved))
     assert "tuned_at" in saved, "the prose and the untouched keys were thrown away"
+    # AND A SET'S OWN NUMBERS ARE NOT SILENTLY PROMOTED. Sending only the base must leave every
+    # other set's row exactly as it was -- the page only knows the sets the tray has rendered.
+    assert (saved.get("per_set") or {}) == (original.get("per_set") or {}), (
+        "a save that named one set changed another's row")
 
 
 def test_the_page_says_it_cannot_save_before_the_tuning_not_after(sheet):

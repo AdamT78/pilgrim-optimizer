@@ -198,8 +198,14 @@ def main():
             ("__SIZES__", json.dumps(sizes)),
             ("__OPENING__", json.dumps(place.get("tuned_at", sizes[-1]))),
             ("__PLACEMENT__", json.dumps(place)),
-            ("__FRAME__", json.dumps(place.get("frame")
-                                     or {"w": 320, "h": 390, "drop": 40})),
+            # EVERY OFFERED SET'S NUMBERS AND PLATES, resolved here. This page switches sets
+            # with a button, so it needs an answer per set rather than the base and the rule
+            # for merging it -- and one resolver means it cannot disagree with the sheet that
+            # tuned them.
+            ("__RULES__", json.dumps({label: board.settings_for(place, label)
+                                      for label in sizes})),
+            ("__GPLANS__", json.dumps({label: board.ground_settings_for(plan, label)
+                                       for label in sizes})),
             ("__PLATES__", json.dumps(plates)),
             ("__GROUNDPLAN__", json.dumps(plan)),
             ("__BANNERTOP__", json.dumps(board.BANNER_TOP)),
@@ -217,9 +223,11 @@ def main():
     branch = sorted(p for p in board_grid() if len(edges.get(p, [])) > 1)
     print("  board from %s: %d positions, %d of them a choice (%s)"
           % (BOARD_JSON.name, len(board_grid()), len(branch), ", ".join(branch)))
+    own = set(place.get("per_set") or {}) | set(plan.get("per_set") or {})
     print("  sculpt sets offered: %s  (named by %s)"
-          % (", ".join("%s [%d pose%s]"
-                       % (s, len(figs[s][0]), "" if len(figs[s][0]) == 1 else "s")
+          % (", ".join("%s [%d pose%s]%s"
+                       % (s, len(figs[s][0]), "" if len(figs[s][0]) == 1 else "s",
+                          " own numbers" if s in own else "")
                        for s in sizes), board.PLACEMENT.name))
     frame = place.get("frame") or {}
     if frame:
