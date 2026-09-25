@@ -108,6 +108,16 @@ html,body{margin:0;height:100%;overflow:hidden;background:#0d0b08;color:#8b8071;
 #ui button[aria-pressed=true]{background:#c9b27a;border-color:#c9b27a;color:#1a1610}
 #ui button[aria-disabled=true]{cursor:default;opacity:.85}
 #ui button[aria-disabled=true]:hover{border-color:#c9b27a}
+/* The sculpt-set dropdown. Styled to sit with the buttons rather than to look like a form
+   control, since it is the same kind of choice as the ones beside it. */
+.setpick{font:inherit;color:#c9b27a;background:#1c1811;border:1px solid #332c20;
+  border-radius:3px;padding:3px 6px;cursor:pointer;
+  /* Fits whatever column it is put in. A fixed max-width was 176px, which suited the
+     sow page's 252px panel and overflowed the placement sheet's 227px one by 24. */
+  max-width:100%;min-width:0;box-sizing:border-box}
+.setpick:hover{border-color:#5a4c36}
+.setpick optgroup{color:#5f5646;font-style:normal}
+.setpick option{color:#8b8071;background:#1c1811}
 #ui .lab{color:#4f483d;min-width:46px}
 #ui .hint{color:#3f3930;line-height:1.5}
 </style>
@@ -128,14 +138,25 @@ html,body{margin:0;height:100%;overflow:hidden;background:#0d0b08;color:#8b8071;
 <script>
 // ---- the drawing rules, inlined from tools/ui_debug/duty_sculpt_rules.js -----------------------
 __FORMATION__
+// ---- the set dropdown, inlined from tools/ui_debug/duty_set_picker.js -------------------
+__SETPICKER__
 // -----------------------------------------------------------------------------------------------
 var CELLS = __CELLS__, EDGES = __EDGES__, FIGS = __FIGS__, SIZES = __SIZES__;
+// EVERY RENDERED SET IS REACHABLE; `sizes` only says which are grouped as the played ones.
+// It used to decide which existed here, and a set tuned next door was invisible as a result.
+var PLAYED = __PLAYED__, BASE_SET = __BASESET__, OWN_SETS = __OWNSETS__;
 var PLACE = __PLACEMENT__, OPENING = __OPENING__;
-var FRAME = __FRAME__, PLATES = __PLATES__, PLAN = __GROUNDPLAN__;
+var FRAME, PLATES = __PLATES__, PLAN = __GROUNDPLAN__;
+// Every offered set's numbers and plates, resolved in Python: the base with that set's own
+// laid over it. One merge, shared with the placement sheet that tuned them.
+var RULES = __RULES__, GPLANS = __GPLANS__;
 // How far the ground sits above the floor line, the same on all nine tiles. Tuned in the
 // placement sheet against the banner and saved with the rest of the plan; there is nothing to
 // set here. Positive is upward.
 var LIFT = PLAN.lift || 0;
+// WHICH DUTY STANDS ON WHICH PLATE IS NOT PER SET, so it is held once and every set's plan is
+// handed the SAME object -- restand a plate for one set and the assignment does not fork.
+var BY_DUTY = PLAN.by_duty || {};
 var BANNER_FS = __BANNERFS__, BANNER_TRACK = __BANNERTRACK__;
 var BANNER_TOP = __BANNERTOP__, BANNER_INK = __BANNERINK__;
 
@@ -143,14 +164,34 @@ var BANNER_TOP = __BANNERTOP__, BANNER_INK = __BANNERINK__;
 // purpose: the numbers are tuned next door in the placement sheet, saved, and this page shows
 // what they do to a sow. A control here would be a second place to set them, and the two would
 // disagree the first time one was nudged.
-var SPREAD = PLACE.spread, BACK = PLACE.back, RANK = PLACE.rank;
+// THE NUMBERS FOLLOW THE SET. Read once at load, they made the sculpt button change the
+// sculpts and nothing else -- so a set tuned to stand differently was drawn standing the way
+// the set before it did. `order` and `mark` stay on the document: both are conventions about
+// reading a tile rather than facts about how big the sculpts are.
 var ORDER = PLACE.order, MARK = PLACE.mark;
-var MODE = PLACE.depth.mode, SHADE = PLACE.depth.amount, FULL_AT = PLACE.depth.full_at;
+var SPREAD, BACK, RANK, MODE, SHADE, FULL_AT, WIDE;
+function applySet(label){
+  var r = RULES[label] || {}, d = r.depth || {};
+  SPREAD = r.spread; BACK = r.back; RANK = r.rank;
+  MODE = d.mode; SHADE = d.amount; FULL_AT = d.full_at;
+  WIDE = !!r.width_across_ranks;
+  FRAME = r.frame || {w: 320, h: 390, drop: 40};
+  var g = GPLANS[label] || {};
+  PLAN = {by_duty: BY_DUTY, grounds: g.grounds || {}, lift: g.lift || 0};
+  LIFT = PLAN.lift;
+}
 var HAZE_STEPS = DUTY_HAZE.steps, HAZE_MAX = DUTY_HAZE.max;
 
 var DPR = devicePixelRatio || 1, px = function(v){ return (v / DPR) + "px"; };
 var POS = CELLS.map(function(c){ return c.pos; });
+// A set LABEL -- `210_painted` -- not a pixel height: two sets can be 210 tall, so the height
+// stopped being able to say which sculpts are on screen.
 var SIZE = SIZES.indexOf(OPENING) >= 0 ? OPENING : SIZES[SIZES.length - 1];
+// The opening set's numbers in force before anything below reads them.
+applySet(SIZE);
+// WHICH POSE A TILE DRAWS is a property of where it sits -- dutyPoseForColumn in the shared
+// rules -- so it is read per tile inside build() rather than held here. The HAND is the one
+// place with no grid position of its own; see drawHand.
 var SEAT = 0, shadow = true, GAUGE = false;
 
 // THE FORMATION ONLY KNOWS FIVE. A tile already holding five is not lit, because there is no
@@ -212,7 +253,13 @@ var BUD = 0, CELL = 0, FIELD = 0, TIGHT = 0, CAP = null, TOTALH = 0, FOOTW = 0;
 function build(){
   BUD = Math.floor(Math.min(innerWidth, innerHeight) * DPR);
   CELL = BUD / 3;
-  var FIG = FIGS[String(SIZE)], figH = Math.max.apply(null, FIG.map(function(f){ return f.h; }));
+  // Over every seat AND every pose: the field has to clear whatever might be drawn in it, and a
+  // height taken off one pose would clip another the moment a tile asked for it.
+  var FIG = FIGS[SIZE] || [], figH = dutySetHeight(FIG);
+  // The footprint marks are sized off the FIRST SEAT, because they are a mark on the floor
+  // rather than a figure -- one size for the whole tile, not one per occupant. Measured over
+  // the set rather than at one pose, so the mark does not change size from column to column.
+  var FOOTW = dutySetWidth([FIG[0] || []]);
   // Where the parts of a tile sit comes from the shared rules, not from here: this was one of
   // two copies that had already drifted apart on the gap above the banner.
   var L = dutyTileLayout(CELL, figH, RANK, BACK, {icons: false});
@@ -228,9 +275,10 @@ function build(){
   TIGHT = total > CELL ? Math.ceil((total - CELL) / DPR) : 0;
   // One capacity box for the whole board: the formation and the sculpt set are the same on
   // every tile, so the room a full tile needs is the same on every tile too.
-  CAP = dutyCapacityBox(SLOTS, SPREAD, BACK, RANK,
-                        Math.max.apply(null, FIG.map(function(f){ return f.w; })),
-                        Math.max.apply(null, FIG.map(function(f){ return f.h; })));
+  // Over every seat AND every pose, for the same reason the field height is: the box has to
+  // hold the worst case the set can produce, not the case pose 1 happens to be.
+  CAP = dutyCapacityBox(SLOTS, SPREAD, BACK, RANK, dutySetWidth(FIG), dutySetHeight(FIG),
+                        WIDE);
   var lit = legal();
 
   var h = "";
@@ -260,13 +308,13 @@ function build(){
       // seat was not already the highest on the tile.
       var after = queueFor(tile.concat([SEAT]));
       var nextIdx = after.indexOf(SEAT) + countsOf(tile)[SEAT];
-      dutyFormation(n + 1, SPREAD, BACK, RANK)
+      dutyFormation(n + 1, SPREAD, BACK, RANK, WIDE)
         .sort(function(a, b){ return a.x - b.x; })
         .forEach(function(s, j){
           h += '<div class="mark foot ' + (j === nextIdx ? "next" : "later") + '" style="left:'
-             + px(CELL / 2 + s.x - FIG[0].w * 0.42) + ';top:'
-             + px(top + FIELD - s.y - FIG[0].w * 0.20) + ';width:' + px(FIG[0].w * 0.84)
-             + ';height:' + px(FIG[0].w * 0.30) + '"></div>';
+             + px(CELL / 2 + s.x - FOOTW * 0.42) + ';top:'
+             + px(top + FIELD - s.y - FOOTW * 0.20) + ';width:' + px(FOOTW * 0.84)
+             + ';height:' + px(FOOTW * 0.30) + '"></div>';
         });
     }
     // `gild` draws no geometry at all -- the banner lights, from CSS.
@@ -275,11 +323,12 @@ function build(){
        + px(FIELD) + '">';
     var q = queueFor(tile), placed;
     // Painter's order by foot, so a sculpt standing further back never covers a nearer one.
-    placed = dutyFormation(n, SPREAD, BACK, RANK)
+    placed = dutyFormation(n, SPREAD, BACK, RANK, WIDE)
                    .sort(function(a, b){ return a.x - b.x; })
                    .map(function(p, j){ return {x: p.x, y: p.y, seat: q[j]}; });
     placed.slice().sort(function(a, b){ return b.y - a.y || a.x - b.x; }).forEach(function(p){
-      var f = FIG[p.seat];
+      var f = dutyPose(FIG[p.seat], dutyPoseForColumn(i));
+      if (!f) return;                     // no art for this seat in this set: draws empty
       h += '<div class=fig style="left:' + px(CELL / 2 + p.x - f.w / 2) + ';top:'
          + px(FIELD - f.h - p.y) + ';width:' + px(f.w) + ';height:' + px(f.h)
          + ';filter:' + figFilter(p.y) + '"><img src="' + f.uri + '"></div>';
@@ -344,7 +393,10 @@ function build(){
 
 // ---- the hand ---------------------------------------------------------------------------------
 function drawHand(){
-  var el = document.getElementById("hand"), f = FIGS[String(SIZE)][SEAT];
+  // THE HAND HAS NO COLUMN. It is a figure in your hand rather than a figure on a tile, so
+  // there is no grid position to ask -- it shows the first pose and changes when the tile it
+  // lands on decides. Anything else would promise the hand's pose predicts where it is going.
+  var el = document.getElementById("hand"), f = dutyPose((FIGS[SIZE] || [])[SEAT], 0);
   el.classList.toggle("empty", HAND === 0);
   var sq = BUD / DPR, left = (innerWidth - sq) / 2;
   el.style.left = Math.max(8, left - 108) + "px";
@@ -430,7 +482,7 @@ function say(){
     && (EDGES[POS[AT]] || []).length > names.length;
   document.getElementById("note").innerHTML =
     "SOW BY HAND, true size at <b>" + DPR.toFixed(2) + "x</b>\n"
-  + "sculpt  <b>" + FIGS[String(SIZE)][0].h + "</b> real px\n"
+  + "sculpt  <b>" + dutySetHeight(FIGS[SIZE] || []) + "</b> real px\n"
   + "seat    <b>p" + (SEAT + 1) + "</b>, <b>" + mine + "</b> on the wheel\n\n"
   + (HAND === 0
       ? "click one of your tiles to lift\nits acolytes into the hand."
@@ -474,20 +526,17 @@ function buttons(host, values, current, label, choose){
   host._values = values; host._current = current;
 }
 function pressAll(){
-  [["szb", function(){ return SIZE; }], ["seatb", function(){ return SEAT; }]]
-    .forEach(function(pair){
-      var host = document.getElementById(pair[0]);
-      [].forEach.call(host.children, function(b){
-        b.setAttribute("aria-pressed", b._value === pair[1]() ? "true" : "false");
-        // A row with one button has nothing to switch to. It still names the size, which is
-        // worth saying, so it is drawn and simply does not pretend to be a choice.
-        if (host._values.length < 2) b.setAttribute("aria-disabled", "true");
-      });
-    });
+  // The seat row is still buttons -- three of them, and which seat you are playing is worth
+  // seeing without opening anything. The sculpt set is a select and carries its own state, so
+  // it is moved rather than pressed; dutySetPickerShow says why that is not automatic.
+  var host = document.getElementById("seatb");
+  [].forEach.call(host.children, function(b){
+    b.setAttribute("aria-pressed", b._value === SEAT ? "true" : "false"); });
+  dutySetPickerShow(document.getElementById("szb"), SIZE);
 }
-buttons(document.getElementById("szb"), SIZES, null,
-        function(v){ return String(v); },
-        function(v){ SIZE = v; build(); });
+dutySetPicker(document.getElementById("szb"), {
+  all: SIZES, played: PLAYED, base: BASE_SET, own: OWN_SETS, value: SIZE,
+  choose: function(v){ SIZE = v; applySet(SIZE); build(); }});
 buttons(document.getElementById("seatb"), [0, 1, 2], null,
         function(v){ return "p" + (v + 1); },
         function(v){

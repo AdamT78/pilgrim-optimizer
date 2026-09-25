@@ -1,17 +1,21 @@
 {
   "note": "How acolyte sculpts are arranged on a duty tile. Read by tools/ui_debug/generate_duty_board_check.py, generate_placement_sheet.py and generate_duty_sow.py. Edit the numbers here rather than in a page.",
-  "tuned_at": 210,
-  "one_set_on_purpose": "These are absolute distances in real device pixels and they are used at EVERY sculpt size, not scaled per size. 210 is the working size, so 210 is what they are tuned against. The consequence, stated rather than discovered: at 90 px the same numbers leave the figures standing well apart, because a spread of 110 is wider than a 90 px figure is tall. That is expected, not a fault - the smaller sizes are there to glance at, not to tune against.",
+  "tuned_at": "210_plastic",
+  "tuned_at_note": "Which set the pages open on, and the set the numbers above were tuned against. A label, so the pixel height comes off the front of it -- 210. That mattered the day two sets were both 210 tall and the height alone could no longer say which sculpts were on screen.",
+  "one_set_on_purpose": "SUPERSEDED 2026-09-25, kept because the reasoning still applies to the base. These are absolute distances in real device pixels, not ratios, so they are not scaled per size: a set that wants different numbers now says so in `per_set` rather than deriving them. The consequence that made one shared set untenable: at 90 px a spread of 110 is wider than the figure is tall, and 210_painted wanted 100/0/65 against the base's 110/21/52 -- one file cannot hold both.",
   "sizes": [
-    210
+    "210_plastic",
+    "210_painted"
   ],
-  "sizes_note": "Which sculpt sizes the sow page offers a button for. The placement sheet ignores this and shows every size the tray has rendered, because comparing them is what it is for; the sow page is played at one size and asks which. NOT a per-size table of numbers -- there is still one spread, one set-back and one rank gap, used whatever is on screen. Name another size here and its button appears; the tray has to have rendered it first (tools/ui_debug/make_tray_figures.py).",
+  "sizes_note": "Which sculpt SETS the sow page offers a button for, by label rather than by pixel height: 210_plastic and 210_painted are both 210 px tall, so the height stopped being able to name one. The placement sheet ignores this list and shows every set the tray has rendered, because comparing them is what it is for; the sow page is played on one set and asks which. NOT a per-set table of numbers -- there is still one spread, one set-back and one rank gap, used whatever is on screen. Name another set here and its button appears; the tray has to have rendered it first (tools/ui_debug/make_tray_figures.py --kind <kind>). A set carries one pose per seat or three; the pages pick with dutyPose() and never branch on which.",
   "spread": 110,
   "back": 21,
   "rank": 52,
-  "spread_note": "Distance between neighbouring sculpts in a rank, centre to centre. The sculpts are not one width: measured at 210 px tall, three of the four are 91 px across and the fourth is 108, so any spread means two different things depending on who is standing there. At 110 the three narrow figures stand about a fifth of a width apart and the wide one just touches its neighbour -- 110 is roughly where overlap stops for every seat rather than for most of them.",
+  "spread_note": "Distance between neighbouring sculpts, centre to centre. What counts as neighbouring depends on `width_across_ranks` below: off, it is the gap WITHIN a rank and the back rank sits in the front rank's gaps; on, it is the gap between any two neighbours whichever rank they stand on. Two and three acolytes are identical either way, because one rank has nothing to interleave. The sculpts are not one width -- measured at 210 px tall, three of the four are 91 px across and the fourth is 108 -- so any spread means two different things depending on who is standing there.",
   "back_note": "How far the middle of three is set back from the other two. A flat row of three identical silhouettes is the hardest case to read, and lifting the centre one breaks the repeat.",
   "rank_note": "How far a back rank stands behind the front one, used at four and five sculpts.",
+  "width_across_ranks": false,
+  "width_across_ranks_note": "The placement sheet's 'calculate width across ranks' checkbox, off by default. Off, `spread` is the gap between neighbours within a rank: four and five acolytes stand in two ranks with the back one offset into the front rank's gaps, which keeps the group narrow and makes it read denser than two or three at the same spread. On, `spread` is the gap between any two neighbours whichever rank they stand on, so nothing sits in anybody's horizontal gap and four and five read as evenly spaced -- at roughly twice the width. Tried as the only behaviour on 2026-09-25 and reverted the same day: on the tuned plates the group burst out of its frame and past the tile, with the outer acolytes hanging over the neighbouring cell. It is a setting because a wider ground plate can carry it and a narrow one cannot. Per set, so the sets whose plates can carry it are the ones that get it.",
   "frame": {
     "w": 320,
     "h": 390,
@@ -27,5 +31,38 @@
     "amount": 60,
     "full_at": 52
   },
-  "depth_note": "haze blends toward the tile colour and is ground-dependent; dark goes toward black and is not. full_at is the depth in real px at which the cue reaches about 63% of `amount` -- the cue is 1-exp(-y/full_at), so it is absolute and monotonic: a figure never becomes clearer because another moved further away, and a third rank still reads as deeper than a second."
+  "depth_note": "haze blends toward the tile colour and is ground-dependent; dark goes toward black and is not. full_at is the depth in real px at which the cue reaches about 63% of `amount` -- the cue is 1-exp(-y/full_at), so it is absolute and monotonic: a figure never becomes clearer because another moved further away, and a third rank still reads as deeper than a second.",
+  "per_set": {
+    "210_painted": {
+      "spread": 100,
+      "back": 0,
+      "rank": 65,
+      "frame": {
+        "w": 350,
+        "h": 326,
+        "drop": 35
+      },
+      "depth": {
+        "mode": "haze",
+        "amount": 60,
+        "full_at": 50
+      }
+    },
+    "150_painted": {
+      "spread": 71,
+      "back": 20,
+      "rank": 49,
+      "frame": {
+        "w": 269,
+        "h": 199,
+        "drop": -1
+      },
+      "depth": {
+        "mode": "haze",
+        "amount": 70,
+        "full_at": 52
+      }
+    }
+  },
+  "per_set_note": "Numbers a single sculpt set carries of its own. The keys above are the BASE, and they belong to the set `tuned_at` names; every other set falls back to them until it is tuned. A set here names only what it changes, and names it WHOLE -- a frame with only `w` in it, or a depth with only `full_at`, is refused rather than half-merged, because a half-frame has no meaning and guessing which half was meant is how a file grows a shape nobody wrote. Only spread, back, rank, frame and depth can split: `order` and `mark` are conventions about reading a tile rather than facts about how big the sculpts are. 210_painted's row was tuned on 2026-09-25 and landed in the base slot by mistake, which is what made a per-set block necessary -- see docs/architecture/painted_miniatures.md."
 }

@@ -27,7 +27,9 @@ Spread, set-back, rank gap, seating order, the marking and the whole depth cue c
 `ui/assets-gothic/metadata/duty_placement.json`, which is tuned next door in the placement sheet
 and saved from it. A control here would be a second place to set the same numbers, and the two
 would disagree the first time one was nudged. The only controls are which seat you are playing
-and which sculpt size is on screen -- and the sizes on offer are the ones the file names.
+and which sculpt SET is on screen -- and the sets on offer are the ones the file names. A set
+is a label (`210_plastic`, `210_painted`) rather than a pixel height, because two sets can be
+210 tall; the height is a fact about the label rather than the name of it.
 
 NOTHING IS COPIED FROM ITS NEIGHBOURS
 
@@ -50,6 +52,8 @@ OUT = HERE / "generated" / "duty_sow.html"
 
 BOARD_JSON = ROOT / "configs" / "board.json"
 RULES_JS = HERE / "duty_sculpt_rules.js"
+# The set dropdown, shared with the placement sheet so the two group the sets the same way.
+PICKER_JS = HERE / "duty_set_picker.js"
 TEMPLATE = HERE / "duty_sow.html.tmpl"
 
 
@@ -115,25 +119,32 @@ def graph():
 
 
 def offered(place, figs, notes):
-    """Which sculpt sizes get a button.
+    """Which sculpt sets the page can show, and which of them the file calls the played ones.
 
-    The file names them. Today that is one size and the row is a label with a border round it,
-    which is the honest way to draw a choice of one. When the file names another, the button
-    appears here with no change to the page -- which is the whole reason the list is in the file
-    rather than in this script.
+    Returns (every set that has art, the subset `sizes` names). BOTH, because `sizes` stopped
+    being a filter on 2026-09-25 and became a grouping.
 
-    A size the file names but the tray has never rendered is dropped with a note rather than
-    offered: a button that produces an empty board is worse than a button that is absent.
+    IT WAS A FILTER AND IT HID REAL WORK. The file named two sets, the tray had rendered ten,
+    and a set tuned in the placement sheet -- 150_painted, with its own spread, set-back, rank
+    and frame, and its own lift for the plates -- simply did not appear here, with nothing on
+    the page to say it existed. A control that silently omits the thing you just tuned is worse
+    than a long list. So everything rendered is reachable, and `sizes` says which ones are the
+    played sizes rather than which ones you are allowed to look at.
+
+    A set the file names but the tray has never rendered is still dropped with a note: there is
+    no art to draw, and an entry that produces an empty board is worse than one that is absent.
     """
+    board = _board_module()
+    have = sorted(figs, key=board.set_sort)
     declared = place.get("sizes") or [place.get("tuned_at")]
-    have = []
-    for px in declared:
-        if str(px) in figs:
-            have.append(px)
+    played = []
+    for label in declared:
+        if label in figs:
+            played.append(label)
         else:
-            notes.append("%s px is named by the placement file but has no art -- left out "
-                         "(run tools/ui_debug/make_tray_figures.py)" % px)
-    return sorted(have)
+            notes.append("%s is named by the placement file but has no art -- left out of the "
+                         "played group (run tools/ui_debug/make_tray_figures.py)" % label)
+    return have, sorted(played, key=board.set_sort)
 
 
 def main():
@@ -161,11 +172,14 @@ def main():
     if not RULES_JS.is_file():
         raise SystemExit("%s is missing -- it is where the drawing rules live"
                          % board._short(RULES_JS))
+    if not PICKER_JS.is_file():
+        raise SystemExit("%s is missing -- it is where the set dropdown lives"
+                         % board._short(PICKER_JS))
 
-    sizes = offered(place, figs, notes)
+    sizes, played = offered(place, figs, notes)
     if not sizes:
-        raise SystemExit("the placement file names no sculpt size that has art -- nothing to "
-                         "draw (run tools/ui_debug/make_tray_figures.py)")
+        raise SystemExit("the tray has rendered no sculpt set -- nothing to draw "
+                         "(run tools/ui_debug/make_tray_figures.py)")
 
     edges = graph()
     cells, font_uri = board.tiles(notes)
@@ -176,8 +190,11 @@ def main():
     plates = board.ground_art(notes)
 
     # Only the seats the page can actually draw: the sculpt rows are p1..p3 and so is the sow.
-    art = {str(px): [{"uri": f["uri"], "w": f["w"], "h": f["h"]} for f in figs[str(px)]]
-           for px in sizes}
+    # A seat is a LIST OF POSES -- one for the plastic set, three for the painted one -- and the
+    # page picks with dutyPose(), so the two stay interchangeable with no branch on which loaded.
+    art = {label: [[{"uri": f["uri"], "w": f["w"], "h": f["h"]} for f in row]
+                   for row in figs[label]]
+           for label in sizes}
 
     page = TEMPLATE.read_text(encoding="utf-8")
     for key, value in (
@@ -190,17 +207,31 @@ def main():
             ("__EDGES__", json.dumps(edges)),
             ("__FIGS__", json.dumps(art)),
             ("__SIZES__", json.dumps(sizes)),
+            # WHICH OF THEM THE FILE CALLS THE PLAYED ONES. The dropdown groups by this rather
+            # than filtering by it; see offered() for the set that went missing when it filtered.
+            ("__PLAYED__", json.dumps(played)),
+            ("__BASESET__", json.dumps(place.get("tuned_at"))),
+            ("__OWNSETS__", json.dumps(sorted(
+                set(place.get("per_set") or {}) | set(plan.get("per_set") or {}),
+                key=board.set_sort))),
             ("__OPENING__", json.dumps(place.get("tuned_at", sizes[-1]))),
             ("__PLACEMENT__", json.dumps(place)),
-            ("__FRAME__", json.dumps(place.get("frame")
-                                     or {"w": 320, "h": 390, "drop": 40})),
+            # EVERY OFFERED SET'S NUMBERS AND PLATES, resolved here. This page switches sets
+            # with a button, so it needs an answer per set rather than the base and the rule
+            # for merging it -- and one resolver means it cannot disagree with the sheet that
+            # tuned them.
+            ("__RULES__", json.dumps({label: board.settings_for(place, label)
+                                      for label in sizes})),
+            ("__GPLANS__", json.dumps({label: board.ground_settings_for(plan, label)
+                                       for label in sizes})),
             ("__PLATES__", json.dumps(plates)),
             ("__GROUNDPLAN__", json.dumps(plan)),
             ("__BANNERTOP__", json.dumps(board.BANNER_TOP)),
             ("__BANNERFS__", json.dumps(board.BANNER_FS)),
             ("__BANNERTRACK__", json.dumps(board.BANNER_TRACK)),
             ("__BANNERINK__", json.dumps(board.BANNER_INK)),
-            ("__FORMATION__", RULES_JS.read_text(encoding="utf-8"))):
+            ("__FORMATION__", RULES_JS.read_text(encoding="utf-8")),
+            ("__SETPICKER__", PICKER_JS.read_text(encoding="utf-8"))):
         page = page.replace(key, value)
     left = re.findall(r"__[A-Z_]+__", page)
     assert not left, "placeholders left unsubstituted: %s" % sorted(set(left))
@@ -211,8 +242,15 @@ def main():
     branch = sorted(p for p in board_grid() if len(edges.get(p, [])) > 1)
     print("  board from %s: %d positions, %d of them a choice (%s)"
           % (BOARD_JSON.name, len(board_grid()), len(branch), ", ".join(branch)))
-    print("  sculpt sizes offered: %s  (named by %s)"
-          % (", ".join(str(s) for s in sizes), board.PLACEMENT.name))
+    own = set(place.get("per_set") or {}) | set(plan.get("per_set") or {})
+    print("  %d sculpt set(s) on the dropdown, %s of them played at per %s"
+          % (len(sizes), len(played) or "none", board.PLACEMENT.name))
+    for label in sizes:
+        print("    %-13s %d pose%s%s%s%s"
+              % (label, len(figs[label][0]), "" if len(figs[label][0]) == 1 else "s",
+                 "  played" if label in played else "",
+                 "  base" if label == place.get("tuned_at") else "",
+                 "  own numbers" if label in own else ""))
     frame = place.get("frame") or {}
     if frame:
         print("  frame %d x %d real px, base %d below the floor"

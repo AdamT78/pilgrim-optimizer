@@ -2163,9 +2163,49 @@ renaming a duty needs no new asset — which it has already had to, twice.
 ## The tray pieces, and judging a new sculpt
 
 `make_tray_figures.py` renders the pieces that page drags around, at every size in `SIZES`, from
-the full-resolution originals in `ui/concept/`.
+the full-resolution originals — `ui/concept/` for the concept kinds, `ui/assets-gothic/sculpts/painted/`
+for the filed set.
 
-    python3 tools/ui_debug/make_tray_figures.py
+    python3 tools/ui_debug/make_tray_figures.py                  # --kind sculpt_plastic
+    python3 tools/ui_debug/make_tray_figures.py --kind painted
+
+Output is `figure_player_<seat>_p<pose>_<px>_<label>.png`, and what the pages switch between is
+the last two fields joined: `210_plastic`, `210_painted`. A LABEL rather than a pixel height,
+because those two are both 210 tall and the height stopped being able to say which. The height
+is still readable off the front of it and several drawings still want it.
+
+A seat is a list of poses — three for `painted`, one for the concept kinds, and a list either
+way. Pages pick with `dutyPose(row, n)`, which answers `n % row.length`, so a one-pose set
+answers every `n` with its only figure and the two sets are interchangeable with no branch.
+Anything that SIZES a tile — the field height, the capacity box — measures every pose, because
+seat 1's painted poses are 89, 89 and 100 px wide at 210 and a box measured off the first would
+clip the third.
+
+Which sets the sow page offers is named in `ui/assets-gothic/metadata/duty_placement.json`
+(`sizes`, and `tuned_at` for which opens); the placement sheet ignores that and shows every set
+the tray has rendered, because comparing them is its job.
+
+Each set can carry its own numbers. The top-level keys in `duty_placement.json` are the BASE and
+belong to the set `tuned_at` names; any other set stores only what it changes under `per_set`.
+`duty_grounds.json` splits the same way for `lift` and the per-plate rows, but not `by_duty` —
+which duty stands on which plate is a fact about the board, not about how big the sculpts are.
+`order` and `mark` do not split either, for the same reason.
+
+Which set is on screen is chosen from a dropdown (`duty_set_picker.js`, shared by the sheet and
+the sow page). It lists every set the tray has rendered, grouped into the ones `sizes` names and
+the rest, each marked `· base` or `· own numbers`. `sizes` groups rather than filters: it used to
+decide what the sow page offered at all, which hid a set that had been tuned next door.
+
+On the placement sheet, choosing a set moves every slider, a line beside the control says whether
+you are looking at the base, a set's own numbers, or a set still inheriting, and **use the base**
+drops a row again. Unsaved edits are kept per set, so flipping between two sets to compare them
+shows each as you left it.
+
+**calculate width across ranks** is a checkbox there, off by default and per set. Off, `spread` is
+the gap between neighbours within a rank and the back rank sits in the front rank's gaps. On, it
+is the gap between any two neighbours whichever rank they stand on, at roughly twice the width.
+One, two and three acolytes never move either way. It is off by default because a narrow ground
+plate cannot carry the wide version — the group runs off the tile.
 
 Two rules pull against each other and the file says which wins. A piece is a plinth standing on a
 tile, so the players are levelled on the plinth first, targeting the narrowest so nothing is ever

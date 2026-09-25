@@ -170,13 +170,20 @@ PALETTES = (("slate", "#2b2f38", "#23272f"),
             ("parchment", "#ddc9a0", "#d5c097"))
 
 # Rows of the tray, top to bottom, each at every size in FIGURE_SIZES. The art is read from
-# generated/figure_<subject>_<px>.png; make_tray_figures.py renders every one of them DOWN from
-# its full-resolution original, plinth-levelled across the players so their bases match.
+# generated/figure_<subject>_p1_<px>_plastic.png; make_tray_figures.py renders every one of them
+# DOWN from its full-resolution original, plinth-levelled across the players so their bases match.
+#
+# POSE 1 OF THE PLASTIC SET, named here rather than offered, and that is a decision rather than
+# an oversight. This page belongs to the earlier wheel design and measures how much ROOM a
+# silhouette needs on a wheel; three poses of one seat would be three answers to a question that
+# has one. Choosing a pose is the duty pages' job. If this page is ever brought onto the new
+# design the choice comes with it -- until then a second switch here is upkeep for nobody.
 FIGURE_SUBJECTS = (("player_1", "p1"),
                    ("player_2", "p2"),
                    ("player_3", "p3"),
                    ("player_4", "p4"))
 FIGURE_SIZES = (90, 120, 150)
+FIGURE_POSE, FIGURE_KIND = 1, "plastic"
 FIGURE_DIR = HERE / "generated"
 
 # The vector acolyte that opens every row. 60 px because that is the size the sculpts were being
@@ -250,8 +257,10 @@ for _cw in CANVAS_WIDTHS:
 ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
 ap.add_argument("--out", default=None, help="where to write the page (default: beside this file)")
 ap.add_argument("--figures", default=None,
-                help="folder holding figure_<px>.png for %s (default: %s)"
-                     % (" and ".join(str(s) for s in FIGURE_SIZES), FIGURE_DIR.relative_to(ROOT)))
+                help="folder holding figure_<subject>_p%d_<px>_%s.png for %s (default: %s)"
+                     % (FIGURE_POSE, FIGURE_KIND,
+                        " and ".join(str(s) for s in FIGURE_SIZES),
+                        FIGURE_DIR.relative_to(ROOT)))
 ap.add_argument("--open", action="store_true", help="open the page when it is written")
 args = ap.parse_args()
 
@@ -484,7 +493,7 @@ for n, (subject, tag) in enumerate(FIGURE_SUBJECTS):
                      % (tag, ACOLYTE_PX, seat, pop.SEAT_SWATCH[seat], aw, ah,
                         "outline %s" % ACOLYTE_STROKE if ACOLYTE_STROKE else "no outline"))
     for px in FIGURE_SIZES:
-        p = fig_dir / ("figure_%s_%d.png" % (subject, px))
+        p = fig_dir / ("figure_%s_p%d_%d_%s.png" % (subject, FIGURE_POSE, px, FIGURE_KIND))
         if not p.is_file():
             fig_notes.append("%-9s %3d px  missing %s, left out" % (tag, px, p.name))
             continue

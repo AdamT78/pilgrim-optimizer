@@ -81,6 +81,10 @@ __FORMATION__
 // -------------------------------------------------------------------------------------------
 var BANNERS = __BANNERS__, NAMES = __NAMES__, ICONS = __ICONS__, FIGS = __FIGS__;
 var SHAPES = __SHAPES__, SIZES = __SIZES__, D = __DEFAULTS__, PLACE = __PLACEMENT__;
+// EVERY SET'S OWN NUMBERS, already resolved: the base with that set's override laid over it.
+// Merged in Python so this page, the sow and the placement sheet cannot come to different
+// answers about what 210_painted's spread is.
+var RULES = __RULES__;
 var BANNER_TOP = __BANNERTOP__, BANNER_FS = __BANNERFS__,
     BANNER_TRACK = __BANNERTRACK__, BANNER_INK = __BANNERINK__;
 
@@ -90,15 +94,36 @@ var BANNER_TOP = __BANNERTOP__, BANNER_FS = __BANNERFS__,
 var DPR = devicePixelRatio || 1;
 function px(v){ return (v / DPR) + "px"; }
 
-// Only sizes that actually got embedded can be offered. A button for a size whose art never
-// rendered would silently draw an empty board.
-var HAVE = SIZES.filter(function(s){ return FIGS[String(s)]; });
-var SIZE = HAVE.indexOf(D.size) >= 0 ? D.size : (HAVE[0] || 0);
-// ONE SET, USED AT EVERY SIZE. The file is tuned at the working size and the other sizes take
-// the same numbers, so changing size changes the sculpts and nothing else.
-var SPREAD = PLACE.spread, BACK = PLACE.back, RANK = PLACE.rank;
-var SHADE = PLACE.depth.amount, FULL_AT = PLACE.depth.full_at || 52;
-var GROUPED = PLACE.order === "grouped", MODE = PLACE.depth.mode,
+// Only sets that actually got embedded can be offered. A button for a set whose art never
+// rendered would silently draw an empty board. A set is a LABEL -- `210_painted` -- not a pixel
+// height, because two sets can be 210 tall and the height stopped being able to say which.
+var HAVE = SIZES.filter(function(s){ return FIGS[s]; });
+var SIZE = HAVE.indexOf(D.size) >= 0 ? D.size : (HAVE[0] || "");
+// WHICH POSE A TILE DRAWS IS A PROPERTY OF WHERE IT SITS, not a setting: dutyPoseForColumn in
+// the shared rules turns a grid position into a pose, so nine tiles holding one seat are not
+// nine copies of one painting. There is no control for it because it is not a choice.
+// THE NUMBERS FOLLOW THE SET. They used to be read once at load and kept, so tuning one set
+// and switching to another drew the first set's arrangement under the second set's sculpts --
+// a comparison of two things that were never both true at once.
+//
+// `order` below does NOT follow the set: grouped-versus-arrival is a convention about reading a
+// tile rather than a fact about how big the sculpts are, so it stays on the document.
+var SPREAD, BACK, RANK, SHADE, FULL_AT, MODE, WIDE;
+function applySet(label){
+  var r = RULES[label] || {}, d = r.depth || {};
+  SPREAD = r.spread; BACK = r.back; RANK = r.rank;
+  MODE = d.mode; SHADE = d.amount; FULL_AT = d.full_at || 52;
+  WIDE = !!r.width_across_ranks;
+  // The sliders show the numbers in force, so switching set moves them rather than leaving
+  // them reading the set you just left.
+  setSlider("sprd", SPREAD); setSlider("dep", BACK);
+  setSlider("rg", RANK); setSlider("sh", SHADE);
+}
+// Called here as well as on every switch, so the numbers are in force before anything below
+// reads them. setSlider no-ops while the controls do not exist yet; the slider() calls further
+// down then take their opening values from what this set.
+applySet(SIZE);
+var GROUPED = PLACE.order === "grouped",
     BANNER = true, ICON = true, shadow = true;
 var SEED = 1, BUD = 0, CELL = 0, zTop = 60;
 var BOARD = [], PINNED = {};
@@ -148,7 +173,7 @@ function deal(kind){
 // ---------------------------------------------------------------- formation
 // The shape comes from the shared file, inlined above; the numbers come from the placement
 // JSON. This wrapper exists only so the call sites stay short.
-function formationAt(n){ return dutyFormation(n, SPREAD, BACK, RANK); }
+function formationAt(n){ return dutyFormation(n, SPREAD, BACK, RANK, WIDE); }
 
 // The seat queue is LOOKED UP, not derived: the generator built both rules and the test holds
 // them to it. A page that recomputed them would be a second copy free to drift.
@@ -195,8 +220,10 @@ function build(){
   // given. Height binds on a laptop, which is why nothing chrome-like sits above the board.
   BUD = Math.floor(Math.min(innerWidth, innerHeight) * DPR);
   CELL = BUD / 3;
-  var FIG = FIGS[String(SIZE)] || [];
-  var figH = FIG.length ? Math.max.apply(null, FIG.map(function(f){ return f.h; })) : 0;
+  var FIG = FIGS[SIZE] || [];
+  // Over every seat AND every pose: the field has to clear whatever might be drawn in it, and a
+  // height measured off one pose would clip another the moment a tile asked for it.
+  var figH = dutySetHeight(FIG);
   // Shared with the sow page and the placement sheet. The field here used to be figH + RANK,
   // which ignores the set-back and would clip the middle of three the moment a set-back larger
   // than the rank gap was tried; the shared version clears the deeper of the two.
@@ -217,8 +244,8 @@ function build(){
     h += '<div class=figs data-t="' + i + '" style="top:' + px(groupTop) + ';left:0;width:'
        + px(CELL) + ';height:' + px(Math.max(fieldH, 1)) + '">';
     slots.forEach(function(p, jj){
-      var seat = FIG[q[jj]];
-      if (!seat) return;                        // no art for this size: the tile draws empty
+      var seat = dutyPose(FIG[q[jj]], dutyPoseForColumn(i));
+      if (!seat) return;                        // no art for this set: the tile draws empty
       var pin = PINNED[i + ":" + jj], at = pin || p;
 
       h += '<div class="fig' + (pin ? " moved" : "") + '" data-t="' + i + '" data-j="' + jj
@@ -334,14 +361,15 @@ function press(sel, test){
 (function sizeButtons(){
   var host = $("szbtns"), h = "";
   HAVE.forEach(function(s){
-    h += '<button class=sz data-px="' + s + '" aria-pressed="' + (s === SIZE) + '">'
-       + s + '</button>';
+    h += '<button class=sz data-set="' + s + '" aria-pressed="' + (s === SIZE) + '">'
+       + s.replace("_", " ") + '</button>';
   });
   host.innerHTML = h || '<span class=lab>no sculpt art</span>';
   [].forEach.call(document.querySelectorAll(".sz"), function(b){
     b.onclick = function(){
-      SIZE = +b.dataset.px;
-      press(".sz", function(x){ return +x.dataset.px === SIZE; });
+      SIZE = b.dataset.set;
+      applySet(SIZE);
+      press(".sz", function(x){ return x.dataset.set === SIZE; });
       build();
     };
   });
@@ -399,12 +427,24 @@ $("breset").onclick = function(){ PINNED = {}; build(); };
 // rather than a retype -- which is where a number you liked on screen quietly fails to become
 // the number in the code.
 $("bdump").onclick  = function(){
-  var out = JSON.parse(JSON.stringify(PLACE));
-  out.spread = SPREAD; out.back = BACK; out.rank = RANK;
-  out.order = GROUPED ? "grouped" : "arrival";
-  out.depth = {mode: MODE, amount: SHADE, full_at: FULL_AT};
-  console.log("// ui/assets-gothic/metadata/duty_placement.json");
-  console.log(JSON.stringify(out, null, 2));
+  var tuned = {spread: SPREAD, back: BACK, rank: RANK,
+               depth: {mode: MODE, amount: SHADE, full_at: FULL_AT}};
+  // WHICH SLOT IT BELONGS IN, not just the numbers. A flat block was safe while every set
+  // shared one; now the same numbers mean different things depending on whether they are the
+  // base or one set's own, and pasting them into the wrong slot is a silent carry-over --
+  // which is the bug this whole split exists to stop.
+  if (SIZE === PLACE.tuned_at){
+    console.log("// duty_placement.json -- the BASE, because tuned_at names " + SIZE);
+    tuned.order = GROUPED ? "grouped" : "arrival";
+    console.log(JSON.stringify(tuned, null, 2));
+  } else {
+    console.log("// duty_placement.json -- under per_set, because the base belongs to "
+              + PLACE.tuned_at);
+    var block = {}; block[SIZE] = tuned;
+    console.log(JSON.stringify({per_set: block}, null, 2));
+    if (GROUPED !== (PLACE.order === "grouped"))
+      console.log("// note: `order` is not per-set. Change it on the document or not at all.");
+  }
 };
 
 addEventListener("keydown", function(e){
@@ -420,7 +460,8 @@ addEventListener("keydown", function(e){
   var n = parseInt(e.key, 10);
   if (n >= 1 && n <= HAVE.length){
     SIZE = HAVE[n - 1];
-    press(".sz", function(x){ return +x.dataset.px === SIZE; });
+    applySet(SIZE);
+    press(".sz", function(x){ return x.dataset.set === SIZE; });
     build(); return;
   }
   if (e.key === "f")

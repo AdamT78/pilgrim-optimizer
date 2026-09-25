@@ -83,9 +83,15 @@ one.
 WHAT IS EMBEDDED AND WHAT CAN GO MISSING
 
 Banners, icons and the title face are committed, so they are always there and are inlined. The
-sculpts come from `generated/figure_player_<seat>_<px>.png`, which `make_tray_figures.py` renders
-DOWN from the full-resolution originals -- git-ignored debug input, so a fresh clone has none of
-it and a missing size costs that size rather than the page.
+sculpts come from `generated/figure_player_<seat>_p<pose>_<px>_<label>.png`, which
+`make_tray_figures.py` renders DOWN from the full-resolution originals -- git-ignored debug
+input, so a fresh clone has none of it and a missing set costs that set rather than the page.
+
+A SET IS NAMED, NOT MEASURED. `210_plastic` and `210_painted` are both 210 px tall and are not
+the same art, so the pixel height stopped being enough to say which sculpts are on screen. What
+the pages switch between is a LABEL -- `<px>_<kind>` -- and the pixel height is a fact about the
+label rather than the identity of it. The sets are discovered from the folder rather than
+declared here: a second copy of make_tray_figures.py's kind table is how the two drift apart.
 
 The action icons are this project's own primitives, not a third-party set, so nothing here adds
 an attribution obligation. THE CITY HAS NO ACTION ICON and that is a fact about the duty rather
@@ -100,6 +106,7 @@ answering the question it was built to ask.
 
 import argparse
 import base64
+import copy
 import io
 import json
 import pathlib
@@ -143,8 +150,24 @@ SLUGS = ("allocation", "clerical", "construct", "build_roads", "city",
          "ordination", "produce", "taxation", "give_alms")
 
 FIGURE_DIR = HERE / "generated"
-FIGURE_SIZES = (90, 120, 150, 180, 210)
 FIGURE_SEATS = (1, 2, 3)
+
+# figure_player_<seat>_p<pose>_<px>_<label>.png, written by make_tray_figures.py. The set label a
+# page shows is the last two fields joined -- `210_painted` -- so the px stays readable off the
+# front of it without a second table saying which labels exist.
+FIGURE_NAME = re.compile(r"^figure_player_(\d+)_p(\d+)_(\d+)_([a-z][a-z0-9_]*)\.png$")
+
+
+def set_px(label):
+    """The pixel height behind a set label. `210_painted` -> 210."""
+    return int(str(label).split("_", 1)[0])
+
+
+def set_sort(label):
+    """Sets in a settled order: by height, then by name. Used wherever buttons are laid out."""
+    text = str(label)
+    head, _, tail = text.partition("_")
+    return (int(head) if head.isdigit() else 0, tail, text)
 
 # THE ARRANGEMENT RULES LIVE IN A FILE, NOT HERE.
 #
@@ -164,7 +187,8 @@ RULES_JS = HERE / "duty_sculpt_rules.js"
 
 # Only if the file is missing. A page built from these instead of from the file would look right
 # and be wrong, so it says so in the run output rather than quietly standing in.
-FALLBACK = {"tuned_at": 210, "spread": 77, "back": 21, "rank": 52, "order": "grouped",
+FALLBACK = {"tuned_at": "210_plastic", "spread": 77, "back": 21, "rank": 52, "order": "grouped",
+            "width_across_ranks": False,
             "frame": {"w": 320, "h": 390, "drop": 40},
             "mark": "floor", "depth": {"mode": "haze", "amount": 60, "full_at": 52}}
 
@@ -237,42 +261,33 @@ def _short(path):
         return path
 
 
-def placement(notes):
-    """The arrangement rules, checked hard enough that a typo cannot reach a page silently."""
-    if not PLACEMENT.is_file():
-        notes.append("%s is missing -- built from the fallback, which may not be what you tuned"
-                     % _short(PLACEMENT))
-        return dict(FALLBACK)
-    data = json.loads(PLACEMENT.read_text(encoding="utf-8"))
+# WHICH NUMBERS A SET MAY CARRY ITS OWN OF. These are the sliders; `order` and `mark` are
+# switches and stay global, because grouped-versus-arrival and which floor mark is drawn are
+# conventions about reading a tile rather than facts about how big the sculpts are.
+PER_SET_KEYS = ("spread", "back", "rank", "frame", "depth", "width_across_ranks")
+
+
+def _check_geometry(data, where, required):
+    """Validate the arrangement numbers, whether they are the base or one set's override.
+
+    ONE FUNCTION FOR BOTH, which is the point: an override reaching a page unchecked would be a
+    typo that draws rather than a typo that stops, and a second copy of these rules would agree
+    on the day it was written. `required` is the only difference -- the base must name every
+    number, an override names only what it changes.
+
+    An override carries WHOLE VALUES. A `frame` with only `w` in it, or a `depth` with only
+    `full_at`, is refused rather than half-merged: a half-frame has no meaning, and guessing
+    which half was meant is how a file ends up with a shape nobody wrote.
+    """
     for key in ("spread", "back", "rank"):
         if key not in data:
-            raise SystemExit("%s has no %s -- the arrangement cannot be drawn without it"
-                             % (_short(PLACEMENT), key))
+            if required:
+                raise SystemExit("%s has no %s -- the arrangement cannot be drawn without it"
+                                 % (where, key))
+            continue
         if not isinstance(data[key], int) or isinstance(data[key], bool) or data[key] < 0:
             raise SystemExit("%s: %s is %r -- want a non-negative whole number of real device "
-                             "pixels" % (_short(PLACEMENT), key, data[key]))
-    # WHICH SIZES ARE ON OFFER, not which sizes have their own numbers. There is still exactly
-    # one spread, one set-back and one rank gap, used at every size -- this list only says which
-    # sculpt sizes a page should put a button on. A per-size TABLE is the thing that was taken
-    # out and is not coming back: it was four rows of upkeep for sizes nobody tunes against.
-    if "sizes" in data:
-        sizes = data["sizes"]
-        if not isinstance(sizes, list) or not sizes:
-            raise SystemExit("%s: sizes is %r, want a non-empty list of sculpt sizes"
-                             % (_short(PLACEMENT), sizes))
-        for px in sizes:
-            if isinstance(px, bool) or not isinstance(px, int) or px <= 0:
-                raise SystemExit("%s: sizes holds %r, want positive whole numbers of pixels"
-                                 % (_short(PLACEMENT), px))
-        if len(set(sizes)) != len(sizes):
-            raise SystemExit("%s: sizes repeats a value (%r) -- one button each"
-                             % (_short(PLACEMENT), sizes))
-    if data.get("order") not in ("grouped", "arrival"):
-        raise SystemExit("%s: order is %r, want 'grouped' or 'arrival'"
-                         % (_short(PLACEMENT), data.get("order")))
-    if data.get("mark") not in ("floor", "foot", "box", "gild"):
-        raise SystemExit("%s: mark is %r, want floor, foot, box or gild"
-                         % (_short(PLACEMENT), data.get("mark")))
+                             "pixels" % (where, key, data[key]))
     # THE FRAME IS NOT DERIVED FROM THE FORMATION, and that is the decision rather than an
     # oversight: art is drawn to a fixed rectangle. `drop` may be negative, because a frame
     # whose base sits ABOVE the floor line is a legitimate thing to want to try.
@@ -280,33 +295,128 @@ def placement(notes):
     if frame is not None:
         if not isinstance(frame, dict):
             raise SystemExit("%s: frame is %r, want an object with w, h and drop"
-                             % (_short(PLACEMENT), frame))
+                             % (where, frame))
         for key in ("w", "h"):
             value = frame.get(key)
             if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
                 raise SystemExit("%s: frame.%s is %r, want a positive whole number of real "
-                                 "device pixels" % (_short(PLACEMENT), key, value))
+                                 "device pixels" % (where, key, value))
         drop = frame.get("drop", 0)
         if isinstance(drop, bool) or not isinstance(drop, int):
             raise SystemExit("%s: frame.drop is %r, want a whole number of real device pixels "
-                             "(negative lifts the frame off the floor)"
-                             % (_short(PLACEMENT), drop))
-    depth = data.get("depth") or {}
+                             "(negative lifts the frame off the floor)" % (where, drop))
+    # WHAT `spread` MEASURES once there are two ranks. A look rather than a correctness
+    # question, and one that depends on the ground plate under the figures -- a wide plate can
+    # carry the spaced-out version, a narrow one puts the outer acolytes over its edge.
+    wide = data.get("width_across_ranks")
+    if wide is not None and not isinstance(wide, bool):
+        raise SystemExit("%s: width_across_ranks is %r, want true or false -- it is the "
+                         "placement sheet's checkbox, not a number" % (where, wide))
+    depth = data.get("depth")
+    if depth is None and not required:
+        return
+    depth = depth or {}
     if depth.get("mode") not in ("haze", "dark", "off"):
         raise SystemExit("%s: depth.mode is %r, want haze, dark or off"
-                         % (_short(PLACEMENT), depth.get("mode")))
+                         % (where, depth.get("mode")))
     if not isinstance(depth.get("amount"), int) or not 0 <= depth["amount"] <= 100:
         raise SystemExit("%s: depth.amount is %r, want a whole number 0-100"
-                         % (_short(PLACEMENT), depth.get("amount")))
+                         % (where, depth.get("amount")))
     # full_at is the e-fold distance of the cue. Zero would divide the depth by nothing and send
     # every figure straight to full haze, so it has to be a real distance.
     if not isinstance(depth.get("full_at"), int) or depth["full_at"] <= 0:
         raise SystemExit("%s: depth.full_at is %r, want a positive whole number of real device "
-                         "pixels" % (_short(PLACEMENT), depth.get("full_at")))
+                         "pixels" % (where, depth.get("full_at")))
+
+
+def settings_for(place, label):
+    """The numbers one sculpt set is drawn with: the base, with that set's override laid over it.
+
+    ONE RESOLVER, IN PYTHON, and the pages are handed the answer rather than the rule. They
+    switch sets live, so each of them would otherwise need its own copy of this merge -- three
+    copies of a two-line rule is still three places for it to stop agreeing, and the last time
+    this project let a two-line rule live in three files the copies had already drifted.
+
+    Whole values, not deep-merged: an override's `frame` replaces the base's frame entire. See
+    _check_geometry for why half of one is refused rather than filled in.
+    """
+    out = {k: copy.deepcopy(place[k]) for k in PER_SET_KEYS if k in place}
+    own = (place.get("per_set") or {}).get(label) or {}
+    for key in PER_SET_KEYS:
+        if key in own:
+            out[key] = copy.deepcopy(own[key])
+    return out
+
+
+def placement(notes):
+    """The arrangement rules, checked hard enough that a typo cannot reach a page silently."""
+    if not PLACEMENT.is_file():
+        notes.append("%s is missing -- built from the fallback, which may not be what you tuned"
+                     % _short(PLACEMENT))
+        return dict(FALLBACK)
+    data = json.loads(PLACEMENT.read_text(encoding="utf-8"))
+    _check_geometry(data, _short(PLACEMENT), required=True)
+    # WHICH SETS ARE ON OFFER, not which sets have their own numbers -- those are `per_set`
+    # below. This list only says which sculpt sets a page should put a button on.
+    #
+    # A LABEL, NOT A NUMBER, since `210_plastic` and `210_painted` are both 210. The pattern is
+    # checked rather than the membership: which labels exist is a fact about the tray folder,
+    # and a name this file cannot parse is the one mistake worth stopping for.
+    if "sizes" in data:
+        sizes = data["sizes"]
+        if not isinstance(sizes, list) or not sizes:
+            raise SystemExit("%s: sizes is %r, want a non-empty list of sculpt set labels"
+                             % (_short(PLACEMENT), sizes))
+        for label in sizes:
+            if not isinstance(label, str) or not re.match(r"^\d+_[a-z][a-z0-9_]*$", label):
+                raise SystemExit("%s: sizes holds %r, want labels like '210_painted' -- a pixel "
+                                 "height, an underscore and the set's name"
+                                 % (_short(PLACEMENT), label))
+        if len(set(sizes)) != len(sizes):
+            raise SystemExit("%s: sizes repeats a value (%r) -- one button each"
+                             % (_short(PLACEMENT), sizes))
+    # `tuned_at` names which set opens, so it is a label too. The numbers below it are still
+    # tuned against 210 real px, which every set named so far happens to share.
+    tuned = data.get("tuned_at")
+    if tuned is not None and not (isinstance(tuned, str)
+                                  and re.match(r"^\d+_[a-z][a-z0-9_]*$", tuned)):
+        raise SystemExit("%s: tuned_at is %r, want a set label like '210_plastic'"
+                         % (_short(PLACEMENT), tuned))
+    if data.get("order") not in ("grouped", "arrival"):
+        raise SystemExit("%s: order is %r, want 'grouped' or 'arrival'"
+                         % (_short(PLACEMENT), data.get("order")))
+    if data.get("mark") not in ("floor", "foot", "box", "gild"):
+        raise SystemExit("%s: mark is %r, want floor, foot, box or gild"
+                         % (_short(PLACEMENT), data.get("mark")))
+    # ---- and each set that carries numbers of its own ------------------------------------
+    per_set = data.get("per_set")
+    if per_set is not None:
+        if not isinstance(per_set, dict):
+            raise SystemExit("%s: per_set is %r, want an object keyed by set label"
+                             % (_short(PLACEMENT), per_set))
+        for label, own in sorted(per_set.items()):
+            where = "%s: per_set[%s]" % (_short(PLACEMENT), label)
+            if not re.match(r"^\d+_[a-z][a-z0-9_]*$", str(label)):
+                raise SystemExit("%s is not a set label like '210_painted'" % where)
+            if not isinstance(own, dict):
+                raise SystemExit("%s is %r, want an object of the numbers this set changes"
+                                 % (where, own))
+            # NAMED, NOT IGNORED. A key here that nothing reads is a number someone moved and
+            # believes is in effect, which is worse than a number they know they cannot set.
+            stray = sorted(set(own) - set(PER_SET_KEYS))
+            if stray:
+                raise SystemExit("%s carries %s, which a set cannot have its own of -- a set "
+                                 "may name %s, and nothing else"
+                                 % (where, ", ".join(stray), ", ".join(PER_SET_KEYS)))
+            if not own:
+                raise SystemExit("%s is empty -- a set with nothing of its own should not be "
+                                 "listed at all, because an empty row reads as 'tuned to the "
+                                 "base' when it means 'never tuned'" % where)
+            _check_geometry(own, where, required=False)
     return data
 
 
-DEFAULTS = {"size": 210}
+DEFAULTS = {"size": "210_plastic"}
 
 
 def shapes():
@@ -352,6 +462,25 @@ def queues(shape):
     return {"grouped": grouped, "arrival": arrival}
 
 
+# WHAT A SET MAY RESTAND. `by_duty` is deliberately absent: which duty stands on which plate is
+# a fact about the board, not about how tall the sculpts are, and letting it split per set would
+# let the same duty stand on two different grounds depending on which sculpts were loaded.
+GROUND_PER_SET_KEYS = ("lift", "grounds")
+
+PLATE_RANGES = (("anchor", 0, 100), ("scale", 1, 300),
+                ("dim", 0, 100), ("saturate", 0, 100), ("opacity", 0, 100))
+
+
+def _check_plate(g, where):
+    """One plate's row, wherever it came from -- the base grounds or a set's override."""
+    if not isinstance(g, dict):
+        raise SystemExit("%s is %r, want an object of the plate's settings" % (where, g))
+    for key, lo, hi in PLATE_RANGES:
+        value = g.get(key)
+        if isinstance(value, bool) or not isinstance(value, int) or not lo <= value <= hi:
+            raise SystemExit("%s.%s is %r, want a whole number %d-%d" % (where, key, value, lo, hi))
+
+
 def ground_plan(notes):
     """Which duty stands on which plate, and how each plate is toned down.
 
@@ -367,12 +496,7 @@ def ground_plan(notes):
         raise SystemExit("%s: grounds is %r, want an object keyed by plate name"
                          % (_short(GROUND_PLAN), grounds))
     for name, g in grounds.items():
-        for key, lo, hi in (("anchor", 0, 100), ("scale", 1, 300),
-                            ("dim", 0, 100), ("saturate", 0, 100), ("opacity", 0, 100)):
-            value = g.get(key)
-            if isinstance(value, bool) or not isinstance(value, int) or not lo <= value <= hi:
-                raise SystemExit("%s: grounds.%s.%s is %r, want a whole number %d-%d"
-                                 % (_short(GROUND_PLAN), name, key, value, lo, hi))
+        _check_plate(g, "%s: grounds.%s" % (_short(GROUND_PLAN), name))
     by_duty = data.get("by_duty") or {}
     for slug, name in by_duty.items():
         if slug not in SLUGS:
@@ -392,7 +516,66 @@ def ground_plan(notes):
         raise SystemExit("%s: lift is %r, want a whole number -300-600"
                          % (_short(GROUND_PLAN), lift))
     data["lift"] = lift
+    # ---- and each set that stands its plates differently -------------------------------------
+    # A PLATE IS THE SAME ART WHATEVER SIZE THE SCULPTS ARE, but how it is STOOD is not: the lift
+    # is a distance in real pixels between the floor line and the ground, and the scale sizes the
+    # plate against figures that are 90 px tall in one set and 210 in another. So the picture
+    # stays global and the standing of it splits, which is also why `by_duty` does not split --
+    # which duty stands on which plate is not a question about how big anything is.
+    per_set = data.get("per_set")
+    if per_set is not None:
+        if not isinstance(per_set, dict):
+            raise SystemExit("%s: per_set is %r, want an object keyed by set label"
+                             % (_short(GROUND_PLAN), per_set))
+        for label, own in sorted(per_set.items()):
+            where = "%s: per_set[%s]" % (_short(GROUND_PLAN), label)
+            if not re.match(r"^\d+_[a-z][a-z0-9_]*$", str(label)):
+                raise SystemExit("%s is not a set label like '210_painted'" % where)
+            if not isinstance(own, dict):
+                raise SystemExit("%s is %r, want an object of what this set changes" % (where, own))
+            stray = sorted(set(own) - set(GROUND_PER_SET_KEYS))
+            if stray:
+                raise SystemExit("%s carries %s, which a set cannot have its own of -- a set "
+                                 "may name %s. `by_duty` is deliberately not among them."
+                                 % (where, ", ".join(stray), ", ".join(GROUND_PER_SET_KEYS)))
+            if not own:
+                raise SystemExit("%s is empty -- a set with nothing of its own should not be "
+                                 "listed at all" % where)
+            if "lift" in own:
+                v = own["lift"]
+                if isinstance(v, bool) or not isinstance(v, int) or not -300 <= v <= 600:
+                    raise SystemExit("%s: lift is %r, want a whole number -300-600" % (where, v))
+            own_grounds = own.get("grounds")
+            if own_grounds is not None:
+                if not isinstance(own_grounds, dict):
+                    raise SystemExit("%s: grounds is %r, want an object keyed by plate name"
+                                     % (where, own_grounds))
+                for name, g in own_grounds.items():
+                    # A PLATE THIS SET TUNES MUST BE A PLATE THAT EXISTS. Tuning a name the base
+                    # has never heard of is a typo that would sit in the file drawing nothing.
+                    if name not in grounds:
+                        raise SystemExit("%s tunes %r, which has no entry under the base grounds"
+                                         % (where, name))
+                    _check_plate(g, "%s: grounds.%s" % (where, name))
     return data
+
+
+def ground_settings_for(plan, label):
+    """How one sculpt set stands its plates: the base, with that set's override laid over it.
+
+    The companion to settings_for, and per plate rather than per file -- a set may restand one
+    plate and leave the other five alone, so a plate's row is merged on its own. The row itself
+    is whole-value like everywhere else: a set's `slate_irregular` replaces the base's entire.
+    """
+    out = {"by_duty": copy.deepcopy(plan.get("by_duty") or {}),
+           "grounds": copy.deepcopy(plan.get("grounds") or {}),
+           "lift": plan.get("lift", 0)}
+    own = (plan.get("per_set") or {}).get(label) or {}
+    if "lift" in own:
+        out["lift"] = own["lift"]
+    for name, g in (own.get("grounds") or {}).items():
+        out["grounds"][name] = copy.deepcopy(g)
+    return out
 
 
 def ground_art(notes):
@@ -468,7 +651,17 @@ def ground_check(plan, plates, notes):
 
 
 def figures(fig_dir, notes):
-    """Every sculpt size that has art, inlined. Shared with generate_placement_sheet.py.
+    """Every sculpt SET that has art, inlined. Shared with generate_placement_sheet.py.
+
+    Returns `figs[label][seat_index][pose_index]`, where `label` is `<px>_<kind>` and a seat's
+    row is a LIST OF POSES -- length 1 for a one-pose set like `210_plastic`, length 3 for
+    `210_painted`. One pose is a list of one rather than a special case, so a page can index
+    `row[n % row.length]` and the two sets stay interchangeable without branching on which is
+    loaded.
+
+    DISCOVERED, NOT DECLARED. Which sets exist is a fact about what the tray has rendered, and
+    this file listing them too would be a second copy of make_tray_figures.py's kind table --
+    the copy that goes stale the first time a kind is added there and not here.
 
     Extracted rather than copied: this function is where "never upscale", "lossless because
     these are the true-size reference" and "name the cause, not the symptom" live, and a second
@@ -482,30 +675,58 @@ def figures(fig_dir, notes):
     if _Img is None:
         notes.append("Pillow is not installed, so the sculpts cannot be re-encoded for "
                      "embedding -- no sculpts on the page (pip3 install --user Pillow)")
-    else:
-        for px in FIGURE_SIZES:
-            row = []
-            for seat in FIGURE_SEATS:
-                path = fig_dir / ("figure_player_%d_%d.png" % (seat, px))
-                if not path.is_file():
-                    notes.append("%3d px  missing %s, size left out" % (px, path.name))
-                    row = []
-                    break
-                im = _Img.open(path).convert("RGBA")
+        return figs
+
+    # label -> {seat: {pose: path}}, filled from whatever the folder holds.
+    found = {}
+    for path in sorted(fig_dir.glob("figure_player_*.png")) if fig_dir.is_dir() else []:
+        m = FIGURE_NAME.match(path.name)
+        if not m:
+            continue            # an older naming, or art for something that is not the tray
+        seat, pose, px, kind = int(m.group(1)), int(m.group(2)), int(m.group(3)), m.group(4)
+        if seat not in FIGURE_SEATS:
+            continue            # seat 4 is rendered and this page seats three -- see above
+        found.setdefault("%d_%s" % (px, kind), {}).setdefault(seat, {})[pose] = path
+
+    for label in sorted(found, key=set_sort):
+        seats = found[label]
+        # A SET IS WHOLE OR IT IS NOT OFFERED. Half a set draws a board with a seat missing,
+        # which reads as a rule about the arrangement rather than as art that never rendered.
+        gap = [s for s in FIGURE_SEATS if s not in seats]
+        if gap:
+            notes.append("%-12s no art for seat%s %s, set left out"
+                         % (label, "" if len(gap) == 1 else "s",
+                            ", ".join(str(s) for s in gap)))
+            continue
+        # Poses must be 1..n for every seat and the SAME n, or `row[i % row.length]` would pick
+        # a different pose per seat from the same index and the column rule would mean nothing.
+        wanted = sorted(seats[FIGURE_SEATS[0]])
+        if (wanted != list(range(1, len(wanted) + 1))
+                or any(sorted(seats[s]) != wanted for s in FIGURE_SEATS)):
+            notes.append("%-12s poses do not line up across the seats (%s), set left out"
+                         % (label, "; ".join("seat %d: %s" % (s, sorted(seats[s]))
+                                             for s in FIGURE_SEATS)))
+            continue
+        row = []
+        for seat in FIGURE_SEATS:
+            poses = []
+            for pose in wanted:
+                im = _Img.open(seats[seat][pose]).convert("RGBA")
                 buf = io.BytesIO()
                 # LOSSLESS. These are the true-size reference the whole page is built to judge;
                 # a lossy re-encode would put its artefacts on the thing being looked at. The
                 # art is small enough that it costs little. (`quality` is ignored when lossless,
                 # so it is not passed -- carrying one would only suggest it did something.)
                 im.save(buf, "WEBP", method=6, lossless=True)
-                row.append({"uri": "data:image/webp;base64,"
-                                   + base64.b64encode(buf.getvalue()).decode("ascii"),
-                            "w": im.width, "h": im.height})
-            if row:
-                figs[str(px)] = row
-        if not figs:
-            notes.append("no sculpts embedded -- run tools/ui_debug/make_tray_figures.py "
-                         "first; the page still builds and shows the tiles empty")
+                poses.append({"uri": "data:image/webp;base64,"
+                                     + base64.b64encode(buf.getvalue()).decode("ascii"),
+                              "w": im.width, "h": im.height})
+            row.append(poses)
+        figs[label] = row
+
+    if not figs:
+        notes.append("no sculpts embedded -- run tools/ui_debug/make_tray_figures.py "
+                     "first; the page still builds and shows the tiles empty")
     return figs
 
 
@@ -568,8 +789,8 @@ def main():
     ap.add_argument("--out", default=None,
                     help="where to write the page (default: %s)" % OUT.relative_to(ROOT))
     ap.add_argument("--figures", default=None,
-                    help="folder holding figure_player_<seat>_<px>.png (default: %s)"
-                         % FIGURE_DIR.relative_to(ROOT))
+                    help="folder holding figure_player_<seat>_p<pose>_<px>_<label>.png "
+                         "(default: %s)" % FIGURE_DIR.relative_to(ROOT))
     # OPENING IS THE DEFAULT. These pages exist to be looked at; a run that writes one and says
     # nothing is a run you have to follow with a second command, and the flag was easy to forget.
     # `--open` is still accepted so it stays in anyone's fingers and in any note that mentions it.
@@ -624,13 +845,21 @@ def main():
             .replace("__ICONS__", json.dumps(icons))
             .replace("__FIGS__", json.dumps(figs))
             .replace("__SHAPES__", json.dumps(SHAPES))
-            .replace("__SIZES__", json.dumps(list(FIGURE_SIZES)))
+            # Every set the tray has rendered, not a declared list: this page is the one whose
+            # job is comparing them, so it offers whatever is there.
+            .replace("__SIZES__", json.dumps(sorted(figs, key=set_sort)))
             .replace("__BANNERTOP__", json.dumps(BANNER_TOP))
             .replace("__BANNERFS__", json.dumps(BANNER_FS))
             .replace("__BANNERTRACK__", json.dumps(BANNER_TRACK))
             .replace("__BANNERINK__", json.dumps(BANNER_INK))
             .replace("__DEFAULTS__", json.dumps(DEFAULTS))
             .replace("__PLACEMENT__", json.dumps(PLACE))
+            # EVERY SET'S NUMBERS, RESOLVED HERE. The page switches sets live, so it needs an
+            # answer per set rather than the base and the rule for merging it -- and the rule
+            # living in one place means the sow and the sheet cannot disagree with this page
+            # about what 210_painted's spread is.
+            .replace("__RULES__", json.dumps(
+                {label: settings_for(PLACE, label) for label in sorted(figs, key=set_sort)}))
             .replace("__FORMATION__", RULES_JS.read_text(encoding="utf-8")))
     left = re.findall(r"__[A-Z_]+__", page)
     assert not left, "placeholders left unsubstituted: %s" % sorted(set(left))
@@ -641,13 +870,21 @@ def main():
     print("  %d shapes, %d of them telling the seating rules apart"
           % (len(SHAPES), sum(1 for s in SHAPES
                               if s["queues"]["grouped"] != s["queues"]["arrival"])))
-    print("  placement from %s: spread %d, set-back %d, rank gap %d  (tuned at %s px, used at "
-          "every size)" % (PLACEMENT.name, PLACE["spread"], PLACE["back"], PLACE["rank"],
-                           PLACE.get("tuned_at", "?")))
+    tuned = PLACE.get("tuned_at")
+    own = sorted(PLACE.get("per_set") or {}, key=set_sort)
+    print("  placement from %s: spread %d, set-back %d, rank gap %d  (the BASE, which belongs "
+          "to %s at %s px)" % (PLACEMENT.name, PLACE["spread"], PLACE["back"], PLACE["rank"],
+                               tuned or "?", set_px(tuned) if tuned else "?"))
+    print("  %s" % ("sets with numbers of their own: %s"
+                    % ", ".join("%s (%s)" % (k, ", ".join(sorted(PLACE["per_set"][k])))
+                                for k in own)
+                    if own else "no set carries numbers of its own -- every one takes the base"))
     print("  order %s  ·  mark %s  ·  depth %s %d%%"
           % (PLACE["order"], PLACE["mark"], PLACE["depth"]["mode"], PLACE["depth"]["amount"]))
     print("  sculpts %s  ·  banners %d  ·  icons %d across %d duties"
-          % (", ".join(sorted(figs, key=int)) or "none", len(banner_art),
+          % (", ".join("%s [%d pose%s]"
+                        % (k, len(figs[k][0]), "" if len(figs[k][0]) == 1 else "s")
+                        for k in sorted(figs, key=set_sort)) or "none", len(banner_art),
              sum(len(i) for i in icons), sum(1 for i in icons if i)))
     for note in notes:
         print("  %s" % note)

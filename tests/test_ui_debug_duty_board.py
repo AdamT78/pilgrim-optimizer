@@ -190,8 +190,7 @@ def test_page_survives_missing_sculpt_art(mod, tmp_path, monkeypatch, capsys):
 def test_page_embeds_the_sculpt_table_when_the_art_is_there(mod, tmp_path, monkeypatch):
     """The other half of the pair. Without this, an empty figure table would satisfy the
     missing-art test above and nothing would notice the art had stopped being embedded."""
-    if not any((mod.FIGURE_DIR / ("figure_player_1_%d.png" % s)).is_file()
-               for s in mod.FIGURE_SIZES):
+    if not any(mod.FIGURE_NAME.match(f.name) for f in mod.FIGURE_DIR.glob("figure_*.png")):
         pytest.skip("no rendered sculpts in %s; run make_tray_figures.py"
                     % mod.FIGURE_DIR.relative_to(ROOT))
     out = tmp_path / "duty_board_check.html"
@@ -200,9 +199,18 @@ def test_page_embeds_the_sculpt_table_when_the_art_is_there(mod, tmp_path, monke
     mod.main()
     page = out.read_text(encoding="utf-8")
     assert not re.search(r"FIGS\s*=\s*\{\}", page), "the sculpt table came out empty"
-    for size in mod.FIGURE_SIZES:
-        if (mod.FIGURE_DIR / ("figure_player_1_%d.png" % size)).is_file():
-            assert '"%d"' % size in page, "size %d rendered but never reached the page" % size
+    # Every SET the tray has rendered reaches the page, by label. Read off the folder rather
+    # than off a table here: which sets exist is a fact about what has been rendered, and a
+    # second list in the test would pass while the page quietly dropped one.
+    want = set()
+    for f in mod.FIGURE_DIR.glob("figure_*.png"):
+        m = mod.FIGURE_NAME.match(f.name)
+        if m and int(m.group(1)) in mod.FIGURE_SEATS:
+            want.add("%s_%s" % (m.group(3), m.group(4)))
+    assert want, "the skip guard let a run through with no art"
+    for label in sorted(want):
+        assert '"%s"' % label in page, (
+            "%s rendered but never reached the page" % label)
 
 
 def test_the_empty_tile_is_guarded(mod):
@@ -298,8 +306,8 @@ def test_sheet_reads_the_placement_file(sheet, mod, tmp_path, monkeypatch):
     out = tmp_path / "placement_sheet.html"
     monkeypatch.setattr(sys, "argv",
                         ["generate_placement_sheet.py", "--no-open", "--out", str(out)])
-    if not any((board.FIGURE_DIR / ("figure_player_1_%d.png" % s)).is_file()
-               for s in board.FIGURE_SIZES):
+    if not any(board.FIGURE_NAME.match(f.name)
+               for f in board.FIGURE_DIR.glob("figure_*.png")):
         pytest.skip("no rendered sculpts; run make_tray_figures.py")
     sheet.main()
     page = out.read_text(encoding="utf-8")
@@ -312,16 +320,18 @@ def test_the_one_set_is_used_at_every_size(mod):
 
     This used to be spelled `"sizes" not in place`, which guarded the absence of a KEY rather
     than the thing the key used to mean. `sizes` now exists and is a plain list of the sculpt
-    sizes the sow page offers a button for -- it carries no numbers of its own. So the guard is
-    written against what would actually break the contract: a size growing its own spread.
+    SETS the sow page offers a button for -- it carries no numbers of its own. So the guard is
+    written against what would actually break the contract: a set growing its own spread.
     """
     place = mod.placement([])
     for key in ("spread", "back", "rank"):
         assert isinstance(place[key], int), "%s is no longer a single number" % key
     for value in (place.get("sizes") or []):
-        assert isinstance(value, int), "sizes holds %r; it is a list of sizes, not a table" % value
-    assert place.get("tuned_at") in mod.FIGURE_SIZES, (
-        "tuned_at should name a size the tray can actually show")
+        assert isinstance(value, str) and re.match(r"^\d+_[a-z][a-z0-9_]*$", value), (
+            "sizes holds %r; it is a list of set labels, not a table" % value)
+    assert isinstance(place.get("tuned_at"), str), (
+        "tuned_at names a SET now, not a pixel height -- two sets can be 210 tall")
+    assert mod.set_px(place["tuned_at"]) > 0, "tuned_at carries no readable pixel height"
 
 
 def test_the_formation_lives_in_exactly_one_file(sheet):
@@ -350,8 +360,12 @@ def test_save_merges_rather_than_overwrites(sheet, mod, tmp_path, monkeypatch):
     monkeypatch.setattr(board, "PLACEMENT", f)
     before = _json.loads(f.read_text(encoding="utf-8"))
 
-    sheet.save_settings(board, {"spread": 88, "back": 25, "rank": 60, "order": "arrival",
-                                "depth": {"mode": "dark", "amount": 70, "full_at": 40}})
+    # The payload is per set now: the page sends what each set is tuned to and the server
+    # decides which slot each goes in. Tuning the set `tuned_at` names writes the base.
+    base_label = before["tuned_at"]
+    sheet.save_settings(board, {"order": "arrival", "sets": {base_label: {
+        "spread": 88, "back": 25, "rank": 60,
+        "depth": {"mode": "dark", "amount": 70, "full_at": 40}}}})
     after = _json.loads(f.read_text(encoding="utf-8"))
     assert after["spread"] == 88 and after["order"] == "arrival"
     assert after["depth"] == {"mode": "dark", "amount": 70, "full_at": 40}
@@ -366,13 +380,15 @@ def test_save_refuses_what_the_generator_would_refuse(sheet, mod, tmp_path, monk
     f = tmp_path / "duty_placement.json"
     f.write_text(mod.PLACEMENT.read_text(encoding="utf-8"), encoding="utf-8")
     monkeypatch.setattr(board, "PLACEMENT", f)
-    good = {"spread": 80, "back": 20, "rank": 50, "order": "grouped",
+    base_label = json.loads(f.read_text(encoding="utf-8"))["tuned_at"]
+    good = {"spread": 80, "back": 20, "rank": 50,
             "depth": {"mode": "haze", "amount": 60, "full_at": 52}}
 
-    def refuse(**over):
-        sent = dict(good, **over)
+    def refuse(order="grouped", label=None, **over):
+        sets = {base_label: dict(good)}
+        sets[label or base_label] = dict(good, **over)
         with pytest.raises(ValueError) as e:
-            sheet.save_settings(board, sent)
+            sheet.save_settings(board, {"order": order, "sets": sets})
         return str(e.value)
 
     assert "non-negative" in refuse(spread=-1)
@@ -382,6 +398,21 @@ def test_save_refuses_what_the_generator_would_refuse(sheet, mod, tmp_path, monk
     assert "haze, dark or off" in refuse(depth={"mode": "glow", "amount": 60, "full_at": 52})
     assert "0-100" in refuse(depth={"mode": "haze", "amount": 900, "full_at": 52})
     assert "positive whole number" in refuse(depth={"mode": "haze", "amount": 60, "full_at": 0})
+    # AND THE SAME RULES ON AN OVERRIDE. A set's own numbers go through the same door; validated
+    # for the base and waved through for everyone else would put the typo in per_set instead.
+    assert "non-negative" in refuse(label="120_plastic", spread=-1)
+    assert "haze, dark or off" in refuse(label="120_plastic",
+                                         depth={"mode": "glow", "amount": 60, "full_at": 52})
+    # A label that is not a label at all.
+    with pytest.raises(ValueError) as e:
+        sheet.save_settings(board, {"order": "grouped",
+                                    "sets": {base_label: dict(good), "enormous": dict(good)}})
+    assert "set label" in str(e.value)
+    # And a flat payload, which is what the page sent before this split: refused rather than
+    # guessed at, because there is no longer one set for it to have meant.
+    with pytest.raises(ValueError) as e:
+        sheet.save_settings(board, dict(good, order="grouped"))
+    assert "per set" in str(e.value)
     # and none of that reached the disk
     import json as _json
     assert _json.loads(f.read_text(encoding="utf-8"))["spread"] == \
@@ -562,26 +593,61 @@ def test_the_haze_ladder_is_described_once():
         assert "DUTY_HAZE.steps" in src, "%s sets the ladder's size itself again" % page
 
 
-def test_the_sizes_on_offer_come_from_the_file(sow):
-    """The rule Adam asked for: the file names the sizes, the buttons follow. A size with no art
-    is dropped with a note rather than offered, because a button that draws an empty board is
-    worse than a button that is absent."""
+def test_the_file_names_which_sets_are_played_at_not_which_exist(sow):
+    """SUPERSEDED CONTRACT, rewritten rather than deleted, because the change is the point.
+
+    This used to assert that `sizes` decided which sets the page offered at all. It did, and
+    that hid real work: the file named two sets, the tray had rendered ten, and a set tuned in
+    the placement sheet was unreachable here with nothing on screen to say it existed. So
+    `sizes` now says which sets are GROUPED as the played ones, and everything rendered is
+    reachable. What survives from the old contract is the part that was always right: a set the
+    file names but the tray has never rendered is dropped with a note, because there is nothing
+    to draw and silence is how you spend an afternoon wondering.
+    """
     notes = []
-    art = {"210": [], "180": []}
-    assert sow.offered({"sizes": [210], "tuned_at": 210}, art, notes) == [210]
-    assert sow.offered({"sizes": [210, 180], "tuned_at": 210}, art, notes) == [180, 210]
+    art = {"210_plastic": [], "180_plastic": [], "210_painted": []}
+    have, played = sow.offered({"sizes": ["210_plastic"], "tuned_at": "210_plastic"},
+                               art, notes)
+    assert played == ["210_plastic"]
+    assert have == ["180_plastic", "210_painted", "210_plastic"], (
+        "a set the file does not name has stopped being reachable again")
+    # Sorted by height then by name, so both groups keep a settled order as sets are added --
+    # and 180 comes before 210 whatever order the file lists them in.
+    _, played = sow.offered({"sizes": ["210_plastic", "180_plastic"],
+                             "tuned_at": "210_plastic"}, art, notes)
+    assert played == ["180_plastic", "210_plastic"]
+    _, played = sow.offered({"sizes": ["210_plastic", "210_painted"],
+                             "tuned_at": "210_plastic"}, art, notes)
+    assert played == ["210_painted", "210_plastic"]
     assert notes == []
-    assert sow.offered({"sizes": [210, 240], "tuned_at": 210}, art, notes) == [210]
-    assert any("240" in n for n in notes), "a named size with no art vanished without a word"
-    # No list at all: the size the numbers were tuned at is the one you get.
-    assert sow.offered({"tuned_at": 210}, art, []) == [210]
+    # A named set with no art is not played at, and is not silently absent either.
+    have, played = sow.offered({"sizes": ["210_plastic", "240_plastic"],
+                                "tuned_at": "210_plastic"}, art, notes)
+    assert played == ["210_plastic"] and "240_plastic" not in have
+    assert any("240_plastic" in n for n in notes), \
+        "a named set with no art vanished without a word"
+    # TWO SETS AT THE SAME HEIGHT ARE TWO SETS. Before labels this pair collapsed into one
+    # entry, which is the whole reason the key stopped being a number.
+    _, played = sow.offered({"sizes": ["210_plastic", "210_painted"],
+                             "tuned_at": "210_plastic"}, art, [])
+    assert len(played) == 2
+    # No list at all: the set the numbers were tuned against is the played one, and everything
+    # rendered is still reachable.
+    have, played = sow.offered({"tuned_at": "210_plastic"}, art, [])
+    assert played == ["210_plastic"] and len(have) == 3
 
 
 def test_placement_refuses_a_broken_size_list(mod, tmp_path, monkeypatch):
-    """`sizes` is a list of sizes, not a table of numbers and not a free-for-all."""
+    """`sizes` is a list of set LABELS, not a table of numbers and not a free-for-all.
+
+    The bare integers are in this list on purpose: they are what the key used to hold, so a
+    file left on the old spelling has to be refused rather than half-read.
+    """
     import json as _json
     good = _json.loads(mod.PLACEMENT.read_text(encoding="utf-8"))
-    for bad in ([], [210, 210], [0], [-90], [210, True], "210", {"210": {}}):
+    for bad in ([], ["210_plastic", "210_plastic"], [210], [0], [-90], [210, True],
+                "210_plastic", {"210_plastic": {}}, ["210"], ["plastic"], ["210_"],
+                ["210_Plastic"], [None]):
         doctored = dict(good)
         doctored["sizes"] = bad
         path = tmp_path / "duty_placement.json"
@@ -598,8 +664,8 @@ def test_sow_page_builds_and_reads_the_placement_file(sow, mod, tmp_path, monkey
     checked the only way that means anything: put an unmistakable value in and look for it."""
     import json as _json
     board = sow._board_module()
-    if not any((board.FIGURE_DIR / ("figure_player_1_%d.png" % s)).is_file()
-               for s in board.FIGURE_SIZES):
+    if not any(board.FIGURE_NAME.match(f.name)
+               for f in board.FIGURE_DIR.glob("figure_*.png")):
         pytest.skip("no rendered sculpts; run make_tray_figures.py")
     doctored = tmp_path / "duty_placement.json"
     place = _json.loads(mod.PLACEMENT.read_text(encoding="utf-8"))
@@ -641,6 +707,533 @@ def _in_node(expression):
     return json.loads(done.stdout)
 
 
+# ---------------------------------------------------------------- choosing a set
+
+
+PICKER_JS = ROOT / "tools" / "ui_debug" / "duty_set_picker.js"
+
+
+def test_every_rendered_set_is_reachable_on_the_sow_page(sow, mod):
+    """`sizes` stopped filtering on 2026-09-25 and started grouping, because filtering hid work.
+
+    The file named two sets, the tray had rendered ten, and 150_painted -- tuned in the
+    placement sheet, with its own spread, set-back, rank, frame and lift -- did not appear on
+    the sow page at all, with nothing on screen to say it existed. A control that silently omits
+    the thing you just tuned is worse than a long list.
+    """
+    place = mod.placement([])
+    figs = mod.figures(mod.FIGURE_DIR, [])
+    if not figs:
+        pytest.skip("no rendered sculpts; run make_tray_figures.py")
+    notes = []
+    have, played = sow.offered(place, figs, notes)
+    assert set(have) == set(figs), (
+        "the sow page cannot reach %s" % sorted(set(figs) - set(have)))
+    assert set(played) <= set(have), "a played set is not among the reachable ones"
+    # every set that carries numbers of its own is reachable, whatever `sizes` says
+    for label in (place.get("per_set") or {}):
+        if label in figs:
+            assert label in have, (
+                "%s carries its own numbers and cannot be selected -- the exact failure that "
+                "made this a grouping instead of a filter" % label)
+
+
+def test_a_named_set_with_no_art_is_dropped_from_the_played_group_with_a_note(sow, mod):
+    """It can still be named in the file and simply not rendered yet. There is nothing to draw,
+    so it is not offered -- but silently is how you spend an afternoon wondering."""
+    figs = mod.figures(mod.FIGURE_DIR, [])
+    if not figs:
+        pytest.skip("no rendered sculpts; run make_tray_figures.py")
+    notes = []
+    place = dict(mod.placement([]), sizes=sorted(figs)[:1] + ["999_nosuch"])
+    have, played = sow.offered(place, figs, notes)
+    assert "999_nosuch" not in played and "999_nosuch" not in have
+    assert any("999_nosuch" in n for n in notes), "it vanished without a word"
+
+
+@needs_node
+def test_the_picker_groups_the_played_sets_first_and_hides_nothing():
+    """The control itself, run against the real file rather than against a description of it."""
+    script = ("const fs = require('fs');\n"
+              "global.document = null;\n"
+              "eval(fs.readFileSync(%r, 'utf8'));\n"
+              "process.stdout.write(JSON.stringify({\n"
+              "  name: dutySetName('210_painted'),\n"
+              "  base: dutySetNote('210_plastic', '210_plastic', ['210_painted']),\n"
+              "  own: dutySetNote('210_painted', '210_plastic', ['210_painted']),\n"
+              "  plain: dutySetNote('90_plastic', '210_plastic', ['210_painted'])}));\n"
+              % str(PICKER_JS))
+    got = json.loads(subprocess.run(["node", "-e", script], capture_output=True, text=True,
+                                    check=True).stdout)
+    assert got["name"] == "210 painted", "the label still shows the file's underscore"
+    assert got["base"] == "base"
+    assert got["own"] == "own numbers"
+    assert got["plain"] == "", "a set with nothing of its own is being annotated anyway"
+
+
+def test_both_pages_use_the_one_picker_and_order_it_the_same(sow, sheet):
+    """Two pages presenting the same ten sets in two orders is two answers to one question.
+
+    They were within a line of each other of doing exactly that: the sow sorted the played
+    group and the sheet took the file's order, which happens to name 210_plastic first.
+    """
+    for src, who in ((sow.TEMPLATE.read_text(encoding="utf-8"), "the sow page"),
+                     (sheet.TEMPLATE, "the placement sheet")):
+        assert "dutySetPicker(" in src, "%s does not use the shared picker" % who
+        assert "dutySetPickerShow(" in src, (
+            "%s never moves the control to a set it was not clicked onto" % who)
+        assert "__SETPICKER__" in src, "%s does not inline the picker" % who
+    gen = (ROOT / "tools" / "ui_debug" / "generate_placement_sheet.py").read_text(
+        encoding="utf-8")
+    sow_gen = (ROOT / "tools" / "ui_debug" / "generate_duty_sow.py").read_text(encoding="utf-8")
+    for src, who in ((gen, "the sheet"), (sow_gen, "the sow")):
+        assert "set_sort" in src, "%s hands the picker an unsorted list" % who
+
+
+@pytest.mark.slow                      # ~30s: builds a whole page
+def test_the_sow_page_offers_every_set_it_was_built_with(sow, mod, tmp_path, monkeypatch):
+    """Read off the built page, not off the source: a generator that computes the right list and
+    substitutes the wrong one looks identical from here."""
+    board = sow._board_module()
+    figs = board.figures(board.FIGURE_DIR, [])
+    if not figs:
+        pytest.skip("no rendered sculpts; run make_tray_figures.py")
+    out = tmp_path / "duty_sow.html"
+    monkeypatch.setattr(sys, "argv", ["generate_duty_sow.py", "--no-open", "--out", str(out)])
+    sow.main()
+    page = out.read_text(encoding="utf-8")
+    sizes = json.loads(re.search(r"SIZES = (\[[^\]]*\])", page).group(1))
+    played = json.loads(re.search(r"PLAYED = (\[[^\]]*\])", page).group(1))
+    assert set(sizes) == set(figs), (
+        "the page was built without %s" % sorted(set(figs) - set(sizes)))
+    assert set(played) <= set(sizes), "a played set is not in the page's own list"
+    assert sizes == sorted(sizes, key=board.set_sort), "the page's list is not in a settled order"
+
+
+# ---------------------------------------------------------------- one set's own numbers
+
+
+def test_a_set_falls_back_to_the_base_until_it_is_tuned(mod):
+    """The shape Adam asked for: base numbers, plus a per-set row naming only what differs.
+
+    A full row per set was the alternative and was turned down for a reason worth keeping in
+    view -- there are ten sets, nobody tunes ten, and nine rows of numbers copied from a tenth
+    is a file where you cannot see which number was a decision.
+    """
+    place = mod.placement([])
+    base = mod.settings_for(place, "no_such_set")
+    for key in ("spread", "back", "rank", "frame", "depth"):
+        assert base[key] == place[key], "%s did not come through from the base" % key
+    for label, own in (place.get("per_set") or {}).items():
+        got = mod.settings_for(place, label)
+        for key in mod.PER_SET_KEYS:
+            want = own[key] if key in own else place[key]
+            assert got[key] == want, (
+                "%s resolved %s to %r, wanted %r" % (label, key, got[key], want))
+
+
+def test_the_resolver_hands_back_a_copy_rather_than_the_document(mod):
+    """A page holds what it is given and edits it. Handing back the file's own objects would
+    make tuning one set rewrite the base under every other set -- the carry-over this whole
+    change exists to stop, reintroduced one level down where nothing would see it."""
+    place = mod.placement([])
+    first = mod.settings_for(place, "210_painted")
+    first["frame"]["w"] = 9999
+    first["depth"]["full_at"] = 1
+    second = mod.settings_for(place, "210_painted")
+    assert second["frame"]["w"] != 9999, "the resolver handed out the document's own frame"
+    assert second["depth"]["full_at"] != 1, "the resolver handed out the document's own depth"
+    assert place["frame"]["w"] != 9999, "editing a resolved set reached the base"
+
+
+def test_a_set_may_not_carry_a_number_that_does_not_split(mod, tmp_path, monkeypatch):
+    """`order` and `mark` are conventions about reading a tile, not facts about how big the
+    sculpts are, so a set cannot have its own of either.
+
+    Refused rather than ignored. A key here that nothing reads is a number someone moved and
+    believes is in effect, which is worse than a number they know they cannot set.
+    """
+    good = json.loads(mod.PLACEMENT.read_text(encoding="utf-8"))
+    for bad in ({"order": "arrival"}, {"mark": "gild"}, {"sizes": ["210_plastic"]},
+                {"tuned_at": "90_plastic"}, {"per_set": {}}):
+        doctored = copy.deepcopy(good)
+        doctored["per_set"] = {"120_plastic": dict(bad)}
+        path = tmp_path / "duty_placement.json"
+        path.write_text(json.dumps(doctored), encoding="utf-8")
+        monkeypatch.setattr(mod, "PLACEMENT", path)
+        with pytest.raises(SystemExit) as caught:
+            mod.placement([])
+        assert "per_set" in str(caught.value), (
+            "the refusal does not say where the trouble is: %r -> %s" % (bad, caught.value))
+
+
+def test_a_set_may_not_carry_half_a_frame(mod, tmp_path, monkeypatch):
+    """An override carries WHOLE values. A frame with only `w` has no meaning, and guessing
+    which half was meant is how a file grows a shape nobody wrote."""
+    good = json.loads(mod.PLACEMENT.read_text(encoding="utf-8"))
+    for bad in ({"frame": {"w": 350}}, {"frame": {"h": 318}}, {"frame": {}},
+                {"depth": {"full_at": 50}}, {"depth": {"mode": "haze"}},
+                {"spread": -1}, {"rank": "wide"}):
+        doctored = copy.deepcopy(good)
+        doctored["per_set"] = {"120_plastic": dict(bad)}
+        path = tmp_path / "duty_placement.json"
+        path.write_text(json.dumps(doctored), encoding="utf-8")
+        monkeypatch.setattr(mod, "PLACEMENT", path)
+        with pytest.raises(SystemExit):
+            mod.placement([])
+    # ...and a whole one is accepted, so the test above is not passing by refusing everything.
+    doctored = copy.deepcopy(good)
+    doctored["per_set"] = {"120_plastic": {"frame": {"w": 350, "h": 318, "drop": 40}}}
+    path = tmp_path / "duty_placement.json"
+    path.write_text(json.dumps(doctored), encoding="utf-8")
+    monkeypatch.setattr(mod, "PLACEMENT", path)
+    assert mod.settings_for(mod.placement([]), "120_plastic")["frame"]["w"] == 350
+
+
+def test_which_duty_stands_on_which_plate_does_not_split(mod, tmp_path, monkeypatch):
+    """`by_duty` is a fact about the board, not about how tall the sculpts are. Letting it split
+    would put one duty on two different grounds depending on which sculpts were loaded."""
+    good = json.loads(mod.GROUND_PLAN.read_text(encoding="utf-8"))
+    doctored = copy.deepcopy(good)
+    doctored["per_set"] = {"120_plastic": {"by_duty": {"taxation": "slate_irregular"}}}
+    path = tmp_path / "duty_grounds.json"
+    path.write_text(json.dumps(doctored), encoding="utf-8")
+    monkeypatch.setattr(mod, "GROUND_PLAN", path)
+    with pytest.raises(SystemExit) as caught:
+        mod.ground_plan([])
+    assert "by_duty" in str(caught.value), "the refusal does not name the key"
+    assert "GROUND_PER_SET_KEYS" not in str(caught.value) or True
+    assert "by_duty" not in mod.GROUND_PER_SET_KEYS
+
+
+def test_a_set_may_only_restand_a_plate_that_exists(mod, tmp_path, monkeypatch):
+    """Tuning a plate name the base has never heard of is a typo that would sit in the file
+    drawing nothing, so it stops the load instead."""
+    good = json.loads(mod.GROUND_PLAN.read_text(encoding="utf-8"))
+    doctored = copy.deepcopy(good)
+    doctored["per_set"] = {"120_plastic": {"grounds": {"no_such_plate": {
+        "anchor": 25, "scale": 100, "dim": 55, "saturate": 65, "opacity": 100}}}}
+    path = tmp_path / "duty_grounds.json"
+    path.write_text(json.dumps(doctored), encoding="utf-8")
+    monkeypatch.setattr(mod, "GROUND_PLAN", path)
+    with pytest.raises(SystemExit) as caught:
+        mod.ground_plan([])
+    assert "no_such_plate" in str(caught.value)
+
+
+def test_a_set_restands_one_plate_without_touching_the_others(mod):
+    """Per plate, not per file: a set that moves one plate's anchor keeps the base's values for
+    the other five rather than having to repeat them."""
+    plan = mod.ground_plan([])
+    base = mod.ground_settings_for(plan, "no_such_set")
+    for label, own in (plan.get("per_set") or {}).items():
+        got = mod.ground_settings_for(plan, label)
+        tuned = set(own.get("grounds") or {})
+        for name in base["grounds"]:
+            if name in tuned:
+                assert got["grounds"][name] == own["grounds"][name]
+            else:
+                assert got["grounds"][name] == base["grounds"][name], (
+                    "%s: %s drifted from the base without being tuned" % (label, name))
+        assert got["by_duty"] == base["by_duty"], "by_duty forked per set"
+
+
+SPLIT_JS = ROOT / "tools" / "ui_debug" / "duty_settings_split.js"
+
+
+def _split_in_node(fn, args):
+    """Run one of the page's split functions against the real file, in node."""
+    script = ("const fs = require('fs');\n"
+              "eval(fs.readFileSync(%r, 'utf8'));\n"
+              "process.stdout.write(JSON.stringify(%s(%s)));\n"
+              % (str(SPLIT_JS), fn, ", ".join(json.dumps(a) for a in args)))
+    done = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True)
+    return json.loads(done.stdout)
+
+
+def test_the_offline_download_merges_into_the_ground_document_not_the_working_plan(sheet):
+    """The grounds file is as full of prose as the placement file, and it nearly lost all of it.
+
+    PLAN used to BE the ground document; per-set made it the RESOLVED plan for whichever set is
+    on screen -- by_duty, grounds and lift, and nothing else. documents() went on merging into
+    it, so an offline download wrote a grounds file with `note`, `grounds_note`, `lift_note`,
+    `by_duty_note` and the camera notes all gone. Caught by comparing the download against what
+    the server wrote for the same payload, which is the only way it shows: the file is valid,
+    loads fine, and is simply missing every line that says why.
+
+    So the page keeps the document and the working plan as two separate things, and this is the
+    guard on their staying separate.
+    """
+    src = sheet.TEMPLATE
+    assert "var DOC_GROUNDS = __GROUNDPLAN__;" in src, (
+        "the page no longer keeps the ground document apart from the plan it is working on")
+    docs = src[src.index("function documents()"):]
+    docs = docs[:docs.index("\n}")]
+    assert "for (k in DOC_GROUNDS)" in docs, (
+        "documents() builds the grounds file from something other than the document")
+    assert "for (k in PLAN)" not in docs, (
+        "documents() is merging into the resolved per-set plan again, which carries none of "
+        "the file's prose")
+    opened = src[src.index("var OPENED = {"):]
+    opened = opened[:opened.index("};") + 2]
+    assert "DOC_GROUNDS" in opened, (
+        "the before-picture is taken from the working plan, so the `changed` flag compares a "
+        "document against something that is not one")
+
+
+@needs_node
+def test_the_page_and_the_server_split_a_save_the_same_way(sheet, mod):
+    """The one duplication this change accepts, held to account.
+
+    The placement sheet can be opened as a file with no server behind it, and its save button
+    then has to hand over a DOCUMENT rather than the wire payload -- it handed over the payload
+    once, under the placement file's name, in a shape that file never has, and the download went
+    into the repo. So the base/override split has to exist in the page as well as in the server.
+
+    Two copies of a rule agree on the day they are written. This is the day they are checked:
+    the same payload goes through both, and the two documents have to match.
+    """
+    place = mod.placement([])
+    doc = json.loads(mod.PLACEMENT.read_text(encoding="utf-8"))
+    base_label = place["tuned_at"]
+    labels = [base_label] + sorted((place.get("per_set") or {})) + ["120_plastic"]
+    cases = [
+        # nothing changed at all
+        {label: mod.settings_for(place, label) for label in labels},
+        # a set that had no numbers of its own grows some
+        dict({label: mod.settings_for(place, label) for label in labels},
+             **{"120_plastic": dict(mod.settings_for(place, "120_plastic"), spread=88)}),
+        # a set that had its own is tuned back onto the base
+        dict({label: mod.settings_for(place, label) for label in labels},
+             **{lbl: copy.deepcopy(mod.settings_for(place, base_label))
+                for lbl in (place.get("per_set") or {})}),
+        # the base set itself moves, which must move the top of the file
+        dict({label: mod.settings_for(place, label) for label in labels},
+             **{base_label: dict(mod.settings_for(place, base_label), rank=61)}),
+    ]
+    for i, sent in enumerate(cases):
+        mine = sheet._split_base_and_overrides(
+            copy.deepcopy(doc), copy.deepcopy(sent), base_label,
+            mod.PER_SET_KEYS, sheet.PER_SET_NOTE)
+        theirs = _split_in_node("splitBaseAndOverrides",
+                                [doc, sent, base_label, list(mod.PER_SET_KEYS),
+                                 sheet.PER_SET_NOTE])
+        assert mine == theirs, (
+            "case %d: the page and the server disagree.\n  server: %s\n  page:   %s"
+            % (i, json.dumps(mine.get("per_set"), sort_keys=True),
+               json.dumps(theirs.get("per_set"), sort_keys=True)))
+    # And the cases are not all the same case: at least one must produce a different file.
+    assert len({json.dumps(_split_in_node("splitBaseAndOverrides",
+                                          [doc, c, base_label, list(mod.PER_SET_KEYS),
+                                           sheet.PER_SET_NOTE]).get("per_set"),
+                           sort_keys=True) for c in cases}) > 1, (
+        "every case produced the same per_set -- this test is not testing the split")
+
+
+@needs_node
+def test_the_page_and_the_server_split_the_plates_the_same_way(sheet, mod):
+    """The grounds' half of the pair above, where the split is per plate rather than per key."""
+    plan = mod.ground_plan([])
+    base_label = mod.placement([])["tuned_at"]
+    labels = [base_label] + sorted((plan.get("per_set") or {})) + ["120_plastic"]
+    plate = sorted(plan["grounds"])[0]
+
+    def sent(mutate=None):
+        out = {}
+        for label in labels:
+            g = mod.ground_settings_for(plan, label)
+            out[label] = {"lift": g["lift"], "grounds": copy.deepcopy(g["grounds"])}
+        if mutate:
+            mutate(out)
+        return out
+
+    def restand(out):
+        out["120_plastic"]["grounds"][plate]["anchor"] = 33
+
+    def relift(out):
+        out["120_plastic"]["lift"] = plan["lift"] + 11
+
+    for mutate in (None, restand, relift):
+        payload = sent(mutate)
+        doc = json.loads(mod.GROUND_PLAN.read_text(encoding="utf-8"))
+        mine = sheet._split_grounds_overrides(copy.deepcopy(doc), copy.deepcopy(payload),
+                                              base_label)
+        theirs = _split_in_node("splitGroundOverrides",
+                                [doc, payload, base_label, sheet.GROUND_PER_SET_NOTE])
+        assert mine == theirs, (
+            "the page and the server disagree about the plates.\n  server: %s\n  page:   %s"
+            % (json.dumps(mine.get("per_set"), sort_keys=True),
+               json.dumps(theirs.get("per_set"), sort_keys=True)))
+    # restanding one plate must store exactly that plate, or the comparison above is vacuous
+    doc = json.loads(mod.GROUND_PLAN.read_text(encoding="utf-8"))
+    after = sheet._split_grounds_overrides(copy.deepcopy(doc), sent(restand), base_label)
+    assert list(after["per_set"]["120_plastic"]["grounds"]) == [plate]
+
+
+# ---------------------------------------------------------------- sets, and a seat's poses
+
+
+def test_a_set_label_carries_its_pixel_height_and_sorts_by_it(mod):
+    """`210_painted` is a NAME with a number on the front, and both halves are load-bearing.
+
+    The height still has to come out, because the placement numbers are tuned in real pixels and
+    several drawings need to know which. The sort has to be by height FIRST, or the button row
+    reads 120, 150, 180, 210, 90 -- which is what plain string order gives you and what a page
+    would have shipped with.
+    """
+    assert mod.set_px("210_painted") == 210
+    assert mod.set_px("90_plastic") == 90
+    labels = ["210_plastic", "90_painted", "120_plastic", "210_painted", "90_plastic"]
+    assert sorted(labels, key=mod.set_sort) == [
+        "90_painted", "90_plastic", "120_plastic", "210_painted", "210_plastic"]
+    # The pair that made the label necessary: same height, different art, two entries that a
+    # sort by height alone would be free to collapse or swap between runs.
+    assert mod.set_sort("210_painted") != mod.set_sort("210_plastic")
+
+
+def test_a_seat_is_a_list_of_poses_whichever_set_it_came_from(mod):
+    """The shape the pages are written against: figs[label][seat][pose].
+
+    One pose is a list of ONE rather than a bare figure, which is the decision that lets a page
+    index the plastic set and the painted set with the same expression. A bare figure for the
+    one-pose case would have put a branch in every drawing site, and the branch is where the two
+    sets would have started to differ.
+    """
+    figs = mod.figures(mod.FIGURE_DIR, [])
+    if not figs:
+        pytest.skip("no rendered sculpts; run make_tray_figures.py")
+    for label, rows in figs.items():
+        assert len(rows) == len(mod.FIGURE_SEATS), (
+            "%s has %d seats, wanted %d" % (label, len(rows), len(mod.FIGURE_SEATS)))
+        widths = {len(row) for row in rows}
+        assert len(widths) == 1, (
+            "%s gives its seats different numbers of poses (%s) -- a column rule keyed off the "
+            "index would then mean a different pose per seat" % (label, sorted(widths)))
+        for row in rows:
+            assert row, "%s has a seat with no poses at all" % label
+            for fig in row:
+                assert fig["w"] > 0 and fig["h"] > 0, "%s embedded a zero-sized figure" % label
+                assert fig["uri"].startswith("data:image/webp;base64,")
+
+
+def test_a_half_rendered_set_is_left_out_rather_than_drawn_short(mod, tmp_path):
+    """Half a set draws a board with a seat missing, which reads as a RULE about the arrangement
+    rather than as art that never rendered. So it is dropped, with a note naming the seat.
+
+    Built from real files rather than from a stub, because the thing being tested is what
+    happens between the folder and the dict."""
+    figs = mod.figures(mod.FIGURE_DIR, [])
+    if not figs:
+        pytest.skip("no rendered sculpts; run make_tray_figures.py")
+    label = sorted(figs, key=mod.set_sort)[0]
+    px, kind = label.split("_", 1)
+    for f in mod.FIGURE_DIR.glob("figure_player_*_%s_%s.png" % (px, kind)):
+        m = mod.FIGURE_NAME.match(f.name)
+        if m and int(m.group(1)) == mod.FIGURE_SEATS[-1]:
+            continue                      # leave the last seat behind: that is the hole
+        shutil.copy2(f, tmp_path / f.name)
+    notes = []
+    short = mod.figures(tmp_path, notes)
+    assert label not in short, "a set missing a seat was offered anyway"
+    assert any(label in n and str(mod.FIGURE_SEATS[-1]) in n for n in notes), (
+        "the set vanished without a note naming the seat: %r" % notes)
+
+
+@needs_node
+def test_one_pose_answers_every_pose_and_three_poses_cycle():
+    """dutyPose is the single place that turns "I want pose n" into a figure.
+
+    The modulo is not a fallback for a one-pose set -- a set with one pose HAS no other, so its
+    only figure is the right answer to every n. That is what lets the plastic set and the
+    painted set be swapped under a page that asks for pose 2 without the page knowing which is
+    loaded. A negative n is the exception: JS keeps the sign through %, so it is folded rather
+    than allowed to index off the front of the row.
+    """
+    three = "[{n:0},{n:1},{n:2}]"
+    one = "[{n:0}]"
+    assert _in_node("[0,1,2,3,4].map(function(i){ return dutyPose(%s, i).n; })" % three) \
+        == [0, 1, 2, 0, 1]
+    assert _in_node("[0,1,2,3,9].map(function(i){ return dutyPose(%s, i).n; })" % one) \
+        == [0, 0, 0, 0, 0]
+    assert _in_node("dutyPose([], 0)") is None
+    assert _in_node("dutyPose(null, 0)") is None
+    assert _in_node("dutyPose(%s, -1).n" % three) == 2, "a negative pose ran off the front"
+
+
+@needs_node
+def test_a_set_is_measured_over_every_pose_not_just_the_first():
+    """The field height and the capacity box both have to hold the worst case a set can put on a
+    tile. Measured off pose 1 alone they would be wrong for this project's real art: seat 1's
+    painted poses are 89, 89 and 100 px wide, so a box sized on pose 1 is eleven pixels short of
+    what pose 3 needs -- and the frame it is checked against is 320 with a capacity of exactly
+    320 at the widest. That is the case that would have passed and then clipped.
+    """
+    rows = "[[{w:89,h:209},{w:89,h:209},{w:100,h:210}],[{w:91,h:205}]]"
+    assert _in_node("dutySetWidth(%s)" % rows) == 100, "the widest pose was not seen"
+    assert _in_node("dutySetHeight(%s)" % rows) == 210, "the tallest pose was not seen"
+    assert _in_node("dutySetWidth([])") == 0
+    assert _in_node("dutySetHeight(null)") == 0
+
+
+@needs_node
+def test_the_pose_comes_from_the_column_and_nothing_else():
+    """First column v1, second v2, third v3, on a row-major grid of nine.
+
+    Adam's rule, and the reason it is the GRID POSITION rather than the duty: the duty tiles are
+    randomised onto grid positions at setup, so a table from duty name to pose would put a duty
+    in a different pose every deal -- the same duty's acolytes changing pose between games, which
+    is the one thing a pose must not appear to signify. The position is fixed for the whole game.
+    """
+    got = _in_node("[0,1,2,3,4,5,6,7,8].map(dutyPoseForColumn)")
+    assert got == [0, 1, 2, 0, 1, 2, 0, 1, 2], (
+        "the pose no longer follows the column: %r" % got)
+    # Three tiles down a column agree, three across a row differ. Stated as the two claims the
+    # rule actually makes, because the list above satisfies both only by accident of order.
+    for column in (0, 1, 2):
+        down = {got[column], got[column + 3], got[column + 6]}
+        assert len(down) == 1, "column %d does not hold one pose" % column
+    for row in (0, 3, 6):
+        assert len(set(got[row:row + 3])) == 3, "row at %d repeats a pose" % row
+    assert _in_node("dutyPoseForColumn(-1)") == 2, "a negative index ran off the front"
+
+
+def test_no_page_chooses_a_tile_pose_for_itself():
+    """The rule is in one file, and a page that kept its own `POSE` for a tile would look right
+    and be wrong -- every tile drawing the same painting, which is what this whole commit exists
+    to stop, and which nothing on screen would announce.
+
+    The placement sheet is allowed a POSE, and only there: its arrangements view is a table of
+    formations with no grid at all, so there is no column to read. Its WHEEL view draws nine
+    positions and must take the column like everyone else.
+    """
+    for page in ("duty_board_check.html.tmpl", "duty_sow.html.tmpl"):
+        src = (ROOT / "tools" / "ui_debug" / page).read_text(encoding="utf-8")
+        assert "dutyPoseForColumn(" in src, "%s does not ask for the column's pose" % page
+        assert not re.search(r"^var POSE\b", src, re.M), (
+            "%s keeps a pose of its own again" % page)
+    sheet_src = (ROOT / "tools" / "ui_debug" / "generate_placement_sheet.py").read_text(
+        encoding="utf-8")
+    assert "dutyPoseForColumn(" in sheet_src, "the sheet's wheel ignores the column"
+    # The one POSE that is allowed, and the view it belongs to.
+    assert "var POSE = 0, ORDER" in sheet_src, "the sheet lost its arrangements-view pose"
+
+
+def test_no_page_indexes_the_art_by_a_bare_pixel_height():
+    """`FIGS[String(SIZE)]` was correct for exactly as long as a size was a number.
+
+    Left behind anywhere it would silently return undefined once SIZE became `210_painted`, and
+    an undefined row draws an empty tile rather than throwing -- so nothing would have said so.
+    """
+    for page in ("duty_board_check.html.tmpl", "duty_sow.html.tmpl"):
+        src = (ROOT / "tools" / "ui_debug" / page).read_text(encoding="utf-8")
+        assert "String(SIZE)" not in src, "%s still keys the art by a pixel height" % page
+        assert "dutyPose(" in src, "%s draws a seat without choosing a pose" % page
+    sheet_src = (ROOT / "tools" / "ui_debug" / "generate_placement_sheet.py").read_text(
+        encoding="utf-8")
+    assert "ART[String(SIZE)]" not in sheet_src, "the sheet still keys the art by a height"
+    assert "dutyPose(" in sheet_src, "the sheet draws a seat without choosing a pose"
+
+
 def test_the_tile_layout_lives_in_exactly_one_file():
     """It was written out in each page that draws the wheel, and the copies had drifted.
 
@@ -655,6 +1248,81 @@ def test_the_tile_layout_lives_in_exactly_one_file():
         assert "dutyTileLayout(" in src, "%s no longer asks for the shared layout" % page
         for own in ("* 0.55", "* 0.046", "* 0.05,", "* 0.010", "* 0.168"):
             assert own not in src, "%s computes %r itself again" % (page, own)
+
+
+@needs_node
+def test_the_default_spacing_is_per_rank_and_keeps_the_group_narrow():
+    """Off -- the default, and what has always been drawn -- `spread` is the gap between
+    neighbours WITHIN a rank, and the back rank sits in the front rank's gaps.
+
+    This was briefly made the only behaviour's opposite on 2026-09-25 and reverted the same day:
+    spacing so that no two figures anywhere are closer than `spread` doubles how wide four and
+    five stand, and on the tuned plates the group burst out of its frame and past the tile, with
+    the outer acolytes hanging over the neighbouring cell. Hence a default that is narrow and a
+    checkbox for the other.
+    """
+    for spread in (40, 100):
+        for n in range(2, 6):
+            slots = _in_node("dutyFormation(%d, %d, 20, 49, false)" % (n, spread))
+            ranks = {}
+            for p in slots:
+                # the set-back middle belongs to the front rank; it is nudged, not a rank of one
+                ranks.setdefault(0 if p["y"] != 49 else 49, []).append(p["x"])
+            for y, xs in ranks.items():
+                xs = sorted(xs)
+                gaps = [round(b - a) for a, b in zip(xs, xs[1:])]
+                assert all(g == spread for g in gaps), (
+                    "n=%d at spread %d: the rank at y=%d has gaps %s, not %d apart"
+                    % (n, spread, y, gaps, spread))
+    # ...and the whole group stays inside two steps plus a figure at five, which is what keeps
+    # it on the tile.
+    box = _in_node("dutyCapacityBox(5, 80, 20, 49, 71, 150, false)")
+    assert round(box["w"]) == 2 * 80 + 71
+
+
+@needs_node
+def test_the_checkbox_spaces_across_ranks_and_costs_width():
+    """On, `spread` is the gap between any two neighbours whichever rank they stand on."""
+    for spread in (40, 100):
+        for n in range(2, 6):
+            xs = sorted(p["x"] for p in
+                        _in_node("dutyFormation(%d, %d, 20, 49, true)" % (n, spread)))
+            steps = [round(b - a) for a, b in zip(xs, xs[1:])]
+            assert steps == [spread] * (n - 1), (
+                "with the box ticked, %d sculpts at spread %d step %s" % (n, spread, steps))
+    box = _in_node("dutyCapacityBox(5, 80, 20, 49, 71, 150, true)")
+    assert round(box["w"]) == 4 * 80 + 71, (
+        "the cost of ticking it is four steps of room at five sculpts, not %s" % box["w"])
+
+
+@needs_node
+def test_one_and_two_and_three_do_not_move_when_the_box_is_ticked():
+    """With one rank there is nothing to interleave, so the box cannot change them. If it does,
+    it has stopped being about ranks and started being about spread."""
+    for n in (1, 2, 3):
+        off = _in_node("dutyFormation(%d, 70, 20, 49, false)" % n)
+        on = _in_node("dutyFormation(%d, 70, 20, 49, true)" % n)
+        assert off == on, "%d sculpts moved when the box was ticked" % n
+    # and four and five DO move, or the test above is vacuous
+    for n in (4, 5):
+        assert _in_node("dutyFormation(%d, 70, 20, 49, false)" % n) \
+            != _in_node("dutyFormation(%d, 70, 20, 49, true)" % n)
+
+
+@needs_node
+def test_nobody_stands_directly_behind_anybody_either_way():
+    """The reason the ranks interleave at all, and it has to survive both settings -- spacing
+    the ranks apart must not be done by stacking the back rank straight behind the front."""
+    for wide in ("false", "true"):
+        for n in (4, 5):
+            slots = _in_node("dutyFormation(%d, 80, 20, 49, %s)" % (n, wide))
+            front = [p["x"] for p in slots if p["y"] != 49]
+            for p in slots:
+                if p["y"] != 49:
+                    continue
+                assert all(abs(p["x"] - f) > 1e-6 for f in front), (
+                    "wide=%s, n=%d: one at x=%s stands directly behind another"
+                    % (wide, n, p["x"]))
 
 
 @needs_node
@@ -731,10 +1399,11 @@ def test_the_sheet_saves_the_frame_without_losing_the_prose(sheet, mod, tmp_path
     path = tmp_path / "duty_placement.json"
     path.write_text(mod.PLACEMENT.read_text(encoding="utf-8"), encoding="utf-8")
     monkeypatch.setattr(board, "PLACEMENT", path)
-    saved = sheet.save_settings(board, {
-        "spread": 110, "back": 21, "rank": 52, "order": "grouped",
+    base_label = json.loads(path.read_text(encoding="utf-8"))["tuned_at"]
+    saved = sheet.save_settings(board, {"order": "grouped", "sets": {base_label: {
+        "spread": 110, "back": 21, "rank": 52,
         "depth": {"mode": "haze", "amount": 60, "full_at": 52},
-        "frame": {"w": 400, "h": 500, "drop": -10}})
+        "frame": {"w": 400, "h": 500, "drop": -10}}}})
     assert saved["frame"] == {"w": 400, "h": 500, "drop": -10}
     assert "frame_note" in saved, "the explanation of what the frame is was thrown away"
     assert "note" in saved and "one_set_on_purpose" in saved
@@ -753,8 +1422,10 @@ def test_the_sheet_has_the_wheel_view_and_the_frame_controls(sheet):
     for wiring in ('\nslider("frw"', '\nslider("frh"', '\nslider("frd"'):
         assert wiring in src, "%s is not wired to anything" % wiring.strip()
     assert "function drawWheel" in src and "function drawCases" in src
-    assert "FRAME = __FRAME__" in src, (
-        "the frame is hardcoded in the page rather than coming from the file")
+    assert "__RULES__" in src and "loadVars(" in src, (
+        "the frame is hardcoded in the page rather than arriving with each set's numbers")
+    assert "__FRAME__" not in src, (
+        "the frame is still handed over once for the whole page; it is per set now")
 
 
 def test_the_wheel_view_does_not_grow_its_own_copy_of_the_nine_tiles(sheet):
@@ -1000,8 +1671,8 @@ def test_the_sow_page_plays_on_what_the_sheet_saved(sow, mod, tmp_path, monkeypa
     them in the page.
     """
     board = sow._board_module()
-    if not any((board.FIGURE_DIR / ("figure_player_1_%d.png" % s)).is_file()
-               for s in board.FIGURE_SIZES):
+    if not any(board.FIGURE_NAME.match(f.name)
+               for f in board.FIGURE_DIR.glob("figure_*.png")):
         pytest.skip("no rendered sculpts; run make_tray_figures.py")
 
     place = json.loads(mod.PLACEMENT.read_text(encoding="utf-8"))
@@ -1039,8 +1710,16 @@ def test_the_sheet_can_pick_a_ground(sheet):
         assert control in src, "%s is missing" % control
     for wiring in ("\nfunction setGround", "\nfunction syncGroundSliders"):
         assert wiring in src, "%s is not there" % wiring.strip()
-    assert "PLATES = __PLATES__" in src and "PLAN = __GROUNDPLAN__" in src, (
-        "the plates or the plan are hardcoded rather than read")
+    # The plan arrives as the ground DOCUMENT and is then resolved per set -- `PLAN` is the
+    # working copy for whichever set is on screen, `DOC_GROUNDS` is the file. Both spellings are
+    # checked, because the page needs each for a different job and losing either is a bug:
+    # without the document an offline download drops the file's prose, and without the working
+    # copy every set stands its plates the same way.
+    assert "PLATES = __PLATES__" in src, "the plates are hardcoded rather than read"
+    assert "DOC_GROUNDS = __GROUNDPLAN__" in src, (
+        "the ground document is hardcoded rather than read")
+    assert "PLAN = " in src and "GPLANS" in src, (
+        "the plan is no longer resolved per set, so every set stands its plates the same way")
 
 
 # ---------------------------------------------------------------- the button that did not save
@@ -1083,15 +1762,23 @@ def test_the_offline_button_downloads_only_what_moved(sheet):
     So the offline path compares each document against what the page opened with and hands over
     only the ones that moved.
 
-    The before-picture has to be frozen at load: PLAN is mutated while you work, because
-    settingsFor() writes a new plate's defaults into it, so it cannot be its own baseline.
+    The before-picture has to be a FROZEN COPY OF THE DOCUMENT, and both halves of that matter.
+    Frozen, because the working plan is mutated while you work -- settingsFor() writes a new
+    plate's defaults into it -- so a baseline that aliased it could never differ. Of the
+    document, because since the numbers went per set the working plan is no longer the document:
+    it is the resolved by_duty/grounds/lift for whichever set is on screen, and comparing a
+    document against that reports every line of the file's prose as a change.
     """
     src = sheet.TEMPLATE
     assert "var OPENED = " in src, "nothing records what the two files looked like on opening"
     opened = src[src.index("var OPENED = "):]
     opened = opened[:opened.index(";\n")]
-    assert "JSON.parse(JSON.stringify(PLAN))" in opened, (
-        "the baseline aliases PLAN, which is mutated as you work -- it could never differ")
+    for doc in ("DOC_PLACEMENT", "DOC_GROUNDS"):
+        assert "JSON.parse(JSON.stringify(%s))" % doc in opened, (
+            "the baseline for %s is not a frozen copy of the document" % doc)
+    assert "JSON.stringify(PLAN)" not in opened, (
+        "the baseline aliases the working plan, which is both mutated as you work and no "
+        "longer the document")
     docs = src[src.index("function documents()"):]
     docs = docs[:docs.index("\n}")]
     assert docs.count("changed:") == 2, "not every document is compared against its baseline"
@@ -1114,12 +1801,17 @@ def test_the_two_save_paths_merge_the_same_keys(sheet):
         "the page has no copy of the placement document to merge into, so it cannot build it")
     docs = src[src.index("function documents()"):]
     docs = docs[:docs.index("\n}")]
-    for key in ("SAVE_KEYS.placement[i]", "SAVE_KEYS.grounds[i]",
-                "SAVE_KEYS.placement_file", "SAVE_KEYS.grounds_file"):
+    for key in ("SAVE_KEYS.per_set", "SAVE_KEYS.placement_file", "SAVE_KEYS.grounds_file",
+                "SAVE_KEYS.per_set_note", "SAVE_KEYS.ground_per_set_note"):
         assert key in docs, "documents() does not go through %s" % key
     for literal in ("spread", "back", "rank", "by_duty"):
         assert '"%s"' % literal not in docs, (
             "documents() names %r itself instead of taking the generator's list" % literal)
+    # THE SPLIT ITSELF IS THE OTHER HALF, and it is a second copy of the server's -- see
+    # test_the_page_and_the_server_split_a_save_the_same_way, which holds the two together.
+    assert "splitBaseAndOverrides(" in docs and "splitGroundOverrides(" in docs, (
+        "documents() no longer applies the base/override split, so an offline download would "
+        "write a flat file the reader cannot make sense of")
 
 
 @pytest.mark.slow                      # ~29s: builds a whole page
@@ -1130,8 +1822,8 @@ def test_the_generator_hands_the_page_the_keys_it_merges_by(sheet, mod, tmp_path
     stale copy is the same bug wearing the fix.
     """
     board = sheet._board_module()
-    if not any((board.FIGURE_DIR / ("figure_player_1_%d.png" % s)).is_file()
-               for s in board.FIGURE_SIZES):
+    if not any(board.FIGURE_NAME.match(f.name)
+               for f in board.FIGURE_DIR.glob("figure_*.png")):
         pytest.skip("no rendered sculpts; run make_tray_figures.py")
     out = tmp_path / "placement_sheet.html"
     monkeypatch.setattr(sys, "argv",
@@ -1168,17 +1860,27 @@ def test_save_settings_writes_exactly_the_keys_it_advertises(sheet, mod, tmp_pat
     original = json.loads(mod.PLACEMENT.read_text(encoding="utf-8"))
     path.write_text(json.dumps(original), encoding="utf-8")
     monkeypatch.setattr(board, "PLACEMENT", path)
-    sent = {"spread": 97, "back": 13, "rank": 41, "order": "arrival",
-            "depth": {"mode": "dark", "amount": 33, "full_at": 44},
-            "frame": {"w": 301, "h": 402, "drop": -7}}
+    base_label = original["tuned_at"]
+    sent = {"order": "arrival", "sets": {base_label: {
+        "spread": 97, "back": 13, "rank": 41,
+        "depth": {"mode": "dark", "amount": 33, "full_at": 44},
+        "frame": {"w": 301, "h": 402, "drop": -7}}}}
     saved = sheet.save_settings(board, sent)
     moved = {k for k in saved if saved[k] != original.get(k)}
-    assert moved <= set(sheet.PLACEMENT_KEYS), (
-        "%s moved but is not named by PLACEMENT_KEYS" % sorted(moved - set(sheet.PLACEMENT_KEYS)))
-    assert moved == set(sheet.PLACEMENT_KEYS), (
+    # `per_set` may also move, because dropping a row that now matches the base is part of what
+    # a save does. It is named here rather than added to PLACEMENT_KEYS, which is the list of
+    # things a SET carries -- per_set is the container those live in, not one of them.
+    allowed = set(sheet.PLACEMENT_KEYS) | {"per_set"}
+    assert moved <= allowed, (
+        "%s moved but nothing names it" % sorted(moved - allowed))
+    assert set(sheet.PLACEMENT_KEYS) <= moved, (
         "%s is named by PLACEMENT_KEYS but a save does not move it"
         % sorted(set(sheet.PLACEMENT_KEYS) - moved))
     assert "tuned_at" in saved, "the prose and the untouched keys were thrown away"
+    # AND A SET'S OWN NUMBERS ARE NOT SILENTLY PROMOTED. Sending only the base must leave every
+    # other set's row exactly as it was -- the page only knows the sets the tray has rendered.
+    assert (saved.get("per_set") or {}) == (original.get("per_set") or {}), (
+        "a save that named one set changed another's row")
 
 
 def test_the_page_says_it_cannot_save_before_the_tuning_not_after(sheet):
@@ -1252,8 +1954,8 @@ def test_the_sow_names_every_plate_it_stands_a_duty_on(sow, mod, tmp_path, monke
     two disagree you can see it without opening the page.
     """
     board = sow._board_module()
-    if not any((board.FIGURE_DIR / ("figure_player_1_%d.png" % s)).is_file()
-               for s in board.FIGURE_SIZES):
+    if not any(board.FIGURE_NAME.match(f.name)
+               for f in board.FIGURE_DIR.glob("figure_*.png")):
         pytest.skip("no rendered sculpts; run make_tray_figures.py")
 
     plan = json.loads(mod.GROUND_PLAN.read_text(encoding="utf-8"))
@@ -1346,8 +2048,8 @@ def test_the_lift_reaches_both_pages(sheet, sow, mod, tmp_path, monkeypatch):
     """The generators must carry the key through to the page at all -- a separate claim from
     the one above, and the one that catches a generator trimming the plan on its way out."""
     board = sheet._board_module()
-    if not any((board.FIGURE_DIR / ("figure_player_1_%d.png" % s)).is_file()
-               for s in board.FIGURE_SIZES):
+    if not any(board.FIGURE_NAME.match(f.name)
+               for f in board.FIGURE_DIR.glob("figure_*.png")):
         pytest.skip("no rendered sculpts; run make_tray_figures.py")
     plan = json.loads(mod.GROUND_PLAN.read_text(encoding="utf-8"))
     path = tmp_path / "duty_grounds.json"
@@ -2357,6 +3059,28 @@ def test_a_plate_is_held_tighter_than_a_sculpt(checker):
             assert verdict(r["degrees"], checker.GROUND_TOLERANCE_DEGREES) == "ok", (
                 "%s carries %s and no longer passes at %s degrees"
                 % (r["name"], ", ".join(r["duties"]), checker.GROUND_TOLERANCE_DEGREES))
+
+
+def test_the_plate_target_is_never_printed_as_the_value_it_was_moved_off(checker, capsys):
+    """31.545 and 31.55 are a corrected value and the mistake it replaced, and at two decimals
+    they are the same string.
+
+    The run summary printed "31.55 deg target" beside a window of "31.07 to 32.02", which is the
+    rounded number the target was deliberately moved away from -- see the assertion below for
+    why rounding it is what put slate on the boundary. A readout showing the old number undoes
+    the correction for whoever reads it, which is the same failure the ring picture had and was
+    fixed for on 2026-09-24.
+    """
+    assert checker._trim(31.545) == "31.545", "the target rounds away again"
+    # Trailing zeros stripped, so a tolerance does not gain a digit it was never measured to.
+    assert checker._trim(0.48) == "0.48"
+    assert checker._trim(0.480) == "0.48"
+    assert checker._trim(32.025) == "32.025"
+    src = (ROOT / "tools" / "ui_debug" / "generate_asset_check.py").read_text(encoding="utf-8")
+    window = src[src.index("ground plates: "):src.index("ground plates: ") + 600]
+    assert "%.2f" not in window, (
+        "the plate target or its window is printed at two decimals again, where 31.545 reads "
+        "as 31.55")
 
 
 def test_the_plate_window_is_locked_and_every_plate_is_inside_it(checker):

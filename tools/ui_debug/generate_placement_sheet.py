@@ -33,10 +33,12 @@ both pages would then disagree about what a valid file is while each looked enti
 """
 
 import argparse
+import copy
 import html
 import importlib.util
 import json
 import pathlib
+import re
 import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -89,6 +91,11 @@ GROUND = "#17130d"
 # into every page that draws acolytes. The formation was written out three times and the depth
 # cue twice; they agreed only because they had been copied from each other.
 RULES_JS = HERE / "duty_sculpt_rules.js"
+# The save button's half of the base/override split, shared with the test that pins it against
+# this file's own _split_base_and_overrides.
+SPLIT_JS = HERE / "duty_settings_split.js"
+# The set dropdown, shared with the sow page so the two group the sets the same way.
+PICKER_JS = HERE / "duty_set_picker.js"
 
 # WHICH KEYS THE BUTTON WRITES, AND INTO WHICH FILE. Handed to the page as well as used here,
 # because the button has two paths -- POST to this generator when served, download when the page
@@ -98,63 +105,152 @@ RULES_JS = HERE / "duty_sculpt_rules.js"
 PLACEMENT_KEYS = ("spread", "back", "rank", "order", "depth", "frame")
 GROUND_KEYS = ("by_duty", "grounds", "lift")
 
+# WHICH OF THOSE A SET MAY CARRY ITS OWN OF is NOT restated here: it is read off the board
+# module through the `board` argument every one of these functions already has. A second list
+# would be a key that splits on save and not on load -- a number the page lets you set and the
+# board then ignores, which is the quietest kind of wrong.
+PER_SET_NOTE = (
+    "Numbers a single sculpt set carries of its own. The keys above are the BASE, and they "
+    "belong to the set `tuned_at` names; every other set falls back to them until it is tuned. "
+    "A set here names only what it changes, and names it WHOLE -- written by the placement "
+    "sheet's save button, which drops a set's row again the moment it matches the base.")
+GROUND_PER_SET_NOTE = (
+    "How one sculpt set stands its plates. The plate ART is shared; how it is STOOD is not, "
+    "because `lift` is a distance in real pixels and `scale` sizes a plate against figures that "
+    "are 90 px tall in one set and 210 in another. `by_duty` is deliberately not here: which "
+    "duty stands on which plate is a fact about the board, not about how big the sculpts are.")
+
+
+def _clean_geometry(sent, where, need_all=True):
+    """Validate one set's arrangement numbers off the wire, with the generator's own rules.
+
+    Returns the cleaned dict rather than mutating anything, so the base and every override go
+    through the same door and the caller decides where each one lands.
+    """
+    clean = {}
+    for key in ("spread", "back", "rank"):
+        if key not in sent:
+            if need_all:
+                raise ValueError("no %s in what the page sent for %s" % (key, where))
+            continue
+        value = sent[key]
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ValueError("%s: %s is %r, want a non-negative whole number"
+                             % (where, key, value))
+        clean[key] = value
+    depth = sent.get("depth")
+    if depth is not None:
+        if depth.get("mode") not in ("haze", "dark", "off"):
+            raise ValueError("%s: depth.mode is %r, want haze, dark or off"
+                             % (where, depth.get("mode")))
+        if isinstance(depth.get("amount"), bool) or not isinstance(depth.get("amount"), int) \
+                or not 0 <= depth["amount"] <= 100:
+            raise ValueError("%s: depth.amount is %r, want a whole number 0-100"
+                             % (where, depth.get("amount")))
+        if isinstance(depth.get("full_at"), bool) or not isinstance(depth.get("full_at"), int) \
+                or depth["full_at"] <= 0:
+            raise ValueError("%s: depth.full_at is %r, want a positive whole number"
+                             % (where, depth.get("full_at")))
+        clean["depth"] = {"mode": depth["mode"], "amount": depth["amount"],
+                          "full_at": depth["full_at"]}
+    elif need_all:
+        raise ValueError("no depth in what the page sent for %s" % where)
+    # The checkbox. Sent on every save so a set can turn it OFF again -- an absent key would
+    # be indistinguishable from "leave it as it was", and there would be no way back.
+    wide = sent.get("width_across_ranks")
+    if wide is not None:
+        if not isinstance(wide, bool):
+            raise ValueError("%s: width_across_ranks is %r, want true or false"
+                             % (where, wide))
+        clean["width_across_ranks"] = wide
+    frame = sent.get("frame")
+    if frame is not None:
+        for key in ("w", "h"):
+            value = frame.get(key)
+            if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                raise ValueError("%s: frame.%s is %r, want a positive whole number"
+                                 % (where, key, value))
+        drop = frame.get("drop", 0)
+        if isinstance(drop, bool) or not isinstance(drop, int):
+            raise ValueError("%s: frame.drop is %r, want a whole number" % (where, drop))
+        clean["frame"] = {"w": frame["w"], "h": frame["h"], "drop": drop}
+    return clean
+
+
+def _split_base_and_overrides(doc, sent_sets, base_label, keys, note):
+    """Put one set's numbers in the base slot and every other set's difference in `per_set`.
+
+    THE BASE BELONGS TO ONE SET, the one `tuned_at` names, and that is what makes the file
+    readable rather than a pile of ten rows: every other set is stored as what it CHANGES. So a
+    set tuned back to the base loses its override automatically, and the file does not slowly
+    fill with rows that say nothing.
+
+    Sets the page never showed are left exactly as they are. The page only knows the sets the
+    tray has rendered, and a save from a half-rendered tray must not quietly delete the tuning
+    of a set that simply was not on screen.
+    """
+    per_set = dict(doc.get("per_set") or {})
+    if base_label in sent_sets:
+        for key in keys:
+            if key in sent_sets[base_label]:
+                doc[key] = copy.deepcopy(sent_sets[base_label][key])
+    base = {key: doc.get(key) for key in keys}
+    for label, values in sent_sets.items():
+        if label == base_label:
+            per_set.pop(label, None)       # the base IS this set; an override would be a copy
+            continue
+        own = {key: copy.deepcopy(values[key]) for key in keys
+               if key in values and values[key] != base.get(key)}
+        if own:
+            per_set[label] = own
+        else:
+            per_set.pop(label, None)
+    if per_set:
+        doc["per_set"] = per_set
+        doc.setdefault("per_set_note", note)
+    else:
+        doc.pop("per_set", None)
+    return doc
+
 
 def save_settings(board, sent):
     """Write the tuned numbers back into the placement file.
 
-    MERGED, NOT OVERWRITTEN. The file carries more prose than numbers -- why the set is one set,
-    what each control costs, what was measured -- and a save that replaced the document would
-    throw all of it away the first time someone nudged a slider.
+    MERGED, NOT OVERWRITTEN. The file carries more prose than numbers -- why the numbers are
+    what they are, what each control costs, what was measured -- and a save that replaced the
+    document would throw all of it away the first time someone nudged a slider.
+
+    PER SET. The page sends every set it is showing, and this decides which slot each one goes
+    in: the set `tuned_at` names writes the base, and every other set writes only what it
+    changes. The page does not make that decision, because the page would have to know which
+    set the base belongs to and that is a fact about the file.
 
     Validated before it touches the disk, with the same rules the generator reads by, so the
     button cannot write a file the tool would then refuse to load.
     """
     current = json.loads(board.PLACEMENT.read_text(encoding="utf-8"))
     merged = dict(current)
-    clean = {}
-    for key in ("spread", "back", "rank"):
-        if key not in sent:
-            raise ValueError("no %s in what the page sent" % key)
-        value = sent[key]
-        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-            raise ValueError("%s is %r, want a non-negative whole number" % (key, value))
-        clean[key] = value
+
+    # `order` is not per set -- it is a convention about reading a tile -- so it is taken once.
     if sent.get("order") not in ("grouped", "arrival"):
         raise ValueError("order is %r, want grouped or arrival" % sent.get("order"))
-    clean["order"] = sent["order"]
-    depth = sent.get("depth") or {}
-    if depth.get("mode") not in ("haze", "dark", "off"):
-        raise ValueError("depth.mode is %r, want haze, dark or off" % depth.get("mode"))
-    if isinstance(depth.get("amount"), bool) or not isinstance(depth.get("amount"), int) \
-            or not 0 <= depth["amount"] <= 100:
-        raise ValueError("depth.amount is %r, want a whole number 0-100" % depth.get("amount"))
-    if isinstance(depth.get("full_at"), bool) or not isinstance(depth.get("full_at"), int) \
-            or depth["full_at"] <= 0:
-        raise ValueError("depth.full_at is %r, want a positive whole number" % depth.get("full_at"))
-    clean["depth"] = {"mode": depth["mode"], "amount": depth["amount"],
-                      "full_at": depth["full_at"]}
-    # The frame, when the page is showing the wheel. Same rules the generator reads by, so the
-    # button cannot write a file the tool would then refuse to load.
-    frame = sent.get("frame")
-    if frame is not None:
-        for key in ("w", "h"):
-            value = frame.get(key)
-            if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-                raise ValueError("frame.%s is %r, want a positive whole number" % (key, value))
-        drop = frame.get("drop", 0)
-        if isinstance(drop, bool) or not isinstance(drop, int):
-            raise ValueError("frame.drop is %r, want a whole number" % drop)
-        clean["frame"] = {"w": frame["w"], "h": frame["h"], "drop": drop}
+    merged["order"] = sent["order"]
 
-    # MERGED THROUGH THE ONE LIST the page is also given, so a key this function learns to
-    # validate but nobody adds to PLACEMENT_KEYS is dropped here loudly rather than written by
-    # one save path and not the other.
-    if set(clean) - set(PLACEMENT_KEYS):
-        raise ValueError("validated %s, which PLACEMENT_KEYS does not name"
-                         % ", ".join(sorted(set(clean) - set(PLACEMENT_KEYS))))
-    for key in PLACEMENT_KEYS:
-        if key in clean:
-            merged[key] = clean[key]
+    sets = sent.get("sets")
+    if not isinstance(sets, dict) or not sets:
+        raise ValueError("no sets in what the page sent -- the numbers are per set now, and a "
+                         "flat payload would have to guess which set it was tuning")
+    base_label = current.get("tuned_at")
+    clean_sets = {}
+    for label, values in sets.items():
+        if not re.match(r"^\d+_[a-z][a-z0-9_]*$", str(label)):
+            raise ValueError("sets has %r, which is not a set label like '210_painted'" % label)
+        clean_sets[label] = _clean_geometry(values, label, need_all=(label == base_label))
+    stray = sorted({k for v in clean_sets.values() for k in v} - set(board.PER_SET_KEYS))
+    if stray:
+        raise ValueError("validated %s, which the board module's PER_SET_KEYS does not name"
+                         % ", ".join(stray))
+    _split_base_and_overrides(merged, clean_sets, base_label, board.PER_SET_KEYS, PER_SET_NOTE)
 
     # ---- and the grounds, which live in their own file ---------------------------------------
     # Two files, one button. They are separate files because they are separate decisions with
@@ -162,18 +258,76 @@ def save_settings(board, sent):
     # are tuned in the same sitting, and a second button would mean a half-saved board.
     grounds = sent.get("grounds")
     if grounds is not None:
-        save_grounds(board, grounds)
+        save_grounds(board, grounds, base_label)
 
     # Written via a neighbour and renamed into place: a crash halfway through a direct write
     # leaves the file truncated, and this one is read by every page in the toolchain.
     tmp = board.PLACEMENT.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
+    tmp.write_text(json.dumps(merged, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     tmp.replace(board.PLACEMENT)
     return merged
 
 
-def save_grounds(board, sent):
+def _split_grounds_overrides(doc, sent_sets, base_label):
+    """The grounds' half of _split_base_and_overrides, per plate rather than per key.
+
+    A set may restand ONE plate and leave the other five alone, so each plate is compared on its
+    own and only the ones that actually differ from the base are stored. A set whose plates all
+    match the base loses its row entirely, which keeps the file from filling with rows that say
+    nothing.
+
+    Sets the page never showed are left untouched, for the same reason as in the placement file:
+    the page only knows the sets the tray has rendered.
+    """
+    per_set = dict(doc.get("per_set") or {})
+    base_grounds = doc.get("grounds") or {}
+    for label, values in sent_sets.items():
+        if label == base_label:
+            per_set.pop(label, None)
+            continue
+        own = {}
+        if "lift" in values and values["lift"] != doc.get("lift"):
+            own["lift"] = values["lift"]
+        plates = {name: copy.deepcopy(row) for name, row in (values.get("grounds") or {}).items()
+                  if row != base_grounds.get(name)}
+        if plates:
+            own["grounds"] = plates
+        if own:
+            per_set[label] = own
+        else:
+            per_set.pop(label, None)
+    if per_set:
+        doc["per_set"] = per_set
+        doc.setdefault("per_set_note", GROUND_PER_SET_NOTE)
+    else:
+        doc.pop("per_set", None)
+    return doc
+
+
+def _clean_plates(board, sent_grounds, stored, where):
+    """Validate a map of plate rows off the wire, merged into what is already stored.
+
+    MERGED INTO THE STORED ROW, NOT BUILT FRESH, and plate by plate rather than by replacing the
+    map -- see the long note in save_grounds for the `camera` block this protects.
+    """
+    clean = dict(stored or {})
+    for name, g in sent_grounds.items():
+        row = dict(clean.get(name)) if isinstance(clean.get(name), dict) else {}
+        for key, lo, hi in board.PLATE_RANGES:
+            value = (g or {}).get(key)
+            if isinstance(value, bool) or not isinstance(value, int) or not lo <= value <= hi:
+                raise ValueError("%sgrounds.%s.%s is %r, want a whole number %d-%d"
+                                 % (where, name, key, value, lo, hi))
+            row[key] = value
+        clean[name] = row
+    return clean
+
+
+def save_grounds(board, sent, base_label=None):
     """Write the ground assignments and their tuning back, merged like the placement file.
+
+    PER SET, the same way: the set `tuned_at` names writes the base rows, and every other set
+    writes only the plates it stands differently. `by_duty` does not split and is taken once.
 
     Validated with the same rules the generator reads by, so the button cannot write a file the
     tool would then refuse to load.
@@ -219,20 +373,7 @@ def save_grounds(board, sent):
         # The cost of merging is that a plate can no longer be retired through the page: doing
         # that is now a hand edit of the file. That is the right way round for a tool whose job
         # is to tune sliders, and it is a deliberate trade rather than an oversight.
-        clean = dict(merged.get("grounds") or {})
-        for name, g in grounds.items():
-            stored = clean.get(name)
-            row = dict(stored) if isinstance(stored, dict) else {}
-            for key, lo, hi in (("anchor", 0, 100), ("scale", 1, 300), ("dim", 0, 100),
-                                ("saturate", 0, 100), ("opacity", 0, 100)):
-                value = (g or {}).get(key)
-                if isinstance(value, bool) or not isinstance(value, int) \
-                        or not lo <= value <= hi:
-                    raise ValueError("grounds.%s.%s is %r, want a whole number %d-%d"
-                                     % (name, key, value, lo, hi))
-                row[key] = value
-            clean[name] = row
-        merged["grounds"] = clean
+        merged["grounds"] = _clean_plates(board, grounds, merged.get("grounds"), "")
 
     # ONE LIFT FOR ALL NINE TILES. Same range the generator reads by.
     lift = sent.get("lift")
@@ -241,13 +382,39 @@ def save_grounds(board, sent):
             raise ValueError("lift is %r, want a whole number -300-600" % lift)
         merged["lift"] = lift
 
+    # ---- and each set that stands its plates differently -------------------------------------
+    sets = sent.get("sets")
+    if isinstance(sets, dict) and sets:
+        clean_sets = {}
+        for label, values in sets.items():
+            if not re.match(r"^\d+_[a-z][a-z0-9_]*$", str(label)):
+                raise ValueError("grounds.sets has %r, which is not a set label" % label)
+            where = "sets[%s]: " % label
+            row = {}
+            if values.get("lift") is not None:
+                v = values["lift"]
+                if isinstance(v, bool) or not isinstance(v, int) or not -300 <= v <= 600:
+                    raise ValueError("%slift is %r, want a whole number -300-600" % (where, v))
+                row["lift"] = v
+            if isinstance(values.get("grounds"), dict):
+                # Against the BASE row rather than against nothing, so a set that moves one
+                # slider still stores a whole plate and the other four keep the base's values
+                # instead of arriving as None.
+                row["grounds"] = _clean_plates(board, values["grounds"],
+                                               merged.get("grounds"), where)
+            if row:
+                clean_sets[label] = row
+        # The base set's rows were already written above from the flat keys, so it is excluded
+        # here the same way it is in the placement file: the base IS that set.
+        _split_grounds_overrides(merged, clean_sets, base_label)
+
     # A plate the plan names but the folder no longer holds would draw nothing and say nothing.
     for slug, name in (merged.get("by_duty") or {}).items():
         if name and name not in (merged.get("grounds") or {}):
             raise ValueError("%s is assigned %r, which has no entry under grounds" % (slug, name))
 
     tmp = board.GROUND_PLAN.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
+    tmp.write_text(json.dumps(merged, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     tmp.replace(board.GROUND_PLAN)
     return merged
 
@@ -347,7 +514,10 @@ def main():
         raise SystemExit("no sculpt art -- run tools/ui_debug/make_tray_figures.py first; "
                          "this page is nothing but arrangements of it")
 
-    sizes = sorted(int(k) for k in figs)   # figures() keys by string; work in ints
+    # A SET LABEL, not a pixel height: `210_plastic` and `210_painted` are both 210 tall, so
+    # int() stopped being able to name one. Sorted by height then by name, so the buttons keep a
+    # settled order as sets are added.
+    sizes = sorted(figs, key=board.set_sort)
     orders = ["grouped", "arrival"]
 
     # The CASES and the art are data; the arrangement is computed in the page, because the
@@ -358,16 +528,61 @@ def main():
     if not RULES_JS.is_file():
         raise SystemExit("%s is missing -- it is where the drawing rules live"
                          % board._short(RULES_JS))
+    # NAMED, NOT TRACEBACKED, for the same reason its neighbour is: without this the run dies
+    # inside the template substitution, which says where Python gave up rather than what is
+    # missing -- and this file is the newest, so it is the one most likely to be absent.
+    if not SPLIT_JS.is_file():
+        raise SystemExit("%s is missing -- it is where the save button's half of the base/"
+                         "override split lives" % board._short(SPLIT_JS))
+    if not PICKER_JS.is_file():
+        raise SystemExit("%s is missing -- it is where the set dropdown lives"
+                         % board._short(PICKER_JS))
 
-    art_uris = {str(px): [{"uri": f["uri"], "w": f["w"], "h": f["h"]}
-                          for f in figs[str(px)]] for px in sizes}
+    # A seat is a LIST OF POSES -- one for the plastic set, three for the painted one -- and
+    # the page picks with dutyPose(), so the two are interchangeable with no branch on which is
+    # loaded.
+    art_uris = {label: [[{"uri": f["uri"], "w": f["w"], "h": f["h"]} for f in row]
+                        for row in figs[label]] for label in sizes}
     page = TEMPLATE
     for key, val in (("__FONT__", font), ("__GROUND__", GROUND),
                      ("__FORMATION__", RULES_JS.read_text(encoding="utf-8")),
+                     # The two split functions, inlined. Their own file so the tests can load
+                     # them into node and hold them against the Python pair -- a rule that has
+                     # to exist twice is a rule that has to be checked twice.
+                     ("__SPLITRULES__", SPLIT_JS.read_text(encoding="utf-8")),
+                     ("__SETPICKER__", PICKER_JS.read_text(encoding="utf-8")),
+                     # THE SHEET SHOWS EVERY RENDERED SET, as it always has -- comparing them is
+                     # what it is for -- but it now groups them the way the sow page does, so
+                     # the two present the same list in the same order.
+                     # SORTED, not in the file's order, so this page and the sow list the
+                     # played group identically. They were within one line of each other and
+                     # disagreed: the file happens to name 210_plastic first, and the sow sorts.
+                     ("__PLAYED__", json.dumps(sorted(
+                         (lab for lab in (place.get("sizes") or []) if lab in figs),
+                         key=board.set_sort))),
+                     ("__OWNSETS__", json.dumps(sorted(
+                         set(place.get("per_set") or {}) | set(plan.get("per_set") or {}),
+                         key=board.set_sort))),
                      ("__CASES__", json.dumps(cases)),
-                     ("__RULE__", json.dumps({k: place[k] for k in ("spread", "back", "rank")})),
+                     # EVERY SET'S NUMBERS AND PLATES, resolved here rather than merged in
+                     # the page. The sheet switches sets while you work, so it needs an answer
+                     # per set -- and the merge living in one place is what stops this page,
+                     # the sow and the board checker disagreeing about 210_painted's spread.
+                     ("__RULES__", json.dumps({label: board.settings_for(place, label)
+                                               for label in sizes})),
+                     ("__GPLANS__", json.dumps({label: board.ground_settings_for(plan, label)
+                                                for label in sizes})),
+                     # WHICH SET OWNS THE BASE. The page shows it, because "this set writes the
+                     # top of the file and the others write what they change" is the one thing
+                     # you have to know to read your own saves back.
+                     ("__BASESET__", json.dumps(place.get("tuned_at"))),
                      ("__ART__", json.dumps(art_uris)),
                      ("__SIZES__", json.dumps(sizes)), ("__ORDERS__", json.dumps(orders)),
+                     # WHICH SET OPENS. The file's own `tuned_at`, so the sheet opens on what
+                     # the numbers below it were tuned against. It is checked against SIZES in
+                     # the page rather than here, because a set the tray has not rendered is a
+                     # thing the page can fall back from and this script cannot.
+                     ("__OPENSET__", json.dumps(place.get("tuned_at", "210_plastic"))),
                      ("__CELLS__", json.dumps(cells)),
                      ("__PLATES__", json.dumps(plates)),
                      ("__GROUNDPLAN__", json.dumps(plan)),
@@ -378,17 +593,21 @@ def main():
                      ("__SAVEKEYS__", json.dumps({
                          "placement": list(PLACEMENT_KEYS),
                          "grounds": list(GROUND_KEYS),
+                         # The per-set lists and the prose go over too, so the offline
+                         # download writes the same keys and the same note the server would
+                         # rather than a second opinion about either.
+                         "per_set": list(board.PER_SET_KEYS),
+                         "ground_per_set": list(board.GROUND_PER_SET_KEYS),
+                         "per_set_note": PER_SET_NOTE,
+                         "ground_per_set_note": GROUND_PER_SET_NOTE,
                          "placement_file": board.PLACEMENT.name,
                          "grounds_file": board.GROUND_PLAN.name,
                          "where": str(board._short(board.PLACEMENT.parent))})),
-                     ("__FRAME__", json.dumps(place.get(
-                         "frame", {"w": 320, "h": 390, "drop": 40}))),
                      ("__BANNERTOP__", json.dumps(board.BANNER_TOP)),
                      ("__BANNERFS__", json.dumps(board.BANNER_FS)),
                      ("__BANNERTRACK__", json.dumps(board.BANNER_TRACK)),
                      ("__BANNERINK__", json.dumps(board.BANNER_INK)),
                      ("__OPENORDER__", json.dumps(place.get("order", "grouped"))),
-                     ("__DEPTH__", json.dumps(place.get("depth", {"mode": "haze", "amount": 60}))),
                      # _short, not relative_to: the latter RAISES for a path outside the repo, so a
                      # file pointed elsewhere would crash the page header rather than name itself.
                      ("__FILE__", html.escape(str(board._short(board.PLACEMENT))))):
@@ -399,8 +618,11 @@ def main():
     out.write_text(page, encoding="utf-8")
     print("wrote %s  (%.0f KB)" % (out, len(page) / 1024))
     frame = place.get("frame") or {}
-    print("  %d cases, %d sizes, both orders -- arranged live in the page"
-          % (len(CASES), len(sizes)))
+    print("  %d cases, %d set(s) (%s), both orders -- arranged live in the page"
+          % (len(CASES), len(sizes),
+             ", ".join("%s [%d pose%s]"
+                       % (s, len(figs[s][0]), "" if len(figs[s][0]) == 1 else "s")
+                       for s in sizes)))
     if frame:
         print("  frame %d x %d real px (%.2f:1), base %d below the floor"
               % (frame["w"], frame["h"], frame["w"] / frame["h"], frame.get("drop", 0)))
@@ -413,9 +635,24 @@ def main():
         print("  NOT SERVED -- the save button can only download. Add --serve to write "
               "%s and %s in place."
               % (board.PLACEMENT.name, board.GROUND_PLAN.name))
-    print("  spread %d, set-back %d, rank gap %d  (from %s, tuned at %s px and used at every "
-          "size)" % (place["spread"], place["back"], place["rank"], board.PLACEMENT.name,
-                     place.get("tuned_at", "?")))
+    tuned = place.get("tuned_at")
+    own = sorted(place.get("per_set") or {}, key=board.set_sort)
+    print("  spread %d, set-back %d, rank gap %d  (from %s -- the BASE, which belongs to %s at "
+          "%s px)" % (place["spread"], place["back"], place["rank"], board.PLACEMENT.name,
+                      tuned or "?", board.set_px(tuned) if tuned else "?"))
+    for label in own:
+        s_ = board.settings_for(place, label)
+        print("    %-13s spread %3d  set-back %2d  rank %2d  frame %dx%d   (its own: %s)"
+              % (label, s_["spread"], s_["back"], s_["rank"], s_["frame"]["w"],
+                 s_["frame"]["h"], ", ".join(sorted(place["per_set"][label]))))
+    if not own:
+        print("    no set carries numbers of its own -- every one takes the base")
+    gown = sorted((plan.get("per_set") or {}), key=board.set_sort)
+    for label in gown:
+        row = plan["per_set"][label]
+        print("    %-13s stands %s differently%s"
+              % (label, ", ".join(sorted(row.get("grounds") or {})) or "no plate",
+                 "" if "lift" not in row else " and lifts them %d" % row["lift"]))
     for note in notes:
         print("  %s" % note)
     if args.serve is not None:
@@ -483,7 +720,31 @@ body{padding-left:243px}
   background:#100d09;border-right:1px solid #1e1811;padding:12px 10px 18px;
   display:grid;grid-template-columns:58px 1fr 32px;gap:7px 7px;align-content:start;
   align-items:center}
+/* The sculpt-set dropdown. Styled to sit with the buttons rather than to look like a form
+   control, since it is the same kind of choice as the ones beside it. */
+.setpick{font:inherit;color:#c9b27a;background:#1c1811;border:1px solid #332c20;
+  border-radius:3px;padding:3px 6px;cursor:pointer;
+  /* Fits whatever column it is put in. A fixed max-width was 176px, which suited the
+     sow page's 252px panel and overflowed the placement sheet's 227px one by 24. */
+  max-width:100%;min-width:0;box-sizing:border-box}
+.setpick:hover{border-color:#5a4c36}
+.setpick optgroup{color:#5f5646;font-style:normal}
+.setpick option{color:#8b8071;background:#1c1811}
+/* Spans the value column and the one after it. The panel is 206px across three columns, and
+   the middle one alone left the dropdown 141px -- four pixels short of its own selected label,
+   so "210 plastic - base" read as "210 plastic - ba...". */
+#ui .full{grid-column:2 / -1}
+/* A checkbox reads as a choice rather than a quantity, which is what this is: it does not
+   change how far apart anything stands, it changes what `spread` is measuring. */
+#ui .chk{display:flex;align-items:center;gap:6px;color:#8b8071;cursor:pointer;line-height:1.3}
+#ui .chk input{accent-color:#c9b27a;margin:0;cursor:pointer}
 #ui .lab{color:#4f483d;text-align:right;white-space:nowrap}
+/* Whose numbers are on screen. Three states worth telling apart at a glance: the base itself,
+   a set carrying its own, and a set still following the base. */
+.whose{color:#7d7468;font-size:11px;margin-right:6px}
+.whose.base{color:#c9b27a}
+.whose.own{color:#8fb2c9}
+#busebase{font-size:11px;padding:1px 6px}
 #ui .wide{grid-column:2 / span 2;display:flex;gap:4px;flex-wrap:wrap}
 #ui .full{grid-column:1 / -1;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 #ui .sep{grid-column:1 / -1;height:1px;background:#1e1811;margin:3px 0 1px}
@@ -510,8 +771,12 @@ body{padding-left:243px}
 <div id=ui>
   <div class=ttl>what you are looking at</div>
   <span class=lab>view</span><span id=viewb class=wide></span>
-  <span class=lab>sculpt</span><span id=szb class=wide></span>
+  <span class=lab>sculpt</span><span id=szb class=full></span>
+  <span class=lab>numbers</span><span class=wide><span id=whose class=whose></span>
+    <button id=busebase title="drop this set's own numbers and follow the base again"
+            >use the base</button></span>
   <span class=lab>order</span><span id=ordb class=wide></span>
+  <span class=lab>pose</span><span id=posb class=wide></span>
 
   <div class=ttl>how the sculpts stand</div>
   <span class=lab>spread</span>
@@ -520,6 +785,9 @@ body{padding-left:243px}
   <input id=back type=range min=0 max=120 step=1><span class=val id=backv></span>
   <span class=lab>rank gap</span>
   <input id=rank type=range min=0 max=160 step=1><span class=val id=rankv></span>
+  <span class=lab></span>
+  <label class=chk for=wide><input type=checkbox id=wide> calculate width across ranks</label>
+  <span class=val id=widev></span>
 
   <div class=ttl>depth</div>
   <span class=lab>mode</span><span id=dmb class=wide></span>
@@ -569,14 +837,38 @@ body{padding-left:243px}
 <script>
 // ---- the drawing rules, inlined from tools/ui_debug/duty_sculpt_rules.js ----------------
 __FORMATION__
+// ---- the set dropdown, inlined from tools/ui_debug/duty_set_picker.js -------------------
+__SETPICKER__
 // -------------------------------------------------------------------------------------------
-var CASES = __CASES__, RULE = __RULE__, ART = __ART__, SIZES = __SIZES__, ORDERS = __ORDERS__;
-var DEPTH = __DEPTH__, MODE = DEPTH.mode, SHADE = DEPTH.amount;
-var FULL_AT = DEPTH.full_at || 52;
-var SIZE = SIZES.indexOf(210) >= 0 ? 210 : SIZES[SIZES.length - 1], ORDER = __OPENORDER__;
-var SPREAD = RULE.spread, BACK = RULE.back, RANK = RULE.rank;
-var CELLS = __CELLS__, FRAME = __FRAME__, VIEW = "arrangements";
-var PLATES = __PLATES__, PLAN = __GROUNDPLAN__;
+var CASES = __CASES__, ART = __ART__, SIZES = __SIZES__, ORDERS = __ORDERS__;
+// EVERY SET'S NUMBERS AND PLATES, resolved in Python: the base with that set's own laid over
+// it. BASE_SET is the set the base belongs to -- tuning it writes the top of the file, and
+// tuning any other writes only what that set changes.
+var RULES = __RULES__, GPLANS = __GPLANS__, BASE_SET = __BASESET__;
+// Which sets the file calls the played ones, and which carry numbers of their own. Both only
+// change how the dropdown reads -- this page has always shown everything the tray rendered.
+var PLAYED = __PLAYED__, OWN_SETS = __OWNSETS__;
+var MODE, SHADE, FULL_AT;
+// A set LABEL -- `210_painted` -- not a pixel height. The opening pick is the file's own
+// `tuned_at` when the tray has rendered it, and otherwise the last set on offer.
+var SIZE = SIZES.indexOf(__OPENSET__) >= 0 ? __OPENSET__ : SIZES[SIZES.length - 1];
+// ONLY THE ARRANGEMENTS VIEW HAS A POSE CONTROL, and the split is the point. The wheel draws
+// nine grid positions and takes its pose from the column, exactly as the board and the sow do
+// -- a control there would let this page show an arrangement the game cannot produce. The
+// arrangements view has no grid at all: it is a table of formations, so there is no column to
+// read and the pose has to be asked for. It is also where comparing the three paintings side
+// by side is actually useful, which is why the control lives on the tuning page and nowhere
+// else. A one-pose set ignores it, because dutyPose folds it away.
+var POSE = 0, ORDER = __OPENORDER__;
+var SPREAD, BACK, RANK, FRAME, WIDE;
+var CELLS = __CELLS__, VIEW = "arrangements";
+// THE GROUND DOCUMENT AS IT IS ON DISK, frozen, prose and all. Separate from PLAN, which is
+// the RESOLVED plan for whichever set is on screen and carries only by_duty, grounds and lift.
+// The offline download merges into this one: merging into PLAN wrote a grounds file with every
+// line of its explanation missing -- `note`, `grounds_note`, `lift_note`, the camera notes --
+// which is the same failure the placement file's merge exists to prevent, one file over.
+var DOC_GROUNDS = __GROUNDPLAN__;
+var PLATES = __PLATES__, PLAN = DOC_GROUNDS;
 var DOC_PLACEMENT = __PLACEMENTDOC__, SAVE_KEYS = __SAVEKEYS__;
 // Which tile the picker is aimed at. Null until you click one, because a picker with no target
 // would have to guess, and the guess it would make is "all of them".
@@ -585,6 +877,60 @@ var GROUND_DEFAULTS = DUTY_GROUND_DEFAULTS;
 // One lift for all nine tiles, real pixels, positive upward. Read from the plan like everything
 // else here, so the page opens where the file left off.
 var LIFT = PLAN.lift || 0;
+// WHICH DUTY STANDS ON WHICH PLATE IS NOT PER SET. Held once and handed to every set's plan by
+// the same reference, so assigning a plate to a duty cannot fork between sets.
+var BY_DUTY = PLAN.by_duty || {};
+
+// THE WORKING COPY, ONE ROW PER SET. The sliders used to write into a single set of variables,
+// so tuning 210_painted and switching to 180_painted showed the painted numbers under the
+// smaller sculpts -- the carry-over this whole split exists to stop. Now each set keeps its
+// own row, edits and all, and the row is only read back into the sliders when that set is on
+// screen. Unsaved work on a set you switch away from is still there when you switch back,
+// which is what makes comparing two sets by flipping between them mean anything.
+var WORK = {}, GWORK = {};
+(function seed(){
+  for (var i = 0; i < SIZES.length; i++){
+    var L = SIZES[i], r = RULES[L] || {}, g = GPLANS[L] || {};
+    WORK[L] = {spread: r.spread, back: r.back, rank: r.rank,
+               width_across_ranks: !!r.width_across_ranks,
+               frame: {w: r.frame.w, h: r.frame.h, drop: r.frame.drop},
+               depth: {mode: r.depth.mode, amount: r.depth.amount, full_at: r.depth.full_at}};
+    GWORK[L] = {lift: g.lift || 0, grounds: JSON.parse(JSON.stringify(g.grounds || {}))};
+  }
+})();
+
+// Read the row for `label` into the live variables. SPLIT FROM applySet so it can run before
+// the controls exist: the sliders take their opening values from these variables, so they have
+// to be loaded first, and the version that also writes the controls has to run after. Doing it
+// in one function put `slider("frw", FRAME.w, ...)` ahead of the only line that defines FRAME,
+// which threw and silently skipped every statement after it in the same block.
+function loadVars(label){
+  var w = WORK[label], g = GWORK[label];
+  SPREAD = w.spread; BACK = w.back; RANK = w.rank;
+  FRAME = w.frame;
+  MODE = w.depth.mode; SHADE = w.depth.amount; FULL_AT = w.depth.full_at || 52;
+  WIDE = !!w.width_across_ranks;
+  LIFT = g.lift;
+  // The same by_duty object every time, so picking a plate for a duty is not per set.
+  PLAN = {by_duty: BY_DUTY, grounds: g.grounds, lift: g.lift};
+}
+// The same, plus writing every control. Called on every set switch and once at the end of load.
+function applySet(label){
+  loadVars(label);
+  syncControls();
+  showWhoseNumbers(label);
+}
+loadVars(SIZE);
+// The live variables back into the row, so an edit survives being switched away from. FRAME and
+// PLAN.grounds are the row's own objects rather than copies, so those need no writing back --
+// only the scalars the sliders keep in variables of their own do.
+function stashSet(label){
+  var w = WORK[label];
+  w.spread = SPREAD; w.back = BACK; w.rank = RANK;
+  w.width_across_ranks = WIDE;
+  w.depth.mode = MODE; w.depth.amount = SHADE; w.depth.full_at = FULL_AT;
+  GWORK[label].lift = LIFT;
+}
 
 // Resolved by the shared rule, so this page and the sow agree about what a duty stands on.
 function groundFor(slug){ return dutyGroundFor(PLAN, slug); }
@@ -632,9 +978,10 @@ function draw(){
 // draws the formation's own envelope inside it and turns the frame red when the sculpts no longer
 // fit. The file decides; the page measures and says when the decision has been outgrown.
 function drawWheel(){
-  var art = ART[String(SIZE)], shadowOn = document.body.classList.contains("shadow");
-  var figH = Math.max.apply(null, art.map(function(f){ return f.h; }));
-  var widest = Math.max.apply(null, art.map(function(f){ return f.w; }));
+  var art = ART[SIZE] || [], shadowOn = document.body.classList.contains("shadow");
+  // Over every seat AND every pose: the field and the capacity box both have to hold the worst
+  // case the set can produce, not the case pose 1 happens to be.
+  var figH = dutySetHeight(art), widest = dutySetWidth(art);
   // The panel is a fixed column down the left now, so it takes width rather than height.
   var panel = document.getElementById("ui").getBoundingClientRect().width;
   var headH = document.getElementById("head").getBoundingClientRect().height;
@@ -645,7 +992,7 @@ function drawWheel(){
   var BUD = Math.floor(side * DPR), CELL = BUD / 3;
   var L = dutyTileLayout(CELL, figH, RANK, BACK, {icons: false});
   var floor = L.top + L.field;
-  var CAP = dutyCapacityBox(5, SPREAD, BACK, RANK, widest, figH);
+  var CAP = dutyCapacityBox(5, SPREAD, BACK, RANK, widest, figH, WIDE);
   // Room above the floor line is the frame's height less however far its base sits below it.
   var room = FRAME.h - FRAME.drop;
   var tight = CAP.w > FRAME.w || CAP.h > room;
@@ -690,12 +1037,13 @@ function drawWheel(){
     var who = dutySeatOrder(counts, ORDER);
     h += '<div class=figs style="top:' + px(L.top) + ';left:0;width:' + px(CELL) + ';height:'
        + px(L.field) + '">';
-    dutyFormation(n, SPREAD, BACK, RANK)
+    dutyFormation(n, SPREAD, BACK, RANK, WIDE)
       .sort(function(a, b){ return a.x - b.x; })
       .map(function(p, j){ return {x: p.x, y: p.y, seat: who[j]}; })
       .sort(function(a, b){ return b.y - a.y || a.x - b.x; })
       .forEach(function(p){
-        var f = art[p.seat];
+        var f = dutyPose(art[p.seat], dutyPoseForColumn(i));
+        if (!f) return;                 // no art for this seat in this set: draws empty
         h += '<div class=fig style="left:' + px(CELL / 2 + p.x - f.w / 2) + ';top:'
            + px(L.field - f.h - p.y) + ';width:' + px(f.w) + ';height:' + px(f.h)
            + ';filter:' + figFilter(p.y, shadowOn) + '"><img src="' + f.uri + '"></div>';
@@ -833,17 +1181,17 @@ function setGround(key, value){
 }
 
 function drawCases(){
-  var art = ART[String(SIZE)], shadowOn = document.body.classList.contains("shadow");
+  var art = ART[SIZE] || [], shadowOn = document.body.classList.contains("shadow");
   // Measured across every case at the CURRENT settings, so a cell is never sized to a formation
   // it is not drawing -- the sliders can outgrow any constant put here.
   var widest = 0, tallest = 0, cells = [];
   CASES.forEach(function(c){
     var n = c.counts.reduce(function(a, b){ return a + b; }, 0);
-    var slots = dutyFormation(n, SPREAD, BACK, RANK)
+    var slots = dutyFormation(n, SPREAD, BACK, RANK, WIDE)
                   .sort(function(a, b){ return a.x - b.x; });
     var who = dutySeatOrder(c.counts, ORDER);
     var figs = slots.map(function(p, i){
-      var a = art[who[i]];
+      var a = dutyPose(art[who[i]], POSE) || {w: 0, h: 0};
       return {x: p.x, y: p.y, seat: who[i], w: a.w, h: a.h};
     });
     figs.forEach(function(f){
@@ -857,7 +1205,10 @@ function drawCases(){
   document.getElementById("head").innerHTML =
       "Every arrangement the rules produce, read from <b>__FILE__</b>.  spread <b>" + SPREAD
     + "</b>, set-back <b>" + BACK + "</b>, rank gap <b>" + RANK + "</b>, order <b>" + ORDER
-    + "</b> -- one set, used at every size.  Showing <b>" + SIZE + "</b> px, depth <b>"
+    + "</b> -- one set, used at every size.  Showing <b>" + SIZE.replace("_", " ")
+    + "</b> pose <b>v" + (POSE + 1) + "</b>"
+    + ((ART[SIZE] || [[]])[0].length > 1 ? "" : " (this set has one)")
+    + ", depth <b>"
     + (SHADE ? MODE + " " + SHADE + "% , full at " + FULL_AT : "off")
     + "</b>.  Drawn at true size, so a sculpt here is the size it is on the board.";
 
@@ -871,7 +1222,7 @@ function drawCases(){
         h += '<div class=fig style="left:' + px(W/2 + f.x - f.w/2) + ';top:'
            + px(H - 10 - f.h - f.y) + ';width:' + px(f.w) + ';height:' + px(f.h)
            + ';filter:' + figFilter(f.y, shadowOn)
-           + '"><img src="' + art[f.seat].uri + '"></div>';
+           + '"><img src="' + dutyPose(art[f.seat], POSE).uri + '"></div>';
       });
     h += '<div class=floor style="top:' + px(H - 10) + '"></div>';
     h += '</div>';
@@ -882,11 +1233,14 @@ function drawCases(){
   document.getElementById("grid").innerHTML = h;
 }
 
-function buttons(host, list, get, set){
+// `label` is optional and only changes what a button SAYS: a set is stored as `210_painted`
+// and reads better as `210 painted`. The value on the button is untouched, so the round trip
+// through dataset.v still hands back the label the art is keyed by.
+function buttons(host, list, get, set, label){
   var h = "";
   list.forEach(function(v){
     h += '<button data-v="' + v + '" aria-pressed="' + (v === get() ? "true" : "false")
-       + '">' + v + '</button>';
+       + '">' + (label ? label(v) : v) + '</button>';
   });
   host.innerHTML = h;
   [].forEach.call(host.querySelectorAll("button"), function(b){
@@ -906,14 +1260,21 @@ function slider(id, value, set){
 }
 buttons(document.getElementById("viewb"), ["arrangements", "wheel"],
         function(){ return VIEW; }, function(v){ VIEW = v; });
-buttons(document.getElementById("szb"), SIZES, function(){ return SIZE; },
-        function(v){ SIZE = v; });
+dutySetPicker(document.getElementById("szb"), {
+  all: SIZES, played: PLAYED, base: BASE_SET, own: OWN_SETS, value: SIZE,
+  choose: function(v){ stashSet(SIZE); SIZE = v; applySet(SIZE); draw(); }});
 buttons(document.getElementById("ordb"), ORDERS, function(){ return ORDER; },
         function(v){ ORDER = v; });
+// Three buttons whatever the set holds, so the row does not change shape when the set does.
+// A set with fewer poses answers them all with what it has rather than losing a button --
+// which keeps the row a statement about the CONVENTION (first column v1, and so on) rather
+// than an inventory of the art currently loaded.
+buttons(document.getElementById("posb"), [0, 1, 2], function(){ return POSE; },
+        function(v){ POSE = v; }, function(v){ return "v" + (v + 1); });
 buttons(document.getElementById("dmb"), ["haze", "dark", "off"], function(){ return MODE; },
         function(v){ MODE = v;
                      if (v === "off") SHADE = 0;
-                     else if (SHADE === 0) SHADE = DEPTH.amount || 60;
+                     else if (SHADE === 0) SHADE = (RULES[SIZE].depth || {}).amount || 60;
                      document.getElementById("haze").value = SHADE;
                      document.getElementById("hazev").textContent = SHADE; });
 slider("sprd", SPREAD, function(v){ SPREAD = v; });
@@ -932,7 +1293,80 @@ slider("frd", FRAME.drop, function(v){ FRAME.drop = v; });
 // from the plan rather than from whichever plate happens to be picked, and it is never disabled,
 // because it still means something on a tile standing on bare floor.
 slider("glift", LIFT, function(v){ LIFT = v; });
+// WHAT `spread` MEASURES once there are two ranks, rather than how big it is -- see
+// dutyFormation. Off is the arrangement that has always been drawn; on spaces four and five so
+// nothing sits in a neighbour's horizontal gap, at roughly twice the width.
+(function(){
+  var box = document.getElementById("wide");
+  box.onchange = function(){ WIDE = box.checked; draw(); };
+})();
 syncGroundSliders();
+
+// EVERY CONTROL, FROM THE LIVE VARIABLES. applySet calls this after loading a set's row, so
+// switching set moves the sliders instead of leaving them reading the set you just left --
+// which is the whole complaint this change answers. Written as one function rather than a line
+// per slider at each call site, because a slider added later and forgotten at one of them is a
+// control that silently keeps the previous set's value.
+// The pressed state of one button row, from a value. buttons() sets this on click; after a
+// set switch nobody clicked, so it has to be written from the row that was loaded.
+function pressOne(hostId, value){
+  var host = document.getElementById(hostId);
+  if (!host) return;
+  [].forEach.call(host.querySelectorAll("button"), function(b){
+    b.setAttribute("aria-pressed", b.dataset.v === String(value) ? "true" : "false"); });
+}
+function setSlider(id, value){
+  var e = document.getElementById(id), v = document.getElementById(id + "v");
+  if (!e) return;
+  e.value = value; if (v) v.textContent = value;
+}
+function syncControls(){
+  setSlider("sprd", SPREAD); setSlider("back", BACK); setSlider("rank", RANK);
+  setSlider("haze", SHADE); setSlider("full", FULL_AT);
+  setSlider("frw", FRAME.w); setSlider("frh", FRAME.h); setSlider("frd", FRAME.drop);
+  setSlider("glift", LIFT);
+  pressOne("dmb", MODE);
+  // THE SET CONTROL TOO. Its own onchange covers clicking it and nothing else -- not a set
+  // loaded at open, not the page driven from the console. A control showing one set while the
+  // sliders show another's numbers is worse than no indicator at all, because it is the exact
+  // confusion the per-set split was made to end.
+  dutySetPickerShow(document.getElementById("szb"), SIZE);
+  var box = document.getElementById("wide");
+  if (box) box.checked = WIDE;
+  syncGroundSliders();
+  showRatio();
+}
+// WHOSE NUMBERS ARE ON SCREEN. Without this the page cannot tell you whether moving a slider
+// is about to rewrite the top of the file or add a row to per_set, and those are different
+// enough that guessing is how a set's tuning ends up in the base -- which is exactly how the
+// numbers this change was built for got into the wrong slot in the first place.
+function showWhoseNumbers(label){
+  var e = document.getElementById("whose");
+  if (!e) return;
+  if (label === BASE_SET){
+    e.textContent = "the base \u2014 this set's numbers are the top of the file";
+    e.className = "whose base";
+  } else {
+    var own = JSON.stringify(WORK[label]) !== JSON.stringify(WORK[BASE_SET]);
+    e.textContent = own ? "its own \u2014 saved under per_set"
+                        : "inheriting the base (" + String(BASE_SET).replace("_", " ") + ")";
+    e.className = "whose" + (own ? " own" : "");
+  }
+}
+// A way back. Without it the only route from "its own" to "inherits" is nudging every slider
+// back to a number you would have to look up, and a set stuck with an override nobody wanted is
+// a set that stops following the base when the base changes.
+document.getElementById("busebase").onclick = function(){
+  if (SIZE === BASE_SET) return;
+  WORK[SIZE] = JSON.parse(JSON.stringify(WORK[BASE_SET]));
+  GWORK[SIZE] = JSON.parse(JSON.stringify(GWORK[BASE_SET]));
+  applySet(SIZE);
+  draw();
+};
+// The opening set's row into the controls, now that every one of them exists. loadVars ran up
+// with the seeding, so the sliders above already opened on the right numbers; this is what
+// writes the button rows and the indicator.
+applySet(SIZE);
 function showRatio(){
   document.getElementById("ratio").textContent =
     (FRAME.w / FRAME.h).toFixed(2) + " : 1";
@@ -954,11 +1388,27 @@ document.getElementById("bshadow").onclick = function(){
 // the repo would have destroyed the placement file and still lost the grounds. Now the offline
 // path builds the two real documents, merging the same keys into the same files the server
 // would, and says plainly that nothing was written.
+// EVERY SET, AND WHICH SLOT EACH GOES IN IS NOT DECIDED HERE. The page sends what each set is
+// currently tuned to; the server puts the base set's row at the top of the file and stores the
+// others as what they change. That decision needs to know which set owns the base, which is a
+// fact about the file rather than about the page -- so the page does not make it.
+//
+// `order` is sent once, outside the sets, because it does not split.
 function settings(){
-  return {spread: SPREAD, back: BACK, rank: RANK, order: ORDER,
-          depth: {mode: MODE, amount: SHADE, full_at: FULL_AT},
-          frame: {w: FRAME.w, h: FRAME.h, drop: FRAME.drop},
-          grounds: {by_duty: PLAN.by_duty || {}, grounds: PLAN.grounds || {}, lift: LIFT}};
+  stashSet(SIZE);                       // the live variables into the row before reading it
+  var sets = {}, gsets = {}, i, L;
+  for (i = 0; i < SIZES.length; i++){
+    L = SIZES[i];
+    sets[L] = {spread: WORK[L].spread, back: WORK[L].back, rank: WORK[L].rank,
+               width_across_ranks: !!WORK[L].width_across_ranks,
+               depth: {mode: WORK[L].depth.mode, amount: WORK[L].depth.amount,
+                       full_at: WORK[L].depth.full_at},
+               frame: {w: WORK[L].frame.w, h: WORK[L].frame.h, drop: WORK[L].frame.drop}};
+    gsets[L] = {lift: GWORK[L].lift, grounds: GWORK[L].grounds};
+  }
+  var base = GWORK[BASE_SET] || GWORK[SIZE];
+  return {order: ORDER, sets: sets,
+          grounds: {by_duty: BY_DUTY, grounds: base.grounds, lift: base.lift, sets: gsets}};
 }
 function say(msg, cls){
   var e = document.getElementById("saymsg");
@@ -973,20 +1423,23 @@ function connected(){
 // WHAT THE TWO FILES LOOKED LIKE WHEN THE PAGE OPENED, frozen. PLAN is mutated as you work --
 // settingsFor() writes a new plate's defaults into it -- so it cannot be its own before-picture.
 var OPENED = {place: JSON.parse(JSON.stringify(DOC_PLACEMENT)),
-              plan: JSON.parse(JSON.stringify(PLAN))};
+              plan: JSON.parse(JSON.stringify(DOC_GROUNDS))};
 
+__SPLITRULES__
 function documents(){
-  var sent = settings(), k, i, out = [];
-  var place = {};
-  for (k in DOC_PLACEMENT) place[k] = DOC_PLACEMENT[k];
-  for (i = 0; i < SAVE_KEYS.placement.length; i++)
-    place[SAVE_KEYS.placement[i]] = sent[SAVE_KEYS.placement[i]];
+  var sent = settings(), k, out = [];
+  var place = splitBaseAndOverrides(DOC_PLACEMENT, sent.sets, BASE_SET,
+                                    SAVE_KEYS.per_set, SAVE_KEYS.per_set_note);
+  place.order = sent.order;
   out.push({name: SAVE_KEYS.placement_file, doc: place,
             changed: JSON.stringify(place) !== JSON.stringify(OPENED.place)});
   var plan = {};
-  for (k in PLAN) plan[k] = PLAN[k];
-  for (i = 0; i < SAVE_KEYS.grounds.length; i++)
-    plan[SAVE_KEYS.grounds[i]] = sent.grounds[SAVE_KEYS.grounds[i]];
+  for (k in DOC_GROUNDS) plan[k] = DOC_GROUNDS[k];
+  plan.by_duty = sent.grounds.by_duty;
+  plan.grounds = sent.grounds.grounds;
+  plan.lift = sent.grounds.lift;
+  plan = splitGroundOverrides(plan, sent.grounds.sets, BASE_SET,
+                              SAVE_KEYS.ground_per_set_note);
   out.push({name: SAVE_KEYS.grounds_file, doc: plan,
             changed: JSON.stringify(plan) !== JSON.stringify(OPENED.plan)});
   return out;

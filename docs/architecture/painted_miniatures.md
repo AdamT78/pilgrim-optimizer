@@ -601,8 +601,148 @@ levelling that lands on a smaller plinth, pushes it out. `generate_asset_check` 
 live limit and the widest figure on its arrangement card so this is visible rather than
 remembered.
 
-**The tray does not read any of this yet.** `make_tray_figures.py` draws from
-`ui/concept/<seat>/sculpt_plastic.png` with a hardcoded `--kind`, so neither the filed sculpts
-nor the painted ones reach `generate_duty_sow.py`. Wiring that up is its own piece of work —
-the intent is one settings set per miniature type in the placement sheet, and a picker for
-which set to draw.
+## The tray reads the painted set
+
+`make_tray_figures.py --kind painted` renders the filed set the same way it renders the concept
+art, and the duty pages now switch between the two. Three things had to change together, and
+the order they are listed in is the order they stop making sense in isolation.
+
+**A set is named, not measured.** The pages used to key their art by pixel height — `FIGS["210"]`
+— which worked for exactly as long as there was one 210. `210_plastic` and `210_painted` are both
+210 px tall and are not the same art, so the key became a label: a pixel height, an underscore,
+and the kind it was rendered from. The height is still recoverable off the front of the label and
+several drawings still want it, but it is now a fact about the set rather than the name of it.
+The rendered files follow: `figure_player_<seat>_p<pose>_<px>_<label>.png`.
+
+**A seat is a list of poses.** The painted set carries three poses a seat and the concept set
+carries one, and the shape is a list either way — length 1 rather than a bare figure. That is the
+decision that keeps the two interchangeable: a page indexes `dutyPose(row, n)` and never asks
+which set is loaded, because a set with one pose *has* no other pose and its only figure is the
+right answer to every `n`. A bare figure for the one-pose case would have put a branch at every
+drawing site, and the branch is where the two sets would have started to differ.
+
+**Everything that sizes a tile measures every pose.** This is not tidiness. Seat 1's three
+painted poses are 89, 89 and 100 px wide at 210, and the capacity box is `2 × spread + widest`
+against a frame of 320 — which at a spread of 110 comes to exactly 320 on pose 3 and 308 on
+pose 1. A box measured off pose 1 would have passed and then clipped the moment a tile drew the
+third painting. `dutySetWidth` and `dutySetHeight` in `duty_sculpt_rules.js` take the whole set.
+
+Which sets a page offers comes from `ui/assets-gothic/metadata/duty_placement.json`: `sizes`
+names them and `tuned_at` says which opens. Both hold labels now. The placement sheet ignores
+`sizes` and shows every set the tray has rendered, because comparing them is what it is for;
+the sow page is played on one set and asks which.
+
+Old-named files left in `generated/` are ignored rather than half-read — the discovery is a
+pattern match, so a folder holding both namings offers only the sets that match the new one.
+
+## Each set carries its own numbers
+
+The placement file used to hold one spread, one set-back and one rank gap, used by every set.
+That held while every set was the same sculpts at a different size. It stopped holding the day
+`210_painted` wanted 100 / 0 / 65 against the base's 110 / 21 / 52 — and the way it stopped is
+worth recording, because it is the failure the shape now prevents: those numbers were tuned with
+`210_painted` on screen, the sheet wrote them to the only slot there was, and every other set
+silently started drawing with them.
+
+**Base plus overrides.** The top-level keys are the base, and they belong to the set `tuned_at`
+names. Every other set falls back to them until it is tuned, and is then stored under `per_set`
+as **only what it changes**. The alternative — a complete row for every set — was turned down
+for a reason worth keeping in view: there are ten sets, nobody tunes ten, and nine rows copied
+from a tenth is a file where you can no longer see which number was a decision.
+
+A set names whole values. A `frame` with only `w` in it, or a `depth` with only `full_at`, is
+refused rather than half-merged: a half-frame has no meaning, and guessing which half was meant
+is how a file grows a shape nobody wrote.
+
+Only the sliders split. `order` and `mark` stay on the document, because grouped-versus-arrival
+and which floor mark is drawn are conventions about reading a tile rather than facts about how
+big the sculpts are. In `duty_grounds.json` the same split covers `lift` and the per-plate rows —
+the plate *art* is shared, but how it is *stood* is not, since `lift` is a distance in real
+pixels and `scale` sizes a plate against figures that are 90 px tall in one set and 210 in
+another. `by_duty` deliberately does not split: which duty stands on which plate is a fact about
+the board, and letting it split would put one duty on two different grounds depending on which
+sculpts were loaded.
+
+**One resolver.** `settings_for(place, label)` and `ground_settings_for(plan, label)` live in
+`generate_duty_board_check.py`, and the generators hand each page a finished label→settings
+table. The pages switch sets live, so each would otherwise need its own copy of the merge, and
+three copies of a two-line rule is still three places for it to stop agreeing.
+
+**Saving.** The page sends what every set it is showing is currently tuned to; the server decides
+which slot each goes in, because that decision needs to know which set owns the base and that is
+a fact about the file rather than about the page. A set tuned back onto the base loses its row
+automatically. A set the page never showed is left exactly as it is — the page only knows the
+sets the tray has rendered, and a save from a half-rendered tray must not delete the tuning of a
+set that simply was not on screen.
+
+The offline download is the one place the rule exists twice, in
+`tools/ui_debug/duty_settings_split.js`, because a page opened as a file has no server to ask and
+a download has to *be* the document. The two copies are pinned against each other by a test that
+runs the JavaScript in node and compares it with the Python, so the day they diverge is the day
+a test fails rather than the day a save quietly loses a set's tuning.
+
+On the sheet, choosing a set moves every slider, a line beside the control says whether you are
+looking at the base, a set's own numbers or a set still inheriting, and **use the base** drops a
+row you did not want. Unsaved edits are kept per set, so flipping between two sets to compare them
+shows each as you left it.
+
+### Choosing a set, and what `sizes` means now
+
+The control is a dropdown (`duty_set_picker.js`, shared by the sheet and the sow page so the two
+present the same list in the same order). It lists **every set the tray has rendered**, grouped
+into the ones `sizes` names and the rest, each marked `· base` or `· own numbers`.
+
+`sizes` used to decide which sets the sow page offered at all, and that hid real work: the file
+named two sets, the tray had rendered ten, and `150_painted` — tuned on the sheet, with its own
+spread, set-back, rank, frame and lift — was unreachable on the sow page with nothing to say it
+existed. A control that silently omits the thing you just tuned is worse than a long list. So
+`sizes` groups rather than filters. A set it names but the tray has never rendered is still
+dropped, with a note: there is nothing to draw.
+
+### Calculate width across ranks
+
+A checkbox on the sheet, off by default, and per set. It decides what `spread` measures once
+there are two ranks:
+
+Off, `spread` is the gap between neighbours **within a rank**. Four and five acolytes stand in two
+ranks with the back one offset into the front rank's gaps, which keeps the group narrow and makes
+it read denser than two or three at the same spread. On, `spread` is the gap between any two
+neighbours whichever rank they stand on, so nothing sits in a neighbour's horizontal gap — at
+roughly twice the width. One, two and three never move: with one rank there is nothing to
+interleave.
+
+It is a setting rather than a decision because it depends on the ground plate. Spacing across
+ranks was briefly made the only behaviour on 2026-09-25 and reverted the same day: on the tuned
+plates the group burst out of its frame and past the tile, with the outer acolytes hanging over
+the neighbouring cell. A wide plate can carry it; a narrow one cannot. Hence per set — the sets
+whose plates can carry it are the ones that get it.
+
+## Which pose a tile draws
+
+The first grid column draws `_v1`, the second `_v2`, the third `_v3` — `dutyPoseForColumn` in
+`duty_sculpt_rules.js`, which is `grid_index % 3` on a row-major grid of nine.
+
+**Keyed off the position, never off the duty.** The duty tiles are randomised onto grid positions
+at setup, so `allocation` is not in a fixed column. A table from duty name to pose would put the
+same duty in a different pose every deal — a duty's acolytes visibly changing pose between games —
+which is the one thing a pose must not appear to signify. The position is fixed for the whole
+game; the duty standing on it is not.
+
+It is also not a rule *about* anything. A pose carries no information a player could read off it.
+It exists so that nine tiles holding one seat are not nine copies of one painting.
+
+There is no control for it on the board or the sow page, because it is not a choice. The
+placement sheet has one, and only in its **arrangements** view: that view is a table of
+formations with no grid at all, so there is no column to read, and it is where comparing the
+three paintings side by side is actually useful. The sheet's **wheel** view takes the column like
+everyone else — a control there could show an arrangement the game cannot produce.
+
+A one-pose set is unaffected, because `dutyPose` folds the column away: all three columns ask,
+and the plastic set answers each with its only figure. The pose buttons stay three wide whatever
+is loaded, so the row states the convention rather than inventorying the art.
+
+Verified on the built page rather than argued: with one seat-1 acolyte on all nine tiles, the sow
+board draws three distinct paintings, the same one down each column and three different ones
+across each row; the plastic set under the same treatment draws one painting nine times. On the
+sheet, the three columns and three seats reach all nine paintings with no column disagreeing with
+itself.
