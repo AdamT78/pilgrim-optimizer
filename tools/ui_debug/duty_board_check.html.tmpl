@@ -108,11 +108,12 @@ var SIZE = HAVE.indexOf(D.size) >= 0 ? D.size : (HAVE[0] || "");
 //
 // `order` below does NOT follow the set: grouped-versus-arrival is a convention about reading a
 // tile rather than a fact about how big the sculpts are, so it stays on the document.
-var SPREAD, BACK, RANK, SHADE, FULL_AT, MODE;
+var SPREAD, BACK, RANK, SHADE, FULL_AT, MODE, WIDE;
 function applySet(label){
   var r = RULES[label] || {}, d = r.depth || {};
   SPREAD = r.spread; BACK = r.back; RANK = r.rank;
   MODE = d.mode; SHADE = d.amount; FULL_AT = d.full_at || 52;
+  WIDE = !!r.width_across_ranks;
   // The sliders show the numbers in force, so switching set moves them rather than leaving
   // them reading the set you just left.
   setSlider("sprd", SPREAD); setSlider("dep", BACK);
@@ -172,7 +173,7 @@ function deal(kind){
 // ---------------------------------------------------------------- formation
 // The shape comes from the shared file, inlined above; the numbers come from the placement
 // JSON. This wrapper exists only so the call sites stay short.
-function formationAt(n){ return dutyFormation(n, SPREAD, BACK, RANK); }
+function formationAt(n){ return dutyFormation(n, SPREAD, BACK, RANK, WIDE); }
 
 // The seat queue is LOOKED UP, not derived: the generator built both rules and the test holds
 // them to it. A page that recomputed them would be a second copy free to drift.

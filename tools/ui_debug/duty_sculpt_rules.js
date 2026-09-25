@@ -44,7 +44,21 @@ function dutyGroundSettings(plan, plates, name) {
   return g;
 }
 
-function dutyFormation(n, spread, back, rank) {
+// `wide` -- "calculate width across ranks" on the placement sheet -- decides what `spread`
+// measures once there are two ranks. It is a LOOK rather than a correctness question, which is
+// why it is a setting and not a decision taken here.
+//
+//   false (default)  `spread` is the gap between neighbours WITHIN a rank. The back rank sits
+//                    in the front rank's gaps, so the group stays narrow and reads denser: at a
+//                    spread that suits three acolytes, four and five look packed.
+//   true             `spread` is the gap between any two neighbouring figures, whichever rank
+//                    they stand on. Nothing sits in anybody's horizontal gap, so four and five
+//                    read as evenly spaced -- and stand about twice as wide. On a narrow ground
+//                    plate that puts the outer acolytes over the edge of the tile, which is why
+//                    it is off unless the plate under them can carry it.
+//
+// Two and three are identical either way: with one rank there is nothing to interleave.
+function dutyFormation(n, spread, back, rank, wide) {
   // AN EMPTY TILE MUST RETURN NO SLOTS. Without this the chain falls through to the five-slot
   // case, the seat queue has nothing to fill them with, and the board build throws on the first
   // empty tile -- which under a typical deal is most of them.
@@ -55,23 +69,18 @@ function dutyFormation(n, spread, back, rank) {
   // hardest case to read, and lifting the centre one breaks the repeat.
   if (n === 3) return [{x: -spread, y: 0}, {x: 0, y: back}, {x: spread, y: 0}];
   // Four and five split into two ranks, the back one offset half a step so nobody stands
-  // directly behind anybody.
-  //
-  // SPREAD IS THE HORIZONTAL STEP, and it has to be the same step here as at two and three.
-  // It was not: the back rank was offset into the FRONT RANK'S GAPS, which keeps each rank's
-  // own neighbours `spread` apart -- true to the letter of what the file calls this number --
-  // while putting a figure every `spread / 2` across the silhouette. Measured on the page at
-  // spread 40, two and three figures stepped 40 and four and five stepped 20, so the setting
-  // that spaced three acolytes properly left four in a heap, and raising it to fix the heap
-  // threw the three apart. One slider cannot mean two things.
-  //
-  // So the ranks are spaced to keep the STEP at `spread`, and each rank's own neighbours end
-  // up 2 x spread apart -- which is the cost, and it is the right way round: what you are
-  // looking at is the silhouette, not one rank at a time.
-  if (n === 4) return [{x: -spread * 1.5, y: rank}, {x: spread * 0.5, y: rank},
-                       {x: -spread * 0.5, y: 0},    {x: spread * 1.5, y: 0}];
-  return [{x: -spread, y: rank}, {x: spread, y: rank},
-          {x: -spread * 2, y: 0}, {x: 0, y: back}, {x: spread * 2, y: 0}];
+  // directly behind anybody. How far apart the ranks stand is what `spacing` chooses; the
+  // half-step offset is the same in both, because it is what stops a figure being hidden.
+  if (n === 4) return wide
+    ? [{x: -spread * 1.5, y: rank}, {x: spread * 0.5, y: rank},
+       {x: -spread * 0.5, y: 0},    {x: spread * 1.5, y: 0}]
+    : [{x: -spread * 0.75, y: rank}, {x: spread * 0.25, y: rank},
+       {x: -spread * 0.25, y: 0},    {x: spread * 0.75, y: 0}];
+  return wide
+    ? [{x: -spread, y: rank}, {x: spread, y: rank},
+       {x: -spread * 2, y: 0}, {x: 0, y: back}, {x: spread * 2, y: 0}]
+    : [{x: -spread / 2, y: rank}, {x: spread / 2, y: rank},
+       {x: -spread, y: 0}, {x: 0, y: back}, {x: spread, y: 0}];
 }
 
 // Which seat stands in each slot, left to right.
@@ -178,8 +187,8 @@ function dutyGroupBox(figs) {
 // The WORST CASE a tile has to hold, which is what a tile must be sized for -- not what it
 // happens to hold right now. Every slot is given the widest and tallest sculpt in the set,
 // because a tile does not get to choose who stands on it.
-function dutyCapacityBox(n, spread, back, rank, widest, tallest) {
-  var slots = dutyFormation(n, spread, back, rank);
+function dutyCapacityBox(n, spread, back, rank, widest, tallest, wide) {
+  var slots = dutyFormation(n, spread, back, rank, wide);
   return dutyGroupBox(slots.map(function (p) {
     return {x: p.x, y: p.y, w: widest, h: tallest};
   }));

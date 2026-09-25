@@ -188,6 +188,7 @@ RULES_JS = HERE / "duty_sculpt_rules.js"
 # Only if the file is missing. A page built from these instead of from the file would look right
 # and be wrong, so it says so in the run output rather than quietly standing in.
 FALLBACK = {"tuned_at": "210_plastic", "spread": 77, "back": 21, "rank": 52, "order": "grouped",
+            "width_across_ranks": False,
             "frame": {"w": 320, "h": 390, "drop": 40},
             "mark": "floor", "depth": {"mode": "haze", "amount": 60, "full_at": 52}}
 
@@ -263,7 +264,7 @@ def _short(path):
 # WHICH NUMBERS A SET MAY CARRY ITS OWN OF. These are the sliders; `order` and `mark` are
 # switches and stay global, because grouped-versus-arrival and which floor mark is drawn are
 # conventions about reading a tile rather than facts about how big the sculpts are.
-PER_SET_KEYS = ("spread", "back", "rank", "frame", "depth")
+PER_SET_KEYS = ("spread", "back", "rank", "frame", "depth", "width_across_ranks")
 
 
 def _check_geometry(data, where, required):
@@ -304,6 +305,13 @@ def _check_geometry(data, where, required):
         if isinstance(drop, bool) or not isinstance(drop, int):
             raise SystemExit("%s: frame.drop is %r, want a whole number of real device pixels "
                              "(negative lifts the frame off the floor)" % (where, drop))
+    # WHAT `spread` MEASURES once there are two ranks. A look rather than a correctness
+    # question, and one that depends on the ground plate under the figures -- a wide plate can
+    # carry the spaced-out version, a narrow one puts the outer acolytes over its edge.
+    wide = data.get("width_across_ranks")
+    if wide is not None and not isinstance(wide, bool):
+        raise SystemExit("%s: width_across_ranks is %r, want true or false -- it is the "
+                         "placement sheet's checkbox, not a number" % (where, wide))
     depth = data.get("depth")
     if depth is None and not required:
         return

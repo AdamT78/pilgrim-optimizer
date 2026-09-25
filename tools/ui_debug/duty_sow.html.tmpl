@@ -169,11 +169,12 @@ var BANNER_TOP = __BANNERTOP__, BANNER_INK = __BANNERINK__;
 // the set before it did. `order` and `mark` stay on the document: both are conventions about
 // reading a tile rather than facts about how big the sculpts are.
 var ORDER = PLACE.order, MARK = PLACE.mark;
-var SPREAD, BACK, RANK, MODE, SHADE, FULL_AT;
+var SPREAD, BACK, RANK, MODE, SHADE, FULL_AT, WIDE;
 function applySet(label){
   var r = RULES[label] || {}, d = r.depth || {};
   SPREAD = r.spread; BACK = r.back; RANK = r.rank;
   MODE = d.mode; SHADE = d.amount; FULL_AT = d.full_at;
+  WIDE = !!r.width_across_ranks;
   FRAME = r.frame || {w: 320, h: 390, drop: 40};
   var g = GPLANS[label] || {};
   PLAN = {by_duty: BY_DUTY, grounds: g.grounds || {}, lift: g.lift || 0};
@@ -276,7 +277,8 @@ function build(){
   // every tile, so the room a full tile needs is the same on every tile too.
   // Over every seat AND every pose, for the same reason the field height is: the box has to
   // hold the worst case the set can produce, not the case pose 1 happens to be.
-  CAP = dutyCapacityBox(SLOTS, SPREAD, BACK, RANK, dutySetWidth(FIG), dutySetHeight(FIG));
+  CAP = dutyCapacityBox(SLOTS, SPREAD, BACK, RANK, dutySetWidth(FIG), dutySetHeight(FIG),
+                        WIDE);
   var lit = legal();
 
   var h = "";
@@ -306,7 +308,7 @@ function build(){
       // seat was not already the highest on the tile.
       var after = queueFor(tile.concat([SEAT]));
       var nextIdx = after.indexOf(SEAT) + countsOf(tile)[SEAT];
-      dutyFormation(n + 1, SPREAD, BACK, RANK)
+      dutyFormation(n + 1, SPREAD, BACK, RANK, WIDE)
         .sort(function(a, b){ return a.x - b.x; })
         .forEach(function(s, j){
           h += '<div class="mark foot ' + (j === nextIdx ? "next" : "later") + '" style="left:'
@@ -321,7 +323,7 @@ function build(){
        + px(FIELD) + '">';
     var q = queueFor(tile), placed;
     // Painter's order by foot, so a sculpt standing further back never covers a nearer one.
-    placed = dutyFormation(n, SPREAD, BACK, RANK)
+    placed = dutyFormation(n, SPREAD, BACK, RANK, WIDE)
                    .sort(function(a, b){ return a.x - b.x; })
                    .map(function(p, j){ return {x: p.x, y: p.y, seat: q[j]}; });
     placed.slice().sort(function(a, b){ return b.y - a.y || a.x - b.x; }).forEach(function(p){

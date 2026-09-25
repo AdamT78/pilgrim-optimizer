@@ -155,6 +155,14 @@ def _clean_geometry(sent, where, need_all=True):
                           "full_at": depth["full_at"]}
     elif need_all:
         raise ValueError("no depth in what the page sent for %s" % where)
+    # The checkbox. Sent on every save so a set can turn it OFF again -- an absent key would
+    # be indistinguishable from "leave it as it was", and there would be no way back.
+    wide = sent.get("width_across_ranks")
+    if wide is not None:
+        if not isinstance(wide, bool):
+            raise ValueError("%s: width_across_ranks is %r, want true or false"
+                             % (where, wide))
+        clean["width_across_ranks"] = wide
     frame = sent.get("frame")
     if frame is not None:
         for key in ("w", "h"):
@@ -726,6 +734,10 @@ body{padding-left:243px}
    the middle one alone left the dropdown 141px -- four pixels short of its own selected label,
    so "210 plastic - base" read as "210 plastic - ba...". */
 #ui .full{grid-column:2 / -1}
+/* A checkbox reads as a choice rather than a quantity, which is what this is: it does not
+   change how far apart anything stands, it changes what `spread` is measuring. */
+#ui .chk{display:flex;align-items:center;gap:6px;color:#8b8071;cursor:pointer;line-height:1.3}
+#ui .chk input{accent-color:#c9b27a;margin:0;cursor:pointer}
 #ui .lab{color:#4f483d;text-align:right;white-space:nowrap}
 /* Whose numbers are on screen. Three states worth telling apart at a glance: the base itself,
    a set carrying its own, and a set still following the base. */
@@ -773,6 +785,9 @@ body{padding-left:243px}
   <input id=back type=range min=0 max=120 step=1><span class=val id=backv></span>
   <span class=lab>rank gap</span>
   <input id=rank type=range min=0 max=160 step=1><span class=val id=rankv></span>
+  <span class=lab></span>
+  <label class=chk for=wide><input type=checkbox id=wide> calculate width across ranks</label>
+  <span class=val id=widev></span>
 
   <div class=ttl>depth</div>
   <span class=lab>mode</span><span id=dmb class=wide></span>
@@ -845,7 +860,7 @@ var SIZE = SIZES.indexOf(__OPENSET__) >= 0 ? __OPENSET__ : SIZES[SIZES.length - 
 // by side is actually useful, which is why the control lives on the tuning page and nowhere
 // else. A one-pose set ignores it, because dutyPose folds it away.
 var POSE = 0, ORDER = __OPENORDER__;
-var SPREAD, BACK, RANK, FRAME;
+var SPREAD, BACK, RANK, FRAME, WIDE;
 var CELLS = __CELLS__, VIEW = "arrangements";
 // THE GROUND DOCUMENT AS IT IS ON DISK, frozen, prose and all. Separate from PLAN, which is
 // the RESOLVED plan for whichever set is on screen and carries only by_duty, grounds and lift.
@@ -877,6 +892,7 @@ var WORK = {}, GWORK = {};
   for (var i = 0; i < SIZES.length; i++){
     var L = SIZES[i], r = RULES[L] || {}, g = GPLANS[L] || {};
     WORK[L] = {spread: r.spread, back: r.back, rank: r.rank,
+               width_across_ranks: !!r.width_across_ranks,
                frame: {w: r.frame.w, h: r.frame.h, drop: r.frame.drop},
                depth: {mode: r.depth.mode, amount: r.depth.amount, full_at: r.depth.full_at}};
     GWORK[L] = {lift: g.lift || 0, grounds: JSON.parse(JSON.stringify(g.grounds || {}))};
@@ -893,6 +909,7 @@ function loadVars(label){
   SPREAD = w.spread; BACK = w.back; RANK = w.rank;
   FRAME = w.frame;
   MODE = w.depth.mode; SHADE = w.depth.amount; FULL_AT = w.depth.full_at || 52;
+  WIDE = !!w.width_across_ranks;
   LIFT = g.lift;
   // The same by_duty object every time, so picking a plate for a duty is not per set.
   PLAN = {by_duty: BY_DUTY, grounds: g.grounds, lift: g.lift};
@@ -910,6 +927,7 @@ loadVars(SIZE);
 function stashSet(label){
   var w = WORK[label];
   w.spread = SPREAD; w.back = BACK; w.rank = RANK;
+  w.width_across_ranks = WIDE;
   w.depth.mode = MODE; w.depth.amount = SHADE; w.depth.full_at = FULL_AT;
   GWORK[label].lift = LIFT;
 }
@@ -974,7 +992,7 @@ function drawWheel(){
   var BUD = Math.floor(side * DPR), CELL = BUD / 3;
   var L = dutyTileLayout(CELL, figH, RANK, BACK, {icons: false});
   var floor = L.top + L.field;
-  var CAP = dutyCapacityBox(5, SPREAD, BACK, RANK, widest, figH);
+  var CAP = dutyCapacityBox(5, SPREAD, BACK, RANK, widest, figH, WIDE);
   // Room above the floor line is the frame's height less however far its base sits below it.
   var room = FRAME.h - FRAME.drop;
   var tight = CAP.w > FRAME.w || CAP.h > room;
@@ -1019,7 +1037,7 @@ function drawWheel(){
     var who = dutySeatOrder(counts, ORDER);
     h += '<div class=figs style="top:' + px(L.top) + ';left:0;width:' + px(CELL) + ';height:'
        + px(L.field) + '">';
-    dutyFormation(n, SPREAD, BACK, RANK)
+    dutyFormation(n, SPREAD, BACK, RANK, WIDE)
       .sort(function(a, b){ return a.x - b.x; })
       .map(function(p, j){ return {x: p.x, y: p.y, seat: who[j]}; })
       .sort(function(a, b){ return b.y - a.y || a.x - b.x; })
@@ -1169,7 +1187,7 @@ function drawCases(){
   var widest = 0, tallest = 0, cells = [];
   CASES.forEach(function(c){
     var n = c.counts.reduce(function(a, b){ return a + b; }, 0);
-    var slots = dutyFormation(n, SPREAD, BACK, RANK)
+    var slots = dutyFormation(n, SPREAD, BACK, RANK, WIDE)
                   .sort(function(a, b){ return a.x - b.x; });
     var who = dutySeatOrder(c.counts, ORDER);
     var figs = slots.map(function(p, i){
@@ -1275,6 +1293,13 @@ slider("frd", FRAME.drop, function(v){ FRAME.drop = v; });
 // from the plan rather than from whichever plate happens to be picked, and it is never disabled,
 // because it still means something on a tile standing on bare floor.
 slider("glift", LIFT, function(v){ LIFT = v; });
+// WHAT `spread` MEASURES once there are two ranks, rather than how big it is -- see
+// dutyFormation. Off is the arrangement that has always been drawn; on spaces four and five so
+// nothing sits in a neighbour's horizontal gap, at roughly twice the width.
+(function(){
+  var box = document.getElementById("wide");
+  box.onchange = function(){ WIDE = box.checked; draw(); };
+})();
 syncGroundSliders();
 
 // EVERY CONTROL, FROM THE LIVE VARIABLES. applySet calls this after loading a set's row, so
@@ -1306,6 +1331,8 @@ function syncControls(){
   // sliders show another's numbers is worse than no indicator at all, because it is the exact
   // confusion the per-set split was made to end.
   dutySetPickerShow(document.getElementById("szb"), SIZE);
+  var box = document.getElementById("wide");
+  if (box) box.checked = WIDE;
   syncGroundSliders();
   showRatio();
 }
@@ -1373,6 +1400,7 @@ function settings(){
   for (i = 0; i < SIZES.length; i++){
     L = SIZES[i];
     sets[L] = {spread: WORK[L].spread, back: WORK[L].back, rank: WORK[L].rank,
+               width_across_ranks: !!WORK[L].width_across_ranks,
                depth: {mode: WORK[L].depth.mode, amount: WORK[L].depth.amount,
                        full_at: WORK[L].depth.full_at},
                frame: {w: WORK[L].frame.w, h: WORK[L].frame.h, drop: WORK[L].frame.drop}};

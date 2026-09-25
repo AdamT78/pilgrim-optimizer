@@ -1251,57 +1251,78 @@ def test_the_tile_layout_lives_in_exactly_one_file():
 
 
 @needs_node
-def test_spread_is_the_same_horizontal_step_in_every_formation():
-    """One slider cannot mean two things, and this one did.
+def test_the_default_spacing_is_per_rank_and_keeps_the_group_narrow():
+    """Off -- the default, and what has always been drawn -- `spread` is the gap between
+    neighbours WITHIN a rank, and the back rank sits in the front rank's gaps.
 
-    Four and five acolytes stand in two ranks with the back one offset into the front rank's
-    gaps. That keeps each rank's OWN neighbours `spread` apart -- true to the letter of what the
-    file called this number -- while putting a figure every `spread / 2` across the silhouette.
-    Measured on the placement sheet at spread 40: two and three figures stepped 40, four and
-    five stepped 20. So the value that spaced three acolytes properly left four in a heap, and
-    raising it to fix the heap threw the three apart.
-
-    Checked across the whole group rather than within a rank, because the silhouette is what is
-    being looked at -- a per-rank check is exactly what passed while the board looked wrong.
+    This was briefly made the only behaviour's opposite on 2026-09-25 and reverted the same day:
+    spacing so that no two figures anywhere are closer than `spread` doubles how wide four and
+    five stand, and on the tuned plates the group burst out of its frame and past the tile, with
+    the outer acolytes hanging over the neighbouring cell. Hence a default that is narrow and a
+    checkbox for the other.
     """
-    for spread in (40, 100, 137):
+    for spread in (40, 100):
+        for n in range(2, 6):
+            slots = _in_node("dutyFormation(%d, %d, 20, 49, false)" % (n, spread))
+            ranks = {}
+            for p in slots:
+                # the set-back middle belongs to the front rank; it is nudged, not a rank of one
+                ranks.setdefault(0 if p["y"] != 49 else 49, []).append(p["x"])
+            for y, xs in ranks.items():
+                xs = sorted(xs)
+                gaps = [round(b - a) for a, b in zip(xs, xs[1:])]
+                assert all(g == spread for g in gaps), (
+                    "n=%d at spread %d: the rank at y=%d has gaps %s, not %d apart"
+                    % (n, spread, y, gaps, spread))
+    # ...and the whole group stays inside two steps plus a figure at five, which is what keeps
+    # it on the tile.
+    box = _in_node("dutyCapacityBox(5, 80, 20, 49, 71, 150, false)")
+    assert round(box["w"]) == 2 * 80 + 71
+
+
+@needs_node
+def test_the_checkbox_spaces_across_ranks_and_costs_width():
+    """On, `spread` is the gap between any two neighbours whichever rank they stand on."""
+    for spread in (40, 100):
         for n in range(2, 6):
             xs = sorted(p["x"] for p in
-                        _in_node("dutyFormation(%d, %d, 20, 49)" % (n, spread)))
+                        _in_node("dutyFormation(%d, %d, 20, 49, true)" % (n, spread)))
             steps = [round(b - a) for a, b in zip(xs, xs[1:])]
             assert steps == [spread] * (n - 1), (
-                "at spread %d, %d sculpts step %s -- every formation must step by the spread"
-                % (spread, n, steps))
-
-
-@needs_node
-def test_nobody_stands_directly_behind_anybody_at_four_and_five():
-    """The other half of the arrangement, and the reason the ranks interleave at all. Making the
-    step uniform must not be done by stacking the back rank straight behind the front one."""
-    for n in (4, 5):
-        slots = _in_node("dutyFormation(%d, 80, 20, 49)" % n)
-        ranks = {}
-        for p in slots:
-            ranks.setdefault(p["y"], []).append(p["x"])
-        assert len(ranks) >= 2, "%d sculpts no longer stand in two ranks" % n
-        front = ranks[min(ranks)]
-        for y, xs in ranks.items():
-            if y == min(ranks):
-                continue
-            for x in xs:
-                assert all(abs(x - f) > 1e-6 for f in front), (
-                    "%d sculpts: one at x=%s stands directly behind another" % (n, x))
-
-
-@needs_node
-def test_five_sculpts_need_four_steps_of_room(mod):
-    """The cost of a uniform step, stated rather than discovered: five acolytes span four steps
-    plus one figure, where they used to span two. A frame tuned before this is half the width it
-    needs, and the page draws them over its edge without comment."""
-    box = _in_node("dutyCapacityBox(5, 80, 20, 49, 71, 150)")
+                "with the box ticked, %d sculpts at spread %d step %s" % (n, spread, steps))
+    box = _in_node("dutyCapacityBox(5, 80, 20, 49, 71, 150, true)")
     assert round(box["w"]) == 4 * 80 + 71, (
-        "five sculpts claim %s px at a step of 80 and a figure of 71; four steps plus the "
-        "figure is %d" % (box["w"], 4 * 80 + 71))
+        "the cost of ticking it is four steps of room at five sculpts, not %s" % box["w"])
+
+
+@needs_node
+def test_one_and_two_and_three_do_not_move_when_the_box_is_ticked():
+    """With one rank there is nothing to interleave, so the box cannot change them. If it does,
+    it has stopped being about ranks and started being about spread."""
+    for n in (1, 2, 3):
+        off = _in_node("dutyFormation(%d, 70, 20, 49, false)" % n)
+        on = _in_node("dutyFormation(%d, 70, 20, 49, true)" % n)
+        assert off == on, "%d sculpts moved when the box was ticked" % n
+    # and four and five DO move, or the test above is vacuous
+    for n in (4, 5):
+        assert _in_node("dutyFormation(%d, 70, 20, 49, false)" % n) \
+            != _in_node("dutyFormation(%d, 70, 20, 49, true)" % n)
+
+
+@needs_node
+def test_nobody_stands_directly_behind_anybody_either_way():
+    """The reason the ranks interleave at all, and it has to survive both settings -- spacing
+    the ranks apart must not be done by stacking the back rank straight behind the front."""
+    for wide in ("false", "true"):
+        for n in (4, 5):
+            slots = _in_node("dutyFormation(%d, 80, 20, 49, %s)" % (n, wide))
+            front = [p["x"] for p in slots if p["y"] != 49]
+            for p in slots:
+                if p["y"] != 49:
+                    continue
+                assert all(abs(p["x"] - f) > 1e-6 for f in front), (
+                    "wide=%s, n=%d: one at x=%s stands directly behind another"
+                    % (wide, n, p["x"]))
 
 
 @needs_node
