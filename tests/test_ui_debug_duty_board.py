@@ -23,6 +23,7 @@ substitute for the full run -- it is what you use between full runs.
 import copy
 import importlib.util
 import json
+import math
 import pathlib
 import re
 import shutil
@@ -1602,6 +1603,88 @@ def test_a_plate_the_page_did_not_send_is_left_alone(sheet, mod, tmp_path, monke
         "%s was not sent and was edited" % keep)
     assert saved["grounds"][one]["dim"] == partial[one]["dim"], (
         "the plate that WAS sent did not take")
+
+
+def _load_tool(checker, name):
+    """Import a sibling tool from tools/ui_debug, the way the fixtures import the checker."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        name, pathlib.Path(checker.__file__).parent / ("%s.py" % name))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_a_corrected_plate_can_be_re_derived_from_its_source(checker, metrics):
+    """A CORRECTED PLATE PASSES THE WINDOW BY CONSTRUCTION, so it has to say so and show how.
+
+    A plate that arrived inside the window is evidence about where the generator puts a camera.
+    A plate that was SCALED until it was inside tells you only that somebody scaled it. The two
+    are indistinguishable once filed, and the window note in ring-ratio.md already names the
+    failure this leads to: if every plate ends up huddled in a corner of its own window, the
+    window has stopped describing the set and is no longer measuring anything.
+
+    So a `correction` block is mandatory the moment a plate has one, and the derivation has to
+    still run. Four things that can each rot separately, the same shape as the guard on a
+    recorded camera: the block names its source, the source is on file, correcting that source
+    reproduces the filed plate byte for byte, and the filed plate really does read what the
+    block says it does.
+
+    The byte-for-byte step is the one that matters. Anything looser lets a plate be retouched
+    by hand after the fact and still claim to be a pure vertical scale of its source, which is
+    exactly the claim `modifications` makes in attribution.json.
+    """
+    import numpy as np
+    from PIL import Image
+
+    gta = _load_tool(checker, "ground_tile_angle")
+    plan = json.loads(checker.GROUND_PLAN.read_text(encoding="utf-8"))
+    corrected = {name: g["correction"] for name, g in (plan.get("grounds") or {}).items()
+                 if (g or {}).get("correction")}
+    if not corrected:
+        pytest.skip("no plate records a correction")
+
+    target = math.sin(math.radians(checker.GROUND_TARGET_DEGREES))
+    for name, c in sorted(corrected.items()):
+        for key in ("from", "to", "scale_y", "source", "instrument", "why"):
+            assert c.get(key) is not None, "%s's correction does not say %r" % (name, key)
+
+        src = checker.GROUNDS.parent / c["source"]
+        assert src.is_file(), (
+            "%s names %s as its source, which is not on file" % (name, c["source"]))
+
+        before = Image.open(src).convert("RGBA")
+        cur = gta.read_repo(before)["ratio"]
+        assert abs(gta.deg(cur) - c["from"]) <= 0.01, (
+            "%s says it was corrected from %.4f, but %s reads %.4f"
+            % (name, c["from"], c["source"], gta.deg(cur)))
+        assert abs(target / cur - c["scale_y"]) <= 1e-5, (
+            "%s records a scale of %s, but %.6f is what its own numbers ask for"
+            % (name, c["scale_y"], target / cur))
+
+        again = gta.crop_to_ink(gta.correct_to_target(before, cur, target))
+        filed = Image.open(checker.GROUNDS / ("%s.png" % name)).convert("RGBA")
+        assert again.size == filed.size, (
+            "correcting %s gives %s, but %s.png is %s"
+            % (c["source"], again.size, name, filed.size))
+        assert np.array_equal(np.asarray(again), np.asarray(filed)), (
+            "correcting %s does not reproduce %s.png byte for byte, so the filed plate is not "
+            "a pure vertical scale of its source" % (c["source"], name))
+
+        got = gta.deg(gta.read_repo(filed)["ratio"])
+        assert abs(got - c["to"]) <= 0.01, (
+            "%s records that it landed at %.4f; it now reads %.4f" % (name, c["to"], got))
+
+    # AND THE SET MUST NOT BECOME ALL CORRECTIONS. Not a style rule: the window's numbers were
+    # derived from plates that arrived where they arrived, and a set of plates scaled to the
+    # target would describe nothing but the scaling. A majority is the point at which the
+    # question is worth asking out loud rather than the point at which something is wrong.
+    filed_plates = {p.stem for p in checker.GROUNDS.glob("*.png")}
+    assert len(corrected) * 2 <= len(filed_plates), (
+        "%d of %d filed plates are corrected rather than generated inside the window. The "
+        "window was derived from plates that arrived where they arrived, so it no longer "
+        "describes the set -- decide whether the generator has moved or the target has."
+        % (len(corrected), len(filed_plates)))
 
 
 def test_a_recorded_camera_keeps_the_ring_it_was_read_from(checker, metrics):
@@ -3951,17 +4034,24 @@ def test_the_key_is_not_a_colour_this_game_uses(metrics, checker):
     """Magenta was the obvious key and it is wrong: it comes within 34 of stones_plum.png,
     plum being a purple. The key has to sit outside the palette or it eats the art.
 
-    The files a plate's `camera` block names as its ring source are skipped, and only those:
-    they carry the key on purpose, which is the whole reason they are on file. Skipping them by
-    reading the plan rather than by naming a filename means the exclusion cannot outlive the
-    thing it excuses -- delete the block and the file is judged like any other art again.
+    The files a plate names as a ring source are skipped, and only those: they carry the key on
+    purpose, which is the whole reason they are on file. Skipping them by reading the plan
+    rather than by naming a filename means the exclusion cannot outlive the thing it excuses --
+    delete the block and the file is judged like any other art again.
+
+    BOTH BLOCKS NAME ONE, for different reasons, and both have to be honoured. A `camera` block
+    keeps its ring because the ring IS the recorded measurement. A `correction` block keeps its
+    ring as the head of the chain and, for mosaic_compass, as the evidence for a ring that was
+    measured and then rejected. Reading only the first was enough until 2026-09-26 and silently
+    was not afterwards.
     """
     import numpy as np
     from PIL import Image
     plan = json.loads(checker.GROUND_PLAN.read_text(encoding="utf-8"))
-    ringed = {(checker.GROUNDS.parent / g["camera"]["ring_source"]).resolve()
+    ringed = {(checker.GROUNDS.parent / block["ring_source"]).resolve()
               for g in (plan.get("grounds") or {}).values()
-              if (g or {}).get("camera", {}).get("ring_source")}
+              for block in ((g or {}).get("camera"), (g or {}).get("correction"))
+              if (block or {}).get("ring_source")}
     key = np.array(metrics.RING_KEY)
     closest = 10 ** 6
     worst = None

@@ -6,11 +6,27 @@ Writes generated/figure_<subject>_<px>.png, which is git-ignored debug art the p
 
 WHICH ART
 
---kind picks what a player row is drawn from. `sculpt_plastic` is the default and is what the
-tray wants: the pieces then read as one family of miniatures, and they are a far tidier set than
-the painted figures -- 5% apart in height and plinth where figure.png is 12% and 6%. The painted
-figures are also dark-robed, and measured against the slate tile they lose half to two thirds of
-their outline where the sculpts do not. `--kind figure` still works if you want to compare.
+--kind picks what a player row is drawn from. `unpainted` is the default: the filed sculpts in
+ui/assets-gothic/sculpts/, three seats and three poses, the same poses as the painted set and
+the art the painted set was made from. `--kind painted` renders their painted counterparts.
+`--kind figure` reads the old concept art and still works if you want to compare.
+
+THE LABEL IS STILL `plastic` AND THE KIND IS NOT. `unpainted` replaced a kind called
+`sculpt_plastic`, which rendered ui/concept/player_N/sculpt_plastic.png -- four seats, one pose,
+each a single flat colour. The label stayed because `210_plastic` is what duty_placement.json
+was tuned at, what its `sizes` list names and what the sow's buttons say; renaming it would have
+orphaned all of that to relabel the same slot. The kind changed because the name said where the
+art came from and no longer would. The concept file of that name still exists and is still read,
+directly rather than through this table, by ui/concept/build_browser.py and by
+generate_asset_check.reference_band().
+
+WHAT THE SWAP COSTS, measured 2026-09-26. The concept plastics carried a hue per seat -- 115,
+213 and 312 degrees at a mean saturation around 0.55, every pixel coloured. The filed unpainted
+sculpts are one warm grey: hue 26 to 28, saturation 0.10 to 0.15, and under a third of their
+pixels carry any colour at all. So the three seats are no longer told apart by colour on any
+page that draws this set, which is a real loss on the arrangements view where the captions name
+seats. It is what the art is; the fix, if it is wanted, is a per-seat tint at render time here
+rather than three more files.
 
 TWO RULES, AND THEY PULL AGAINST EACH OTHER
 
@@ -24,9 +40,10 @@ TWO RULES, AND THEY PULL AGAINST EACH OTHER
    and the rest come in under it: nothing overshoots the size on its label, and the relative
    heights stay honest rather than being flattened.
 
-With the sculpts the two rules barely fight: the four come in within about 8% of each other on
-identical bases. With --kind figure the spread is wider, which is that art's own height variation
-showing through and a thing to fix at the source if it matters.
+With the filed sculpts the two rules barely fight; the run prints the levelled spread so you can
+see how hard they are pulling on whatever art you gave it. With --kind figure the spread is
+wider, which is that art's own height variation showing through and a thing to fix at the source
+if it matters.
 
 ALL FOUR COME FROM THE SAME PLACE
 
@@ -62,7 +79,8 @@ bbox, plinth, resize, down, fringe = (
 
 SIZES = (90, 120, 150, 180, 210)
 CONCEPT = ROOT / "ui" / "concept"
-PAINTED = ROOT / "ui" / "assets-gothic" / "sculpts" / "painted"
+SCULPTS = ROOT / "ui" / "assets-gothic" / "sculpts"
+PAINTED = SCULPTS / "painted"
 
 # A KIND IS A SET OF ART, AND IT DECIDES THREE THINGS AT ONCE: where the art comes from, which
 # seats it covers, and how many poses each seat has. They are kept together here because they
@@ -72,14 +90,21 @@ PAINTED = ROOT / "ui" / "assets-gothic" / "sculpts" / "painted"
 #
 # `label` is what the size becomes on the page: 210 rendered from `painted` is `210_painted`.
 # It is derived here rather than passed in, so a run cannot label itself as a set it did not draw.
+#
+# ONE KIND PER LABEL, and that is load-bearing rather than tidy. Two kinds writing `plastic`
+# would write the same filenames from different art: seats 1 to 3 pose 1 overwritten by
+# whichever ran last, and any seat or pose only the other one had left behind as a file the
+# pages still discover. `sculpt_plastic` was therefore removed rather than kept alongside
+# `unpainted`. Asking for it now fails at argparse with the choices listed, which is the loud
+# failure; keeping it would have been the quiet one.
 KINDS = {
-    "sculpt_plastic": {"label": "plastic", "seats": (1, 2, 3, 4), "poses": 1},
+    "unpainted":      {"label": "plastic", "seats": (1, 2, 3),    "poses": 3},
     "figure":         {"label": "figure",  "seats": (1, 2, 3, 4), "poses": 1},
     "painted":        {"label": "painted", "seats": (1, 2, 3),    "poses": 3},
 }
 
 ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-ap.add_argument("--kind", default="sculpt_plastic", choices=tuple(KINDS),
+ap.add_argument("--kind", default="unpainted", choices=tuple(KINDS),
                 help="which art a player row is drawn from (default: %(default)s)")
 ap.add_argument("--out", default=None, help="where to write (default: %s)" % OUT.relative_to(ROOT))
 args = ap.parse_args()
@@ -91,10 +116,13 @@ KIND = KINDS[args.kind]
 def source_path(seat: int, pose: int) -> pathlib.Path:
     """Where one seat's one pose lives, which differs per kind rather than per seat.
 
-    The concept kinds are one file per seat and ignore the pose; `painted` is the filed set,
-    three poses a seat, named for the pose rather than for what the figure is doing -- see
-    docs/architecture/painted_miniatures.md for why seat 1 moved onto that convention.
+    `unpainted` and `painted` are the two halves of the filed set and differ only in which
+    folder they read -- same nine names, three poses a seat, named for the pose rather than for
+    what the figure is doing (see docs/architecture/painted_miniatures.md for why seat 1 moved
+    onto that convention). The concept kind is one file per seat and ignores the pose.
     """
+    if args.kind == "unpainted":
+        return SCULPTS / ("player_%d_v%d.png" % (seat, pose))
     if args.kind == "painted":
         return PAINTED / ("player_%d_v%d.png" % (seat, pose))
     return CONCEPT / ("player_%d" % seat) / ("%s.png" % args.kind)

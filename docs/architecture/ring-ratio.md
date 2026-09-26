@@ -107,6 +107,14 @@ is the moment to decide whether the plate is wrong or the family has genuinely m
 It keeps one check in the other direction: if every plate ends up huddled in a corner of its
 own window, the window has stopped describing the set and is no longer measuring anything.
 
+Since 2026-09-26 a plate can also be **corrected** into the window rather than generated inside
+it — scaled vertically from the camera it arrived at to the target. That makes the check above
+load-bearing rather than hypothetical, because a corrected plate satisfies the window by
+construction and says nothing about where the generator puts a camera. A corrected plate
+therefore declares itself in `duty_grounds.json` and its derivation is asserted, and the same
+test refuses to let corrections become a majority of the set. See
+[`correcting-a-ground-plate.md`](correcting-a-ground-plate.md).
+
 ## The measuring ring
 
 Most ground plates are round with a rim, and a round plate's own outline is an ellipse you
@@ -267,4 +275,5 @@ fixture built the same way as the code under test will agree with it for the wro
 | the judgement | the ground-tiles tab of `tools/ui_debug/generated/asset_check.html` |
 | the briefs that ask for a ring | `tools/ui_debug/prompts/*.md` |
 | this picture | `tools/ui_debug/generate_ring_ratio_explainer.py` |
+| correcting a plate to the target | [`correcting-a-ground-plate.md`](correcting-a-ground-plate.md) — `tools/ui_debug/ground_tile_angle.py` |
 | the camera decision itself | [`duty_tile_art_plan.md`](duty_tile_art_plan.md) |

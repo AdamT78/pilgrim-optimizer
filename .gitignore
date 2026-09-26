@@ -44,3 +44,4 @@ Claude outputs/
 # re-post, not an artist. The manifest records the URL so the reference survives without the file,
 # and build_browser.py draws a card that links out when the file is not there.
 ui/concept/_reference/
+noun_wagon_7392556.svg

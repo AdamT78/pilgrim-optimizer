@@ -65,6 +65,21 @@
         "amount": 70,
         "full_at": 52
       }
+    },
+    "150_plastic": {
+      "spread": 71,
+      "back": 20,
+      "rank": 49,
+      "frame": {
+        "w": 269,
+        "h": 199,
+        "drop": -1
+      },
+      "depth": {
+        "mode": "haze",
+        "amount": 70,
+        "full_at": 52
+      }
     }
   },
   "per_set_note": "Numbers a single sculpt set carries of its own. The keys above are the BASE, and they belong to the set `tuned_at` names; every other set falls back to them until it is tuned. A set here names only what it changes, and names it WHOLE -- a frame with only `w` in it, or a depth with only `full_at`, is refused rather than half-merged, because a half-frame has no meaning and guessing which half was meant is how a file grows a shape nobody wrote. Only spread, back, rank, frame and depth can split: `order` and `mark` are conventions about reading a tile rather than facts about how big the sculpts are. 210_painted's row was tuned on 2026-09-25 and landed in the base slot by mistake, which is what made a per-set block necessary -- see docs/architecture/painted_miniatures.md."

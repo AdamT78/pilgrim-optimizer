@@ -2163,19 +2163,34 @@ renaming a duty needs no new asset — which it has already had to, twice.
 ## The tray pieces, and judging a new sculpt
 
 `make_tray_figures.py` renders the pieces that page drags around, at every size in `SIZES`, from
-the full-resolution originals — `ui/concept/` for the concept kinds, `ui/assets-gothic/sculpts/painted/`
-for the filed set.
+the full-resolution originals — `ui/assets-gothic/sculpts/` and its `painted/` for the two halves
+of the filed set, `ui/concept/` for the old concept art.
 
-    python3 tools/ui_debug/make_tray_figures.py                  # --kind sculpt_plastic
+    python3 tools/ui_debug/make_tray_figures.py                  # --kind unpainted
     python3 tools/ui_debug/make_tray_figures.py --kind painted
+
+`unpainted` and `painted` are the same nine sculpts in the same nine poses, and differ only in
+whether they have been painted. **The kind is `unpainted`; the label it writes is still
+`plastic`.** It replaced a kind called `sculpt_plastic`, which rendered four flat-coloured
+figures out of `ui/concept/`; the label stayed because `210_plastic` is what
+`duty_placement.json` was tuned at and what the sow's buttons say, and renaming it would have
+orphaned that to relabel the same slot. `sculpt_plastic` is gone as a kind rather than kept
+beside the new one, because two kinds writing one label write the same filenames from different
+art and leave whatever the loser had as files the pages still discover.
+
+One thing the swap costs, measured 2026-09-26: the concept plastics carried a hue per seat — 115°,
+213° and 312° at around 0.55 saturation — and the filed unpainted sculpts are one warm grey, hue
+26–28° at 0.10–0.15. Seats are no longer told apart by colour in this set, which shows most on the
+arrangements view where the captions name them. A per-seat tint at render time is the lever if
+that matters; it is not three more files.
 
 Output is `figure_player_<seat>_p<pose>_<px>_<label>.png`, and what the pages switch between is
 the last two fields joined: `210_plastic`, `210_painted`. A LABEL rather than a pixel height,
 because those two are both 210 tall and the height stopped being able to say which. The height
 is still readable off the front of it and several drawings still want it.
 
-A seat is a list of poses — three for `painted`, one for the concept kinds, and a list either
-way. Pages pick with `dutyPose(row, n)`, which answers `n % row.length`, so a one-pose set
+A seat is a list of poses — three for both halves of the filed set, one for the concept kind, and
+a list either way. Pages pick with `dutyPose(row, n)`, which answers `n % row.length`, so a one-pose set
 answers every `n` with its only figure and the two sets are interchangeable with no branch.
 Anything that SIZES a tile — the field height, the capacity box — measures every pose, because
 seat 1's painted poses are 89, 89 and 100 px wide at 210 and a box measured off the first would
