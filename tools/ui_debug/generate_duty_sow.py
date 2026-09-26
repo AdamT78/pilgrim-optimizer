@@ -53,9 +53,10 @@ OUT = HERE / "generated" / "duty_sow.html"
 BOARD_JSON = ROOT / "configs" / "board.json"
 RULES_JS = HERE / "duty_sculpt_rules.js"
 MARK_JS = HERE / "duty_mark_rules.js"
-# What the engine offers during a turn, recorded by record_sow_offers.py. The page draws
-# from this rather than working out what is legal; see the long note at the top of that
-# script for why, and for the two places the rule it replaced was measurably wrong.
+# What the engine offers during a turn, captured by tools/capture_sow_offers.py -- which
+# lives OUTSIDE ui_debug because it imports the engine and nothing here may. The page draws
+# from this file rather than working out what is legal; the long note at the top of that
+# script says why, and corrects what the first version of this comment claimed.
 OFFERS = ROOT / "ui" / "assets-gothic" / "metadata" / "duty_sow_offers.json"
 # The set dropdown, shared with the placement sheet so the two group the sets the same way.
 PICKER_JS = HERE / "duty_set_picker.js"
@@ -162,7 +163,7 @@ def main():
                     help="write the page without opening it")
     ap.add_argument("--offers", default=None, metavar="FILE",
                     help="a recording other than the committed one, for building two deals "
-                         "side by side (see tools/ui_debug/record_sow_offers.py)")
+                         "side by side (see tools/capture_sow_offers.py)")
     args = ap.parse_args()
 
     board = _board_module()
@@ -194,7 +195,7 @@ def main():
     if not offers_path.is_file():
         raise SystemExit(
             "%s is missing -- the page has no engine answers to draw and will not guess at "
-            "them. Record it with: python3 tools/ui_debug/record_sow_offers.py"
+            "them. Capture it with: python3 tools/capture_sow_offers.py --scenario <name>"
             % board._short(offers_path))
     offers = json.loads(offers_path.read_text(encoding="utf-8"))
 

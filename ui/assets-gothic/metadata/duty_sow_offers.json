@@ -1,5 +1,5 @@
 {
-  "note": "Recorded from the engine by tools/ui_debug/record_sow_offers.py. Every `lit` list is a projection of legal_actions given the decisions in the node's id -- no rule about the board is written anywhere in this file or in the page that reads it. Re-record when the engine's offers change; the page cannot tell that they have.",
+  "note": "Captured from the engine by tools/capture_sow_offers.py. Every `lit` list is a projection of legal_actions given the decisions in the node's id -- no rule about the board is written anywhere in this file or in the page that reads it. Re-record when the engine's offers change; the page cannot tell that they have.",
   "positions": [
     "city",
     "north",

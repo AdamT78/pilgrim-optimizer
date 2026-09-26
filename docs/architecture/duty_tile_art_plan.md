@@ -31,8 +31,12 @@ Since 2026-09-25 the first two are **base plus overrides**: the top-level keys b
 
 `generate_duty_sow.py` used to decide for itself which tiles could be sown onto: a neighbour of
 where the acolyte stood, with space, off the board graph. It now reads
-`ui/assets-gothic/metadata/duty_sow_offers.json`, written by `tools/ui_debug/record_sow_offers.py`
-from a committed scenario, and tests nothing. A node is "what has been decided so far" and carries
+`ui/assets-gothic/metadata/duty_sow_offers.json`, written by `tools/capture_sow_offers.py`
+from a committed scenario, and tests nothing. That script sits in `tools/` and not
+`tools/ui_debug/` because it imports the engine, which nothing under `ui_debug` may do —
+`test_no_page_of_the_ui_reaches_for_the_engines_state_or_rules` is the rule and it caught
+this on the first CI run. The seam holds: the capture script knows the engine, the json is
+what crosses, the page knows only the json. A node is "what has been decided so far" and carries
 the positions the engine still offers; the page holds a node id and reads `lit`.
 
 Two things about that worth keeping straight, both learned the hard way:

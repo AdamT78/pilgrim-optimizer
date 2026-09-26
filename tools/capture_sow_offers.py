@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-"""Record what the engine OFFERS during one turn's sow, so a page can draw it without deciding it.
+"""Capture what the engine OFFERS during one turn's sow, so a page can draw it without deciding it.
+
+ON THIS SIDE OF THE SEAM ON PURPOSE. It lived under tools/ui_debug until CI caught it:
+`test_no_page_of_the_ui_reaches_for_the_engines_state_or_rules` forbids anything there from
+importing the engine, and this imports `pilgrim.rules.transition` itself. The rule is right
+and the file was on the wrong side of it -- the whole point of a dict crossing the seam is
+that only one side knows the engine, and this IS that side: it is the thing that writes the
+dict. It sits in tools/ beside capture_legal_actions.py and the rest, and what it writes is
+all the drawing side ever sees.
 
 WHY THIS EXISTS. generate_duty_sow.py used to work out for itself which tiles a player
 could sow onto. THE RULE IT REPLACED WAS NOT WRONG, AND THE FIRST VERSION OF THIS NOTE SAID IT WAS.
@@ -40,7 +48,7 @@ better guess.
 
 Run it with the engine importable (Python 3.12+; the ui_debug tools themselves run on 3.10):
 
-    python3 tools/ui_debug/record_sow_offers.py --scenario movement_2p
+    python3 tools/capture_sow_offers.py --scenario movement_2p
 """
 
 from __future__ import annotations
@@ -51,7 +59,10 @@ import pathlib
 import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
-ROOT = HERE.parents[1]
+# `HERE.parent`, not `HERE.parents[1]`: this file moved up out of tools/ui_debug on 2026-09-26
+# and the old depth silently pointed sys.path at the repo's PARENT, so `import pilgrim` failed
+# with ModuleNotFoundError rather than anything that named the cause.
+ROOT = HERE.parent
 OUT = ROOT / "ui" / "assets-gothic" / "metadata" / "duty_sow_offers.json"
 SCENARIOS = ROOT / "scenarios" / "playtest"
 
@@ -150,7 +161,7 @@ def offers(state, config, load, view, FullTurnAction, legal_actions, seat=None):
 
     payload = view(state, config)
     return {
-        "note": "Recorded from the engine by tools/ui_debug/record_sow_offers.py. Every `lit` "
+        "note": "Captured from the engine by tools/capture_sow_offers.py. Every `lit` "
                 "list is a projection of legal_actions given the decisions in the node's id -- "
                 "no rule about the board is written anywhere in this file or in the page that "
                 "reads it. Re-record when the engine's offers change; the page cannot tell that "

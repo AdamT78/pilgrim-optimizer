@@ -2235,8 +2235,8 @@ def test_the_recording_is_the_plain_sow_and_says_what_it_left_out(mod):
     assert "turns_left_out_hiring_a_route_building" in rec, (
         "the recording does not say how much it left out")
     # AND THE CAUSE, which is what actually keeps it one step at a time.
-    rec_src = (pathlib.Path(mod.__file__).parent / "record_sow_offers.py").read_text(
-        encoding="utf-8")
+    # OUTSIDE ui_debug: it imports the engine, and the seam test forbids that in there.
+    rec_src = (mod.ROOT / "tools" / "capture_sow_offers.py").read_text(encoding="utf-8")
     assert "sow_route_building_id is None" in rec_src, (
         "the recorder no longer filters out the hired routes")
 
