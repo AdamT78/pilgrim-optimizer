@@ -61,6 +61,24 @@
         "method": "least-squares ellipse fit to the ring's pixels",
         "ring_source": "grounds/candidates/planks_rough_ringed.png"
       }
+    },
+    "mosaic_compass": {
+      "anchor": 54,
+      "scale": 100,
+      "dim": 55,
+      "saturate": 65,
+      "correction": {
+        "from": 34.1286,
+        "to": 31.5506,
+        "scale_y": 0.932476,
+        "instrument": "ground_ellipse (the `repo` reading of tools/ui_debug/ground_tile_angle.py)",
+        "tool": "tools/ui_debug/ground_tile_angle.py",
+        "source": "grounds/candidates/mosaic_compass_c01.png",
+        "ring_source": "grounds/candidates/mosaic_compass_ringed.png",
+        "ring_degrees": 37.19,
+        "dated": "2026-09-26",
+        "why": "THIS PLATE PASSES THE WINDOW BECAUSE IT WAS SCALED UNTIL IT DID, and that is a different kind of fact from a plate that arrived inside it. It is recorded so the window can still be read honestly: a corrected plate is not evidence about where the generator puts a camera, and if the whole set ever became corrected plates the window would have stopped describing anything. Generated at 34.13 by its own outline, which is 2.6 degrees above target and outside the window; a vertical scale of 0.932476 brings it to 31.55. Flat mosaic and low rubble, so the 7 per cent squash has no visible face to distort.\n\nTHE RING THAT ARRIVED ON IT WAS NOT USED. It fits 37.19, three degrees above the tile's own outline, and correcting by it would have left the plate reading 28.80 -- 2.76 degrees from the painted sculpts' base discs, where the outline left it 0.006 away. This is the jig-measures-itself failure already on record from the first ringed cobbles batch: the ring is honest about its own geometry and can still say nothing about the tile it encircles. The ringed original is filed anyway, as the evidence for that and because the whole chain is then re-derivable -- without_ring on it gives mosaic_compass_c01.png, and correcting that reproduces this plate byte for byte.\n\nThe corroboration, and the only non-circular thing in this area: the painted sculpts' base discs are clean circles, so ground_ellipse reads them exactly, and they sit at 31.26 to 31.80 -- the ground target, from art that shares nothing with these plates. The correction moved this tile from 2.26 degrees of disagreement with the figure that stands on it to 0.006"
+      }
     }
   },
   "grounds_note": "All whole-number percentages. `anchor` is where down the plate's own ink the standing line falls -- where the figures' feet belong -- and it is per plate rather than global because it is a property of the picture: measured at the widest row the round rimmed plates all sit near 48%. Two plates have ever differed and both for the same reason: flagstones_slab read 61% while it was a ragged patch of loose slabs with no rim, and came back to 47.9% the day it was redrawn as a round rimmed plate; cobbles_oval reads 57.8% as of 2026-09-23 and is a ragged patch with no rim BY DESIGN. A rim is most of what sits below the equator, so a plate without one has less ink under its widest row and its anchor rises. A value far from 48 means a plate is not the same kind of object as the rest, not that it is tuned differently -- and for cobbles_oval that is the intent rather than a fault. `scale` is the plate's width as a percentage of the frame's. `dim`, `saturate` and `opacity` tone it down; the plates arrive at full strength and compete with the sculpts until they are brought down.",
@@ -115,6 +133,23 @@
       }
     },
     "150_painted": {
+      "lift": 38,
+      "grounds": {
+        "cobbles_oval": {
+          "anchor": 47,
+          "scale": 100,
+          "dim": 55,
+          "saturate": 65
+        },
+        "limestone_irregular": {
+          "anchor": 42,
+          "scale": 100,
+          "dim": 55,
+          "saturate": 65
+        }
+      }
+    },
+    "150_plastic": {
       "lift": 38,
       "grounds": {
         "cobbles_oval": {

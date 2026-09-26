@@ -732,9 +732,18 @@ TEMPLATE = r"""<!doctype html><html lang=en><meta charset=utf-8>
 html,body{margin:0;min-height:100%;background:#0d0b08;color:#8b8071;
   font:11px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace}
 body{padding-left:243px}
+/* Only while the picker is up, so the board keeps the whole width when no tile is chosen. The
+   stage centres itself with `margin:auto`, which centres it in the BODY box -- without this it
+   would sit half the picker's width too far right and slide under it. */
+body.picking{padding-right:171px}
 #head{padding:14px 18px 6px;color:#5f574a}
 #head b{color:#c9b27a;font-weight:400}
 #grid{display:flex;flex-wrap:wrap;gap:10px;padding:8px 18px 28px;align-items:flex-start}
+/* The same trap the picker's column hit: `display:flex` here is an author rule at id
+   specificity and `[hidden]{display:none}` is the user agent's, so the author one wins and
+   draw()'s `grid.hidden = wheel` did nothing. The wheel view has been drawn above 2385 px of
+   arrangements ever since the grid became a flex container. */
+#grid[hidden]{display:none}
 .case{background:#17130d;border:1px solid #221c14;border-radius:3px;position:relative;
   min-width:148px;display:flex;flex-direction:column}
 .field{position:relative;align-self:center;flex:none}
@@ -760,15 +769,32 @@ body{padding-left:243px}
 #stage .cap{position:absolute;z-index:5;border:1px dashed rgba(201,178,122,.45);padding:0}
 #stage .cell{cursor:pointer}
 #stage .cell.picked .frame{border-color:#f0dcaa;box-shadow:0 0 0 1px rgba(240,220,170,.35)}
-/* The picker: the plates on offer, shown where you are about to put one. */
-#picker{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;padding:4px 18px 10px}
+/* The picker: the plates on offer, a COLUMN down the right, mirroring the panel on the left.
+   It was a strip across the top, which cost the board height it could not spare -- the wheel's
+   budget is the smaller of the width left beside the panel and the height left under the head,
+   so a strip that grew took the square down with it. A column takes width instead, and width is
+   the axis that had room.
+
+   One plate per row also makes the list readable as a list: which plates exist, and which of
+   them nobody is standing on. That is what the green is for, below. */
+#picker{position:fixed;right:0;top:0;bottom:0;width:150px;overflow:auto;z-index:5;
+  background:#100d09;border-left:1px solid #1e1811;padding:12px 10px 18px;
+  display:flex;flex-direction:column;gap:8px;align-items:stretch}
+/* `hidden` is a UA rule of lower specificity than the id above, so `display:flex` would beat it
+   and the column would stand there with no tile picked. It has to be said here. */
+#picker[hidden]{display:none}
 #picker .opt{border:1px solid #221c14;border-radius:3px;padding:4px;cursor:pointer;
-  background:#17130d;text-align:center;color:#5f574a}
+  background:#17130d;text-align:center;color:#5f574a;font:inherit}
 #picker .opt:hover{border-color:#5a4c36}
 #picker .opt[aria-pressed=true]{border-color:#c9b27a;background:#1e1810}
-#picker .opt img{display:block;height:54px;width:auto}
-#picker .opt span{display:block;margin-top:3px;font-size:10px}
-#picker .who{color:#c9b27a;align-self:center;margin-right:4px}
+#picker .opt img{display:block;margin:0 auto;max-width:100%;max-height:64px}
+#picker .opt span{display:block;margin-top:3px;font-size:10px;word-break:break-all}
+/* GREEN MEANS SOMETHING IS STANDING ON IT. The question this page cannot otherwise answer is
+   which plates are spare -- the strip showed all of them alike, so telling the used from the
+   unused meant clicking through nine tiles and remembering. Marking the USED ones rather than
+   the spare ones is deliberate: it is the shorter list, and a plate going green the moment you
+   assign it is the feedback that makes the colour mean something. */
+#picker .opt span.used{color:#6fbf73}
 #stage .figs{position:absolute;z-index:3}
 #stage .fig{position:absolute}
 #stage .ban{position:absolute;left:50%;transform:translateX(-50%);z-index:4}
@@ -1080,7 +1106,12 @@ function draw(){
   var wheel = VIEW === "wheel";
   document.getElementById("stage").hidden = !wheel;
   document.getElementById("grid").hidden = wheel;
-  document.getElementById("picker").hidden = !wheel || !PICKED;
+  // The picker is a fixed column, so the body has to make room for it or the stage centres
+  // itself underneath it. One class, set in the one place that already decides whether the
+  // picker is up at all.
+  var picking = wheel && !!PICKED;
+  document.getElementById("picker").hidden = !picking;
+  document.body.classList.toggle("picking", picking);
   return wheel ? drawWheel() : drawCases();
 }
 
@@ -1098,9 +1129,13 @@ function drawWheel(){
   var panel = document.getElementById("ui").getBoundingClientRect().width;
   var headH = document.getElementById("head").getBoundingClientRect().height;
   var pick = document.getElementById("picker");
-  var pickH = pick.hidden ? 0 : pick.getBoundingClientRect().height;
+  // THE PICKER TAKES WIDTH NOW, NOT HEIGHT, since it became a column on the right. Left as a
+  // height it subtracted nothing from the width it actually occupies and a whole column's worth
+  // from the height it no longer uses -- the board would have shrunk vertically and then run
+  // under the picker horizontally.
+  var pickW = pick.hidden ? 0 : pick.getBoundingClientRect().width;
   var side = Math.max(300,
-                      Math.min(innerWidth - panel - 48, innerHeight - headH - pickH - 34));
+                      Math.min(innerWidth - panel - pickW - 48, innerHeight - headH - 34));
   var BUD = Math.floor(side * DPR), CELL = BUD / 3;
   var L = dutyTileLayout(CELL, figH, RANK, BACK, {icons: false});
   var floor = L.top + L.field;
@@ -1185,10 +1220,10 @@ function drawWheel(){
   drawPicker();
   syncGroundSliders();
   sayLift(L, floor);
-  // The strip's height is only knowable once it is in the document, and it changes the board's
+  // The column's width is only knowable once it is in the document, and it changes the board's
   // budget. One re-measure, guarded, rather than a layout loop.
-  var after = pick.hidden ? 0 : pick.getBoundingClientRect().height;
-  if (Math.abs(after - pickH) > 1 && !RESIZING){ RESIZING = true; drawWheel(); RESIZING = false; }
+  var after = pick.hidden ? 0 : pick.getBoundingClientRect().width;
+  if (Math.abs(after - pickW) > 1 && !RESIZING){ RESIZING = true; drawWheel(); RESIZING = false; }
 
   document.getElementById("head").innerHTML =
       "The wheel at true size, from <b>__FILE__</b>.  frame <b>" + FRAME.w + "&#215;"
@@ -1210,16 +1245,25 @@ function drawPicker(){
   var strip = document.getElementById("picker");
   strip.hidden = VIEW !== "wheel" || !PICKED;
   if (strip.hidden) return;
-  var title = "";
-  CELLS.forEach(function(c){ if (c.slug === PICKED) title = c.title; });
   var here = groundFor(PICKED);
-  var h = '<span class=who>' + title + ' stands on</span>';
-  h += '<button class=opt data-g="" aria-pressed="' + (here ? "false" : "true")
+  // WHICH PLATES ARE SPOKEN FOR, read off the nine tiles rather than off by_duty's keys. The
+  // two are not the same: by_duty can carry a slug that is not one of the nine on screen, and
+  // a plate assigned only to such a slug would go green while no visible tile stood on it.
+  // CELLS is what the page is showing, so CELLS is what the colour is about.
+  var taken = {};
+  CELLS.forEach(function(c){
+    var n = groundFor(c.slug);
+    if (n) taken[n] = true;
+  });
+  // NO CAPTION. It read "<duty> stands on", which said what the panel's `plate` row already
+  // says and what the pressed button already shows, and it cost the column a line at the top
+  // that pushed the first plate out of view on a short window.
+  var h = '<button class=opt data-g="" aria-pressed="' + (here ? "false" : "true")
      + '"><span>bare floor</span></button>';
   Object.keys(PLATES).sort().forEach(function(name){
     h += '<button class=opt data-g="' + name + '" aria-pressed="'
        + (name === here ? "true" : "false") + '"><img src="' + PLATES[name].uri
-       + '"><span>' + name + '</span></button>';
+       + '"><span' + (taken[name] ? ' class=used' : '') + '>' + name + '</span></button>';
   });
   strip.innerHTML = h;
   strip.querySelectorAll(".opt").forEach(function(b){
@@ -1708,6 +1752,29 @@ if (!connected()){
 }
 
 document.body.classList.add("shadow");
+
+// CLICKING THE BACKGROUND PUTS THE PICKER AWAY. Without it the only way out of a selection was
+// to click the same tile again, which you have to remember was the one you clicked.
+//
+// TWO LISTENERS, AND THE FIRST ONE IS WHY. A single bubble-phase handler asking whether the
+// click came from inside the UI cannot answer: a cell's own handler runs first and rewrites
+// `#stage.innerHTML`, so by the time the document sees the event the clicked cell has been
+// DETACHED from the document, `closest("#stage")` walks a subtree that is no longer in the page
+// and finds nothing, and the handler clears the selection the cell had just made. Selecting a
+// tile became impossible, and the cause is invisible from the code that looks wrong.
+//
+// So the question is asked during CAPTURE, on the way down, while the node is still where it
+// was clicked; the bubble handler only acts on the answer.
+var CLICK_IN_UI = false;
+document.addEventListener("click", function(ev){
+  CLICK_IN_UI = !!(ev.target.closest && ev.target.closest("#ui,#picker,#stage,#head,#grid"));
+}, true);
+document.addEventListener("click", function(){
+  if (!PICKED || CLICK_IN_UI) return;
+  PICKED = null;
+  draw();
+});
+
 draw();
 addEventListener("resize", draw);
 (function(){ if (!document.fonts) return;
