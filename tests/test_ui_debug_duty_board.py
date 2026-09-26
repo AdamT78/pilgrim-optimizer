@@ -254,7 +254,11 @@ def test_placement_rejects_a_broken_file(mod, tmp_path, monkeypatch):
     assert "real device pixels" in run(lambda d: d.__setitem__("spread", "77"))
     assert "real device pixels" in run(lambda d: d.__setitem__("back", True))
     assert "order is" in run(lambda d: d.__setitem__("order", "sideways"))
-    assert "want floor" in run(lambda d: d.__setitem__("mark", "sparkles"))
+    # `mark` may now name an effect as well as a floor style, so the refusal names both the
+    # floor marks and what the catalogue actually holds -- which is what tells you which of
+    # the two files to go and fix.
+    broke = run(lambda d: d["marks"].__setitem__("route", "sparkles"))
+    assert "floor, foot, box, gild" in broke and "duty_effects.json" in broke
     assert "depth.mode" in run(lambda d: d["depth"].__setitem__("mode", "glow"))
     assert "0-100" in run(lambda d: d["depth"].__setitem__("amount", 140))
 
@@ -363,7 +367,7 @@ def test_save_merges_rather_than_overwrites(sheet, mod, tmp_path, monkeypatch):
     # The payload is per set now: the page sends what each set is tuned to and the server
     # decides which slot each goes in. Tuning the set `tuned_at` names writes the base.
     base_label = before["tuned_at"]
-    sheet.save_settings(board, {"order": "arrival", "sets": {base_label: {
+    sheet.save_settings(board, {"order": "arrival", "marks": {"route": "floor"}, "sets": {base_label: {
         "spread": 88, "back": 25, "rank": 60,
         "depth": {"mode": "dark", "amount": 70, "full_at": 40}}}})
     after = _json.loads(f.read_text(encoding="utf-8"))
@@ -388,7 +392,7 @@ def test_save_refuses_what_the_generator_would_refuse(sheet, mod, tmp_path, monk
         sets = {base_label: dict(good)}
         sets[label or base_label] = dict(good, **over)
         with pytest.raises(ValueError) as e:
-            sheet.save_settings(board, {"order": order, "sets": sets})
+            sheet.save_settings(board, {"order": order, "marks": {"route": "floor"}, "sets": sets})
         return str(e.value)
 
     assert "non-negative" in refuse(spread=-1)
@@ -405,13 +409,13 @@ def test_save_refuses_what_the_generator_would_refuse(sheet, mod, tmp_path, monk
                                          depth={"mode": "glow", "amount": 60, "full_at": 52})
     # A label that is not a label at all.
     with pytest.raises(ValueError) as e:
-        sheet.save_settings(board, {"order": "grouped",
+        sheet.save_settings(board, {"order": "grouped", "marks": {"route": "floor"},
                                     "sets": {base_label: dict(good), "enormous": dict(good)}})
     assert "set label" in str(e.value)
     # And a flat payload, which is what the page sent before this split: refused rather than
     # guessed at, because there is no longer one set for it to have meant.
     with pytest.raises(ValueError) as e:
-        sheet.save_settings(board, dict(good, order="grouped"))
+        sheet.save_settings(board, dict(good, order="grouped", marks={"route": "floor"}))
     assert "per set" in str(e.value)
     # and none of that reached the disk
     import json as _json
@@ -854,7 +858,7 @@ def test_a_set_may_not_carry_a_number_that_does_not_split(mod, tmp_path, monkeyp
     believes is in effect, which is worse than a number they know they cannot set.
     """
     good = json.loads(mod.PLACEMENT.read_text(encoding="utf-8"))
-    for bad in ({"order": "arrival"}, {"mark": "gild"}, {"sizes": ["210_plastic"]},
+    for bad in ({"order": "arrival"}, {"marks": {"route": "gild"}}, {"sizes": ["210_plastic"]},
                 {"tuned_at": "90_plastic"}, {"per_set": {}}):
         doctored = copy.deepcopy(good)
         doctored["per_set"] = {"120_plastic": dict(bad)}
@@ -912,7 +916,7 @@ def test_a_set_may_only_restand_a_plate_that_exists(mod, tmp_path, monkeypatch):
     good = json.loads(mod.GROUND_PLAN.read_text(encoding="utf-8"))
     doctored = copy.deepcopy(good)
     doctored["per_set"] = {"120_plastic": {"grounds": {"no_such_plate": {
-        "anchor": 25, "scale": 100, "dim": 55, "saturate": 65, "opacity": 100}}}}
+        "anchor": 25, "scale": 100, "dim": 55, "saturate": 65}}}}
     path = tmp_path / "duty_grounds.json"
     path.write_text(json.dumps(doctored), encoding="utf-8")
     monkeypatch.setattr(mod, "GROUND_PLAN", path)
@@ -1400,7 +1404,8 @@ def test_the_sheet_saves_the_frame_without_losing_the_prose(sheet, mod, tmp_path
     path.write_text(mod.PLACEMENT.read_text(encoding="utf-8"), encoding="utf-8")
     monkeypatch.setattr(board, "PLACEMENT", path)
     base_label = json.loads(path.read_text(encoding="utf-8"))["tuned_at"]
-    saved = sheet.save_settings(board, {"order": "grouped", "sets": {base_label: {
+    saved = sheet.save_settings(board, {"order": "grouped", "marks": {"route": "floor"},
+                                        "sets": {base_label: {
         "spread": 110, "back": 21, "rank": 52,
         "depth": {"mode": "haze", "amount": 60, "full_at": 52},
         "frame": {"w": 400, "h": 500, "drop": -10}}}})
@@ -1488,7 +1493,10 @@ def test_ground_plan_refuses_what_would_draw_nothing(mod, tmp_path, monkeypatch)
         {"grounds": {"cobbles_oval": dict(good["grounds"]["cobbles_oval"], anchor=101)}},
         {"grounds": {"cobbles_oval": dict(good["grounds"]["cobbles_oval"], scale=0)}},
         {"grounds": {"cobbles_oval": dict(good["grounds"]["cobbles_oval"], dim="55")}},
-        {"grounds": {"cobbles_oval": dict(good["grounds"]["cobbles_oval"], opacity=True)}},
+        {"grounds": {"cobbles_oval": dict(good["grounds"]["cobbles_oval"], saturate=True)}},
+        {"grounds": good["grounds"], "transparency": 101},
+        {"grounds": good["grounds"], "transparency": "50"},
+        {"grounds": good["grounds"], "transparency": True},
         {"grounds": good["grounds"], "by_duty": {"not_a_duty": "cobbles_oval"}},
         {"grounds": good["grounds"], "by_duty": {"produce": "no_such_plate"}},
     ]
@@ -1517,10 +1525,12 @@ def test_the_grounds_save_merges_and_validates(sheet, mod, tmp_path, monkeypatch
     monkeypatch.setattr(board, "GROUND_PLAN", path)
     saved = sheet.save_grounds(board, {
         "by_duty": {"produce": "flagstones_slab"},
+        "transparency": 40,
         "grounds": {"flagstones_slab": {"anchor": 61, "scale": 100, "dim": 40,
-                                        "saturate": 50, "opacity": 90}}})
+                                        "saturate": 50}}})
     assert saved["by_duty"]["produce"] == "flagstones_slab"
     assert saved["grounds"]["flagstones_slab"]["dim"] == 40
+    assert saved["transparency"] == 40
     assert "note" in saved and "angle_note" in saved, "the prose was thrown away"
     # and what it wrote is a file the generator would accept back
     monkeypatch.setattr(mod, "GROUND_PLAN", path)
@@ -1706,8 +1716,13 @@ def test_the_sheet_can_pick_a_ground(sheet):
     assert "id=picker" in src and "function drawPicker" in src
     assert 'data-g=""' in src, "there is no way back to a bare floor"
     for control in ("id=ganc type=range", "id=gsca type=range", "id=gdim type=range",
-                    "id=gsat type=range", "id=gopa type=range"):
+                    "id=gsat type=range"):
         assert control in src, "%s is missing" % control
+    # The transparency is NOT in that list and must not go back into it: those four are per
+    # plate and this one is the whole board's. `id=gopa` was the per-plate opacity, and having
+    # it per plate is what forked the transparency per set.
+    assert "id=gopall type=range" in src, "the board's transparency slider is missing"
+    assert "id=gopa type=range" not in src, "the per-plate opacity slider is back"
     for wiring in ("\nfunction setGround", "\nfunction syncGroundSliders"):
         assert wiring in src, "%s is not there" % wiring.strip()
     # The plan arrives as the ground DOCUMENT and is then resolved per set -- `PLAN` is the
@@ -1861,7 +1876,7 @@ def test_save_settings_writes_exactly_the_keys_it_advertises(sheet, mod, tmp_pat
     path.write_text(json.dumps(original), encoding="utf-8")
     monkeypatch.setattr(board, "PLACEMENT", path)
     base_label = original["tuned_at"]
-    sent = {"order": "arrival", "sets": {base_label: {
+    sent = {"order": "arrival", "marks": {"route": "gild"}, "sets": {base_label: {
         "spread": 97, "back": 13, "rank": 41,
         "depth": {"mode": "dark", "amount": 33, "full_at": 44},
         "frame": {"w": 301, "h": 402, "drop": -7}}}}
@@ -1963,7 +1978,7 @@ def test_the_sow_names_every_plate_it_stands_a_duty_on(sow, mod, tmp_path, monke
     assert len(names) >= 2, "need at least two plates on file to tell them apart"
     # every duty on a DIFFERENT plate than the file ships, so a page reading a stale copy shows
     plan["by_duty"] = {slug: names[i % len(names)] for i, slug in enumerate(mod.SLUGS)}
-    plan["grounds"] = {n: {"anchor": 50, "scale": 100, "dim": 55, "saturate": 65, "opacity": 100}
+    plan["grounds"] = {n: {"anchor": 50, "scale": 100, "dim": 55, "saturate": 65}
                        for n in names}
     doctored = tmp_path / "duty_grounds.json"
     doctored.write_text(json.dumps(plan), encoding="utf-8")
@@ -2015,6 +2030,417 @@ def test_a_plan_written_before_the_lift_existed_still_loads(mod, tmp_path, monke
     assert mod.ground_plan([])["lift"] == 0, "a plan with no lift did not default to flat"
 
 
+def test_the_transparency_is_one_number_for_every_plate_and_every_set(mod, tmp_path, monkeypatch):
+    """It was a per-plate `opacity` until 2026-09-26, and that made it per SET as well.
+
+    Nothing declared it per set. It became per set by accident: a set that restands one plate
+    stores that plate's WHOLE row, so the row carried an opacity along with the anchor it was
+    actually there for. The two tuned sets were saved while the plates were solid and kept 100;
+    every set inheriting the base later went to 50. So the sow page's dropdown offered two of
+    its own played sets at different transparencies, with nothing on screen to say why, and
+    setting it on the base could not reach the tuned sets at all.
+
+    Pinned at both ends: a set may not name it, and every set must be handed the same number --
+    including the sets that DO have plate rows of their own, which is where the old bug lived.
+    """
+    plan = mod.ground_plan([])
+    assert "transparency" not in mod.GROUND_PER_SET_KEYS
+    want = plan["transparency"]
+    labels = ["no_such_set"] + sorted(plan.get("per_set") or {})
+    tuned = [l for l in labels if (plan.get("per_set") or {}).get(l, {}).get("grounds")]
+    assert tuned, "no set carries plate rows of its own -- this test cannot see the old bug"
+    for label in labels:
+        got = mod.ground_settings_for(plan, label)
+        assert got["transparency"] == want, (
+            "%s draws its grounds at %r while the board is set to %r"
+            % (label, got["transparency"], want))
+        for name, row in got["grounds"].items():
+            assert "opacity" not in row, (
+                "%s.%s carries a per-plate opacity again -- that is the key that forked "
+                "the transparency per set" % (label, name))
+
+    # and a set that tries to name its own is refused rather than quietly ignored
+    doctored = copy.deepcopy(plan)
+    doctored.setdefault("per_set", {})["120_plastic"] = {"transparency": 90}
+    path = tmp_path / "duty_grounds.json"
+    path.write_text(json.dumps(doctored), encoding="utf-8")
+    monkeypatch.setattr(mod, "GROUND_PLAN", path)
+    with pytest.raises(SystemExit) as caught:
+        mod.ground_plan([])
+    assert "transparency" in str(caught.value)
+
+
+def test_a_plan_written_before_the_transparency_existed_still_loads(mod, tmp_path, monkeypatch):
+    """Same defaulting as the lift, and the default is SOLID: a plan from before the key existed
+    drew its plates at full strength, so 0 is the only reading that leaves such a board alone."""
+    plan = json.loads(mod.GROUND_PLAN.read_text(encoding="utf-8"))
+    plan.pop("transparency", None)
+    path = tmp_path / "duty_grounds.json"
+    path.write_text(json.dumps(plan), encoding="utf-8")
+    monkeypatch.setattr(mod, "GROUND_PLAN", path)
+    assert mod.ground_plan([])["transparency"] == 0
+
+
+def test_no_set_is_listed_for_nothing_but_a_transparency_it_no_longer_owns(mod):
+    """Retiring the per-plate opacity left seven sets holding plate rows identical to the base.
+
+    They were only ever there to say `opacity: 100`. Left in place they would be worse than
+    noise: an override block pins that set to TODAY'S base, so the next time a plate is restood
+    for everyone, the seven sets that appear to be inheriting it silently would not.
+    """
+    plan = mod.ground_plan([])
+    base = plan["grounds"]
+    for label, own in (plan.get("per_set") or {}).items():
+        for name, row in (own.get("grounds") or {}).items():
+            assert row != base.get(name), (
+                "per_set[%s].grounds.%s is identical to the base -- it overrides nothing and "
+                "pins the set to the base as it stands today" % (label, name))
+
+
+# ------------------------------------------------- what is legal is the engine's to say
+
+def test_the_sow_page_decides_nothing_about_what_is_legal(mod):
+    """A SECOND IMPLEMENTATION OF THE RULES, which is the argument -- not that it was wrong.
+
+    An earlier version of this docstring claimed `legal()` was measurably wrong. It was not:
+    against the PLAIN sow it agreed everywhere testable, on both scenarios, including which
+    tiles you may lift from. The "engine offers nine from the city" that seemed to condemn it
+    came from the recorder unioning across turns that hire Kogge or Cloisters.
+
+    What was true: it knew nothing about route buildings at all, so it was right by luck on the
+    cases it could express and had no way to be right about the rest -- and it would drift the
+    first time the engine moved, silently, because nothing compared them.
+
+    So the page reads a recording and tests nothing. This asks that it has not grown the habit
+    back -- which is easy to do, because every one of these is two lines and looks like a
+    harmless preview convenience at the time.
+    """
+    tmpl = (pathlib.Path(mod.__file__).parent / "duty_sow.html.tmpl").read_text(encoding="utf-8")
+    body = "\n".join(line for line in tmpl.splitlines()
+                     if not line.strip().startswith("//"))
+    assert "function legal(" not in body, "the legality rule has grown back"
+    assert "EDGES[" not in body, (
+        "the page is reading the board graph again -- the graph is honest and the rule built "
+        "on it was not")
+    assert "SLOTS" not in body or "BOARD[i].length >= SLOTS" not in body, (
+        "the page is testing for space again; a full tile is one the engine does not offer")
+    # The one seat count left is how many you LIFT, which is not a test of whether you may.
+    assert "litCells()" in body, "the page no longer reads the recorded offers"
+    for decided in ("dutyPlateHtml", "OFFERS.root"):
+        assert decided in body, "%s went missing from the page" % decided
+
+
+def test_the_sow_takes_its_layout_from_the_same_deal_as_its_offers(sow, mod, tmp_path,
+                                                                   monkeypatch):
+    """WHICH DUTY IS ON WHICH TILE has to come from the deal the offers were recorded against.
+
+    It did not. The banners and the ground plates came from configs/setups/basic_mancala_
+    sandbox.json and the lit tiles came from a recorded scenario, and the two layouts differ at
+    SIX OF EIGHT POSITIONS. Every tile carried a real duty and a real plate; just not the ones
+    belonging to the position it stood on. The lit sets were correct throughout, which is
+    exactly why a day of checking them missed it.
+
+    So this compares the page's own tiles against the recording's own layout, and nothing else.
+    Falsified by passing no layout to board.tiles().
+    """
+    board = sow._board_module()
+    rec = json.loads(mod.ROOT.joinpath(
+        "ui", "assets-gothic", "metadata", "duty_sow_offers.json").read_text(encoding="utf-8"))
+    recorded = {t["position_name"]: t["duty"] for t in rec["duty_tiles"]}
+    assert recorded, "the recording carries no layout to pair its offers with"
+
+    cells, _ = board.tiles([], layout=recorded)
+    for cell in cells:
+        if cell["pos"] == "city":
+            continue
+        assert cell["slug"] == recorded[cell["pos"]], (
+            "%s shows %s while the recorded deal puts %s there"
+            % (cell["pos"], cell["slug"], recorded[cell["pos"]]))
+
+    # AND THE SANDBOX IS STILL WHAT THE OTHER PAGES GET. They show no game state, so a real
+    # deal would be a claim they are not making.
+    sandbox = board.duty_at()
+    assert set(sandbox) == set(recorded) | {"city"}, "the two layouts cover different positions"
+
+    # The guard has to be able to SEE a disagreement, or it is asserting that two things it
+    # derived the same way are equal. Give it a layout that differs and watch it bite.
+    moved = dict(recorded)
+    a, b = sorted(p for p in moved if p != "city")[:2]
+    moved[a], moved[b] = moved[b], moved[a]
+    swapped, _ = board.tiles([], layout=moved)
+    assert any(c["slug"] != recorded.get(c["pos"]) for c in swapped if c["pos"] != "city"), (
+        "tiles() ignores the layout it is handed")
+
+    # AND THE SOW ACTUALLY HANDS IT ONE. Everything above proves tiles() honours a layout, which
+    # is worth nothing if the generator stops passing it -- and that is precisely the line that
+    # was missing when the banners and the offers came from different files.
+    src = pathlib.Path(sow.__file__).read_text(encoding="utf-8")
+    assert "board.tiles(notes, layout=" in src, (
+        "the sow builds its tiles without a layout, so they come from the sandbox setup again")
+
+
+def test_the_recording_is_walkable_and_says_which_decision_each_node_asks(mod):
+    """Every node names a decision the engine makes, lights something, and leads somewhere real.
+
+    A recording is a snapshot: nothing in the page build can tell that the engine has moved on
+    since it was taken. So what CAN be checked is checked -- that it is internally whole, and
+    that it only ever speaks in the engine's own vocabulary.
+    """
+    path = mod.ROOT / "ui" / "assets-gothic" / "metadata" / "duty_sow_offers.json"
+    rec = json.loads(path.read_text(encoding="utf-8"))
+    assert rec["root"] in rec["nodes"], "the root is not a node"
+    assert len(rec["positions"]) == 9, "the board is not nine positions"
+    seen = set()
+    for key, n in rec["nodes"].items():
+        where = "node %r" % key
+        assert n["decision"] in mod.DECISION_FIELDS, (
+            "%s asks %r, which is not a decision the engine makes" % (where, n["decision"]))
+        seen.add(n["decision"])
+        assert n["lit"], "%s lights nothing, so it is a dead end nobody can leave" % where
+        for p in n["lit"]:
+            assert 0 <= p < len(rec["positions"]), "%s lights position %r" % (where, p)
+        for value, child in n["next"].items():
+            assert int(value) in n["lit"], (
+                "%s leads on from %s without lighting it" % (where, value))
+            assert child in rec["nodes"], "%s leads to %r, which is not a node" % (where, child)
+    assert {"origin", "route"} <= seen, "the recording never asks for an origin or a route"
+    # THE RECORDING MAY CARRY MORE THAN ANY PAGE DRAWS, and this once asserted the opposite.
+    # What the engine offers is a fact about the engine; what a page shows is a separate choice.
+    # `selected_duty` is recorded and deliberately not drawn in the sow.
+    assert seen <= set(mod.DECISION_FIELDS), (
+        "the recording asks for %s, which the engine does not decide"
+        % sorted(seen - set(mod.DECISION_FIELDS)))
+    # AND IT IS ABOUT A REAL POSITION: the lit sets were recorded against this board, so a page
+    # drawing them over another one would light tiles for reasons nothing on screen explains.
+    assert rec["acolytes"] and any(any(row) for row in rec["acolytes"]), "nobody is on the board"
+
+
+def test_the_recording_is_the_plain_sow_and_says_what_it_left_out(mod):
+    """ONE STEP, NOT EVERY STEP A HIRED BUILDING COULD BUY.
+
+    legal_actions returns whole turns, and a whole turn may hire Kogge or Cloisters, which
+    reach further. Projecting the next position without separating those unioned them: from
+    Construct in kogge_and_cloisters_2p the plain sow reaches `south`, cloisters also reaches
+    `south_west` and kogge+cloisters reaches `city`, and the page lit all three as equally
+    free -- two tiles beyond where the acolytes can actually walk.
+
+    Hiring is a decision about a BUILDING, not a tile, and no page here can ask it. So the
+    recording is the plain sow, and what it leaves out is COUNTED IN THE FILE rather than
+    dropped: an omission nothing states reads, later, as something the engine never offered.
+    """
+    rec = json.loads(mod.ROOT.joinpath(
+        "ui", "assets-gothic", "metadata", "duty_sow_offers.json").read_text(encoding="utf-8"))
+    assert rec.get("plain_sow_only") is True, "the recording no longer says what it is"
+    assert rec.get("turns_recorded", 0) > 0
+    assert "turns_left_out_hiring_a_route_building" in rec, (
+        "the recording does not say how much it left out")
+    # AND THE CAUSE, which is what actually keeps it one step at a time.
+    # OUTSIDE ui_debug: it imports the engine, and the seam test forbids that in there.
+    rec_src = (mod.ROOT / "tools" / "capture_sow_offers.py").read_text(encoding="utf-8")
+    assert "sow_route_building_id is None" in rec_src, (
+        "the recorder no longer filters out the hired routes")
+
+
+def test_the_sow_stops_at_the_end_of_the_sow(sow, mod):
+    """It went on asking. Once the last acolyte landed the page lit tiles for `selected_duty`
+    -- which duty you then act on -- and that is the next phase, not this one. A board that
+    keeps offering after the move is over is claiming to run something it does not.
+
+    `selected_duty` IS a position and could be drawn, so nothing about the drawing stopped it;
+    only the decision not to. It stays in the recording, because what the engine offers is not
+    the same question as what a page shows.
+    """
+    assert "selected_duty" not in mod.DRAWABLE_DECISIONS, "the sow is drawing the next phase"
+    assert "selected_duty" in mod.DECISION_FIELDS, "the engine still decides it"
+    # and the page asks DRAWS rather than carrying its own list
+    tmpl = (pathlib.Path(mod.__file__).parent / "duty_sow.html.tmpl").read_text(encoding="utf-8")
+    assert "__DRAWABLE__" in tmpl and "drawsNode()" in tmpl, (
+        "the page no longer checks whether it shows this decision")
+    body = "\n".join(L for L in tmpl.splitlines() if not L.strip().startswith("//"))
+    assert '"selected_duty"' not in body, (
+        "the page names a decision instead of reading the list it was given")
+
+
+def test_the_engine_s_rule_for_the_duty_you_act_on_is_written_down(mod):
+    """Not a test of behaviour -- a test that the reason survives.
+
+    `selected_duty` is any tile holding one of your acolytes AFTER the sow, which is
+    `ensure_selected_duty_has_acolyte(state_after_sow, ...)` in the engine, NOT "where you just
+    landed". Measured 2026-09-26: 190/190 and 1044/1044 legal turns satisfy the after-sow rule
+    while only 76 and 470 are anywhere in the route. There is a `selected_duty_is_actual_
+    placement` that does mean the landing tiles; transition.py never calls it.
+
+    That took an hour to establish and is the kind of thing that gets re-derived wrongly. It
+    lives in a comment, so this holds the comment there.
+    """
+    src = pathlib.Path(mod.__file__).read_text(encoding="utf-8")
+    # The comment block sits ABOVE the declaration, so read backwards from it -- reading
+    # forwards from the first mention lands in the validator that uses it.
+    at = src.index("DRAWABLE_DECISIONS = (")
+    where = src[max(0, at - 2500):at]
+    assert "ensure_selected_duty_has_acolyte" in where, (
+        "the engine rule behind this decision is no longer recorded beside it")
+    assert "190/190" in where, "the measurement that settled it is gone"
+
+
+def test_the_decision_names_are_the_engine_s(mod):
+    """Read out of play_server.py rather than agreed by hand.
+
+    DECISION_FIELDS is a copy -- these tools run on Python 3.10 where the sculpts are rendered
+    and the engine needs 3.12+, so it cannot be imported. A copy that nothing compares is a
+    copy that drifts, so this reads the server's tuple as text and holds them equal.
+    """
+    server = mod.ROOT / "tools" / "play_server.py"
+    if not server.is_file():
+        pytest.skip("play_server.py is not in this tree")
+    found = re.search(r"^DECIDED_FIELDS\s*=\s*\(([^)]*)\)",
+                      server.read_text(encoding="utf-8"), re.M)
+    assert found, "play_server.py no longer declares DECIDED_FIELDS"
+    theirs = tuple(re.findall(r'"([a-z_]+)"', found.group(1)))
+    assert theirs == mod.DECISION_FIELDS, (
+        "the server decides %s and these tools think it decides %s"
+        % (list(theirs), list(mod.DECISION_FIELDS)))
+
+
+def test_a_marking_may_only_hang_on_a_decision(mod, tmp_path, monkeypatch):
+    """`marks` is keyed by the engine's decisions, so a phase somebody invented is refused."""
+    good = json.loads(mod.PLACEMENT.read_text(encoding="utf-8"))
+    for bad, why in (({"sow_phase": "amber"}, "a name the engine does not use"),
+                     ({"route": "sparkles"}, "an effect nobody has written"),
+                     ({"route": "floor:pulse"}, "a floor mark cannot breathe"),
+                     # A DECISION THE ENGINE MAKES BUT NO PAGE DRAWS. Refused for the reason the
+                     # seven empty per_set blocks were dropped: nobody can check a setting that
+                     # nothing reads, and years later there is no way to tell if it ever worked.
+                     ({"resolution": "amber"}, "no page can draw it yet")):
+        doctored = copy.deepcopy(good)
+        doctored["marks"] = bad
+        path = tmp_path / "duty_placement.json"
+        path.write_text(json.dumps(doctored), encoding="utf-8")
+        monkeypatch.setattr(mod, "PLACEMENT", path)
+        with pytest.raises(SystemExit):
+            mod.placement([])
+    # A FILE STILL CARRYING THE OLD SINGULAR KEY IS REFUSED, not migrated in silence: loading it
+    # would drop that marking and the board would simply look unmarked.
+    doctored = copy.deepcopy(good)
+    doctored["mark"] = "amber"
+    path = tmp_path / "duty_placement.json"
+    path.write_text(json.dumps(doctored), encoding="utf-8")
+    monkeypatch.setattr(mod, "PLACEMENT", path)
+    with pytest.raises(SystemExit) as caught:
+        mod.placement([])
+    assert "marks.route" in str(caught.value)
+    # and a decision with no marking is fine -- that is how an undrawable one is recorded
+    doctored = copy.deepcopy(good)
+    doctored["marks"] = {"route": "amber"}
+    path.write_text(json.dumps(doctored), encoding="utf-8")
+    assert mod.placement([])["marks"] == {"route": "amber"}
+
+
+# ---------------------------------------------------------------- how a marked tile is lit
+
+def test_an_effect_added_to_the_file_reaches_both_pages_with_no_code_change(sheet, mod):
+    """THE CLAIM THE CATALOGUE IS FOR. Everything else about it is an implementation detail.
+
+    Before duty_effects.json, a new marking meant editing three places -- the tuple `mark` was
+    checked against, the sow's stylesheet, and the sheet's buttons -- and a dropdown over that
+    would have been a menu in front of a switch statement. An effect is worth storing as data
+    only if the data is enough.
+
+    Falsified by deleting the loop in offered_marks and returning FLOOR_MARKS: the new effect
+    vanishes from the dropdown while every other test here still passes.
+    """
+    effects = mod.effects_plan([])
+    before = sheet.offered_marks(mod, effects)
+    added = copy.deepcopy(effects)
+    added["effects"]["verdigris"] = {"hue": 140, "saturation": 55, "lightness": 48,
+                                     "strength": 60,
+                                     "pulse": {"lo": 22, "hi": 66, "speed": 1600}}
+    after = sheet.offered_marks(mod, added)
+    assert "verdigris" in after and "verdigris:pulse" in after, (
+        "an effect in the file is not on offer: %s" % after)
+    assert after[:len(before)] == before or set(before) <= set(after), (
+        "adding an effect disturbed the markings already on offer")
+    # and both forms are accepted by the guard that runs on save
+    for m in ("verdigris", "verdigris:pulse"):
+        mod.check_mark(m, added, "duty_placement.json")
+    # an effect with no pulse block is offered solid and ONLY solid -- offering the breathing
+    # form would put a choice in the dropdown that check_mark refuses the moment you save it.
+    solid = copy.deepcopy(added)
+    solid["effects"]["verdigris"].pop("pulse")
+    assert "verdigris" in sheet.offered_marks(mod, solid)
+    assert "verdigris:pulse" not in sheet.offered_marks(mod, solid)
+
+
+def test_a_mark_must_name_something_that_can_be_drawn(mod):
+    """Same guard as `by_duty` naming a plate with no entry under `grounds`, and it matters for
+    the same reason: the page would draw nothing and say nothing, which reads as missing art
+    rather than as a bad key."""
+    effects = mod.effects_plan([])
+    for good in ("floor", "gild", "amber", "amber:pulse"):
+        mod.check_mark(good, effects, "where")
+    for bad, why in (("emerald", "an effect nobody has written"),
+                     ("amber:glow", "a modifier that does not exist"),
+                     ("floor:pulse", "a floor mark has nothing to breathe with"),
+                     ("", "no answer at all")):
+        with pytest.raises(SystemExit) as caught:
+            mod.check_mark(bad, effects, "where")
+        assert "where" in str(caught.value), why
+    # NAMING A BREATH THE EFFECT CANNOT TAKE. Without this the page falls back to the solid
+    # marking, which is a real marking -- so the mistake reads as "why is it not pulsing"
+    # rather than as an error, and the answer is in a different file.
+    flat = copy.deepcopy(effects)
+    flat["effects"]["amber"].pop("pulse")
+    with pytest.raises(SystemExit) as caught:
+        mod.check_mark("amber:pulse", flat, "where")
+    assert "pulse" in str(caught.value)
+
+
+def test_an_effect_is_checked_like_everything_else_in_the_tree(mod, tmp_path, monkeypatch):
+    """A typo lights a tile in a colour nobody chose, or in none at all."""
+    good = json.loads(mod.EFFECTS.read_text(encoding="utf-8"))
+    bad_files = [
+        {"effects": {"amber": dict(good["effects"]["amber"], hue=361)}},
+        {"effects": {"amber": dict(good["effects"]["amber"], strength="65")}},
+        {"effects": {"amber": dict(good["effects"]["amber"], glow=1)}},
+        {"effects": {"amber": dict(good["effects"]["amber"], pulse={"lo": 18, "hi": 70})}},
+        # AN EFFECT MAY NOT TAKE A FLOOR MARK'S NAME: `mark` is read as a floor mark first, so
+        # this one could never be chosen and the file would look as though it were ignored.
+        {"effects": {"gild": good["effects"]["amber"]}},
+        {"effects": {"Amber": good["effects"]["amber"]}},
+    ]
+    path = tmp_path / "duty_effects.json"
+    monkeypatch.setattr(mod, "EFFECTS", path)
+    for bad in bad_files:
+        path.write_text(json.dumps(bad), encoding="utf-8")
+        with pytest.raises(SystemExit):
+            mod.effects_plan([])
+    # and a tree with no catalogue at all still loads, on the floor marks alone
+    notes = []
+    monkeypatch.setattr(mod, "EFFECTS", tmp_path / "gone.json")
+    assert mod.effects_plan(notes)["effects"] == {}
+    assert any("missing" in n for n in notes), "a missing catalogue passed without a word"
+
+
+def test_neither_page_writes_its_own_plate_markup(sheet, mod):
+    """One plate, drawn one way, by the file both pages inline.
+
+    They did not agree before: the sow put brightness and saturation on the plate's wrapper
+    while the sheet had moved them onto the image so the marking would not be desaturated along
+    with the stone. Two drawings of one plate, and only one of them could carry a marking --
+    which is the sort of thing that is invisible until the second page has to draw the effect.
+    """
+    here = pathlib.Path(mod.__file__).parent
+    rules = (here / "duty_mark_rules.js").read_text(encoding="utf-8")
+    assert "function dutyPlateHtml" in rules, "the shared plate has gone"
+    for page, src in (("the placement sheet", sheet.TEMPLATE),
+                      ("the sow", (here / "duty_sow.html.tmpl").read_text(encoding="utf-8"))):
+        assert "dutyPlateHtml(" in src, "%s no longer asks for the shared plate" % page
+        assert "'<div class=plate" not in src and '"<div class=plate' not in src, (
+            "%s has gone back to writing its own plate markup" % page)
+        assert "mix-blend-mode" not in src, (
+            "%s carries its own copy of the blend, which is where the two drifted before" % page)
+
+
 def test_the_lift_is_in_the_expression_that_places_the_plate(sheet, mod):
     """THAT THE DRAWING USES IT -- which is not what rendering the page twice proves.
 
@@ -2028,15 +2454,20 @@ def test_the_lift_is_in_the_expression_that_places_the_plate(sheet, mod):
     else. Falsified by removing LIFT from exactly that expression in each page.
     """
     here = pathlib.Path(mod.__file__).parent
-    for page, src, marker in (
-            ("the placement sheet", sheet.TEMPLATE, "<div class=ground"),
-            ("the sow", (here / "duty_sow.html.tmpl").read_text(encoding="utf-8"),
-             "<div class=plate")):
-        at = src.index(marker)
-        where = src[at:at + 400]
-        assert "';top:'" in where, "%s: the plate emit does not set a top" % page
-        top = where[where.index("';top:'"):]
-        top = top[:top.index("';width:'")]
+    # WHERE THE TOP IS DECIDED, which has moved twice and will move again. It was inline markup
+    # in each page, then markup with a state class and a quote in it, and is now the `top:` each
+    # page hands to the shared dutyPlateHtml. Two earlier spellings of this test pinned the
+    # markup and broke on pages that still lifted the plate correctly -- so it asks the one
+    # question that has survived all three: does the number this page calls the plate's top
+    # have the lift and the plate's own anchor in it.
+    for page, src in (("the placement sheet", sheet.TEMPLATE),
+                      ("the sow", (here / "duty_sow.html.tmpl").read_text(encoding="utf-8"))):
+        at = src.find("dutyPlateHtml(")
+        assert at >= 0, "%s does not draw a plate at all" % page
+        call = src[at:at + 400]
+        assert "top:" in call, "%s: the plate call does not set a top" % page
+        top = call[call.index("top:"):]
+        top = top[:top.index(",")]
         assert "LIFT" in top, (
             "%s positions the plate without the lift, so the slider moves nothing: %s"
             % (page, top.strip()))

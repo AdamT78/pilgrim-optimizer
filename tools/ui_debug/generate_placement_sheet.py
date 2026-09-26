@@ -91,6 +91,7 @@ GROUND = "#17130d"
 # into every page that draws acolytes. The formation was written out three times and the depth
 # cue twice; they agreed only because they had been copied from each other.
 RULES_JS = HERE / "duty_sculpt_rules.js"
+MARK_JS = HERE / "duty_mark_rules.js"
 # The save button's half of the base/override split, shared with the test that pins it against
 # this file's own _split_base_and_overrides.
 SPLIT_JS = HERE / "duty_settings_split.js"
@@ -102,8 +103,10 @@ PICKER_JS = HERE / "duty_set_picker.js"
 # was opened as a file -- and they must merge the same keys into the same documents. They did
 # not: the offline path wrote the wire payload under the name of the placement file, a shape
 # that file never has, carrying the ground assignments in a key nothing reads them from.
-PLACEMENT_KEYS = ("spread", "back", "rank", "order", "depth", "frame")
-GROUND_KEYS = ("by_duty", "grounds", "lift")
+# `mark` joins `order` here: both are conventions about how the board READS rather than
+# numbers about how sculpts stand, and neither splits per set for the same reason.
+PLACEMENT_KEYS = ("spread", "back", "rank", "order", "marks", "depth", "frame")
+GROUND_KEYS = ("by_duty", "grounds", "lift", "transparency")
 
 # WHICH OF THOSE A SET MAY CARRY ITS OWN OF is NOT restated here: it is read off the board
 # module through the `board` argument every one of these functions already has. A second list
@@ -213,6 +216,26 @@ def _split_base_and_overrides(doc, sent_sets, base_label, keys, note):
     return doc
 
 
+def offered_marks(board, effects):
+    """Every marking the dropdown may offer, in the order it offers them.
+
+    BUILT FROM THE CATALOGUE, never from a list kept here. The floor styles come first because
+    they are what the file has always held; then each effect, and its breathing form only where
+    the entry has a pulse block to breathe with -- offering `x:pulse` for an effect that cannot
+    pulse would put a choice in the dropdown that the loader refuses on save.
+
+    This is the claim the catalogue is for, which is why it is a function with a test rather
+    than a comprehension inside the substitution list: an effect added to duty_effects.json
+    reaches both pages without a line changing in either.
+    """
+    out = list(board.FLOOR_MARKS)
+    for name, fx in sorted((effects.get("effects") or {}).items()):
+        out.append(name)
+        if (fx or {}).get("pulse"):
+            out.append(name + ":pulse")
+    return out
+
+
 def save_settings(board, sent):
     """Write the tuned numbers back into the placement file.
 
@@ -235,6 +258,24 @@ def save_settings(board, sent):
     if sent.get("order") not in ("grouped", "arrival"):
         raise ValueError("order is %r, want grouped or arrival" % sent.get("order"))
     merged["order"] = sent["order"]
+    # CHECKED BY THE GENERATOR'S OWN GUARD rather than against a list repeated here. `mark` may
+    # name a floor style or an effect in duty_effects.json, and the page offers only what the
+    # catalogue holds -- but a save is a wire message and the wire is not the page.
+    sent_marks = sent.get("marks")
+    if not isinstance(sent_marks, dict):
+        raise ValueError("marks is %r, want an object keyed by decision" % (sent_marks,))
+    stray = sorted(set(sent_marks) - set(board.DECISION_FIELDS))
+    if stray:
+        raise ValueError("marks carries %s, which is not a decision the engine makes"
+                         % ", ".join(stray))
+    effects = board.effects_plan([])
+    for field, value in sorted(sent_marks.items()):
+        try:
+            board.check_mark(value, effects, "marks.%s" % field)
+        except SystemExit as bad:
+            raise ValueError(str(bad)) from bad
+    merged["marks"] = dict(sent_marks)
+    merged.pop("mark", None)
 
     sets = sent.get("sets")
     if not isinstance(sets, dict) or not sets:
@@ -336,7 +377,7 @@ def save_grounds(board, sent, base_label=None):
     if board.GROUND_PLAN.is_file():
         current = json.loads(board.GROUND_PLAN.read_text(encoding="utf-8"))
     merged = dict(current)
-    assert set(GROUND_KEYS) == {"by_duty", "grounds", "lift"}, (
+    assert set(GROUND_KEYS) == {"by_duty", "grounds", "lift", "transparency"}, (
         "GROUND_KEYS names something this function does not write")
 
     by_duty = sent.get("by_duty")
@@ -374,6 +415,15 @@ def save_grounds(board, sent, base_label=None):
         # that is now a hand edit of the file. That is the right way round for a tool whose job
         # is to tune sliders, and it is a deliberate trade rather than an oversight.
         merged["grounds"] = _clean_plates(board, grounds, merged.get("grounds"), "")
+
+    # ONE TRANSPARENCY FOR EVERY PLATE ON EVERY SET. Not in the per-set block below and not
+    # in a plate's row: it is a fact about the board, like the lift under it.
+    transp = sent.get("transparency")
+    if transp is not None:
+        if isinstance(transp, bool) or not isinstance(transp, int) \
+                or not 0 <= transp <= 100:
+            raise ValueError("transparency is %r, want a whole number 0-100" % transp)
+        merged["transparency"] = transp
 
     # ONE LIFT FOR ALL NINE TILES. Same range the generator reads by.
     lift = sent.get("lift")
@@ -509,6 +559,7 @@ def main():
     cells, font = board.tiles(notes)
     # The plates are discovered from the folder; the plan says which duty stands on which.
     plan = board.ground_plan(notes)
+    effects = board.effects_plan(notes)
     plates = board.ground_art(notes)
     if not figs:
         raise SystemExit("no sculpt art -- run tools/ui_debug/make_tray_figures.py first; "
@@ -546,6 +597,7 @@ def main():
     page = TEMPLATE
     for key, val in (("__FONT__", font), ("__GROUND__", GROUND),
                      ("__FORMATION__", RULES_JS.read_text(encoding="utf-8")),
+                     ("__MARKRULES__", MARK_JS.read_text(encoding="utf-8")),
                      # The two split functions, inlined. Their own file so the tests can load
                      # them into node and hold them against the Python pair -- a rule that has
                      # to exist twice is a rule that has to be checked twice.
@@ -578,6 +630,8 @@ def main():
                      ("__BASESET__", json.dumps(place.get("tuned_at"))),
                      ("__ART__", json.dumps(art_uris)),
                      ("__SIZES__", json.dumps(sizes)), ("__ORDERS__", json.dumps(orders)),
+                     ("__EFFECTS__", json.dumps(effects.get("effects") or {})),
+                     ("__MARKS__", json.dumps(offered_marks(board, effects))),
                      # WHICH SET OPENS. The file's own `tuned_at`, so the sheet opens on what
                      # the numbers below it were tuned against. It is checked against SIZES in
                      # the page rather than here, because a set the tray has not rendered is a
@@ -608,6 +662,10 @@ def main():
                      ("__BANNERTRACK__", json.dumps(board.BANNER_TRACK)),
                      ("__BANNERINK__", json.dumps(board.BANNER_INK)),
                      ("__OPENORDER__", json.dumps(place.get("order", "grouped"))),
+                     ("__OPENMARKS__", json.dumps(place.get("marks") or {})),
+                     # ONLY THE ONES A PAGE CAN DRAW. A row for a decision nothing shows
+                     # would invite storing a marking nobody could ever see.
+                     ("__DECISIONS__", json.dumps(list(board.DRAWABLE_DECISIONS))),
                      # _short, not relative_to: the latter RAISES for a path outside the repo, so a
                      # file pointed elsewhere would crash the page header rather than name itself.
                      ("__FILE__", html.escape(str(board._short(board.PLACEMENT))))):
@@ -631,6 +689,11 @@ def main():
           % (len(plates), board.GROUNDS_DIR.name, len(plan.get("by_duty") or {}),
              ", ".join(in_use) or "bare floor only"))
     print("  ground lifted %d px above the floor line on every tile" % plan.get("lift", 0))
+    # SAID BESIDE THE LIFT because it is the other number that is true of every tile AND
+    # every set. Printed even at 0: a summary that only mentions transparency when the
+    # plates are faded reads as though solid plates were the absence of a setting.
+    print("  ground drawn at %d%% transparency on every tile and every sculpt set"
+          % plan.get("transparency", 0))
     if args.serve is None:
         print("  NOT SERVED -- the save button can only download. Add --serve to write "
               "%s and %s in place."
@@ -689,8 +752,11 @@ body{padding-left:243px}
 #stage .frame{position:absolute;z-index:1;border:1px solid rgba(201,178,122,.55);
   border-radius:2px;background:rgba(201,178,122,.045)}
 #stage .frame.tight{border-color:#e0705f;background:rgba(224,112,95,.07)}
-#stage .ground{position:absolute;z-index:2;pointer-events:none}
-#stage .ground img{display:block;width:100%;height:100%}
+/* `.plate` and not `.ground`, which is what this page called it: the sow already used
+   `.ground` for the floor LINE, so one name meant two things across two pages that now share
+   the markup that draws it. */
+#stage .plate{position:absolute;z-index:2;pointer-events:none}
+#stage .plate>img{display:block;width:100%;height:100%}
 #stage .cap{position:absolute;z-index:5;border:1px dashed rgba(201,178,122,.45);padding:0}
 #stage .cell{cursor:pointer}
 #stage .cell.picked .frame{border-color:#f0dcaa;box-shadow:0 0 0 1px rgba(240,220,170,.35)}
@@ -734,6 +800,11 @@ body{padding-left:243px}
    the middle one alone left the dropdown 141px -- four pixels short of its own selected label,
    so "210 plastic - base" read as "210 plastic - ba...". */
 #ui .full{grid-column:2 / -1}
+/* THE LIT GROUND IS NOT WRITTEN HERE ANY MORE. Its rules come from duty_mark_rules.js, which
+   the sow inlines too, and are added to the document at load -- see dutyEffectCss below. The
+   amber's four numbers moved to ui/assets-gothic/metadata/duty_effects.json at the same time,
+   where the sow can read them; they were CSS custom properties in this page while it was the
+   only thing that drew them, which is exactly as far as a prototype gets you. */
 /* A checkbox reads as a choice rather than a quantity, which is what this is: it does not
    change how far apart anything stands, it changes what `spread` is measuring. */
 #ui .chk{display:flex;align-items:center;gap:6px;color:#8b8071;cursor:pointer;line-height:1.3}
@@ -812,6 +883,19 @@ body{padding-left:243px}
   <span class=lab>lift</span>
   <input id=glift type=range min=-150 max=400 step=1><span class=val id=gliftv></span>
   <span class=note id=gliftn></span>
+  <!-- ALL NINE, like the lift above it and unlike the five below. Placed on this side of the
+       separator for that reason: the rule in this panel is that what sits above the line moves
+       every tile and what sits below it moves the plate under the one you clicked. -->
+  <span class=lab>transparency</span>
+  <input id=gopall type=range min=0 max=100 step=1><span class=val id=gopallv></span>
+  <span class=note id=gopalln></span>
+  <!-- HOW A LIT TILE IS MARKED. Saved, unlike the three preview buttons that stood here:
+       this is `mark` in duty_placement.json, the same key that has always chosen between the
+       floor styles, and the sow draws whatever it names. All nine tiles show it here because
+       what you cannot judge from one lit tile is whether it separates from its neighbours. -->
+  <!-- ONE ROW PER DECISION THE PLAYER IS ASKED TO MAKE, named as the engine names them. Built
+       from DECISION_FIELDS rather than written out, so a decision added there arrives here. -->
+  <span id=markrows></span>
   <div class=sep></div>
   <span class=lab>plate</span><span class=wide id=gwho></span>
   <span class=lab>anchor</span>
@@ -822,8 +906,6 @@ body{padding-left:243px}
   <input id=gdim type=range min=0 max=100 step=1><span class=val id=gdimv></span>
   <span class=lab>saturate</span>
   <input id=gsat type=range min=0 max=100 step=1><span class=val id=gsatv></span>
-  <span class=lab>opacity</span>
-  <input id=gopa type=range min=0 max=100 step=1><span class=val id=gopav></span>
 
   <div class=sep></div>
   <div class=full><button id=bshadow aria-pressed=true>shadow</button>
@@ -837,6 +919,8 @@ body{padding-left:243px}
 <script>
 // ---- the drawing rules, inlined from tools/ui_debug/duty_sculpt_rules.js ----------------
 __FORMATION__
+// ---- how a marked tile is lit, inlined from tools/ui_debug/duty_mark_rules.js -----------
+__MARKRULES__
 // ---- the set dropdown, inlined from tools/ui_debug/duty_set_picker.js -------------------
 __SETPICKER__
 // -------------------------------------------------------------------------------------------
@@ -862,6 +946,31 @@ var SIZE = SIZES.indexOf(__OPENSET__) >= 0 ? __OPENSET__ : SIZES[SIZES.length - 
 var POSE = 0, ORDER = __OPENORDER__;
 var SPREAD, BACK, RANK, FRAME, WIDE;
 var CELLS = __CELLS__, VIEW = "arrangements";
+// HOW A MARKED TILE IS LIT, and the catalogue it is chosen from. `mark` is saved with the
+// rest of the placement file; which tile is actually marked is the sow's business, and this
+// page shows the marking on all nine so it can be judged against its neighbours.
+var EFFECTS = __EFFECTS__, MARKS = __MARKS__;
+// WHAT MARKS WHICH DECISION, keyed by the engine's own field names. The sheet shows one at a
+// time on all nine tiles -- SHOWING is not the same as which tile is actually in that state,
+// which only the engine knows and this page never asks.
+var DECISIONS = __DECISIONS__, MARK_BY = __OPENMARKS__;
+var SHOWING = DECISIONS[0];
+for (var _d = 0; _d < DECISIONS.length; _d++)
+  if (MARK_BY[DECISIONS[_d]]) { SHOWING = DECISIONS[_d]; break; }
+var MARK = MARK_BY[SHOWING] || "", FX = null, PULSING = false;
+function reMark(){
+  MARK = MARK_BY[SHOWING] || "";
+  FX = dutyEffectFor(EFFECTS, MARK);
+  PULSING = dutyMarkPulses(EFFECTS, MARK);
+}
+reMark();
+// The marking's rules, asked of the shared file rather than written out in the stylesheet.
+// Empty scope: this page marks every tile, where the sow marks only the lit one.
+(function(){
+  var st = document.createElement("style");
+  st.textContent = dutyEffectCss("");
+  document.head.appendChild(st);
+})();
 // THE GROUND DOCUMENT AS IT IS ON DISK, frozen, prose and all. Separate from PLAN, which is
 // the RESOLVED plan for whichever set is on screen and carries only by_duty, grounds and lift.
 // The offline download merges into this one: merging into PLAN wrote a grounds file with every
@@ -880,6 +989,9 @@ var LIFT = PLAN.lift || 0;
 // WHICH DUTY STANDS ON WHICH PLATE IS NOT PER SET. Held once and handed to every set's plan by
 // the same reference, so assigning a plate to a duty cannot fork between sets.
 var BY_DUTY = PLAN.by_duty || {};
+// ONE NUMBER FOR EVERY PLATE ON EVERY SET. It sits outside WORK/GWORK on purpose: anything in
+// those is per set, and per set is exactly what this stopped being.
+var TRANSP = DOC_GROUNDS.transparency || 0;
 
 // THE WORKING COPY, ONE ROW PER SET. The sliders used to write into a single set of variables,
 // so tuning 210_painted and switching to 180_painted showed the painted numbers under the
@@ -1025,10 +1137,14 @@ function drawWheel(){
     if (plate){
       var gs = settingsFor(gname);
       var gw = FRAME.w * gs.scale / 100, gh = gw * plate.h / plate.w;
-      h += '<div class=ground style="left:' + px(CELL / 2 - gw / 2) + ';top:'
-         + px(floor - LIFT - gh * gs.anchor / 100) + ';width:' + px(gw) + ';height:' + px(gh)
-         + ';opacity:' + (gs.opacity / 100) + ';filter:brightness(' + (gs.dim / 100)
-         + ') saturate(' + (gs.saturate / 100) + ')"><img src="' + plate.uri + '"></div>';
+      // EMITTED BY THE SHARED RULES so this page and the sow draw one plate one way. The dim
+      // and the saturate belong on the image and not the wrapper -- on the wrapper, anything
+      // else put inside went through the same desaturation and the amber came out grey -- and
+      // that, along with the blend group, now lives in duty_mark_rules.js for both pages.
+      h += dutyPlateHtml(plate, gs,
+                         {left: CELL / 2 - gw / 2, top: floor - LIFT - gh * gs.anchor / 100,
+                          w: gw, h: gh},
+                         TRANSP, FX, PULSING);
     }
     h += '<div class=cap style="left:' + px(CELL / 2 + CAP.left) + ';top:'
        + px(floor - CAP.top) + ';width:' + px(CAP.w) + ';height:' + px(CAP.h) + '"></div>';
@@ -1163,7 +1279,7 @@ function syncGroundSliders(){
   var name = currentGround();
   var g = name ? settingsFor(name) : GROUND_DEFAULTS;
   [["ganc", "anchor"], ["gsca", "scale"], ["gdim", "dim"],
-   ["gsat", "saturate"], ["gopa", "opacity"]].forEach(function(pair){
+   ["gsat", "saturate"]].forEach(function(pair){
     var e = document.getElementById(pair[0]);
     if (!e) return;
     e.value = g[pair[1]];
@@ -1172,6 +1288,19 @@ function syncGroundSliders(){
   });
   var who = document.getElementById("gwho");
   if (who) who.textContent = name || "none";
+  // The master reads back the one number the whole board is drawn at. It used to read back
+  // what the six plate rows ACTUALLY held and say "mixed" when they disagreed, because the
+  // per-plate slider could make them disagree. Nothing can any more.
+  var all = document.getElementById("gopall");
+  if (all){
+    all.value = TRANSP;
+    document.getElementById("gopallv").textContent = TRANSP + "%";
+    var note = document.getElementById("gopalln");
+    // No "mixed" any more, because there is nothing left that could differ: one number, every
+    // plate, every set.
+    if (note) note.textContent = "every plate, every set \u00b7 " + (100 - TRANSP)
+      + "% of the ground showing";
+  }
 }
 function setGround(key, value){
   var name = currentGround();
@@ -1265,6 +1394,60 @@ dutySetPicker(document.getElementById("szb"), {
   choose: function(v){ stashSet(SIZE); SIZE = v; applySet(SIZE); draw(); }});
 buttons(document.getElementById("ordb"), ORDERS, function(){ return ORDER; },
         function(v){ ORDER = v; });
+// ALL NINE TILES AT ONCE, which is the point of showing them here -- on the board only one or
+// two are ever lit, and what you cannot judge from one lit tile is whether it separates from
+// its eight neighbours. Preview only; nothing about this is saved.
+// A ROW PER DECISION: a dropdown of every marking on offer, plus "none" -- a decision may be
+// drawn unmarked, which with one key was meaningless and with four is not. Clicking a row's
+// label shows that decision on the wheel; the dropdown sets what marks it.
+(function(){
+  var host = document.getElementById("markrows");
+  if (!host) return;
+  var h = "", i, j, d;
+  for (i = 0; i < DECISIONS.length; i++){
+    d = DECISIONS[i];
+    h += '<span class="lab markpick" data-d="' + d + '">' + d.replace(/_/g, " ") + '</span>'
+       + '<span class=full><select class=setpick data-d="' + d + '">'
+       + '<option value="">none</option>';
+    for (j = 0; j < MARKS.length; j++)
+      h += '<option value="' + MARKS[j] + '">' + markLabel(MARKS[j]) + '</option>';
+    h += '</select></span>';
+  }
+  h += '<span class=note id=markn></span>';
+  host.innerHTML = h;
+  var sels = host.querySelectorAll("select");
+  for (i = 0; i < sels.length; i++){
+    sels[i].value = MARK_BY[sels[i].dataset.d] || "";
+    sels[i].onchange = function(){
+      if (this.value) MARK_BY[this.dataset.d] = this.value;
+      else delete MARK_BY[this.dataset.d];
+      SHOWING = this.dataset.d;
+      reMark(); sayMark(); draw();
+    };
+  }
+  var labs = host.querySelectorAll(".markpick");
+  for (i = 0; i < labs.length; i++)
+    labs[i].onclick = function(){ SHOWING = this.dataset.d; reMark(); sayMark(); draw(); };
+})();
+function markLabel(m){
+  var w = dutyMarkParse(m);
+  return dutyEffectFor(EFFECTS, m) ? w.name + (w.pulse ? ", breathing" : "") : m;
+}
+function sayMark(){
+  var e = document.getElementById("markn");
+  if (!e) return;
+  var host = document.getElementById("markrows"), labs = host.querySelectorAll(".markpick"), i;
+  for (i = 0; i < labs.length; i++)
+    labs[i].style.color = labs[i].dataset.d === SHOWING ? "#c9b27a" : "";
+  // WHAT IS BEING SHOWN, and the reminder that this page is not deciding anything. Which tile
+  // is actually in a given state is the engine's answer, read from a recording; all nine are
+  // lit here because a marking has to separate from its neighbours to be judged at all.
+  e.textContent = "showing " + SHOWING.replace(/_/g, " ")
+    + (MARK_BY[SHOWING] ? " on all nine \u00b7 the sow lights whichever tiles the engine offers"
+                        : " \u00b7 unmarked, so the sow draws nothing for this decision");
+}
+sayMark();
+
 // Three buttons whatever the set holds, so the row does not change shape when the set does.
 // A set with fewer poses answers them all with what it has rather than losing a button --
 // which keeps the row a statement about the CONVENTION (first column v1, and so on) rather
@@ -1286,13 +1469,34 @@ slider("frw", FRAME.w, function(v){ FRAME.w = v; });
 slider("frh", FRAME.h, function(v){ FRAME.h = v; });
 slider("frd", FRAME.drop, function(v){ FRAME.drop = v; });
 [["ganc", "anchor"], ["gsca", "scale"], ["gdim", "dim"],
- ["gsat", "saturate"], ["gopa", "opacity"]].forEach(function(pair){
+ ["gsat", "saturate"]].forEach(function(pair){
   slider(pair[0], 0, function(v){ setGround(pair[1], v); });
 });
 // The lift is not in that list because it is not a per-plate setting: it takes its opening value
 // from the plan rather than from whichever plate happens to be picked, and it is never disabled,
 // because it still means something on a tile standing on bare floor.
 slider("glift", LIFT, function(v){ LIFT = v; });
+// EVERY PLATE AT ONCE. Opacity is per plate in the file and always will be -- a plate can want
+// its own -- but the thing actually being chosen is how solid the GROUND is, and setting that
+// one plate at a time means six passes and six chances to leave one behind. So this writes the
+// same number into every plate's row; the per-plate slider below still overrides it afterwards.
+//
+// It writes rather than multiplies, so nothing new is stored: what comes out is six ordinary
+// `opacity` values the reader already understands.
+(function(){
+  var e = document.getElementById("gopall");
+  if (!e) return;
+  // ONE VALUE, STORED ONCE. It used to write an `opacity` into all six plate rows, which was
+  // per plate and therefore per SET the moment a set carried rows of its own -- the two tuned
+  // sets kept 100 while everything inheriting the base went to 50, and the sow's dropdown
+  // showed two of its own played sets at different transparencies with nothing to say why.
+  e.oninput = function(){
+    TRANSP = +e.value;
+    document.getElementById("gopallv").textContent = TRANSP + "%";
+    syncGroundSliders();
+    draw();
+  };
+})();
 // WHAT `spread` MEASURES once there are two ranks, rather than how big it is -- see
 // dutyFormation. Off is the arrangement that has always been drawn; on spaces four and five so
 // nothing sits in a neighbour's horizontal gap, at roughly twice the width.
@@ -1407,8 +1611,9 @@ function settings(){
     gsets[L] = {lift: GWORK[L].lift, grounds: GWORK[L].grounds};
   }
   var base = GWORK[BASE_SET] || GWORK[SIZE];
-  return {order: ORDER, sets: sets,
-          grounds: {by_duty: BY_DUTY, grounds: base.grounds, lift: base.lift, sets: gsets}};
+  return {order: ORDER, marks: MARK_BY, sets: sets,
+          grounds: {by_duty: BY_DUTY, grounds: base.grounds, lift: base.lift,
+                    transparency: TRANSP, sets: gsets}};
 }
 function say(msg, cls){
   var e = document.getElementById("saymsg");
@@ -1431,6 +1636,8 @@ function documents(){
   var place = splitBaseAndOverrides(DOC_PLACEMENT, sent.sets, BASE_SET,
                                     SAVE_KEYS.per_set, SAVE_KEYS.per_set_note);
   place.order = sent.order;
+  place.marks = sent.marks;
+  delete place.mark;
   out.push({name: SAVE_KEYS.placement_file, doc: place,
             changed: JSON.stringify(place) !== JSON.stringify(OPENED.place)});
   var plan = {};
@@ -1438,6 +1645,7 @@ function documents(){
   plan.by_duty = sent.grounds.by_duty;
   plan.grounds = sent.grounds.grounds;
   plan.lift = sent.grounds.lift;
+  plan.transparency = sent.grounds.transparency;
   plan = splitGroundOverrides(plan, sent.grounds.sets, BASE_SET,
                               SAVE_KEYS.ground_per_set_note);
   out.push({name: SAVE_KEYS.grounds_file, doc: plan,
