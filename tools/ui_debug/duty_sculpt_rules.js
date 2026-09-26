@@ -20,7 +20,9 @@
 //
 // The plan is ui/assets-gothic/metadata/duty_grounds.json read whole; `plates` is the folder,
 // discovered. This decides NOTHING about which plate is right -- it resolves what the file says.
-var DUTY_GROUND_DEFAULTS = {anchor: 50, scale: 100, dim: 55, saturate: 65, opacity: 100};
+// No `opacity` here since 2026-09-26: how solid the ground is is one number for the whole
+// board, `transparency` at the top of duty_grounds.json, not a property of one plate.
+var DUTY_GROUND_DEFAULTS = {anchor: 50, scale: 100, dim: 55, saturate: 65};
 
 function dutyGroundFor(plan, slug) {
   var name = ((plan || {}).by_duty || {})[slug];

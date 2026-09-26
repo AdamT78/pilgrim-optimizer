@@ -7,21 +7,51 @@ sheet grew a wheel view, a frame and a ground picker.
 ## What exists today
 
 Three pages share one set of rules. `tools/ui_debug/duty_sculpt_rules.js` owns the formation, the
-seat order, the depth cue and the tile layout; `duty_set_picker.js` owns the dropdown that chooses
+seat order, the depth cue and the tile layout; `duty_mark_rules.js` owns how a marked tile is lit,
+including the plate markup both pages emit; `duty_set_picker.js` owns the dropdown that chooses
 which sculpt set is on screen; `duty_settings_split.js` owns the save button's half of the
 base/override split, pinned against the server's copy by a test. `generate_duty_board_check.py`
 owns the art loading, the validators and the per-set resolver; `generate_placement_sheet.py` tunes
 and saves; `generate_duty_sow.py` plays on what was saved and has no settings of its own.
 
-Two files carry every decision. `ui/assets-gothic/metadata/duty_placement.json` holds spread,
-set-back, rank gap, seating order, the marking, the depth cue and the frame.
+Three files carry every decision. `ui/assets-gothic/metadata/duty_placement.json` holds spread,
+set-back, rank gap, seating order, the markings, the depth cue and the frame.
 `ui/assets-gothic/metadata/duty_grounds.json` holds which duty stands on which plate and how each
-plate is toned down. Both are written by the sheet's save button and read by everything else.
+plate is toned down. `duty_effects.json`, added 2026-09-26, is the catalogue of markings — colour,
+strength and an optional pulse — and adding one to it is meant to be the whole job of adding an
+effect, with no code change in either page. The first two are written by the sheet's save button;
+all three are read by everything else.
 
-Since 2026-09-25 both are **base plus overrides**: the top-level keys belong to the set `tuned_at`
-names, and any other sculpt set stores only what it changes under `per_set`. `by_duty`, `order`
-and `mark` deliberately do not split — see 'Each set carries its own numbers' in
-`painted_miniatures.md`.
+Since 2026-09-25 the first two are **base plus overrides**: the top-level keys belong to the set
+`tuned_at` names, and any other sculpt set stores only what it changes under `per_set`. `by_duty`,
+`order` and `marks` deliberately do not split — see 'Each set carries its own numbers' in
+`painted_miniatures.md`. `lift` and `transparency` are single numbers for the whole board.
+
+### What is legal is the engine's to say — 2026-09-26
+
+`generate_duty_sow.py` used to decide for itself which tiles could be sown onto: a neighbour of
+where the acolyte stood, with space, off the board graph. It now reads
+`ui/assets-gothic/metadata/duty_sow_offers.json`, written by `tools/ui_debug/record_sow_offers.py`
+from a committed scenario, and tests nothing. A node is "what has been decided so far" and carries
+the positions the engine still offers; the page holds a node id and reads `lit`.
+
+Two things about that worth keeping straight, both learned the hard way:
+
+The rule it replaced **was not wrong**. Measured against the plain sow it agreed everywhere
+testable. The "engine offers nine from the city" that first justified replacing it came from the
+recorder unioning across turns that hire Kogge or Cloisters, which reach further — a fault in the
+projection, not in the page. It went because it was a second implementation of the rules in a
+page, and because it knew nothing about route buildings at all.
+
+A projection is only honest if every field it does not walk is **pinned**. Unioning over
+`sow_route_building_id` lit tiles two steps beyond where the acolytes could walk. The recording is
+therefore the plain sow, and the count of turns it leaves out is written into the file and printed
+at every build.
+
+`marks` is keyed by the engine's own decision names — `origin`, `route`, `selected_duty`,
+`resolution`, mirroring `DECIDED_FIELDS` in `play_server.py` and pinned against it by a test.
+`DRAWABLE_DECISIONS` is the shorter list these pages actually draw: `origin` and `route`. Moving a
+name into it is the whole job of turning a marking on once a phase exists to show it.
 
 Numbers worth not re-deriving, all in real device pixels at the 210 px sculpt size:
 

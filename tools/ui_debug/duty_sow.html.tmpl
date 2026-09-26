@@ -138,6 +138,8 @@ html,body{margin:0;height:100%;overflow:hidden;background:#0d0b08;color:#8b8071;
 <script>
 // ---- the drawing rules, inlined from tools/ui_debug/duty_sculpt_rules.js -----------------------
 __FORMATION__
+// ---- how a marked tile is lit, inlined from tools/ui_debug/duty_mark_rules.js -----------------
+__MARKRULES__
 // ---- the set dropdown, inlined from tools/ui_debug/duty_set_picker.js -------------------
 __SETPICKER__
 // -----------------------------------------------------------------------------------------------
@@ -157,6 +159,16 @@ var LIFT = PLAN.lift || 0;
 // WHICH DUTY STANDS ON WHICH PLATE IS NOT PER SET, so it is held once and every set's plan is
 // handed the SAME object -- restand a plate for one set and the assignment does not fork.
 var BY_DUTY = PLAN.by_duty || {};
+var TRANSP = 0, GPLANS_TRANSPARENCY = __TRANSPARENCY__;
+// THE CATALOGUE OF MARKINGS, whole, and the one this board uses. The page looks the entry up
+// rather than being handed the colours, so an effect added to duty_effects.json arrives here
+// without a line changing in this template.
+//
+// FX IS NULL WHEN `mark` NAMES A FLOOR STYLE, and the floor styles below draw their geometry
+// exactly as before. The amber REPLACES the floor line rather than joining it, which falls out
+// of `mark` holding one answer: no branch below matches an effect's name, so no mark element is
+// emitted, and the plate lights instead.
+var EFFECTS = __EFFECTS__;
 var BANNER_FS = __BANNERFS__, BANNER_TRACK = __BANNERTRACK__;
 var BANNER_TOP = __BANNERTOP__, BANNER_INK = __BANNERINK__;
 
@@ -168,7 +180,59 @@ var BANNER_TOP = __BANNERTOP__, BANNER_INK = __BANNERINK__;
 // sculpts and nothing else -- so a set tuned to stand differently was drawn standing the way
 // the set before it did. `order` and `mark` stay on the document: both are conventions about
 // reading a tile rather than facts about how big the sculpts are.
-var ORDER = PLACE.order, MARK = PLACE.mark;
+var ORDER = PLACE.order;
+// WHAT THE ENGINE OFFERS, recorded. Not what this page works out -- it does not work anything
+// out any more. tools/ui_debug/record_sow_offers.py walks legal_actions over a scenario and
+// writes, for every point in the turn, which positions are on offer and which decision is
+// being asked. The page holds a node id and reads `lit`.
+//
+// THE RULE THIS REPLACED WAS NOT WRONG, and the first version of this note said it was.
+// `legal()` answered "a neighbour of where I am, with space" off the real board graph, and
+// against the plain sow it agreed everywhere testable. The "engine offers nine from the city"
+// that justified replacing it was the RECORDER unioning across turns that hire Kogge or
+// Cloisters, which reach further -- a fault in the projection, not in this page.
+//
+// It went because it was a second implementation of the rules living in a page, and because it
+// knew nothing about route buildings at all: right by luck on what it could express, and with
+// no way to be right about the rest.
+var OFFERS = __OFFERS__, NODE = OFFERS.root;
+// WHOSE TURN IT IS, from the recording. The offers belong to the active player, so a
+// page showing another seat would light tiles for a turn nobody on screen is taking.
+SEAT = OFFERS.seat;
+// A marking per decision, keyed by the engine's own field names. An absent one draws nothing.
+var MARK_BY = PLACE.marks || {};
+// The engine counts positions 0..8 over its own names; this page counts cells. One lookup,
+// here, so no other line has to know there are two numberings.
+function cellOf(enginePos){ return POS.indexOf(OFFERS.positions[enginePos]); }
+function node(){ return OFFERS.nodes[NODE] || {decision: null, lit: [], next: {}}; }
+// WHICH DECISIONS THIS PAGE SHOWS. The recording carries every one the engine offers -- that
+// is a fact about the engine -- and this is the shorter list of what the sow puts on screen.
+var DRAWS = __DRAWABLE__;
+function drawsNode(){ return DRAWS.indexOf(node().decision) >= 0; }
+// THE LIT SET, read rather than decided -- and empty for a question this page does not ask.
+//
+// `selected_duty` is the case: which duty you then act on is a real choice with real offers in
+// the recording, but it belongs to the phase AFTER the sow. Lighting its tiles here made the
+// board go on asking something once the sow was over. Returning nothing is not the same as
+// having nothing to return, which is why this reads off DRAWS rather than off an empty list.
+function litCells(){
+  if (!drawsNode()) return [];
+  return node().lit.map(cellOf).filter(function(i){ return i >= 0; });
+}
+var MARK = "", FX = null, PULSING = false;
+function reMark(){
+  MARK = MARK_BY[node().decision] || "";
+  FX = dutyEffectFor(EFFECTS, MARK);
+  PULSING = dutyMarkPulses(EFFECTS, MARK);
+}
+reMark();
+// The marking's own rules, asked of the shared file rather than written out here, so the two
+// pages cannot drift. Scoped to the lit cell: marked only while something is in hand.
+(function(){
+  var st = document.createElement("style");
+  st.textContent = dutyEffectCss(".cell.live ");
+  document.head.appendChild(st);
+})();
 var SPREAD, BACK, RANK, MODE, SHADE, FULL_AT, WIDE;
 function applySet(label){
   var r = RULES[label] || {}, d = r.depth || {};
@@ -179,6 +243,9 @@ function applySet(label){
   var g = GPLANS[label] || {};
   PLAN = {by_duty: BY_DUTY, grounds: g.grounds || {}, lift: g.lift || 0};
   LIFT = PLAN.lift;
+  // ONE TRANSPARENCY FOR THE WHOLE BOARD -- it does not vary by set, so it is read off the
+  // plan rather than out of the per-set table, and every plate on every tile takes it.
+  TRANSP = GPLANS_TRANSPARENCY;
 }
 var HAZE_STEPS = DUTY_HAZE.steps, HAZE_MAX = DUTY_HAZE.max;
 
@@ -192,7 +259,7 @@ applySet(SIZE);
 // WHICH POSE A TILE DRAWS is a property of where it sits -- dutyPoseForColumn in the shared
 // rules -- so it is read per tile inside build() rather than held here. The HAND is the one
 // place with no grid position of its own; see drawHand.
-var SEAT = 0, shadow = true, GAUGE = false;
+var SEAT = 0, shadow = true, GAUGE = false;   // SEAT is set from the recording at load
 
 // THE FORMATION ONLY KNOWS FIVE. A tile already holding five is not lit, because there is no
 // sixth place for the rules to describe and a silent refusal at the drop would look like a bug
@@ -219,29 +286,34 @@ function countsOf(tile){
 }
 
 function reset(){
-  // An opening-ish board rather than an empty one: the setup config starts a player with three
-  // on a single position, so a pile is the normal state and not an edge case.
+  // THE RECORDED POSITION, not a hand-written opening. It has to be the scenario's board:
+  // the lit sets were recorded against THIS position, and showing them over an invented one
+  // would light tiles for reasons nothing on screen could explain.
+  //
+  // The scenario is chosen for the art as well as the offers -- kogge_and_cloisters_2p stands
+  // five on one tile, which is the widest formation the rules draw, and fills eight of nine.
   BOARD = CELLS.map(function(){ return []; });
-  OPENING_BOARD.forEach(function(p){
-    var i = POS.indexOf(p.pos);
-    if (i >= 0) for (var k = 0; k < p.n && BOARD[i].length < SLOTS; k++) BOARD[i].push(p.seat);
+  OFFERS.acolytes.forEach(function(row, seat){
+    row.forEach(function(n, pos){
+      var i = cellOf(pos);
+      if (i >= 0) for (var k = 0; k < n && BOARD[i].length < SLOTS; k++) BOARD[i].push(seat);
+    });
   });
-  HAND = 0; FROM = -1; AT = -1; HIST = [];
+  // The dummy groups fill slots without belonging to anyone. Drawn as the last seat so the
+  // tiles are as full as they really are.
+  (OFFERS.dummies || []).forEach(function(n, pos){
+    var i = cellOf(pos);
+    if (i >= 0) for (var k = 0; k < n && BOARD[i].length < SLOTS; k++)
+      BOARD[i].push(OFFERS.acolytes.length);
+  });
+  HAND = 0; FROM = -1; AT = -1; HIST = []; NODE = OFFERS.root;
   build();
 }
-var OPENING_BOARD = [{pos: "north", seat: 0, n: 3}, {pos: "east", seat: 1, n: 2},
-                     {pos: "south_west", seat: 2, n: 1}, {pos: "west", seat: 0, n: 1},
-                     {pos: "north_west", seat: 2, n: 1}];
 
-// THE LIT SET: the tiles this acolyte may legally go to, and only those. The board graph runs
-// one way and only three positions branch, so this is one tile most of the time and two at
-// east, west and the City. Both choices are lit identically -- the page has no business
-// implying one of them is the real one.
-function legal(){
-  if (AT < 0 || HAND <= 0) return [];
-  return (EDGES[POS[AT]] || []).map(function(n){ return POS.indexOf(n); })
-                               .filter(function(i){ return i >= 0 && BOARD[i].length < SLOTS; });
-}
+// `legal()` STOOD HERE and was the page deciding the rules of the game. It is gone; litCells()
+// reads the engine's recorded answer instead. Nothing below may reintroduce a test of what is
+// allowed -- if a state cannot be drawn, it is missing from the recording and the recorder is
+// where to go.
 
 // Which seats stand where, left to right, for a tile's current occupants.
 function queueFor(tile){
@@ -279,7 +351,8 @@ function build(){
   // hold the worst case the set can produce, not the case pose 1 happens to be.
   CAP = dutyCapacityBox(SLOTS, SPREAD, BACK, RANK, dutySetWidth(FIG), dutySetHeight(FIG),
                         WIDE);
-  var lit = legal();
+  var lit = litCells();
+  reMark();
 
   var h = "";
   for (var i = 0; i < 9; i++){
@@ -354,10 +427,14 @@ function build(){
     if (plate){
       var gs = dutyGroundSettings(PLAN, PLATES, gname0);
       var gw = FRAME.w * gs.scale / 100, gh = gw * plate.h / plate.w;
-      h += '<div class=plate style="left:' + px(CELL / 2 - gw / 2) + ';top:'
-         + px(floorY - LIFT - gh * gs.anchor / 100) + ';width:' + px(gw) + ';height:' + px(gh)
-         + ';opacity:' + (gs.opacity / 100) + ';filter:brightness(' + (gs.dim / 100)
-         + ') saturate(' + (gs.saturate / 100) + ')"><img src="' + plate.uri + '"></div>';
+      // EMITTED BY THE SHARED RULES, not written out here. This page used to put brightness and
+      // saturation straight on the plate's wrapper while the sheet had already moved them onto
+      // the <img> so the marking would not be desaturated along with the stone -- two drawings
+      // of one plate, and only one of them could carry a marking.
+      h += dutyPlateHtml(plate, gs,
+                         {left: CELL / 2 - gw / 2, top: floorY - LIFT - gh * gs.anchor / 100,
+                          w: gw, h: gh},
+                         TRANSP, FX, PULSING);
     }
 
     if (GAUGE){
@@ -443,47 +520,57 @@ function moveGhost(e){
 
 // ---- the moves --------------------------------------------------------------------------------
 function remember(){
-  HIST.push(JSON.stringify({B: BOARD, H: HAND, F: FROM, A: AT}));
+  HIST.push(JSON.stringify({B: BOARD, H: HAND, F: FROM, A: AT, N: NODE}));
 }
 function tap(i){
-  if (HAND > 0){                                    // clicking a lit tile also drops
-    if (legal().indexOf(i) >= 0) drop(i);
-    return;
+  // ONE TEST FOR BOTH MOVES, and it is not a test of the rules: is this tile among the ones the
+  // engine offers at the point the turn has reached. Lifting used to ask whether you had an
+  // acolyte here and dropping used to ask whether the tile was adjacent and had space -- two
+  // rules, in a page, that the engine already knew the answer to.
+  if (litCells().indexOf(i) < 0) return;
+  var step = node().next[String(engineOf(i))];
+  if (step === undefined) return;                   // the recording stops here
+  remember();
+  if (node().decision === "origin"){
+    HAND = BOARD[i].filter(function(s){ return s === SEAT; }).length;
+    BOARD[i] = BOARD[i].filter(function(s){ return s !== SEAT; });
+    FROM = i; AT = i;
+  } else {
+    // MOVING THE SCULPT IS THE PAGE'S JOB and the only one left: the engine applies a whole
+    // turn and has no state for halfway through one, so there is nothing to read for this and
+    // the page animates the choice you just made. What is LEGAL came from the recording.
+    BOARD[i] = BOARD[i].concat([SEAT]);
+    HAND -= 1;
+    AT = i;
   }
-  var mine = BOARD[i].filter(function(s){ return s === SEAT; }).length;
-  if (mine <= 0) return;                            // only your own, and only if there are any
-  remember();
-  HAND = mine;
-  BOARD[i] = BOARD[i].filter(function(s){ return s !== SEAT; });
-  FROM = i; AT = i;
+  NODE = step;
   build();
 }
-function drop(i){
-  if (HAND <= 0 || BOARD[i].length >= SLOTS) return;
-  remember();
-  BOARD[i] = BOARD[i].concat([SEAT]);
-  HAND -= 1;
-  AT = i;
-  if (HAND === 0){ FROM = -1; AT = -1; }            // the sow is over; nothing is lit
-  build();
-}
+// The engine's numbering for a cell -- the inverse of cellOf, and the only other place the two
+// numberings meet.
+function engineOf(cell){ return OFFERS.positions.indexOf(POS[cell]); }
+// `drop()` STOOD HERE with its own "is there space" test -- a second rule, and one the engine
+// enforces by simply not offering a full tile. tap() does both moves now.
 function undo(){
   if (!HIST.length) return;
   var s = JSON.parse(HIST.pop());
-  BOARD = s.B; HAND = s.H; FROM = s.F; AT = s.A;
+  BOARD = s.B; HAND = s.H; FROM = s.F; AT = s.A; NODE = s.N;
   build();
 }
 
 function say(){
-  var names = legal().map(function(i){ return CELLS[i].title; });
+  var names = litCells().map(function(i){ return CELLS[i].title; });
   var mine = BOARD.reduce(function(a, t){
     return a + t.filter(function(s){ return s === SEAT; }).length; }, 0);
-  var blocked = AT >= 0 && HAND > 0
-    && (EDGES[POS[AT]] || []).length > names.length;
+  // WHY A TILE IS NOT LIT IS THE ENGINE'S BUSINESS. This used to compare the lit count against
+  // the board graph's exits and volunteer "an exit is full", which was the page guessing at a
+  // reason -- and the reason was frequently not that.
+  var asking = node().decision;
+  var shown = drawsNode();
   document.getElementById("note").innerHTML =
     "SOW BY HAND, true size at <b>" + DPR.toFixed(2) + "x</b>\n"
   + "sculpt  <b>" + dutySetHeight(FIGS[SIZE] || []) + "</b> real px\n"
-  + "seat    <b>p" + (SEAT + 1) + "</b>, <b>" + mine + "</b> on the wheel\n\n"
+  + "seat    <b>p" + (SEAT + 1) + "</b> to move, <b>" + mine + "</b> on the wheel\n\n"
   + (HAND === 0
       ? "click one of your tiles to lift\nits acolytes into the hand."
       : "in hand <b>" + HAND + "</b>\nfrom    <b>" + (FROM >= 0 ? CELLS[FROM].title : "-")
@@ -491,8 +578,10 @@ function say(){
         + (names.length === 0 ? "<b>nowhere</b>  (every exit is full)"
            : names.length === 1 ? "<b>" + names[0] + "</b>  (forced)"
            : "<b>" + names.join("</b> or <b>") + "</b>  (choose)")
-        + (blocked && names.length ? "\n        an exit is full, so not lit" : ""))
-  + "\n\norder   <b>" + ORDER + "</b>\nmark    <b>" + MARK + "</b>\ndepth   <b>"
+        )
+  + "\n\norder   <b>" + ORDER + "</b>\nasking  <b>" + (asking || "-")
+  + (shown ? "" : "  (not shown here)")
+  + "</b>\nmark    <b>" + (MARK || "unmarked") + "</b>\ndepth   <b>"
   + (SHADE ? MODE + " " + SHADE + "%, full at " + FULL_AT : "off") + "</b>"
   + (TIGHT ? "\n\n<b>the window is " + TIGHT + " px too short</b>\nfor a tile at this sculpt "
              + "size;\nthe bottom row is clipped.\npress f for fullscreen."
@@ -537,12 +626,29 @@ function pressAll(){
 dutySetPicker(document.getElementById("szb"), {
   all: SIZES, played: PLAYED, base: BASE_SET, own: OWN_SETS, value: SIZE,
   choose: function(v){ SIZE = v; applySet(SIZE); build(); }});
+// THE SEAT IS THE RECORDED TURN'S AND CANNOT BE CHANGED.
+//
+// A recording is ONE PLAYER'S TURN. The engine has no answer for what p2 would be offered on a
+// board where it is p1 to move, so the other seats have no offers to show -- and while they
+// were clickable the board went on pulsating p1's tiles at you, and clicking one lifted
+// nothing, because the tile holds no acolyte of yours.
+//
+// The other seats stay VISIBLE and disabled rather than being removed: three seats play this
+// game, and a row with one button in it says something untrue about that. All three colours
+// stand on the wheel regardless, so nothing about the art check depends on this.
 buttons(document.getElementById("seatb"), [0, 1, 2], null,
         function(v){ return "p" + (v + 1); },
-        function(v){
-          if (HAND > 0) return;                     // a seat change mid-sow would strand the hand
-          SEAT = v; build();
-        });
+        function(){ return; });
+(function(){
+  var host = document.getElementById("seatb");
+  [].forEach.call(host.children, function(b){
+    if (b._value === SEAT) return;
+    b.disabled = true;
+    b.style.opacity = ".38";
+    b.style.cursor = "default";
+    b.title = "p" + (SEAT + 1) + " is to move in this recording";
+  });
+})();
 document.getElementById("breset").onclick = reset;
 document.getElementById("bgauge").onclick = function(){
   GAUGE = !GAUGE;
@@ -556,10 +662,7 @@ addEventListener("keydown", function(e){
   if (e.key === "r") return reset();
   if (e.key === "s"){ shadow = !shadow; return build(); }
   if (e.key === "x") return document.getElementById("bgauge").click();
-  if (e.key === "1" || e.key === "2" || e.key === "3"){
-    if (HAND > 0) return;
-    SEAT = +e.key - 1; return build();
-  }
+  // 1/2/3 used to switch seat. The seat is the recording's; see the note by the buttons.
   if (e.key === "f") document.fullscreenElement ? document.exitFullscreen()
                                                 : document.documentElement.requestFullscreen();
 });

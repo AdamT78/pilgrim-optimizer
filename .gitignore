@@ -19,6 +19,13 @@ tools/ui_debug/generated/*.html
 tools/ui_debug/generated/*.svg
 tools/ui_debug/generated/*.png
 _to_delete/
+# Session scratch, same category as _to_delete/ above. `_xfer` is transit archives moving files
+# between a cloud session and this machine; `_scratch` is built pages and one-off recordings
+# kept for a second look. Everything in either is regenerable from a command in the tree -- a
+# recording is `record_sow_offers.py --scenario X`, a page is its generator -- so committing
+# them would only mean two copies, one of which nothing updates.
+_xfer/
+_scratch/
 pilgrim_optimizer.egg-info/
 *.tar.gz
 

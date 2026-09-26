@@ -52,6 +52,11 @@ OUT = HERE / "generated" / "duty_sow.html"
 
 BOARD_JSON = ROOT / "configs" / "board.json"
 RULES_JS = HERE / "duty_sculpt_rules.js"
+MARK_JS = HERE / "duty_mark_rules.js"
+# What the engine offers during a turn, recorded by record_sow_offers.py. The page draws
+# from this rather than working out what is legal; see the long note at the top of that
+# script for why, and for the two places the rule it replaced was measurably wrong.
+OFFERS = ROOT / "ui" / "assets-gothic" / "metadata" / "duty_sow_offers.json"
 # The set dropdown, shared with the placement sheet so the two group the sets the same way.
 PICKER_JS = HERE / "duty_set_picker.js"
 TEMPLATE = HERE / "duty_sow.html.tmpl"
@@ -155,6 +160,9 @@ def main():
     ap.add_argument("--open", action="store_true", default=True, help=argparse.SUPPRESS)
     ap.add_argument("--no-open", dest="open", action="store_false",
                     help="write the page without opening it")
+    ap.add_argument("--offers", default=None, metavar="FILE",
+                    help="a recording other than the committed one, for building two deals "
+                         "side by side (see tools/ui_debug/record_sow_offers.py)")
     args = ap.parse_args()
 
     board = _board_module()
@@ -182,11 +190,29 @@ def main():
                          "(run tools/ui_debug/make_tray_figures.py)")
 
     edges = graph()
-    cells, font_uri = board.tiles(notes)
+    offers_path = pathlib.Path(args.offers).expanduser() if args.offers else OFFERS
+    if not offers_path.is_file():
+        raise SystemExit(
+            "%s is missing -- the page has no engine answers to draw and will not guess at "
+            "them. Record it with: python3 tools/ui_debug/record_sow_offers.py"
+            % board._short(offers_path))
+    offers = json.loads(offers_path.read_text(encoding="utf-8"))
+
+    # THE LAYOUT COMES FROM THE RECORDING, not from the sandbox setup the other pages use.
+    # The offers were taken against a particular deal, and banners drawn from a different one
+    # put real duties on the wrong tiles while every lit set still checks out -- which is how
+    # this went unnoticed for a day.
+    layout = {t["position_name"]: t["duty"] for t in (offers.get("duty_tiles") or [])}
+    if not layout:
+        raise SystemExit("%s carries no duty_tiles -- re-record it; the page will not pair its "
+                         "offers with a layout from somewhere else"
+                         % board._short(offers_path))
+    cells, font_uri = board.tiles(notes, layout=layout)
     # The same two files the placement sheet writes. The sheet tunes; this page plays on what
     # the sheet saved -- if it read its own copy of any of this, the two would drift the first
     # time a slider moved.
     plan = board.ground_plan(notes)
+    effects = board.effects_plan(notes)
     plates = board.ground_art(notes)
 
     # Only the seats the page can actually draw: the sculpt rows are p1..p3 and so is the sow.
@@ -224,6 +250,7 @@ def main():
                                       for label in sizes})),
             ("__GPLANS__", json.dumps({label: board.ground_settings_for(plan, label)
                                        for label in sizes})),
+            ("__TRANSPARENCY__", json.dumps(plan.get("transparency", 0))),
             ("__PLATES__", json.dumps(plates)),
             ("__GROUNDPLAN__", json.dumps(plan)),
             ("__BANNERTOP__", json.dumps(board.BANNER_TOP)),
@@ -231,6 +258,14 @@ def main():
             ("__BANNERTRACK__", json.dumps(board.BANNER_TRACK)),
             ("__BANNERINK__", json.dumps(board.BANNER_INK)),
             ("__FORMATION__", RULES_JS.read_text(encoding="utf-8")),
+            ("__MARKRULES__", MARK_JS.read_text(encoding="utf-8")),
+            ("__OFFERS__", json.dumps(offers)),
+            # What the page SHOWS, which is shorter than what the recording carries.
+            ("__DRAWABLE__", json.dumps(list(board.DRAWABLE_DECISIONS))),
+            # THE CATALOGUE, WHOLE. The page reads the entry `mark` names rather than being told
+            # which one to draw, so an effect added to the file reaches this page without a line
+            # changing here -- which is the claim the catalogue is for.
+            ("__EFFECTS__", json.dumps(effects.get("effects") or {})),
             ("__SETPICKER__", PICKER_JS.read_text(encoding="utf-8"))):
         page = page.replace(key, value)
     left = re.findall(r"__[A-Z_]+__", page)
@@ -260,9 +295,30 @@ def main():
           % (len(plates), board.GROUNDS_DIR.name, len(plan.get("by_duty") or {}),
              board.GROUND_PLAN.name, ", ".join(in_use) or "bare floor only"))
     print("  ground lifted %d px above the floor line on every tile" % plan.get("lift", 0))
-    print("  spread %d, set-back %d, rank gap %d  ·  order %s  ·  mark %s  ·  depth %s %d%%"
-          % (place["spread"], place["back"], place["rank"], place["order"], place["mark"],
+    # SAID BESIDE THE LIFT because it is the other number that is true of every tile AND
+    # every set. Printed even at 0: a summary that only mentions transparency when the
+    # plates are faded reads as though solid plates were the absence of a setting.
+    print("  ground drawn at %d%% transparency on every tile and every sculpt set"
+          % plan.get("transparency", 0))
+    print("  spread %d, set-back %d, rank gap %d  ·  order %s  ·  depth %s %d%%"
+          % (place["spread"], place["back"], place["rank"], place["order"],
              place["depth"]["mode"], place["depth"]["amount"]))
+    print("  marks  %s" % board._marks_sentence(place))
+    # WHERE THE LIT TILES COME FROM, said every build. The recording is a snapshot of what the
+    # engine offered when it was taken, and nothing in the page build can tell that the engine
+    # has moved on -- so the run says which scenario it is and how old it is, rather than
+    # letting a stale recording pass as a current answer.
+    print("  offers recorded from scenario %s  ·  %d nodes  ·  p%d to move"
+          % (offers.get("scenario", "?"), len(offers.get("nodes") or {}),
+             offers.get("seat", 0) + 1))
+    # WHAT THE PAGE IS NOT SHOWING, every build. The recording is the plain sow; turns that
+    # hire Kogge or Cloisters reach further and are left out, because hiring is a decision
+    # about a building and no page here can ask it. Said out loud so the omission cannot
+    # quietly become "the engine only ever offered one step".
+    left_out = offers.get("turns_left_out_hiring_a_route_building")
+    if left_out:
+        print("  plain sow only: %d turns drawn, %d left out for hiring a route building"
+              % (offers.get("turns_recorded", 0), left_out))
     for note in notes:
         print("  %s" % note)
     board.show(out, args.open)

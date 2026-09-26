@@ -24,8 +24,11 @@
   "frame_note": "The picture a duty tile is drawn on -- the ground the acolytes stand on, and whatever border it carries. Real device pixels, independent of the formation ON PURPOSE: art is drawn to a fixed rectangle, and a frame that moved every time a spread slider did would be art you have to redraw. The pages draw the formation's own envelope inside it as a check and say so when the sculpts outgrow the frame. `drop` is how far the frame's base sits BELOW the floor line the figures stand on, because a ground that continues under and behind the feet reads as a place rather than as a backdrop. These starting numbers are provisional and were chosen to fit rather than to look right: 320 clears the 311 a full stack of five needs by nine pixels, and 390 is the tallest that fits a tile at the current wheel pitch. The banner is wider than the frame and overhangs its sides, which is what the first concept art does too.",
   "order": "grouped",
   "order_note": "grouped keeps a seat's sculpts adjacent and countable; arrival never reorders what is already down. Measured, the two move the same number of sculpts per drop (2.73 of them), because the shuffle comes from the formation changing shape with the count, not from the ordering.",
-  "mark": "floor",
-  "mark_note": "floor, foot, box or gild. A footprint promises a SPOT, which a rule that re-lays the whole group cannot keep; the floor claims only the tile, so the arrangement is free to follow its own rules.",
+  "marks": {
+    "origin": "amber:pulse",
+    "route": "amber"
+  },
+  "marks_note": "HOW EACH DECISION IS MARKED, keyed by the engine's own field names -- the same names as DECIDED_FIELDS in tools/play_server.py, which are fields of FullTurnAction. `origin` is the tile you pick acolytes up from, `route` where they go, `selected_duty` which duty tile you then act on. A value is either a floor style drawn in geometry (floor, foot, box, gild) or the name of an effect in duty_effects.json, with ':pulse' where that effect has a pulse block. A decision left out here is drawn unmarked. `resolution` -- duty action or tithe -- is deliberately absent: no page can draw it yet, and a setting nothing reads is a decision nobody can check. WAS A SINGLE `mark` until 2026-09-26, when there was only one marked moment; the loader refuses a file that still carries it rather than migrating it silently. NOTHING HERE DECIDES WHICH TILE IS IN WHICH STATE: that is the engine's answer, and the pages read it rather than working it out.",
   "depth": {
     "mode": "haze",
     "amount": 60,

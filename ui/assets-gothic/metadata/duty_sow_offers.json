@@ -1,0 +1,222 @@
+{
+  "note": "Recorded from the engine by tools/ui_debug/record_sow_offers.py. Every `lit` list is a projection of legal_actions given the decisions in the node's id -- no rule about the board is written anywhere in this file or in the page that reads it. Re-record when the engine's offers change; the page cannot tell that they have.",
+  "positions": [
+    "city",
+    "north",
+    "north_east",
+    "east",
+    "south_east",
+    "south",
+    "south_west",
+    "west",
+    "north_west"
+  ],
+  "seat": 0,
+  "acolytes": [
+    [
+      2,
+      0,
+      0,
+      0,
+      2,
+      0,
+      0,
+      1,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      2,
+      0,
+      0,
+      0,
+      3,
+      0
+    ]
+  ],
+  "dummies": [
+    0,
+    1,
+    1,
+    1,
+    0,
+    1,
+    1,
+    1,
+    0
+  ],
+  "duty_tiles": [
+    {
+      "position": 1,
+      "position_name": "north",
+      "duty": "taxation",
+      "tithe": null
+    },
+    {
+      "position": 2,
+      "position_name": "north_east",
+      "duty": "give_alms",
+      "tithe": "cornucopia"
+    },
+    {
+      "position": 3,
+      "position_name": "east",
+      "duty": "produce",
+      "tithe": "silver"
+    },
+    {
+      "position": 4,
+      "position_name": "south_east",
+      "duty": "construct",
+      "tithe": "silver"
+    },
+    {
+      "position": 5,
+      "position_name": "south",
+      "duty": "build_roads",
+      "tithe": "wheat"
+    },
+    {
+      "position": 6,
+      "position_name": "south_west",
+      "duty": "clerical",
+      "tithe": "wheat"
+    },
+    {
+      "position": 7,
+      "position_name": "west",
+      "duty": "allocation",
+      "tithe": "stone"
+    },
+    {
+      "position": 8,
+      "position_name": "north_west",
+      "duty": "ordination",
+      "tithe": "stone"
+    }
+  ],
+  "root": "",
+  "nodes": {
+    "": {
+      "decision": "origin",
+      "lit": [
+        0,
+        4,
+        7
+      ],
+      "next": {
+        "0": "0",
+        "4": "4",
+        "7": "7"
+      }
+    },
+    "0": {
+      "decision": "route",
+      "lit": [
+        1,
+        5
+      ],
+      "next": {
+        "1": "0/1",
+        "5": "0/5"
+      }
+    },
+    "0/1": {
+      "decision": "route",
+      "lit": [
+        2
+      ],
+      "next": {
+        "2": "0/1/2"
+      }
+    },
+    "0/1/2": {
+      "decision": "selected_duty",
+      "lit": [
+        1,
+        2,
+        4,
+        7
+      ],
+      "next": {}
+    },
+    "0/5": {
+      "decision": "route",
+      "lit": [
+        6
+      ],
+      "next": {
+        "6": "0/5/6"
+      }
+    },
+    "0/5/6": {
+      "decision": "selected_duty",
+      "lit": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "next": {}
+    },
+    "4": {
+      "decision": "route",
+      "lit": [
+        5
+      ],
+      "next": {
+        "5": "4/5"
+      }
+    },
+    "4/5": {
+      "decision": "route",
+      "lit": [
+        6
+      ],
+      "next": {
+        "6": "4/5/6"
+      }
+    },
+    "4/5/6": {
+      "decision": "selected_duty",
+      "lit": [
+        5,
+        6,
+        7
+      ],
+      "next": {}
+    },
+    "7": {
+      "decision": "route",
+      "lit": [
+        0,
+        8
+      ],
+      "next": {
+        "0": "7/0",
+        "8": "7/8"
+      }
+    },
+    "7/0": {
+      "decision": "selected_duty",
+      "lit": [
+        4
+      ],
+      "next": {}
+    },
+    "7/8": {
+      "decision": "selected_duty",
+      "lit": [
+        4,
+        8
+      ],
+      "next": {}
+    }
+  },
+  "plain_sow_only": true,
+  "turns_recorded": 55,
+  "turns_left_out_hiring_a_route_building": 989,
+  "scenario": "kogge_and_cloisters_2p"
+}

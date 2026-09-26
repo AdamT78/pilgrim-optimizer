@@ -181,16 +181,28 @@ def set_sort(label):
 # read by more than one thing has no business being a constant in one of them.
 PLACEMENT = ROOT / "ui" / "assets-gothic" / "metadata" / "duty_placement.json"
 
+# How a marked tile is lit: the catalogue of effects a `mark` may name, beside the floor styles
+# the sow draws in geometry. Its own file rather than a section of duty_placement.json because an
+# effect is not a fact about how sculpts stand -- it may yet mark a seat or a whole tile rather
+# than a plate -- and not a section of duty_grounds.json because it is not a fact about a piece
+# of art either. What it IS a fact about is how the board reads, which is a third thing.
+EFFECTS = ROOT / "ui" / "assets-gothic" / "metadata" / "duty_effects.json"
+
 # The drawing rules -- formation, seat order and the depth cue -- inlined into the page.
 # One copy, shared with the placement sheet.
 RULES_JS = HERE / "duty_sculpt_rules.js"
+
+# The marking technique -- the blend group, the pulse, the plate markup itself -- inlined into
+# every page that draws a marked tile. One copy, for the same reason RULES_JS is one copy.
+MARK_JS = HERE / "duty_mark_rules.js"
 
 # Only if the file is missing. A page built from these instead of from the file would look right
 # and be wrong, so it says so in the run output rather than quietly standing in.
 FALLBACK = {"tuned_at": "210_plastic", "spread": 77, "back": 21, "rank": 52, "order": "grouped",
             "width_across_ranks": False,
             "frame": {"w": 320, "h": 390, "drop": 40},
-            "mark": "floor", "depth": {"mode": "haze", "amount": 60, "full_at": 52}}
+            "marks": {"route": "floor"},
+            "depth": {"mode": "haze", "amount": 60, "full_at": 52}}
 
 
 # The nine positions as a compass, so a wheel drawn from this reads as the ring on the board.
@@ -206,8 +218,27 @@ GRID = ("north_west", "north", "north_east",
 SETUP = ROOT / "configs" / "setups" / "basic_mancala_sandbox.json"
 
 
-def duty_at():
-    """Position to duty slug, from the sandbox scenario. One deal, not the deal."""
+def duty_at(layout=None):
+    """Position to duty slug. One deal, not the deal -- so a caller showing a REAL deal says so.
+
+    `layout` is a position-name to duty-slug map from whoever knows which deal is on screen.
+    The sow passes the one recorded beside its engine offers, because a page whose lit tiles
+    come from one deal and whose banners come from another is wrong in a way that looks fine:
+    every tile carries a real duty and a real plate, just not the ones belonging to the
+    position it is standing on.
+
+    THAT IS NOT HYPOTHETICAL. Measured 2026-09-26: the sandbox layout and the recorded
+    kogge_and_cloisters_2p layout differ at six of eight positions, and the page had been
+    drawing one over the other since the offers were recorded. The lit sets were right, which
+    is exactly why nobody noticed.
+
+    With no layout given, the sandbox setup stands in -- the right answer for the board check
+    and the placement sheet, which show no game state at all.
+    """
+    if layout:
+        tiles = dict(layout)
+        tiles["city"] = "city"
+        return tiles
     if not SETUP.is_file():
         raise SystemExit("%s is missing -- there is no duty to put on a tile" % _short(SETUP))
     tiles = dict((json.loads(SETUP.read_text(encoding="utf-8")) or {}).get("duty_tiles") or {})
@@ -217,14 +248,16 @@ def duty_at():
     return tiles
 
 
-def tiles(notes):
+def tiles(notes, layout=None):
     """The nine tiles in compass order, each with its parchment and its title.
 
     Parchment and title are looked up by the duty's SLUG, so a page cannot pair a name with
-    somebody else's banner even if the compass or the layout changes.
+    somebody else's banner even if the compass or the layout changes. The ground plates are
+    keyed by slug too -- `by_duty` in duty_grounds.json -- so a duty that moves takes its
+    plate with it and nothing has to be re-tuned when the deal changes.
     """
     art, font_uri = banners(notes)
-    at = duty_at()
+    at = duty_at(layout)
     out = []
     for pos in GRID:
         slug = at.get(pos)
@@ -385,9 +418,42 @@ def placement(notes):
     if data.get("order") not in ("grouped", "arrival"):
         raise SystemExit("%s: order is %r, want 'grouped' or 'arrival'"
                          % (_short(PLACEMENT), data.get("order")))
-    if data.get("mark") not in ("floor", "foot", "box", "gild"):
-        raise SystemExit("%s: mark is %r, want floor, foot, box or gild"
-                         % (_short(PLACEMENT), data.get("mark")))
+    # A MARKING PER DECISION THE PLAYER IS BEING ASKED TO MAKE. This was one `mark` while the
+    # only marked moment was the sow destination. It is a block rather than three sibling keys
+    # because the keys are not free-form: they are the engine's own decision fields, so the
+    # block can be checked against DECISION_FIELDS and a fourth marking is a row rather than
+    # another top-level key.
+    #
+    # An absent field is not an error -- it means that decision is drawn unmarked, which is the
+    # honest state for a decision no page can draw yet.
+    marks = data.get("marks")
+    if marks is None:
+        marks = {}
+    if not isinstance(marks, dict):
+        raise SystemExit("%s: marks is %r, want an object keyed by decision"
+                         % (_short(PLACEMENT), marks))
+    stray = sorted(set(marks) - set(DECISION_FIELDS))
+    if stray:
+        raise SystemExit("%s: marks carries %s, which is not a decision the engine makes -- "
+                         "a marking hangs on one of %s"
+                         % (_short(PLACEMENT), ", ".join(stray), ", ".join(DECISION_FIELDS)))
+    undrawable = sorted(set(marks) - set(DRAWABLE_DECISIONS))
+    if undrawable:
+        raise SystemExit("%s: marks carries %s, which the engine decides but no page can draw "
+                         "yet -- storing a marking for it would be a setting nothing reads. Add "
+                         "it to DRAWABLE_DECISIONS when there is a phase to show it on."
+                         % (_short(PLACEMENT), ", ".join(undrawable)))
+    effects = effects_plan([])
+    for field in DECISION_FIELDS:
+        if field in marks:
+            check_mark(marks[field], effects, "%s: marks.%s" % (_short(PLACEMENT), field))
+    data["marks"] = marks
+    # `mark` WAS THIS KEY, singular, and meant the sow destination. Refused rather than migrated
+    # quietly: a file still carrying it would load with that marking silently dropped.
+    if "mark" in data:
+        raise SystemExit("%s still carries `mark`, which became marks.route on 2026-09-26 when "
+                         "there was more than one marked moment -- move its value there"
+                         % _short(PLACEMENT))
     # ---- and each set that carries numbers of its own ------------------------------------
     per_set = data.get("per_set")
     if per_set is not None:
@@ -462,13 +528,170 @@ def queues(shape):
     return {"grouped": grouped, "arrival": arrival}
 
 
+# ---- how a marked tile is lit -----------------------------------------------------------------
+# THE DECISIONS A TURN IS MADE OF, in the order the engine settles them, and the only names a
+# marking may be hung on. This mirrors DECIDED_FIELDS in tools/play_server.py, which in turn
+# names fields of the engine's FullTurnAction -- so a marking is attached to a QUESTION THE
+# ENGINE ASKS rather than to a phase somebody named in a stylesheet.
+#
+# Copied rather than imported on purpose: these tools run wherever the sculpts are rendered,
+# which is Python 3.10 here, and the engine needs 3.12+. A test pins this tuple against the
+# server's by reading it, so the copy cannot drift in silence.
+DECISION_FIELDS = ("origin", "route", "selected_duty", "resolution")
+
+# OF THOSE, THE ONES A PAGE CAN ACTUALLY DRAW. Two are out, for different reasons.
+#
+# `resolution` -- duty action or tithe -- is a decision about an already-chosen tile. Its values
+# are not positions at all (14 names: allocation, taxation, tithe, produce_stone...), so there is
+# nothing for a ground-tile marking to appear on, and a fourteenth colour on one tile would not
+# be readable if there were.
+#
+# `selected_duty` IS a position and could be drawn, and briefly was. It is out because the sow
+# page's job ends when the sow ends: choosing which duty to act on is the next phase, and a page
+# that lights tiles for it is claiming to show a phase it does not run. The rule behind it, from
+# the engine on 2026-09-26, is worth writing down where the next person looks --
+# `ensure_selected_duty_has_acolyte(state_after_sow, ...)`: the city is not a duty position, and
+# the tile must hold at least one of your acolytes ONCE THE SOW IS DONE. Not "where you just
+# landed": measured over every legal turn, 190/190 and 1044/1044 satisfy the after-sow rule while
+# only 76 and 470 are anywhere in the route.
+#
+# Both stay out of the sheet's rows and are refused in the file, for the reason the seven empty
+# per_set blocks were dropped: a setting nothing reads is a decision nobody can check.
+#
+# WHAT IS RECORDED AND WHAT IS DRAWN ARE DIFFERENT QUESTIONS. The recording still carries every
+# decision the engine offers, because that is a fact about the engine; this tuple says what THIS
+# set of pages puts on screen. Moving a name in here is the whole job of turning a marking on.
+DRAWABLE_DECISIONS = ("origin", "route")
+# The four the sow draws in geometry. Anything else `mark` names has to be an effect in the
+# catalogue, which is what lets an effect be added without touching this list.
+FLOOR_MARKS = ("floor", "foot", "box", "gild")
+
+# An effect's name. No colon, because the colon is the pulse modifier -- `amber:pulse` is the
+# amber breathing, not a second effect, and a name containing one could not be told apart.
+EFFECT_NAME = re.compile(r"^[a-z][a-z0-9_]*$")
+
+# hsl() plus how far the colour is laid over the plate. Hue wraps at 360 rather than 100.
+EFFECT_RANGES = (("hue", 0, 360), ("saturation", 0, 100),
+                 ("lightness", 0, 100), ("strength", 0, 100))
+
+# The breath. `speed` is milliseconds and has a floor: under about a tenth of a second a pulse
+# stops reading as breathing and starts reading as a fault in the screen.
+PULSE_RANGES = (("lo", 0, 100), ("hi", 0, 100), ("speed", 100, 20000))
+
+
+def effects_plan(notes):
+    """The catalogue of markings, checked the way the other two plans are.
+
+    A typo here lights a tile in a colour nobody chose, or in none at all, which looks like a
+    bug in the board rather than a bad key -- so it stops the load and says which entry.
+    """
+    if not EFFECTS.is_file():
+        notes.append("%s is missing -- only the floor marks are on offer" % _short(EFFECTS))
+        return {"effects": {}}
+    data = json.loads(EFFECTS.read_text(encoding="utf-8"))
+    fx = data.get("effects")
+    if fx is None:
+        fx = {}
+    if not isinstance(fx, dict):
+        raise SystemExit("%s: effects is %r, want an object keyed by effect name"
+                         % (_short(EFFECTS), fx))
+    for name, e in sorted(fx.items()):
+        where = "%s: effects[%s]" % (_short(EFFECTS), name)
+        if not EFFECT_NAME.match(str(name)):
+            raise SystemExit("%s is not an effect name -- lowercase, digits and underscores, "
+                             "and no colon: the colon is the pulse modifier" % where)
+        # AN EFFECT MAY NOT TAKE A FLOOR MARK'S NAME. `mark` holds one string and is read as a
+        # floor mark first, so an effect called `floor` could never be selected and the file
+        # would look as though it were being ignored.
+        if name in FLOOR_MARKS:
+            raise SystemExit("%s takes the name of a floor mark, which `mark` reads first -- "
+                             "this effect could never be chosen" % where)
+        if not isinstance(e, dict):
+            raise SystemExit("%s is %r, want an object of the effect's numbers" % (where, e))
+        for key, lo, hi in EFFECT_RANGES:
+            v = e.get(key)
+            if isinstance(v, bool) or not isinstance(v, int) or not lo <= v <= hi:
+                raise SystemExit("%s.%s is %r, want a whole number %d-%d"
+                                 % (where, key, v, lo, hi))
+        stray = sorted(set(e) - {k for k, _, _ in EFFECT_RANGES} - {"pulse"})
+        if stray:
+            raise SystemExit("%s carries %s, which an effect has no use for -- an effect may "
+                             "name %s and an optional pulse"
+                             % (where, ", ".join(stray),
+                                ", ".join(k for k, _, _ in EFFECT_RANGES)))
+        pulse = e.get("pulse")
+        if pulse is not None:
+            if not isinstance(pulse, dict):
+                raise SystemExit("%s.pulse is %r, want an object of lo, hi and speed"
+                                 % (where, pulse))
+            for key, lo, hi in PULSE_RANGES:
+                v = pulse.get(key)
+                if isinstance(v, bool) or not isinstance(v, int) or not lo <= v <= hi:
+                    raise SystemExit("%s.pulse.%s is %r, want a whole number %d-%d"
+                                     % (where, key, v, lo, hi))
+            stray = sorted(set(pulse) - {k for k, _, _ in PULSE_RANGES})
+            if stray:
+                raise SystemExit("%s.pulse carries %s, which a pulse has no use for"
+                                 % (where, ", ".join(stray)))
+    data["effects"] = fx
+    return data
+
+
+def _marks_sentence(place):
+    """The markings, as one phrase, saying which decisions are drawn and which are not.
+
+    A decision with no marking is NAMED rather than left out. A setting nothing reads is a
+    decision nobody can check, and a summary that simply omits it is how it stays that way.
+    """
+    marks = place.get("marks") or {}
+    said = ["%s %s" % (f, marks[f]) for f in DECISION_FIELDS if f in marks]
+    bare = [f for f in DECISION_FIELDS if f not in marks]
+    if bare:
+        said.append("unmarked: " + ", ".join(bare))
+    return "  \u00b7  ".join(said) if said else "nothing marked"
+
+
+def check_mark(mark, effects, where):
+    """That `mark` names something that can actually be drawn.
+
+    The same guard as `by_duty` naming a plate with no entry under `grounds`, and it matters for
+    the same reason: the page would draw nothing and say nothing, which reads as missing art.
+    """
+    base, _, modifier = str(mark if mark is not None else "").partition(":")
+    known = (effects or {}).get("effects") or {}
+    if base not in FLOOR_MARKS and base not in known:
+        raise SystemExit("%s: mark is %r, which is neither a floor mark (%s) nor an effect in "
+                         "%s (%s)"
+                         % (where, mark, ", ".join(FLOOR_MARKS), _short(EFFECTS),
+                            ", ".join(sorted(known)) or "none on file"))
+    if modifier and modifier != "pulse":
+        raise SystemExit("%s: mark is %r -- the only modifier is ':pulse'" % (where, mark))
+    if modifier and base in FLOOR_MARKS:
+        raise SystemExit("%s: mark is %r, but %s is a floor mark drawn in geometry and has "
+                         "nothing to breathe with -- ':pulse' is for effects"
+                         % (where, mark, base))
+    # NAMING THE BREATH AN EFFECT CANNOT TAKE. Without this the page falls back to the solid
+    # marking, which is a real marking, so the mistake shows up as "why is it not pulsing"
+    # rather than as an error -- and the answer is in a different file.
+    if modifier == "pulse" and not (known.get(base) or {}).get("pulse"):
+        raise SystemExit("%s: mark is %r, but %s has no pulse block to breathe with -- give it "
+                         "lo, hi and speed in %s, or drop the ':pulse'"
+                         % (where, mark, base, _short(EFFECTS)))
+    return base, modifier == "pulse"
+
+
 # WHAT A SET MAY RESTAND. `by_duty` is deliberately absent: which duty stands on which plate is
 # a fact about the board, not about how tall the sculpts are, and letting it split per set would
 # let the same duty stand on two different grounds depending on which sculpts were loaded.
 GROUND_PER_SET_KEYS = ("lift", "grounds")
 
+# `opacity` LEFT THIS LIST ON 2026-09-26 and became one top-level `transparency`. It was per
+# plate, which meant it was also per SET the moment a set carried plate rows of its own -- and
+# the two sets that had been tuned kept opacity 100 while every set inheriting the base went to
+# 50, so the sow's dropdown showed two of its own played sets at different transparencies with
+# nothing on screen to say why. How solid the ground is is a fact about the board, like `lift`.
 PLATE_RANGES = (("anchor", 0, 100), ("scale", 1, 300),
-                ("dim", 0, 100), ("saturate", 0, 100), ("opacity", 0, 100))
+                ("dim", 0, 100), ("saturate", 0, 100))
 
 
 def _check_plate(g, where):
@@ -516,6 +739,15 @@ def ground_plan(notes):
         raise SystemExit("%s: lift is %r, want a whole number -300-600"
                          % (_short(GROUND_PLAN), lift))
     data["lift"] = lift
+    # ONE TRANSPARENCY FOR EVERY PLATE ON EVERY SET, beside the lift and for the same reason:
+    # both are facts about how the board is drawn rather than about one piece of art. Stored as
+    # transparency rather than opacity because that is the way round it gets talked about, and
+    # because a top-level `opacity` beside a per-plate `opacity` would be two keys of one name.
+    transp = data.get("transparency", 0)
+    if isinstance(transp, bool) or not isinstance(transp, int) or not 0 <= transp <= 100:
+        raise SystemExit("%s: transparency is %r, want a whole number 0-100 (0 is solid)"
+                         % (_short(GROUND_PLAN), transp))
+    data["transparency"] = transp
     # ---- and each set that stands its plates differently -------------------------------------
     # A PLATE IS THE SAME ART WHATEVER SIZE THE SCULPTS ARE, but how it is STOOD is not: the lift
     # is a distance in real pixels between the floor line and the ground, and the scale sizes the
@@ -536,7 +768,8 @@ def ground_plan(notes):
             stray = sorted(set(own) - set(GROUND_PER_SET_KEYS))
             if stray:
                 raise SystemExit("%s carries %s, which a set cannot have its own of -- a set "
-                                 "may name %s. `by_duty` is deliberately not among them."
+                                 "may name %s. `by_duty` and `transparency` are deliberately "
+                                 "not among them."
                                  % (where, ", ".join(stray), ", ".join(GROUND_PER_SET_KEYS)))
             if not own:
                 raise SystemExit("%s is empty -- a set with nothing of its own should not be "
@@ -569,7 +802,10 @@ def ground_settings_for(plan, label):
     """
     out = {"by_duty": copy.deepcopy(plan.get("by_duty") or {}),
            "grounds": copy.deepcopy(plan.get("grounds") or {}),
-           "lift": plan.get("lift", 0)}
+           "lift": plan.get("lift", 0),
+           # NOT per set, and it is handed over here anyway so a page has one place to read
+           # every number it draws a plate with.
+           "transparency": plan.get("transparency", 0)}
     own = (plan.get("per_set") or {}).get(label) or {}
     if "lift" in own:
         out["lift"] = own["lift"]
@@ -880,7 +1116,8 @@ def main():
                                 for k in own)
                     if own else "no set carries numbers of its own -- every one takes the base"))
     print("  order %s  ·  mark %s  ·  depth %s %d%%"
-          % (PLACE["order"], PLACE["mark"], PLACE["depth"]["mode"], PLACE["depth"]["amount"]))
+          % (PLACE["order"], _marks_sentence(PLACE), PLACE["depth"]["mode"],
+             PLACE["depth"]["amount"]))
     print("  sculpts %s  ·  banners %d  ·  icons %d across %d duties"
           % (", ".join("%s [%d pose%s]"
                         % (k, len(figs[k][0]), "" if len(figs[k][0]) == 1 else "s")

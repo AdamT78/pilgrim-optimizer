@@ -1,0 +1,21 @@
+{
+  "note": "How a marked tile is lit. Read by tools/ui_debug/generate_placement_sheet.py and generate_duty_sow.py, and turned into CSS by tools/ui_debug/duty_mark_rules.js, which both pages share so that the same entry draws the same thing on each. Nothing here says WHICH tile is marked -- that is the board's business, and in the sow it is the tile you may put the next acolyte on. This file says only what the marking LOOKS like. An effect is named in `mark` in duty_placement.json, beside the floor styles it can replace.",
+  "adding_note": "ADDING AN EFFECT IS A CHANGE TO THIS FILE AND NOTHING ELSE. That is the whole point of the catalogue and it is worth keeping true: a new entry here reaches both pages without a line of JavaScript, because the pages draw from `effects` rather than from a list of names they carry themselves. The moment a page needs a branch for one effect, the catalogue has stopped paying for itself and the branch belongs in duty_mark_rules.js where both pages get it.",
+  "effects": {
+    "amber": {
+      "hue": 36,
+      "saturation": 72,
+      "lightness": 55,
+      "strength": 65,
+      "pulse": {
+        "lo": 18,
+        "hi": 70,
+        "speed": 1350
+      }
+    }
+  },
+  "effects_note": "All whole numbers. `hue`, `saturation` and `lightness` are the CSS hsl() triple, degrees and two percentages. `strength` is how far the colour is laid over the plate, 0-100, and is the opacity a SOLID marking rests at. `pulse` is optional and its absence is what makes an effect solid-only: with it, the effect can also be named as `<name>:pulse` and the marking breathes between `lo` and `hi` over `speed` milliseconds. lo and hi are opacities on the same 0-100 scale as strength; lo above hi is allowed and simply starts the breath at its brightest.",
+  "colour_note": "The colour is laid over the plate through mix-blend-mode: color, masked to the plate's own ink, so it recolours the stones rather than painting a shape on top of them -- the plate keeps its texture and its shadows and simply turns amber. THE MASK AND THE PLATE MUST SIT IN THE SAME ISOLATION GROUP. Measured on 2026-09-25: with the animated opacity on the layer above them, every blend mode returned identical RGB, which is the tell that nothing is blending at all and the flood is just painting flat colour. An earlier attempt to skip the blend and mask a flood directly moved saturation by +4 where feFlood moved it by +44, and the cause was an unstyled <img> in the tint layer painting over the flood.",
+  "amber_note": "GOLD RATHER THAN GREEN, which is what this was first going to be. Hue 36 was chosen because it is clear of every seat's hue range -- player 1 runs 45-100, player 2 180-260, player 3 265-350 -- so a marked tile cannot be mistaken for a tile belonging to somebody. Green sits inside player 1's range. The four numbers came from the sandbox prototype on 2026-09-25 and are the first thing this file was made to hold; before it existed they lived as CSS custom properties in the placement sheet, where the sow could not read them.",
+  "pulse_note": "The lit plate is a SECOND COPY of the ground stacked on the resting one, and only that copy's opacity animates. Drawn any other way the pulse takes the acolytes standing on the plate with it, which reads as the figures breathing rather than the ground. Note also that the marking fades with the plate: the tint sits inside the wrapper that duty_grounds.json's `transparency` governs, so at transparency 80 the marking is at a fifth of its own strength too. That is a decision and not a side effect, but it is the kind of decision worth revisiting the first time a faded board makes the marking hard to see."
+}
