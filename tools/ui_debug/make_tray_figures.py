@@ -20,13 +20,22 @@ art came from and no longer would. The concept file of that name still exists an
 directly rather than through this table, by ui/concept/build_browser.py and by
 generate_asset_check.reference_band().
 
-WHAT THE SWAP COSTS, measured 2026-09-26. The concept plastics carried a hue per seat -- 115,
-213 and 312 degrees at a mean saturation around 0.55, every pixel coloured. The filed unpainted
-sculpts are one warm grey: hue 26 to 28, saturation 0.10 to 0.15, and under a third of their
-pixels carry any colour at all. So the three seats are no longer told apart by colour on any
-page that draws this set, which is a real loss on the arrangements view where the captions name
-seats. It is what the art is; the fix, if it is wanted, is a per-seat tint at render time here
-rather than three more files.
+WHAT THE SWAP COST, measured 2026-09-26, AND WHAT WAS DONE ABOUT IT. The concept plastics carried
+a hue per seat -- 115, 213 and 312 degrees at a mean saturation around 0.55, every pixel coloured.
+The filed unpainted sculpts are one warm grey: hue 26 to 28, saturation 0.10 to 0.15, and under a
+third of their pixels carry any colour at all. So the three seats stopped being told apart by
+colour on every page that draws this set, which was a real loss on the arrangements view where the
+captions name seats.
+
+THE FIX IS A PER-SEAT TINT AT RENDER TIME HERE, rather than three more files or a colour-carrying
+set. See `seat_tint` below for what it does and `SEAT_TINT` for how hard. It is baked into the
+PNGs rather than applied by whichever page happens to draw them, so every consumer gets it: the
+placement sheet, the sow, the board check, and generate_wheel_space_check_v2.py, which reads these
+files straight off disk. A tint applied in a page would have coloured that one page, and only
+while its art was inlined -- a CSS mask needs a same-origin source, so the same trick from a
+file:// URL fails silently and renders the figure grey with no error at all.
+
+`generated/` IS GIT-IGNORED, so pulling the change does not colour anything. Re-run this.
 
 TWO RULES, AND THEY PULL AGAINST EACH OTHER
 
@@ -62,6 +71,7 @@ import argparse
 import pathlib
 import sys
 
+import numpy as np
 from PIL import Image
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -82,11 +92,36 @@ CONCEPT = ROOT / "ui" / "concept"
 SCULPTS = ROOT / "ui" / "assets-gothic" / "sculpts"
 PAINTED = SCULPTS / "painted"
 
-# A KIND IS A SET OF ART, AND IT DECIDES THREE THINGS AT ONCE: where the art comes from, which
-# seats it covers, and how many poses each seat has. They are kept together here because they
-# only make sense together -- `painted` has three poses and no seat 4, `sculpt_plastic` has one
-# pose and four seats, and pairing the wrong source with the wrong shape is how a tray ends up
-# silently one row short.
+# THE SEAT COLOURS, READ RATHER THAN COPIED. ui/render/population_sets.py owns them and says why:
+# a set "carries no colours", because a seat's colour is a property of the PLAYER rather than of
+# how their people are drawn, and two surfaces drawing seat-coloured figures have to agree about
+# plum. This is now a third surface, so it reads the one table.
+sys.path.insert(0, str(ROOT / "ui" / "render"))
+import population_sets as pop                                         # noqa: E402
+
+# HOW MUCH OF THE SCULPT'S OWN GREY THE SEAT'S COLOUR REPLACES, 0 to 1.
+#
+# 0.60 because the job is telling three seats apart at 90 px, the smallest size below, where the
+# robe is a sliver of a figure the height of a line of text -- not because it looks best on the
+# 210. Measured 2026-09-26: at 0.60 the tinted figures' mean saturation lands inside the painted
+# set's own 0.34-0.44 band, and at 0.45 it sits below it.
+#
+# One constant rather than a flag or a settings file, and that is a decision rather than an
+# omission. A flag lets two people render the tray differently and leaves no record of which; a
+# settings file nothing else reads is a decision nobody can check. Changing this is a one-line
+# diff that says what changed and can be reverted.
+SEAT_TINT = 0.60
+
+# A KIND IS A SET OF ART, AND IT DECIDES FOUR THINGS AT ONCE: where the art comes from, which
+# seats it covers, how many poses each seat has, and whether it is tinted. They are kept together
+# here because they only make sense together -- `painted` has three poses and no seat 4,
+# `sculpt_plastic` has one pose and four seats, and pairing the wrong source with the wrong shape
+# is how a tray ends up silently one row short.
+#
+# `tint` IS IN THE TABLE AND NOT A FLAG, for the same reason the other three are. The painted
+# sculpts already carry their seat's colour in paint -- seats 2 and 3 measure hue 213-217 and
+# 315-325 -- so tinting them would be painting over paint, and a flag would let that happen by
+# typing. Here it cannot: the kind decides, and the kind is what the run is.
 #
 # `label` is what the size becomes on the page: 210 rendered from `painted` is `210_painted`.
 # It is derived here rather than passed in, so a run cannot label itself as a set it did not draw.
@@ -98,9 +133,9 @@ PAINTED = SCULPTS / "painted"
 # `unpainted`. Asking for it now fails at argparse with the choices listed, which is the loud
 # failure; keeping it would have been the quiet one.
 KINDS = {
-    "unpainted":      {"label": "plastic", "seats": (1, 2, 3),    "poses": 3},
-    "figure":         {"label": "figure",  "seats": (1, 2, 3, 4), "poses": 1},
-    "painted":        {"label": "painted", "seats": (1, 2, 3),    "poses": 3},
+    "unpainted":      {"label": "plastic", "seats": (1, 2, 3),    "poses": 3, "tint": True},
+    "figure":         {"label": "figure",  "seats": (1, 2, 3, 4), "poses": 1, "tint": False},
+    "painted":        {"label": "painted", "seats": (1, 2, 3),    "poses": 3, "tint": False},
 }
 
 ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -111,6 +146,70 @@ args = ap.parse_args()
 OUT = pathlib.Path(args.out).expanduser() if args.out else OUT
 OUT.mkdir(parents=True, exist_ok=True)
 KIND = KINDS[args.kind]
+
+
+# ---- the seat tint -------------------------------------------------------------------------
+#
+# WHAT IT REPLACES AND WHAT IT KEEPS: the seat's hue and saturation, the sculpt's own lightness.
+# That is the CSS `color` blend, and it is the right one here because the filed unpainted sculpts
+# are one warm grey -- hue 26 to 28, saturation 0.10 to 0.15, under a third of their pixels
+# carrying any colour at all. There is nothing there for a hue rotation to rotate, and a duotone
+# of the kind generate_asset_check.seat_tint draws maps lightness onto a two-point ramp, which
+# suits the flat concept pawns it was written for and would flatten the modelling that makes
+# these sculpts rather than pawns.
+#
+# IT IS THE SPEC OPERATION, NOT AN APPROXIMATION -- SetLum and ClipColor from Compositing and
+# Blending Level 1, with that spec's 0.30/0.59/0.11 luminosity weighting and NOT the Rec.709
+# weighting sculpt_metrics uses for rim luminance. Getting that constant wrong is a plausible
+# near-miss that looks right, so it was checked against a browser rendering the same blend on the
+# same figure: mean difference 0.5 and worst channel 2.5 of 255 over the opaque pixels, which is
+# sRGB rounding.
+#
+# HERE RATHER THAN IN sculpt_metrics: that module is for what more than one tool needs, and its
+# own note says the third copy of those functions is what made that obvious. This has one caller.
+LUM = np.array([0.30, 0.59, 0.11])
+
+
+def _lum(c):
+    return c @ LUM
+
+
+def _clip_colour(c):
+    """Pull an out-of-gamut colour back toward its own luminosity rather than clamping channels.
+
+    Clamping each channel on its own would shift the hue of whatever went out of range, which is
+    the one thing this operation exists not to do.
+    """
+    l = _lum(c)[..., None]
+    lo, hi = c.min(-1)[..., None], c.max(-1)[..., None]
+    c = np.where(lo < 0, l + (c - l) * l / np.maximum(l - lo, 1e-9), c)
+    return np.where(hi > 1, l + (c - l) * (1 - l) / np.maximum(hi - l, 1e-9), c)
+
+
+def seat_tint(im: Image.Image, hexcol: str, amount: float = SEAT_TINT) -> Image.Image:
+    """`im` recoloured toward `hexcol`, keeping its own lightness. Alpha is untouched.
+
+    ALPHA IS UNTOUCHED AND THAT MATTERS BEYOND TIDINESS: the run ends by asserting that no
+    part-transparent rim comes out lighter than the body, which is how it catches a resize
+    inventing light pixels. Because the blend preserves lightness exactly, that number does not
+    move -- measured across all nine figures it shifts by at most 0.2, staying between -12 and
+    -31 against an assertion that trips at +6.
+    """
+    a = np.asarray(im.convert("RGBA")).astype(np.float64) / 255.0
+    rgb, alpha = a[..., :3], a[..., 3:]
+    seat = np.broadcast_to(
+        np.array([int(hexcol[i:i + 2], 16) / 255.0 for i in (1, 3, 5)]), rgb.shape)
+    blended = _clip_colour(seat + (_lum(rgb) - _lum(seat))[..., None])
+    out = np.concatenate([np.clip(rgb + (blended - rgb) * amount, 0, 1), alpha], axis=-1)
+    return Image.fromarray((out * 255).round().astype(np.uint8), "RGBA")
+
+
+def seat_colour(seat: int) -> str:
+    """Seat 1 is the first name in SEAT_ORDER. Wraps, so a set with more seats than the table has
+    colours repeats rather than failing -- which is what generate_asset_check already does when it
+    deals five sculpts four colours."""
+    order = [s for s in pop.SEAT_ORDER if s in pop.SEAT_SWATCH]
+    return pop.SEAT_SWATCH[order[(seat - 1) % len(order)]]
 
 
 def source_path(seat: int, pose: int) -> pathlib.Path:
@@ -141,10 +240,20 @@ for seat in KIND["seats"]:
             raise SystemExit("%s is missing -- %s art for seat %d pose %d"
                              % (p, args.kind, seat, pose))
         im = Image.open(p).convert("RGBA")
-        src[(seat, pose)] = im.crop(bbox(im))
-print("%d pieces from %s (%d seats x %d pose%s)"
+        im = im.crop(bbox(im))
+        # TINTED ONCE, ON THE CROPPED SOURCE, so all five sizes are rendered down from the same
+        # coloured pixels: nine blends rather than forty-five, and no chance of two sizes of the
+        # same figure disagreeing about its colour.
+        if KIND["tint"]:
+            im = seat_tint(im, seat_colour(seat))
+        src[(seat, pose)] = im
+print("%d pieces from %s (%d seats x %d pose%s)%s"
       % (len(src), args.kind, len(KIND["seats"]), KIND["poses"],
-         "" if KIND["poses"] == 1 else "s"))
+         "" if KIND["poses"] == 1 else "s",
+         (", tinted %d%% toward %s" % (round(100 * SEAT_TINT),
+          ", ".join("%s %s" % (s, pop.SEAT_SWATCH[s])
+                    for s in pop.SEAT_ORDER[:len(KIND["seats"])])))
+         if KIND["tint"] else ""))
 
 target = min(plinth(src[n]) for n in src)
 lev = {n: target / plinth(src[n]) for n in src}

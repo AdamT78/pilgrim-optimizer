@@ -4081,3 +4081,139 @@ def test_an_occluded_ring_refuses_rather_than_reporting_the_wrong_number(metrics
     assert tight is None, "an occluded ring reported %s instead of refusing" % tight
     roomy = metrics.ring_ellipse(_ringed(metrics, ragged, 32.0, radius=1.1))
     assert roomy is not None and abs(roomy["degrees"] - 32.0) < 0.5
+
+
+# ---- the seat tint on the plastic sets ------------------------------------------------------
+#
+# THESE MEASURE PIXELS, NOT STRUCTURE, and that is the whole point of them. The first attempt at
+# this tint was in a page rather than in the art, built as a CSS mask, and a stray double quote
+# closed the style attribute so the browser dropped the mask and the colour. Every structural
+# check passed -- the class was on the element, the count was right, the console was clean -- and
+# every figure was grey. A test that asserts the tint was requested would have passed too.
+
+@pytest.fixture(scope="module")
+def tray():
+    """make_tray_figures.py, imported without running it.
+
+    It runs its render at module scope, so it cannot simply be imported. The functions under test
+    are pure, so the module is loaded with argv set to a kind that reads no files and an --out in
+    a throwaway place; what is exercised below is `seat_tint` and `seat_colour`, not the render.
+    """
+    import numpy as np                                                # noqa: F401
+    path = ROOT / "tools" / "ui_debug" / "make_tray_figures.py"
+    src = path.read_text(encoding="utf-8")
+    head = src.split("made = []")[0]                                  # everything before the run
+    sys.path.insert(0, str(ROOT / "tools" / "ui_debug"))
+    sys.path.insert(0, str(ROOT / "ui" / "render"))
+    ns = {"__file__": str(path), "__name__": "make_tray_figures_under_test"}
+    argv = sys.argv
+    sys.argv = ["make_tray_figures.py"]
+    try:
+        exec(compile(head, str(path), "exec"), ns)                    # noqa: S102
+    finally:
+        sys.argv = argv
+    return ns
+
+
+def _hue_mode(im, floor=0.18):
+    """The dominant hue of the coloured pixels, as a histogram MODE rather than a mean.
+
+    A circular mean over a figure this size is dragged off the robe by skin and wood -- measured
+    58.7 degrees where the peak sat at 62 to 64 -- and a window centred on the mean swallowed a
+    face. The mode answers the question actually being asked: what colour is most of this.
+    """
+    import numpy as np
+    from PIL import Image                                             # noqa: F401
+    a = np.asarray(im.convert("RGBA")).astype(float) / 255.0
+    rgb, solid = a[..., :3], a[..., 3] > 0.9
+    mx, mn = rgb.max(-1), rgb.min(-1)
+    d = mx - mn
+    dd = np.where(d == 0, 1, d)
+    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+    h = (np.where(mx == r, ((g - b) / dd) % 6,
+         np.where(mx == g, (b - r) / dd + 2, (r - g) / dd + 4)) * 60) % 360
+    sat = np.where(mx > 0, d / np.maximum(mx, 1e-9), 0)
+    sel = solid & (sat > floor)
+    if sel.sum() < 200:
+        return None, 0.0
+    hist, edges = np.histogram(h[sel], bins=180, range=(0, 360))
+    i = int(hist.argmax())
+    # OVER THE FIGURE, NOT OVER THE CANVAS. These sources are mostly transparent, so a fraction
+    # taken over every pixel answers "how big is the figure in its own file" and reads as a tint
+    # that barely landed.
+    return float((edges[i] + edges[i + 1]) / 2), float(sat[solid].mean())
+
+
+def _swatch_hue(hexcol):
+    import colorsys
+    r, g, b = (int(hexcol[i:i + 2], 16) / 255.0 for i in (1, 3, 5))
+    return colorsys.rgb_to_hsv(r, g, b)[0] * 360
+
+
+def test_the_tinted_sculpts_carry_their_own_seat_s_hue(tray):
+    """Each seat's figure comes out at that seat's colour, measured off the pixels.
+
+    Tolerance is 20 degrees rather than 2 because the tint is partial by design: at 0.60 the
+    sculpt keeps four tenths of its own warm grey, which pulls the result a little toward it. What
+    the test is for is that seat 1 is not seat 2's colour and that neither is still grey, and the
+    seats are 122 degrees apart at the narrowest.
+    """
+    from PIL import Image
+    sculpts = ROOT / "ui" / "assets-gothic" / "sculpts"
+    for seat in (1, 2, 3):
+        src = sculpts / ("player_%d_v1.png" % seat)
+        if not src.is_file():
+            pytest.skip("%s is not in this checkout" % src.name)
+        raw = Image.open(src).convert("RGBA")
+        want = _swatch_hue(tray["seat_colour"](seat))
+        _, before = _hue_mode(raw)
+        got, after = _hue_mode(tray["seat_tint"](raw, tray["seat_colour"](seat)))
+        assert got is not None, "seat %d came out with no coloured pixels at all" % seat
+        off = abs((got - want + 180) % 360 - 180)
+        assert off < 20, ("seat %d wanted hue %.0f and measured %.0f, %.0f degrees off"
+                          % (seat, want, got, off))
+        # AND IT REACHED THE FIGURE, said as saturation against the same figure untinted rather
+        # than as an absolute. The plastic set is tinted without protecting skin -- that was the
+        # decision -- so the whole silhouette should gain colour. Measured 2026-09-26 the three
+        # seats go 0.145 -> 0.402, 0.114 -> 0.248 and 0.094 -> 0.265, so 1.5x has room under it.
+        assert after > 0.20 and after > before * 1.5, (
+            "seat %d mean saturation went %.3f -> %.3f, so the tint barely landed"
+            % (seat, before, after))
+
+
+def test_only_the_unpainted_kind_is_tinted(tray):
+    """The painted sculpts already carry their seat's colour in paint -- seats 2 and 3 measure
+    hue 213-217 and 315-325 -- so tinting them would be painting over paint. `tint` lives in the
+    KINDS table rather than in a flag precisely so that cannot be asked for.
+    """
+    kinds = tray["KINDS"]
+    assert kinds["unpainted"]["tint"] is True
+    assert [k for k, v in kinds.items() if v["tint"]] == ["unpainted"], (
+        "something other than `unpainted` is being tinted: %s"
+        % {k: v["tint"] for k, v in kinds.items()})
+
+
+def test_the_tint_leaves_alpha_and_lightness_alone(tray):
+    """Why the run's rim assertion does not move.
+
+    `make_tray_figures` ends by asserting no part-transparent rim comes out lighter than the body,
+    which is how it catches a resize inventing light pixels. The `color` blend preserves
+    luminosity by definition, so that number is a property of the art rather than of the tint --
+    and if this ever stopped being true, the failure would arrive at the end of a 45-file render
+    wearing a message about resampling.
+    """
+    import numpy as np
+    from PIL import Image
+    sculpts = ROOT / "ui" / "assets-gothic" / "sculpts"
+    src = sculpts / "player_1_v1.png"
+    if not src.is_file():
+        pytest.skip("%s is not in this checkout" % src.name)
+    raw = Image.open(src).convert("RGBA")
+    tinted = tray["seat_tint"](raw, tray["seat_colour"](1))
+    a = np.asarray(raw).astype(float)
+    b = np.asarray(tinted).astype(float)
+    assert (a[..., 3] == b[..., 3]).all(), "the tint moved the alpha channel"
+    w = np.array([0.30, 0.59, 0.11])
+    solid = a[..., 3] > 250
+    drift = np.abs((a[..., :3] @ w) - (b[..., :3] @ w))[solid].max()
+    assert drift <= 2.0, "lightness moved by %.1f of 255, so the blend is not `color`" % drift
