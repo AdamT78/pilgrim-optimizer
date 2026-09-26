@@ -735,7 +735,10 @@ body{padding-left:243px}
 /* Only while the picker is up, so the board keeps the whole width when no tile is chosen. The
    stage centres itself with `margin:auto`, which centres it in the BODY box -- without this it
    would sit half the picker's width too far right and slide under it. */
-body.picking{padding-right:171px}
+/* 186 content + 20 padding + 1 border. It is the picker's OWN box written out a second time,
+   which is a thing to watch: it was 171 for a 150px column and stayed 171 when the column grew
+   to 186, so the board sat 36px too far right for exactly as long as nobody measured it. */
+body.picking{padding-right:207px}
 #head{padding:14px 18px 6px;color:#5f574a}
 #head b{color:#c9b27a;font-weight:400}
 #grid{display:flex;flex-wrap:wrap;gap:10px;padding:8px 18px 28px;align-items:flex-start}
@@ -777,12 +780,34 @@ body.picking{padding-right:171px}
 
    One plate per row also makes the list readable as a list: which plates exist, and which of
    them nobody is standing on. That is what the green is for, below. */
-#picker{position:fixed;right:0;top:0;bottom:0;width:150px;overflow:auto;z-index:5;
+#picker{position:fixed;right:0;top:0;bottom:0;width:186px;overflow:auto;z-index:5;
   background:#100d09;border-left:1px solid #1e1811;padding:12px 10px 18px;
   display:flex;flex-direction:column;gap:8px;align-items:stretch}
 /* `hidden` is a UA rule of lower specificity than the id above, so `display:flex` would beat it
    and the column would stand there with no tile picked. It has to be said here. */
 #picker[hidden]{display:none}
+#platelist{display:flex;flex-direction:column;gap:8px;align-items:stretch}
+/* The same title bar the left panel uses, minus the grid it lives in. Written out rather than
+   shared, because `#ui .ttl` is positioned by `grid-column` and this column is a flex stack --
+   what the two have in common is how they LOOK, and that part is four declarations. */
+#picker .ptitle{color:#6a6252;letter-spacing:.09em;text-transform:uppercase;font-size:9px;
+  display:flex;align-items:baseline;gap:6px;border-bottom:1px solid #191410;padding-bottom:4px;
+  margin-top:4px}
+#picker .ptitle:first-child{margin-top:0}
+#picker .ptitle em{font-style:normal;text-transform:none;letter-spacing:0;font-size:10px;
+  color:#4c4539;margin-left:auto;white-space:nowrap}
+/* THE PLATE'S NAME ON ITS OWN LINE, not in the title beside the scope tag. Plate names run to
+   `limestone_irregular` -- nineteen characters -- and a title holding that plus a scope tag in
+   186px would either wrap or ellipsis away the end, which is the half that tells the plates
+   apart. */
+#picker .pname{color:#c9b27a;font-size:11px;word-break:break-all;line-height:1.3}
+#picker .prow{display:flex;align-items:baseline;gap:6px;color:#4f483d;font-size:11px;
+  margin-top:5px}
+#picker .prow .val{color:#c9b27a;margin-left:auto}
+#picker input[type=range]{width:100%;accent-color:#c9b27a;background:transparent;margin:0}
+/* NOTHING IS PICKED, SO NOTHING IS TUNABLE -- said by dimming rather than by removing, so the
+   list below does not jump up the column the moment a tile is set to bare floor. */
+#platenow.off{opacity:.42}
 #picker .opt{border:1px solid #221c14;border-radius:3px;padding:4px;cursor:pointer;
   background:#17130d;text-align:center;color:#5f574a;font:inherit}
 #picker .opt:hover{border-color:#5a4c36}
@@ -810,8 +835,13 @@ body.picking{padding-right:171px}
    because each row was spaced by hand. */
 #ui{position:fixed;left:0;top:0;bottom:0;width:206px;overflow:auto;z-index:5;
   background:#100d09;border-right:1px solid #1e1811;padding:12px 10px 18px;
-  display:grid;grid-template-columns:58px 1fr 32px;gap:7px 7px;align-content:start;
+  display:grid;grid-template-columns:68px 1fr 30px;gap:6px 6px;align-content:start;
   align-items:center}
+/* THE NAME COLUMN IS 68px BECAUSE OF THE LONGEST NAME IN IT, not because 68 is a round number.
+   At 58 the widest label in the panel -- `ground opacity`, and `transparency` before it -- was
+   clipped mid-word, which is the one failure a control panel cannot have: a slider whose name
+   you have to guess is a slider you move to find out what it does. The ten pixels come off the
+   value column and the gaps rather than off the panel, so the board loses nothing. */
 /* The sculpt-set dropdown. Styled to sit with the buttons rather than to look like a form
    control, since it is the same kind of choice as the ones beside it. */
 .setpick{font:inherit;color:#c9b27a;background:#1c1811;border:1px solid #332c20;
@@ -838,18 +868,50 @@ body.picking{padding-right:171px}
 #ui .lab{color:#4f483d;text-align:right;white-space:nowrap}
 /* Whose numbers are on screen. Three states worth telling apart at a glance: the base itself,
    a set carrying its own, and a set still following the base. */
-.whose{color:#7d7468;font-size:11px;margin-right:6px}
-.whose.base{color:#c9b27a}
-.whose.own{color:#8fb2c9}
+/* Scoped under `#ui .ttl` so these beat the generic scope-tag colour above rather than losing
+   to it -- `#ui .ttl em` is id+class+type and a bare `.whose` is one class, so the three states
+   would all have come out the same grey that `per set` and `per plate` are drawn in. */
+#ui .ttl em.whose{color:#7d7468}
+#ui .ttl em.whose.base{color:#c9b27a}
+#ui .ttl em.whose.own{color:#8fb2c9}
 #busebase{font-size:11px;padding:1px 6px}
 #ui .wide{grid-column:2 / span 2;display:flex;gap:4px;flex-wrap:wrap}
 #ui .full{grid-column:1 / -1;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 #ui .sep{grid-column:1 / -1;height:1px;background:#1e1811;margin:3px 0 1px}
-#ui .ttl{grid-column:1 / -1;color:#3f3930;letter-spacing:.08em;text-transform:uppercase;
-  font-size:9px;margin-top:2px}
+/* A SECTION TITLE SAYS TWO THINGS, and the second one is the one the panel could not say
+   before: WHAT the group controls, on the left, and WHOSE it is, on the right. Scope used to be
+   carried by position alone -- a comment in this file said that what sits above the separator
+   moves all nine tiles and what sits below it moves one plate -- which is a rule the source can
+   state and the screen cannot. Every group now ends in its own scope tag, always in the same
+   place, so "does this slider rewrite the base or one plate's row" is read rather than
+   remembered. */
+#ui .ttl{grid-column:1 / -1;color:#6a6252;letter-spacing:.09em;text-transform:uppercase;
+  font-size:9px;margin-top:10px;display:flex;align-items:baseline;gap:6px;
+  border-bottom:1px solid #191410;padding-bottom:4px}
+#ui .ttl:first-child{margin-top:0}
+/* The scope tag. Right-aligned by `margin-left:auto` rather than by a column, so it stays put
+   whatever the title's length. */
+#ui .ttl em{font-style:normal;text-transform:none;letter-spacing:0;font-size:10px;
+  color:#4c4539;margin-left:auto;white-space:nowrap}
+/* The subject a group is currently acting on -- which set, which plate -- named in the title
+   rather than in a row of its own, because it is not a setting and a row made it look like one. */
+#ui .ttl b{font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;color:#c9b27a;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+/* `markrows` IS A WRAPPER, NOT A CONTROL. Without this it is a single grid item, so the two
+   decision rows inside it laid themselves out in the 68px name column alone: the dropdowns came
+   out 55px wide reading "ambe", and the note under them broke one word per line. `display:contents`
+   drops the wrapper out of the layout and lets its children sit in the panel's own three columns,
+   which is what every row written directly in the markup already does. */
+#ui #markrows{display:contents}
 #ui button{font:inherit;color:#8b8071;background:#1c1811;border:1px solid #332c20;
   border-radius:3px;padding:3px 7px;cursor:pointer}
 #ui button:hover{border-color:#5a4c36}
+/* Disabled is dimmed AND left un-hoverable, so the pointer does not promise a press that will
+   not happen. `use the base` is the one that needs it: it is inert on the base set, which is
+   the set the page opens showing. */
+#ui button:disabled{opacity:.38;cursor:default}
+#ui button:disabled:hover{border-color:#332c20}
+#ui select:disabled{opacity:.42;cursor:default}
 #ui button[aria-pressed=true]{background:#c9b27a;border-color:#c9b27a;color:#1a1610}
 #ui input[type=range]{width:100%;accent-color:#c9b27a;background:transparent;margin:0}
 #ui .val{color:#c9b27a;text-align:right}
@@ -866,34 +928,47 @@ body.picking{padding-right:171px}
 </style>
 <svg width=0 height=0 style="position:absolute" aria-hidden=true><defs id=hazedefs></defs></svg>
 <div id=ui>
-  <div class=ttl>what you are looking at</div>
-  <span class=lab>view</span><span id=viewb class=wide></span>
-  <span class=lab>sculpt</span><span id=szb class=full></span>
-  <span class=lab>numbers</span><span class=wide><span id=whose class=whose></span>
-    <button id=busebase title="drop this set's own numbers and follow the base again"
-            >use the base</button></span>
-  <span class=lab>order</span><span id=ordb class=wide></span>
-  <span class=lab>pose</span><span id=posb class=wide></span>
+  <!-- THE PANEL IS ORDERED BY SCOPE, WIDEST FIRST, and that is the whole layout rule.
+       Preview controls that change nothing on disk, then the one number shared by every set,
+       then the set's own numbers, then the picked plate's own row, then the file. It used to be
+       ordered by subject -- everything about the ground together, whatever each control reached
+       -- which put a slider that moves all nine tiles directly above five that move one, and
+       left a comment in this file as the only statement of which was which. -->
 
-  <div class=ttl>how the sculpts stand</div>
+  <div class=ttl>view <em>preview</em></div>
+  <span class=lab>layout</span><span id=viewb class=wide></span>
+  <span class=lab>pose</span><span id=posb class=wide></span>
+  <span class=lab>seat order</span><span id=ordb class=wide></span>
+  <span class=lab>shadow</span><span class=wide><button id=bshadow aria-pressed=true>on</button></span>
+
+  <!-- HOW A LIT TILE IS MARKED. Saved, unlike the three preview buttons that once stood here:
+       this is `mark` in duty_placement.json, the same key that has always chosen between the
+       floor styles, and the sow draws whatever it names. All nine tiles show it here because
+       what you cannot judge from one lit tile is whether it separates from its neighbours.
+       ONE ROW PER DECISION THE PLAYER IS ASKED TO MAKE, named as the engine names them. Built
+       from DRAWABLE_DECISIONS rather than written out, so a decision added there arrives here --
+       which is also why there are two rows and not the four DECISION_FIELDS lists. -->
+  <div class=ttl>tile marking <em>preview</em></div>
+  <span id=markrows></span>
+
+  <div class=ttl>sculpt set <em id=whose class=whose></em></div>
+  <span id=szb class=full></span>
+  <div class=full><button id=busebase
+       title="drop this set's own numbers and follow the base again">use the base</button></div>
+
+  <div class=ttl>arrangement <em>per set</em></div>
   <span class=lab>spread</span>
   <input id=sprd type=range min=0 max=200 step=1><span class=val id=sprdv></span>
   <span class=lab>set-back</span>
   <input id=back type=range min=0 max=120 step=1><span class=val id=backv></span>
   <span class=lab>rank gap</span>
   <input id=rank type=range min=0 max=160 step=1><span class=val id=rankv></span>
-  <span class=lab></span>
-  <label class=chk for=wide><input type=checkbox id=wide> calculate width across ranks</label>
-  <span class=val id=widev></span>
+  <!-- ACROSS THE WHOLE PANEL, not in the 1fr control column. `widev` was an empty value cell
+       that never held anything -- it existed so the row had three cells like every other row --
+       and with it and the empty name cell gone the sentence fits on one line instead of four. -->
+  <label class="chk full" for=wide><input type=checkbox id=wide> measure width across ranks</label>
 
-  <div class=ttl>depth</div>
-  <span class=lab>mode</span><span id=dmb class=wide></span>
-  <span class=lab>amount</span>
-  <input id=haze type=range min=0 max=100 step=1><span class=val id=hazev></span>
-  <span class=lab>full at</span>
-  <input id=full type=range min=4 max=200 step=1><span class=val id=fullv></span>
-
-  <div class=ttl>the frame the art fills</div>
+  <div class=ttl>frame <em>per set</em></div>
   <span class=lab>width</span>
   <input id=frw type=range min=120 max=900 step=1><span class=val id=frwv></span>
   <span class=lab>height</span>
@@ -902,44 +977,74 @@ body.picking{padding-right:171px}
   <input id=frd type=range min=-150 max=300 step=1><span class=val id=frdv></span>
   <span class=lab>ratio</span><span class=wide id=ratio></span>
 
-  <div class=ttl>the ground it stands on</div>
-  <!-- LIFT IS THE ONE GLOBAL CONTROL IN THIS BLOCK and is marked as such, because everything
-       under it acts on the plate beneath the tile you clicked. A slider that silently moved
-       nine tiles while sitting among five that move one is a control you learn twice. -->
+  <div class=ttl>depth <em>per set</em></div>
+  <span class=lab>mode</span><span id=dmb class=wide></span>
+  <span class=lab>strength</span>
+  <input id=haze type=range min=0 max=100 step=1><span class=val id=hazev></span>
+  <span class=lab>full at</span>
+  <input id=full type=range min=4 max=200 step=1><span class=val id=fullv></span>
+
+  <!-- THE TWO CONTROLS THAT ACT ON ALL NINE PLATES, together, because that is what they have in
+       common and it is the thing you are thinking about when you reach for either. They were
+       split across two groups while scope decided the order -- `opacity` is one number for every
+       set and `lift` is this set's, so scope-first put four unrelated groups between them.
+       SCOPE IS NOW SAID PER ROW HERE rather than by the group's own tag, and this is the only
+       group in the panel that needs it. Every other group is one scope throughout, so its tag
+       covers it; these two differ, so each note names its own. That is the trade for putting
+       them together, and it is worth it: a tag is a label, and a group is a place to look. -->
+  <div class=ttl>ground <em>all nine tiles</em></div>
+  <span class=lab>opacity</span>
+  <input id=gopall type=range min=0 max=100 step=1><span class=val id=gopallv></span>
+  <span class=note id=gopalln></span>
   <span class=lab>lift</span>
   <input id=glift type=range min=-150 max=400 step=1><span class=val id=gliftv></span>
   <span class=note id=gliftn></span>
-  <!-- ALL NINE, like the lift above it and unlike the five below. Placed on this side of the
-       separator for that reason: the rule in this panel is that what sits above the line moves
-       every tile and what sits below it moves the plate under the one you clicked. -->
-  <span class=lab>transparency</span>
-  <input id=gopall type=range min=0 max=100 step=1><span class=val id=gopallv></span>
-  <span class=note id=gopalln></span>
-  <!-- HOW A LIT TILE IS MARKED. Saved, unlike the three preview buttons that stood here:
-       this is `mark` in duty_placement.json, the same key that has always chosen between the
-       floor styles, and the sow draws whatever it names. All nine tiles show it here because
-       what you cannot judge from one lit tile is whether it separates from its neighbours. -->
-  <!-- ONE ROW PER DECISION THE PLAYER IS ASKED TO MAKE, named as the engine names them. Built
-       from DECISION_FIELDS rather than written out, so a decision added there arrives here. -->
-  <span id=markrows></span>
-  <div class=sep></div>
-  <span class=lab>plate</span><span class=wide id=gwho></span>
-  <span class=lab>anchor</span>
-  <input id=ganc type=range min=0 max=100 step=1><span class=val id=gancv></span>
-  <span class=lab>scale</span>
-  <input id=gsca type=range min=20 max=200 step=1><span class=val id=gscav></span>
-  <span class=lab>dim</span>
-  <input id=gdim type=range min=0 max=100 step=1><span class=val id=gdimv></span>
-  <span class=lab>saturate</span>
-  <input id=gsat type=range min=0 max=100 step=1><span class=val id=gsatv></span>
 
-  <div class=sep></div>
-  <div class=full><button id=bshadow aria-pressed=true>shadow</button>
-    <button id=save>save to json</button></div>
+  <!-- THE PER-PLATE CONTROLS ARE NOT HERE ANY MORE. They are at the top of the picker column on
+       the right, above the list of plates -- see `#platenow`. The plate you are tuning and the
+       list you would swap it from are one subject, and they were at opposite edges of the
+       screen. -->
+
+  <!-- `opacity` AND NOT `ground opacity`, for the same reason `lift` is not `ground lift`: the
+       title says which subject the group is about, so repeating it in every name inside costs
+       the six characters that made this one overflow the name column and lie across its own
+       slider. A name in this panel has about eleven characters; the title has the rest. -->
+
+  <div class=ttl>file</div>
+  <div class=full><button id=save>save to json</button></div>
   <div class=full><span id=saymsg></span></div>
 </div>
 <div id=head></div>
-<div id=picker hidden></div>
+<!-- THE PLATE COLUMN: what the picked tile is standing on, and what else it could stand on.
+     The four per-plate sliders were at the far left, at the bottom of a panel whose other
+     twenty controls are about the set; the list of plates was at the far right. Choosing a
+     plate and then tuning it meant crossing the board, and the only thing naming which plate
+     the sliders were acting on was a one-word readout eleven rows below the set dropdown.
+     Both halves of one subject now live in one column, tuning above and list below. -->
+<div id=picker hidden>
+  <div id=platenow>
+    <div class=ptitle>plate<em>per plate</em></div>
+    <div class=pname id=gwho></div>
+    <div class=prow><span>anchor</span><span class=val id=gancv></span></div>
+    <input id=ganc type=range min=0 max=100 step=1>
+    <div class=prow><span>scale</span><span class=val id=gscav></span></div>
+    <input id=gsca type=range min=20 max=200 step=1>
+    <div class=prow><span>dim</span><span class=val id=gdimv></span></div>
+    <input id=gdim type=range min=0 max=100 step=1>
+    <div class=prow><span>saturate</span><span class=val id=gsatv></span></div>
+    <input id=gsat type=range min=0 max=100 step=1>
+  </div>
+  <!-- NAME AND SLIDER ON SEPARATE LINES, unlike the left panel's three columns. This column is
+       186px, and a name column wide enough for `saturate` would have left the slider about
+       forty pixels of travel -- a slider you cannot aim is worse than one you have to read two
+       lines to identify. -->
+  <!-- NOT "stands on". That was the caption this column used to carry and it was taken out on
+       purpose: it named the duty and the plate, both of which the pressed button and the block
+       above already say. What the list needs a heading for is the GREEN, which means a plate one
+       of the nine tiles is standing on -- a colour nobody can work out by looking at it. -->
+  <div class=ptitle id=plisth>plates<em>green = in use</em></div>
+  <div id=platelist></div>
+</div>
 <div id=stage hidden></div>
 <div id=grid></div>
 <script>
@@ -1101,6 +1206,7 @@ function figFilter(y, shadowOn){
                         steps: HAZE_STEPS});
 }
 
+
 function draw(){
   showRatio();
   var wheel = VIEW === "wheel";
@@ -1242,9 +1348,13 @@ function drawWheel(){
 // The plates on offer, shown only once a tile is chosen -- the strip has to know what it is
 // assigning to, and "all of them" is not an answer anybody wants by accident.
 function drawPicker(){
-  var strip = document.getElementById("picker");
-  strip.hidden = VIEW !== "wheel" || !PICKED;
-  if (strip.hidden) return;
+  var col = document.getElementById("picker");
+  col.hidden = VIEW !== "wheel" || !PICKED;
+  if (col.hidden) return;
+  // The LIST, not the column: the column also holds the per-plate sliders above it now, and
+  // writing innerHTML on the column would take them out of the document every redraw -- along
+  // with the ids syncGroundSliders writes into and the handlers `slider` bound to them.
+  var strip = document.getElementById("platelist");
   var here = groundFor(PICKED);
   // WHICH PLATES ARE SPOKEN FOR, read off the nine tiles rather than off by_duty's keys. The
   // two are not the same: by_duty can carry a slug that is not one of the nine on screen, and
@@ -1301,12 +1411,12 @@ function sayLift(L, floor){
   var e = document.getElementById("gliftn");
   if (!e) return;
   var w = bannerClear(L, floor);
-  if (!w){ e.innerHTML = "all nine tiles &#183; no plate assigned to measure"; return; }
+  if (!w){ e.innerHTML = "this set &#183; no plate assigned to measure"; return; }
   // ROUNDED FIRST, THEN BRANCHED. Branching on the raw gap and printing the rounded one says
   // "0 px still lies over the banner" for any overlap under half a pixel -- a number that reads
   // as a contradiction at exactly the setting you are hunting for.
   var n = Math.round(w.gap / DPR);
-  e.innerHTML = "all nine tiles &#183; "
+  e.innerHTML = "this set &#183; "
     + (n > 0
         ? "clears the banner by <b style='color:#8fae6a'>" + n + "</b> px on " + w.name
         : n < 0
@@ -1331,7 +1441,9 @@ function syncGroundSliders(){
     document.getElementById(pair[0] + "v").textContent = name ? g[pair[1]] : "-";
   });
   var who = document.getElementById("gwho");
-  if (who) who.textContent = name || "none";
+  if (who) who.textContent = name || "bare floor — nothing to tune";
+  var block = document.getElementById("platenow");
+  if (block) block.className = name ? "" : "off";
   // The master reads back the one number the whole board is drawn at. It used to read back
   // what the six plate rows ACTUALLY held and say "mixed" when they disagreed, because the
   // per-plate slider could make them disagree. Nothing can any more.
@@ -1342,8 +1454,11 @@ function syncGroundSliders(){
     var note = document.getElementById("gopalln");
     // No "mixed" any more, because there is nothing left that could differ: one number, every
     // plate, every set.
-    if (note) note.textContent = "every plate, every set \u00b7 " + (100 - TRANSP)
-      + "% of the ground showing";
+    // WHAT THE NUMBER DOES TO THE FILE, which the slider cannot say. It read "every plate,
+    // every set - 50% of the ground showing", whose second half was the slider's own value read
+    // back at you in different words. The first half survives because this group holds the
+    // panel's only two rows of differing scope, and the row under this one is per set.
+    if (note) note.textContent = "every set · written once, at the top of the file";
   }
 }
 function setGround(key, value){
@@ -1451,13 +1566,12 @@ buttons(document.getElementById("ordb"), ORDERS, function(){ return ORDER; },
   for (i = 0; i < DECISIONS.length; i++){
     d = DECISIONS[i];
     h += '<span class="lab markpick" data-d="' + d + '">' + d.replace(/_/g, " ") + '</span>'
-       + '<span class=full><select class=setpick data-d="' + d + '">'
+       + '<span class=wide><select class=setpick data-d="' + d + '">'
        + '<option value="">none</option>';
     for (j = 0; j < MARKS.length; j++)
       h += '<option value="' + MARKS[j] + '">' + markLabel(MARKS[j]) + '</option>';
     h += '</select></span>';
   }
-  h += '<span class=note id=markn></span>';
   host.innerHTML = h;
   var sels = host.querySelectorAll("select");
   for (i = 0; i < sels.length; i++){
@@ -1477,18 +1591,17 @@ function markLabel(m){
   var w = dutyMarkParse(m);
   return dutyEffectFor(EFFECTS, m) ? w.name + (w.pulse ? ", breathing" : "") : m;
 }
+// WHICH DECISION IS ON SCREEN, SAID BY HIGHLIGHTING ITS ROW rather than by a sentence under
+// them. The sentence read "showing origin on all nine - the sow lights whichever tiles the
+// engine offers", which restated the `preview` tag in this group's own title and then explained
+// the engine, in a 68px column that broke it one word per line. The lit row says the same thing
+// in the place you are already looking.
 function sayMark(){
-  var e = document.getElementById("markn");
-  if (!e) return;
-  var host = document.getElementById("markrows"), labs = host.querySelectorAll(".markpick"), i;
+  var host = document.getElementById("markrows");
+  if (!host) return;
+  var labs = host.querySelectorAll(".markpick"), i;
   for (i = 0; i < labs.length; i++)
     labs[i].style.color = labs[i].dataset.d === SHOWING ? "#c9b27a" : "";
-  // WHAT IS BEING SHOWN, and the reminder that this page is not deciding anything. Which tile
-  // is actually in a given state is the engine's answer, read from a recording; all nine are
-  // lit here because a marking has to separate from its neighbours to be judged at all.
-  e.textContent = "showing " + SHOWING.replace(/_/g, " ")
-    + (MARK_BY[SHOWING] ? " on all nine \u00b7 the sow lights whichever tiles the engine offers"
-                        : " \u00b7 unmarked, so the sow draws nothing for this decision");
 }
 sayMark();
 
@@ -1591,13 +1704,26 @@ function syncControls(){
 function showWhoseNumbers(label){
   var e = document.getElementById("whose");
   if (!e) return;
+  // THREE WORDS, NOT A SENTENCE. It sits in the group's scope tag now, where every other group
+  // says `per set` or `per plate` -- so it has to answer the same question in the same shape.
+  // The long form ("the base -- this set's numbers are the top of the file") was three wrapped
+  // lines explaining a slot in a file, above the dropdown that chooses it; the `title` keeps it
+  // for whoever wants it.
+  // THE BUTTON IS DEAD ON THE BASE AND NOW SAYS SO. Its handler has always opened with
+  // `if (SIZE === BASE_SET) return;` -- there is no base for the base to follow -- but it sat
+  // there looking pressable, and the set it is inert on is the one the page opens showing. An
+  // inert control that looks live is the same failure as a name you have to guess.
+  var back = document.getElementById("busebase");
+  if (back) back.disabled = label === BASE_SET;
   if (label === BASE_SET){
-    e.textContent = "the base \u2014 this set's numbers are the top of the file";
+    e.textContent = "the base";
+    e.title = "this set's numbers are the top of the file";
     e.className = "whose base";
   } else {
     var own = JSON.stringify(WORK[label]) !== JSON.stringify(WORK[BASE_SET]);
-    e.textContent = own ? "its own \u2014 saved under per_set"
-                        : "inheriting the base (" + String(BASE_SET).replace("_", " ") + ")";
+    e.textContent = own ? "own numbers" : "inherits";
+    e.title = own ? "saved under per_set"
+                  : "follows the base (" + String(BASE_SET).replace("_", " ") + ")";
     e.className = "whose" + (own ? " own" : "");
   }
 }
@@ -1623,6 +1749,11 @@ showRatio();
 document.getElementById("bshadow").onclick = function(){
   var on = document.body.classList.toggle("shadow");
   this.setAttribute("aria-pressed", on ? "true" : "false");
+  // IT SAYS ITS STATE, because it no longer sits beside `save to json` where a button that reads
+  // like a verb belongs. Under a `shadow` label among the other preview controls it is a switch,
+  // and a switch reading `shadow` answers nothing -- pressed-looking is not a state you can
+  // read off a dark panel with confidence.
+  this.textContent = on ? "on" : "off";
   draw();                      // the shadow is part of the filter chain now, not a CSS class
 };
 
