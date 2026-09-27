@@ -368,7 +368,9 @@ def test_save_merges_rather_than_overwrites(sheet, mod, tmp_path, monkeypatch):
     # The payload is per set now: the page sends what each set is tuned to and the server
     # decides which slot each goes in. Tuning the set `tuned_at` names writes the base.
     base_label = before["tuned_at"]
-    sheet.save_settings(board, {"order": "arrival", "marks": {"route": "floor"}, "sets": {base_label: {
+    sheet.save_settings(board, {"order": "arrival", "marks": {"route": "floor"},
+                            "banner": {"size": "small", "lift": 0.35},
+                            "sets": {base_label: {
         "spread": 88, "back": 25, "rank": 60,
         "depth": {"mode": "dark", "amount": 70, "full_at": 40}}}})
     after = _json.loads(f.read_text(encoding="utf-8"))
@@ -389,11 +391,14 @@ def test_save_refuses_what_the_generator_would_refuse(sheet, mod, tmp_path, monk
     good = {"spread": 80, "back": 20, "rank": 50,
             "depth": {"mode": "haze", "amount": 60, "full_at": 52}}
 
-    def refuse(order="grouped", label=None, **over):
+    def refuse(order="grouped", label=None, banner=None, **over):
         sets = {base_label: dict(good)}
         sets[label or base_label] = dict(good, **over)
         with pytest.raises(ValueError) as e:
-            sheet.save_settings(board, {"order": order, "marks": {"route": "floor"}, "sets": sets})
+            sheet.save_settings(board, {"order": order, "marks": {"route": "floor"},
+                                        "banner": (banner if banner is not None
+                                                   else {"size": "large", "lift": 0.0}),
+                                        "sets": sets})
         return str(e.value)
 
     assert "non-negative" in refuse(spread=-1)
@@ -403,6 +408,13 @@ def test_save_refuses_what_the_generator_would_refuse(sheet, mod, tmp_path, monk
     assert "haze, dark or off" in refuse(depth={"mode": "glow", "amount": 60, "full_at": 52})
     assert "0-100" in refuse(depth={"mode": "haze", "amount": 900, "full_at": 52})
     assert "positive whole number" in refuse(depth={"mode": "haze", "amount": 60, "full_at": 0})
+    # THE BANNER, on the way IN as well as on the way out. The loader's own guard is tested
+    # further down; this is the wire, and the wire is not the page -- a payload is whatever was
+    # POSTed, so the button cannot be trusted to have sent only what its own controls offer.
+    assert "one of small, medium, large" in refuse(banner={"size": "huge", "lift": 0})
+    assert "fraction of the tile" in refuse(banner={"size": "large", "lift": 70})
+    assert "fraction of the tile" in refuse(banner={"size": "large", "lift": "0.7"})
+    assert "size and lift" in refuse(banner="large")
     # AND THE SAME RULES ON AN OVERRIDE. A set's own numbers go through the same door; validated
     # for the base and waved through for everyone else would put the typo in per_set instead.
     assert "non-negative" in refuse(label="120_plastic", spread=-1)
@@ -411,6 +423,7 @@ def test_save_refuses_what_the_generator_would_refuse(sheet, mod, tmp_path, monk
     # A label that is not a label at all.
     with pytest.raises(ValueError) as e:
         sheet.save_settings(board, {"order": "grouped", "marks": {"route": "floor"},
+                            "banner": {"size": "small", "lift": 0.35},
                                     "sets": {base_label: dict(good), "enormous": dict(good)}})
     assert "set label" in str(e.value)
     # And a flat payload, which is what the page sent before this split: refused rather than
@@ -1040,7 +1053,18 @@ def test_the_page_and_the_server_split_the_plates_the_same_way(sheet, mod):
     """The grounds' half of the pair above, where the split is per plate rather than per key."""
     plan = mod.ground_plan([])
     base_label = mod.placement([])["tuned_at"]
-    labels = [base_label] + sorted((plan.get("per_set") or {})) + ["120_plastic"]
+    # A SET THAT HAS NO ROW YET, found rather than named. This was hard-coded to `120_plastic`,
+    # which was true of the file on the day it was written and stopped being true the moment
+    # somebody tuned that set in the sheet and pressed save -- the last assertion then read a row
+    # of five plates where it expected the one it had just restood, and the test failed on a
+    # tuning session rather than on a bug. The name matters not at all; having no row is the
+    # whole point of it, so that is what is asked for.
+    tuned = set(plan.get("per_set") or {})
+    fresh = next((L for L in ("120_plastic", "90_plastic", "180_plastic", "240_plastic")
+                  if L not in tuned), None)
+    assert fresh, ("every set this test knows of now carries its own grounds row, so there is "
+                   "none left to prove that restanding one plate stores exactly one plate")
+    labels = [base_label] + sorted(tuned) + [fresh]
     plate = sorted(plan["grounds"])[0]
 
     def sent(mutate=None):
@@ -1053,10 +1077,10 @@ def test_the_page_and_the_server_split_the_plates_the_same_way(sheet, mod):
         return out
 
     def restand(out):
-        out["120_plastic"]["grounds"][plate]["anchor"] = 33
+        out[fresh]["grounds"][plate]["anchor"] = 33
 
     def relift(out):
-        out["120_plastic"]["lift"] = plan["lift"] + 11
+        out[fresh]["lift"] = plan["lift"] + 11
 
     for mutate in (None, restand, relift):
         payload = sent(mutate)
@@ -1072,7 +1096,8 @@ def test_the_page_and_the_server_split_the_plates_the_same_way(sheet, mod):
     # restanding one plate must store exactly that plate, or the comparison above is vacuous
     doc = json.loads(mod.GROUND_PLAN.read_text(encoding="utf-8"))
     after = sheet._split_grounds_overrides(copy.deepcopy(doc), sent(restand), base_label)
-    assert list(after["per_set"]["120_plastic"]["grounds"]) == [plate]
+    assert list(after["per_set"][fresh]["grounds"]) == [plate], (
+        "restanding one plate on %s stored %s" % (fresh, list(after["per_set"][fresh]["grounds"])))
 
 
 # ---------------------------------------------------------------- sets, and a seat's poses
@@ -1406,6 +1431,7 @@ def test_the_sheet_saves_the_frame_without_losing_the_prose(sheet, mod, tmp_path
     monkeypatch.setattr(board, "PLACEMENT", path)
     base_label = json.loads(path.read_text(encoding="utf-8"))["tuned_at"]
     saved = sheet.save_settings(board, {"order": "grouped", "marks": {"route": "floor"},
+                            "banner": {"size": "small", "lift": 0.35},
                                         "sets": {base_label: {
         "spread": 110, "back": 21, "rank": 52,
         "depth": {"mode": "haze", "amount": 60, "full_at": 52},
@@ -1959,7 +1985,9 @@ def test_save_settings_writes_exactly_the_keys_it_advertises(sheet, mod, tmp_pat
     path.write_text(json.dumps(original), encoding="utf-8")
     monkeypatch.setattr(board, "PLACEMENT", path)
     base_label = original["tuned_at"]
-    sent = {"order": "arrival", "marks": {"route": "gild"}, "sets": {base_label: {
+    sent = {"order": "arrival", "marks": {"route": "gild"},
+            "banner": {"size": "small", "lift": 0.35},
+            "sets": {base_label: {
         "spread": 97, "back": 13, "rank": 41,
         "depth": {"mode": "dark", "amount": 33, "full_at": 44},
         "frame": {"w": 301, "h": 402, "drop": -7}}}}
@@ -2557,6 +2585,282 @@ def test_the_lift_is_in_the_expression_that_places_the_plate(sheet, mod):
         assert "anchor" in top, "%s stopped using the plate's own anchor" % page
 
 
+# ---------------------------------------------------------------- the banner over the floor
+
+
+@needs_node
+def test_a_tile_asking_for_no_banner_in_particular_is_drawn_exactly_as_before():
+    """The default has to survive the control, or every page that never asked moves.
+
+    Three pages call dutyTileLayout and only one of them has sliders. The two sizes and the gap
+    are new arguments with defaults, so this pins the defaults themselves: 0.55 of the cell
+    across and 0.046 of it above the floor line, which is what every page drew for as long as
+    there has been a banner. Falsified by nudging either number in DUTY_BANNER.
+    """
+    plain = _in_node("dutyTileLayout(300, 120, 52, 21, {icons: false})")
+    assert plain["banW"] == pytest.approx(300 * 0.55), (
+        "the banner's default width moved: %s" % plain["banW"])
+    assert plain["gapA"] == pytest.approx(300 * 0.046), (
+        "the banner's default gap above the floor moved: %s" % plain["gapA"])
+    assert plain["banY"] == pytest.approx(plain["gapA"]), (
+        "an unlifted banner is not sitting where the stack put it: %s" % plain["banY"])
+    # AND THAT ASKING FOR `large` IS THE SAME AS NOT ASKING. If these ever part, the sheet opens
+    # on a board that does not match the one the sow draws from the same file.
+    named = _in_node("dutyTileLayout(300, 120, 52, 21, "
+                     "{icons: false, banner: DUTY_BANNER.sizes.large, lift: DUTY_BANNER.lift})")
+    assert named == plain, "large is not what a page gets when it says nothing: %s" % named
+
+
+@needs_node
+def test_lifting_the_banner_leaves_the_floor_and_everything_standing_on_it_alone():
+    """THE BUG THIS CONTROL SHIPPED WITH, and the reason it is `lift` and not `above`.
+
+    The first slider tuned `above`, the gap between the floor line and the parchment INSIDE the
+    stack. But `total` is field + above + banH and `top` centres that stack in the cell, so
+    shrinking the gap shrank the stack, which moved `top` down, which moved the floor line --
+    and the ground plate and the sculpts standing on it -- down with it. Adam moved the banner
+    up and watched the ground tiles slide down to meet it. Measured at cell 288: `above` from
+    0.046 to -0.150 raised the banner 28 px and dropped the floor 28 px, so half the travel went
+    to the wrong thing and the other half went the wrong way.
+
+    `lift` is applied to the banner's own top and to nothing the stack is built from. This
+    asserts the separation directly: across the whole range of the slider, every number that
+    places something other than the banner has to be identical. Falsified by putting the lift
+    back into `total`, or by computing banY from anything the stack reads.
+    """
+    still = ("total", "top", "field", "gapA", "gapB", "icon", "banW", "banH", "mark")
+    rest = _in_node("dutyTileLayout(288, 120, 52, 21, {icons: true, lift: 0})")
+    seen = []
+    for lift in (-0.1, 0.0, 0.25, 0.7, 1.0):
+        got = _in_node("dutyTileLayout(288, 120, 52, 21, {icons: true, lift: %s})" % lift)
+        for key in still:
+            assert got[key] == pytest.approx(rest[key]), (
+                "lift %s moved `%s` from %s to %s -- the lift is meant to move the banner and "
+                "nothing else" % (lift, key, rest[key], got[key]))
+        seen.append(got["banY"])
+    # AND THAT IT MOVES THE BANNER AT ALL, in the right direction and by the right amount. Every
+    # assertion above is equally true of a lift that does nothing whatsoever.
+    assert seen == sorted(seen, reverse=True), (
+        "a bigger lift did not put the banner higher: %s" % seen)
+    assert seen[1] - seen[3] == pytest.approx(288 * 0.7), (
+        "a lift of 0.7 did not raise the banner by 0.7 of the tile: %s" % seen)
+
+
+@needs_node
+def test_the_three_banner_sizes_carry_the_title_down_with_the_parchment():
+    """WHY THE SMALL ONE IS NOT LESS READABLE, which is the question a size button invites.
+
+    The title's font size is a fraction of the banner's height and the height is a third of the
+    width, so parchment and lettering scale together and the ratio of text to parchment is the
+    same at all three. That makes the button a choice about how much of a tile the banner
+    claims rather than about whether the duty's name can be read -- and it is only true while
+    banH stays tied to banW. Falsified by pinning banH to a constant, which is the plausible
+    "fix" the moment someone wants a squatter banner.
+    """
+    seen = {}
+    for size in ("small", "medium", "large"):
+        got = _in_node("dutyTileLayout(300, 120, 52, 21, "
+                       "{icons: false, banner: DUTY_BANNER.sizes.%s})" % size)
+        seen[size] = got
+        assert got["banH"] == pytest.approx(got["banW"] / 3), (
+            "%s: the parchment stopped being three times as wide as it is tall, so the title "
+            "no longer scales with it" % size)
+    widths = [seen[s]["banW"] for s in ("small", "medium", "large")]
+    assert widths[0] < widths[1] < widths[2], (
+        "the three sizes are not a ladder: %s" % widths)
+
+
+@needs_node
+def test_choosing_a_smaller_banner_does_not_narrow_the_floor_the_sow_marks():
+    """`mark` is a rule; the banner's size is a decoration. They were one number.
+
+    The sow reads `mark` as FOOTW -- how far its foot markers spread across the floor -- and it
+    was defined as the banner's own width with a little over, tuned when there was one banner.
+    Left coupled, picking a smaller parchment for looks would quietly narrow the sow's footwork,
+    which is a rule change wearing a decoration's clothes. Falsified by returning `banW * 1.06`
+    again: small and medium then fail while large still passes, which is how it would reach you.
+    """
+    marks = {size: _in_node("dutyTileLayout(300, 120, 52, 21, "
+                            "{icons: false, banner: DUTY_BANNER.sizes.%s}).mark" % size)
+             for size in ("small", "medium", "large")}
+    assert len(set(round(v, 6) for v in marks.values())) == 1, (
+        "the floor a tile claims now depends on how big its parchment is: %s" % marks)
+    assert marks["large"] == pytest.approx(300 * 0.55 * 1.06), (
+        "the floor claim drifted off the full-size banner it was tuned against: %s"
+        % marks["large"])
+
+
+def test_every_page_that_draws_a_tile_is_handed_the_banner_the_sheet_tuned(sheet, mod):
+    """A setting one page obeys and two ignore is a setting that lies.
+
+    The sheet is where the banner is tuned and the sow is where it is played, and the board
+    checker draws the same tile a third time. All three already carry the placement document,
+    so this asks the only question that matters: does each of them pass the tuned numbers into
+    the layout, rather than take the defaults and leave the sliders talking to themselves.
+
+    Asked of the call rather than of the rendered page for the same reason as the lift's test
+    above -- the value is in every page's embedded plan whether or not anything draws with it.
+    """
+    here = pathlib.Path(mod.__file__).parent
+    for page, src in (("the placement sheet", sheet.TEMPLATE),
+                      ("the sow", (here / "duty_sow.html.tmpl").read_text(encoding="utf-8")),
+                      ("the board check",
+                       (here / "duty_board_check.html.tmpl").read_text(encoding="utf-8"))):
+        at = src.find("dutyTileLayout(")
+        assert at >= 0, "%s does not lay out a tile at all" % page
+        call = src[at:at + 300]
+        call = call[:call.index(")") + 1] if ")" in call else call
+        for key in ("banner:", "lift:"):
+            assert key in call, (
+                "%s lays out its tile without %s so the banner the sheet saved does not reach "
+                "it: %s" % (page, key, " ".join(call.split())))
+
+
+def test_a_banner_the_file_cannot_hold_is_refused(mod, tmp_path, monkeypatch):
+    """The wrong unit is the mistake worth stopping for.
+
+    `above` is a fraction of the tile and every other distance on these pages is whole device
+    pixels, so 4.6 typed where 0.046 was meant is a plausible slip -- and it would put the
+    parchment four and a half tiles below the floor line with nothing on screen to say where it
+    had gone. A name outside the three is the other one: the size buttons are built from the
+    same list that refuses it, so a fourth could only arrive by hand.
+    """
+    good = json.loads(mod.PLACEMENT.read_text(encoding="utf-8"))
+    path = tmp_path / "duty_placement.json"
+    monkeypatch.setattr(mod, "PLACEMENT", path)
+
+    for bad, why in (({"size": "huge", "lift": 0.0}, "a size nothing draws"),
+                     ({"size": "large", "lift": 70}, "per cent where a fraction was wanted"),
+                     ({"size": "large", "lift": -3}, "a fraction below any tile"),
+                     ({"size": "large", "lift": "0.7"}, "a number written as text"),
+                     ({"size": "large", "lift": True}, "a flag where a number goes"),
+                     ({"lift": 0.0}, "no size at all"),
+                     ({"size": "large", "lift": 0.0, "colour": "red"}, "a key nothing reads"),
+                     # THE KEY THIS REPLACED, named rather than swept into the stray check: a
+                     # file carrying it was tuned against a slider that moved the ground too,
+                     # so its number cannot be carried across.
+                     ({"size": "large", "above": 0.046}, "the key `lift` replaced"),
+                     ("large", "the block written as a bare name")):
+        doctored = copy.deepcopy(good)
+        doctored["banner"] = bad
+        path.write_text(json.dumps(doctored), encoding="utf-8")
+        with pytest.raises(SystemExit) as caught:
+            mod.placement([])
+        assert "banner" in str(caught.value), why
+
+    # AND THE THREE THE BUTTONS OFFER ALL LOAD, including a gap that walks it up over the floor
+    # line -- which is the end of the slider the control was asked for.
+    for size in mod.BANNER_SIZES:
+        doctored = copy.deepcopy(good)
+        doctored["banner"] = {"size": size, "lift": 0.7}
+        path.write_text(json.dumps(doctored), encoding="utf-8")
+        assert mod.placement([])["banner"]["size"] == size
+    # A FILE WRITTEN BEFORE THIS CONTROL EXISTED IS NOT A BROKEN FILE.
+    doctored = copy.deepcopy(good)
+    doctored.pop("banner", None)
+    path.write_text(json.dumps(doctored), encoding="utf-8")
+    assert mod.placement([]).get("banner") is None
+
+
+# ---------------------------------------------------------------- the plate on a retina screen
+
+
+MARK_RULES_JS = ROOT / "tools" / "ui_debug" / "duty_mark_rules.js"
+
+
+def _plate_in_node(dpr, box):
+    """Emit one plate from the real rules file, with the display's pixel ratio stubbed.
+
+    A browser is the other way to ask this and the suite has none -- but it is also more
+    machinery than the question needs. `dutyPlateHtml` reads `devicePixelRatio` and nothing
+    else from its surroundings, so a global is the entire environment it has.
+    """
+    script = (
+        "const fs = require('fs');\n"
+        "globalThis.devicePixelRatio = %s;\n"
+        "eval(fs.readFileSync(%r, 'utf8'));\n"
+        "process.stdout.write(JSON.stringify(dutyPlateHtml(\n"
+        "  {uri: 'plate.png', w: 100, h: 60},\n"
+        "  {dim: 100, saturate: 100, scale: 100, anchor: 50},\n"
+        "  %s, 0, null, false)));\n"
+        % (json.dumps(dpr), str(MARK_RULES_JS), json.dumps(box))
+    )
+    done = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True)
+    markup = json.loads(done.stdout)
+    got = dict(re.findall(r"(left|top|width|height):(-?[\d.]+)px", markup))
+    assert set(got) == {"left", "top", "width", "height"}, (
+        "the plate no longer writes all four of its own sides: %s" % markup)
+    return {k: float(v) for k, v in got.items()}
+
+
+@needs_node
+def test_the_plate_is_drawn_in_css_pixels_whatever_the_display_is():
+    """The one number on a tile that used to keep its device size.
+
+    `box` arrives in real device pixels -- the file says so eight lines above the function --
+    and every other number on these pages reaches the document through a px() that divides by
+    devicePixelRatio. This one did not. At 1x the two are the same arithmetic and nothing
+    shows; at 2x the frame and the sculpts halved into CSS pixels around a plate that did not,
+    so it drew twice as wide and twice as far down and hung out of the bottom of its own cell.
+
+    Measured on the untouched page before the fix, at 1400x900: the frame went 322 -> 162 CSS
+    px between 1x and 2x while the plate stayed 320, taking it from 0.99 of the frame to 1.98.
+
+    The suite could not have caught this. Three tests name dutyPlateHtml and all three ask
+    structural questions -- that the function exists, that both pages call it, that the top it
+    is handed carries the lift -- every one of which stayed true while the plate was twice the
+    size it should be. Falsified by dropping the division back out of the rules file: 2x and
+    3x fail, 1x still passes, which is the shape of the bug.
+    """
+    box = {"left": 120.0, "top": 260.0, "w": 320.0, "h": 200.0}
+    for dpr in (1, 2, 3):
+        got = _plate_in_node(dpr, box)
+        for side, device in (("left", box["left"]), ("top", box["top"]),
+                             ("width", box["w"]), ("height", box["h"])):
+            assert got[side] == pytest.approx(device / dpr, abs=0.01), (
+                "at %sx the plate's %s came out %s CSS px from %s device px -- it should be %s"
+                % (dpr, side, got[side], device, device / dpr))
+    # AND THAT IT ACTUALLY SHRINKS. Every assertion above still holds for a px() that divides
+    # by a constant 1, which is what the broken version was.
+    one, two = _plate_in_node(1, box), _plate_in_node(2, box)
+    assert two["width"] * 2 == pytest.approx(one["width"], abs=0.01), (
+        "the plate does not halve between 1x and 2x: %s then %s" % (one, two))
+
+
+def test_the_pages_hand_the_plate_device_pixels_and_divide_them_exactly_once(sheet, mod):
+    """Which half of the pair does the dividing -- asked of both halves, so neither can move.
+
+    The division is the rules file's job because `box` is documented as device pixels, and the
+    plausible wrong repair is the other one: pre-divide at the call site and leave the shared
+    file alone. That looks right on the page you were staring at and renders every plate at
+    half size on the other one, because both pages call the same function.
+
+    So this pins the contract rather than the arithmetic: each page divides its own numbers by
+    devicePixelRatio, the shared plate divides the box it is given, and the box each page hands
+    over is built from quantities it has not already put through px().
+    """
+    here = pathlib.Path(mod.__file__).parent
+    rules = MARK_RULES_JS.read_text(encoding="utf-8")
+    plate = rules[rules.index("function dutyPlateHtml"):]
+    plate = plate[:plate.index("\nfunction ")] if "\nfunction " in plate else plate
+    assert "devicePixelRatio" in plate, (
+        "the shared plate no longer divides by the pixel ratio, so it is back to emitting "
+        "device pixels as though they were CSS pixels")
+
+    for page, src in (("the placement sheet", sheet.TEMPLATE),
+                      ("the sow", (here / "duty_sow.html.tmpl").read_text(encoding="utf-8"))):
+        assert "devicePixelRatio" in src, (
+            "%s stopped working in device pixels, so the plate's division is now wrong for it"
+            % page)
+        at = src.find("dutyPlateHtml(")
+        assert at >= 0, "%s does not draw a plate at all" % page
+        call = src[at:at + 400]
+        box = call[call.index("{"):call.index("}") + 1]
+        assert "px(" not in box, (
+            "%s divides the plate's box itself and the shared plate divides it again, so the "
+            "plate draws at half size: %s" % (page, box.strip()))
+
+
 @pytest.mark.slow                      # ~117s: builds a whole page
 def test_the_lift_reaches_both_pages(sheet, sow, mod, tmp_path, monkeypatch):
     """The generators must carry the key through to the page at all -- a separate claim from
@@ -2622,7 +2926,11 @@ def test_the_lift_readout_measures_the_worst_plate_not_the_picked_one(sheet):
     assert "for (var i = 0; i < 9; i++)" in body, "the clearance is not measured across the tiles"
     assert "PICKED" not in body, "the clearance is measured on the picked tile"
     assert "gap < worst.gap" in body, "it does not keep the worst plate"
-    assert "L.gapA" in body, "the clearance is not measured against the banner"
+    # `L.banY` AND NOT `L.gapA`. They were the same line until the banner got a lift: gapA is
+    # where the STACK puts the parchment and banY is where the parchment actually is. Measured
+    # against gapA, a lifted banner would be reported as overlapped by a plate it now sits well
+    # clear of -- a readout confidently describing a tile nobody is looking at.
+    assert "L.banY" in body, "the clearance is not measured against where the banner really is"
 
 
 # ---------------------------------------------------------------- judging a new asset

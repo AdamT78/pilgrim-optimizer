@@ -123,6 +123,11 @@ function applySet(label){
 // reads them. setSlider no-ops while the controls do not exist yet; the slider() calls further
 // down then take their opening values from what this set.
 applySet(SIZE);
+// THE BANNER THE SHEET TUNED. Read off the placement document this page already carries, so
+// there is no new placeholder and no second copy of the defaults -- absent means whatever
+// duty_sculpt_rules.js draws with, which is what this page drew before the control existed.
+var BAN = PLACE.banner || {};
+var BAN_OPTS = {banner: DUTY_BANNER.sizes[BAN.size], lift: BAN.lift};
 var GROUPED = PLACE.order === "grouped",
     BANNER = true, ICON = true, shadow = true;
 var SEED = 1, BUD = 0, CELL = 0, zTop = 60;
@@ -227,8 +232,11 @@ function build(){
   // Shared with the sow page and the placement sheet. The field here used to be figH + RANK,
   // which ignores the set-back and would clip the middle of three the moment a set-back larger
   // than the rank gap was tried; the shared version clears the deeper of the two.
-  var L = dutyTileLayout(CELL, figH, RANK, BACK, {icons: ICON});
-  var banW = L.banW, banH = L.banH, gapA = L.gapA, gapB = L.gapB, icon = L.icon;
+  var L = dutyTileLayout(CELL, figH, RANK, BACK,
+                         {icons: ICON, banner: BAN_OPTS.banner,
+                          lift: BAN_OPTS.lift});
+  var banW = L.banW, banH = L.banH, gapA = L.gapA, banY = L.banY,
+      gapB = L.gapB, icon = L.icon;
   var fieldH = L.field;
   var total = L.total;
   var groupTop = L.top;
@@ -259,7 +267,7 @@ function build(){
        + (n ? parts.join("+") : "empty") + '</em>  '
        + q.map(function(s){ return "p" + (s + 1); }).join(" ") + '</div>';
     if (BANNER && BANNERS[i])
-      h += '<div class=ban data-t="' + i + '" style="top:' + px(groupTop + fieldH + gapA)
+      h += '<div class=ban data-t="' + i + '" style="top:' + px(groupTop + fieldH + banY)
          + ';width:' + px(banW) + ';height:' + px(banH) + '"><img src="' + BANNERS[i]
          + '"><b style="top:' + (BANNER_TOP * 100) + '%;font-size:' + px(banH * BANNER_FS)
          + ';letter-spacing:' + px(banH * BANNER_FS * BANNER_TRACK) + ';color:' + BANNER_INK
@@ -274,6 +282,9 @@ function build(){
                  .replace(/height="\d+"/, 'height="' + px(icon * 0.78) + '"') + '</div>';
         });
       else a = '<span class=noicon>no action icon</span>';
+      // THE ACTION ICONS KEEP THE STACK'S OWN LINE, `gapA`, and do not follow the banner up.
+      // A lift floats the parchment out of the room the layout reserved for it; it is not a
+      // rearrangement of the tile, and dragging this row along would make it one.
       h += '<div class=acts style="top:' + px(groupTop + fieldH + gapA + banH + gapB)
          + ';height:' + px(icon) + '">' + a + '</div>';
     }

@@ -24,6 +24,11 @@
   "frame_note": "The picture a duty tile is drawn on -- the ground the acolytes stand on, and whatever border it carries. Real device pixels, independent of the formation ON PURPOSE: art is drawn to a fixed rectangle, and a frame that moved every time a spread slider did would be art you have to redraw. The pages draw the formation's own envelope inside it as a check and say so when the sculpts outgrow the frame. `drop` is how far the frame's base sits BELOW the floor line the figures stand on, because a ground that continues under and behind the feet reads as a place rather than as a backdrop. These starting numbers are provisional and were chosen to fit rather than to look right: 320 clears the 311 a full stack of five needs by nine pixels, and 390 is the tallest that fits a tile at the current wheel pitch. The banner is wider than the frame and overhangs its sides, which is what the first concept art does too.",
   "order": "grouped",
   "order_note": "grouped keeps a seat's sculpts adjacent and countable; arrival never reorders what is already down. Measured, the two move the same number of sculpts per drop (2.73 of them), because the shuffle comes from the formation changing shape with the count, not from the ordering.",
+  "banner": {
+    "size": "small",
+    "lift": 0.6
+  },
+  "banner_note": "The parchment a duty's name is written on. `size` is small, medium or large and chooses how much of a tile the banner claims -- the fractions the three names stand for are in duty_sculpt_rules.js, beside the layout that uses them. Large is 0.55 of the tile and is what every page drew before the sizes existed. The title scales with the parchment, so all three are equally readable; the choice is weight rather than legibility. `lift` raises the parchment off its resting place, as a FRACTION of the tile's width -- 0 leaves it where the layout puts it, around 0.60 to 0.65 sits it on the tile's top edge for the sets filed today, though where that falls depends on how tall the sculpts are -- the sheet reads it out. It moves the banner and nothing else: the stack still reserves the room it always did, the way the ground's own `lift` moves a plate without rearranging the tile. A fraction and not pixels because it crosses most of a tile and tiles run from about 230 px to 650 px with the window. One setting for all nine tiles, like `order`: how a tile is read is not a fact about how tall its sculpts are.",
   "marks": {
     "origin": "amber:pulse",
     "route": "amber"
@@ -79,6 +84,14 @@
         "mode": "haze",
         "amount": 70,
         "full_at": 52
+      }
+    },
+    "120_plastic": {
+      "spread": 60,
+      "frame": {
+        "w": 260,
+        "h": 287,
+        "drop": 40
       }
     }
   },

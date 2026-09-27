@@ -165,6 +165,51 @@
           "saturate": 65
         }
       }
+    },
+    "120_plastic": {
+      "lift": 21,
+      "grounds": {
+        "cobbles_oval": {
+          "anchor": 54,
+          "scale": 100,
+          "dim": 55,
+          "saturate": 65
+        },
+        "limestone_irregular": {
+          "anchor": 56,
+          "scale": 100,
+          "dim": 55,
+          "saturate": 65
+        },
+        "flagstones_grey": {
+          "anchor": 55,
+          "scale": 100,
+          "dim": 55,
+          "saturate": 65
+        },
+        "slate_irregular": {
+          "anchor": 53,
+          "scale": 100,
+          "dim": 55,
+          "saturate": 65
+        },
+        "planks_rough": {
+          "anchor": 50,
+          "scale": 100,
+          "dim": 55,
+          "saturate": 65,
+          "camera": {
+            "degrees": 31.14,
+            "from": "ring",
+            "outline": 30.66,
+            "source": "ChatGPT Image Sep 23, 2026, 11_58_00 AM (9).png",
+            "dated": "2026-09-23",
+            "why": "its own outline cannot give a camera and its measuring ring can. ground_ellipse fits an ellipse; this plate is a ragged patch of plank ends, and the fit visibly misses -- it bulges past the timber on one side and falls inside it on the other, reading 30.66. The ring drawn on the source image IS a circle and fits at 31.14. The two agree to 0.48, inside the 1.5 agreement bar, so the plate is sound and the ring is the better of its two numbers. FIRST RECORDED AT 31.57 AND CORRECTED THE SAME DAY: that came from filling the ring and taking its bounding box, which measures the ring's OUTER edge and so reports a steeper camera than the ring was drawn at. Measured against rings of known centreline the old method erred by up to +0.70 degrees, more than the whole tolerance a plate is held to. The ring was stripped when the art was filed, so for a year and a day this could not be re-derived from anything committed -- which is the whole reason it is written down here. RECOVERED 2026-09-24: the ring-bearing generation was downloaded again from the session that produced it and is filed at grounds/candidates/planks_rough_ringed.png. ring_ellipse re-derives 31.1400 from it, and stripping its ring and cropping to ink reproduces grounds/planks_rough.png byte for byte, so the identity is proven rather than assumed. The number is a measurement again, not testimony",
+            "method": "least-squares ellipse fit to the ring's pixels",
+            "ring_source": "grounds/candidates/planks_rough_ringed.png"
+          }
+        }
+      }
     }
   },
   "per_set_note": "How one sculpt set stands its plates. The plate ART is the same whatever size the sculpts are; how it is STOOD is not -- `lift` is a distance in real pixels between the floor line and the ground, and `scale` sizes the plate against figures that are 90 px tall in one set and 210 in another. A set may restand one plate and leave the others alone; each plate's row is merged on its own and is a whole row. `by_duty` is deliberately not splittable: which duty stands on which plate is a fact about the board, and letting it split would put one duty on two different grounds depending on which sculpts were loaded. The 210_painted anchors here were tuned on 2026-09-25 and landed in the base slot by mistake."

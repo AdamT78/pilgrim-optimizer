@@ -198,10 +198,17 @@ MARK_JS = HERE / "duty_mark_rules.js"
 
 # Only if the file is missing. A page built from these instead of from the file would look right
 # and be wrong, so it says so in the run output rather than quietly standing in.
+# THE THREE THE SIZE BUTTONS OFFER, named here rather than in the page, for the same reason the
+# markings are: a page offering a fourth the file would refuse is a button that fails on save.
+# The fractions each name stands for live in duty_sculpt_rules.js, with the layout that uses
+# them -- this is only the list of names that may be written down.
+BANNER_SIZES = ("small", "medium", "large")
+
 FALLBACK = {"tuned_at": "210_plastic", "spread": 77, "back": 21, "rank": 52, "order": "grouped",
             "width_across_ranks": False,
             "frame": {"w": 320, "h": 390, "drop": 40},
             "marks": {"route": "floor"},
+            "banner": {"size": "large", "lift": 0.0},
             "depth": {"mode": "haze", "amount": 60, "full_at": 52}}
 
 
@@ -448,6 +455,53 @@ def placement(notes):
         if field in marks:
             check_mark(marks[field], effects, "%s: marks.%s" % (_short(PLACEMENT), field))
     data["marks"] = marks
+    # THE BANNER, which is one setting for the whole board rather than one per set: how big the
+    # parchment is and how far it hangs above the floor line are facts about reading a tile, not
+    # about how tall the sculpts on it happen to be. `order` is stored the same way and for the
+    # same reason.
+    #
+    # ABSENT IS FINE and means the two values duty_sculpt_rules.js already draws with -- a file
+    # written before this control existed is not a broken file. Half of one is refused, the same
+    # way half a frame is: guessing which half was meant is how a file ends up with a shape
+    # nobody wrote.
+    banner = data.get("banner")
+    if banner is not None:
+        if not isinstance(banner, dict):
+            raise SystemExit("%s: banner is %r, want an object with size and lift"
+                             % (_short(PLACEMENT), banner))
+        # `above` WAS THIS KEY for about an hour on 2026-09-27, and it tuned the gap INSIDE the
+        # tile stack -- which re-centred the stack and took the floor line, and the ground plate
+        # standing on it, along for half the travel. Refused by name rather than swept up by the
+        # stray-key check below, because a file carrying it was tuned against a control that
+        # moved two things at once and the number will not mean what it meant.
+        if "above" in banner:
+            raise SystemExit("%s: banner.above became banner.lift on 2026-09-27, when moving the "
+                             "banner stopped moving the ground with it. `above` tuned the gap "
+                             "inside the stack; `lift` raises the parchment and nothing else, so "
+                             "the old number does not carry over -- set banner.lift to 0 and "
+                             "move the slider again" % _short(PLACEMENT))
+        stray = sorted(set(banner) - {"size", "lift"})
+        if stray:
+            raise SystemExit("%s: banner carries %s, which nothing reads -- it holds `size` "
+                             "and `lift` and no more"
+                             % (_short(PLACEMENT), ", ".join(stray)))
+        if banner.get("size") not in BANNER_SIZES:
+            raise SystemExit("%s: banner.size is %r, want one of %s"
+                             % (_short(PLACEMENT), banner.get("size"),
+                                ", ".join(BANNER_SIZES)))
+        lift = banner.get("lift")
+        if isinstance(lift, bool) or not isinstance(lift, (int, float)):
+            raise SystemExit("%s: banner.lift is %r, want a fraction of the tile's width "
+                             "(0 leaves the banner where the layout puts it; about 0.70 sits it "
+                             "on the tile's top edge)" % (_short(PLACEMENT), lift))
+        # A BOUND RATHER THAN A FREE NUMBER, because this one is a fraction and the others on
+        # this page are pixels: 70 typed where 0.70 was meant is a plausible slip, and it would
+        # throw the parchment seventy tiles off the board with nothing on screen to say where it
+        # went. The bound is wide enough to hold a banner pushed right off the tile on purpose.
+        if not -0.5 <= lift <= 1.5:
+            raise SystemExit("%s: banner.lift is %r -- it is a FRACTION of the tile's width, "
+                             "so anything outside -0.5 to 1.5 is a number in the wrong unit"
+                             % (_short(PLACEMENT), lift))
     # `mark` WAS THIS KEY, singular, and meant the sow destination. Refused rather than migrated
     # quietly: a file still carrying it would load with that marking silently dropped.
     if "mark" in data:

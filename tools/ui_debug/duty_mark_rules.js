@@ -104,7 +104,14 @@ function dutyEffectCss(scope) {
 // the ground rather than floating over a ground that is not there.
 function dutyPlateHtml(plate, gs, box, transp, fx, pulsing) {
   if (!plate) return "";
-  function px(v) { return Math.round(v * 100) / 100 + "px"; }
+  // REAL DEVICE PIXELS IN, CSS PIXELS OUT -- the same division every other number on these
+  // pages goes through, and the reason `box` is documented above as device pixels. Without it
+  // the plate was the one element on the tile that kept its device size: on a 2x display the
+  // frame and the sculpts halved around it while the plate drew twice as wide and twice as far
+  // down, hanging out of the bottom of its own cell. Invisible at 1x -- which is why it lived
+  // so long -- and wrong on every Retina screen the sheet and the sow have ever been opened on.
+  function px(v) { var d = devicePixelRatio || 1;
+                   return Math.round(v / d * 100) / 100 + "px"; }
   var fil = "filter:brightness(" + (gs.dim / 100) + ") saturate(" + (gs.saturate / 100) + ")";
   var uri = plate.uri;
   var h = '<div class=plate style="left:' + px(box.left) + ';top:' + px(box.top)

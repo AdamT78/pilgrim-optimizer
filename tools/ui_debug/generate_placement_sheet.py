@@ -105,7 +105,11 @@ PICKER_JS = HERE / "duty_set_picker.js"
 # that file never has, carrying the ground assignments in a key nothing reads them from.
 # `mark` joins `order` here: both are conventions about how the board READS rather than
 # numbers about how sculpts stand, and neither splits per set for the same reason.
-PLACEMENT_KEYS = ("spread", "back", "rank", "order", "marks", "depth", "frame")
+# `banner` joins them for the same reason: it is one answer about how a tile READS, it does
+# not split per set, and leaving it out of this list would save it when the generator is
+# serving and drop it when the page was opened from a file -- the exact split this list was
+# written to close.
+PLACEMENT_KEYS = ("spread", "back", "rank", "order", "marks", "depth", "frame", "banner")
 GROUND_KEYS = ("by_duty", "grounds", "lift", "transparency")
 
 # WHICH OF THOSE A SET MAY CARRY ITS OWN OF is NOT restated here: it is read off the board
@@ -292,6 +296,25 @@ def save_settings(board, sent):
         raise ValueError("validated %s, which the board module's PER_SET_KEYS does not name"
                          % ", ".join(stray))
     _split_base_and_overrides(merged, clean_sets, base_label, board.PER_SET_KEYS, PER_SET_NOTE)
+
+    # THE BANNER, taken once for the same reason as `order`: it is one answer for the whole
+    # board. Checked against the board module's own list rather than a copy of the names here --
+    # the page offers what that list holds, and a save is a wire message rather than the page.
+    banner = sent.get("banner")
+    if not isinstance(banner, dict):
+        raise ValueError("banner is %r, want an object with size and lift" % (banner,))
+    if banner.get("size") not in board.BANNER_SIZES:
+        raise ValueError("banner.size is %r, want one of %s"
+                         % (banner.get("size"), ", ".join(board.BANNER_SIZES)))
+    lift = banner.get("lift")
+    if isinstance(lift, bool) or not isinstance(lift, (int, float)):
+        raise ValueError("banner.lift is %r, want a fraction of the tile's width" % (lift,))
+    # The same bound the generator reads by. A fraction arriving in the wrong unit is the one
+    # mistake worth refusing, because it lands the banner off the board with nothing to say so.
+    if not -0.5 <= lift <= 1.5:
+        raise ValueError("banner.lift is %r -- it is a fraction of the tile's width, so "
+                         "anything outside -0.5 to 1.5 is a number in the wrong unit" % (lift,))
+    merged["banner"] = {"size": banner["size"], "lift": lift}
 
     # ---- and the grounds, which live in their own file ---------------------------------------
     # Two files, one button. They are separate files because they are separate decisions with
@@ -662,6 +685,12 @@ def main():
                      ("__BANNERTRACK__", json.dumps(board.BANNER_TRACK)),
                      ("__BANNERINK__", json.dumps(board.BANNER_INK)),
                      ("__OPENORDER__", json.dumps(place.get("order", "grouped"))),
+                     ("__BANSIZES__", json.dumps(list(board.BANNER_SIZES))),
+                     # ABSENT MEANS THE DRAWN DEFAULTS, not an empty object: a placement file
+                     # written before this control existed opens on exactly what it opened on
+                     # before, and the panel comes up reading it.
+                     ("__BANNER__", json.dumps(place.get("banner")
+                                               or {"size": "large", "lift": 0.0})),
                      ("__OPENMARKS__", json.dumps(place.get("marks") or {})),
                      # ONLY THE ONES A PAGE CAN DRAW. A row for a decision nothing shows
                      # would invite storing a marking nobody could ever see.
@@ -917,6 +946,9 @@ body.picking{padding-right:207px}
 #ui .val{color:#c9b27a;text-align:right}
 /* The lift's readout: what the number MEANS on the tile -- all nine, and whether the plate is
    still lying across the banner -- rather than the number again. */
+#ui #bansize{gap:8px}
+#ui #bansb{display:flex;gap:4px}
+#ui #bansize .lab{text-align:left;width:auto}
 #ui .note{grid-column:1 / -1;color:#5f574a;line-height:1.4;margin:-1px 0 2px 2px}
 #ui .note b{color:#e0705f;font-weight:400}
 #save{border-color:#4a5a3a}
@@ -999,6 +1031,27 @@ body.picking{padding-right:207px}
   <span class=lab>lift</span>
   <input id=glift type=range min=-150 max=400 step=1><span class=val id=gliftv></span>
   <span class=note id=gliftn></span>
+
+  <!-- THE PARCHMENT ITSELF, which had no control at all: its width and the gap the stack rests
+       it in were written into duty_sculpt_rules.js, tunable only by editing that file and
+       reloading every page.
+       NOT IN syncControls, and `order` is not either: both are one answer for the whole board,
+       so re-aiming them when the sculpt set changes would be re-aiming them at themselves. -->
+  <div class=ttl>banner <em>all nine tiles</em></div>
+  <!-- `lift`, THE SAME WORD THE GROUND USES, because it is the same idea: it moves the thing off
+       its resting line and rearranges nothing around it. The first version of this slider tuned
+       the gap inside the stack instead, which re-centred the stack and took the floor line --
+       and the ground plate standing on it -- along for half the ride, in the other direction.
+       PER CENT OF THE TILE, so it means the same thing on a 235 px tile and a 650 px one. Where
+       the top edge falls depends on how tall the set's sculpts are -- around 60 to 65 for the
+       sets filed today -- so the note below reads it out rather than this comment guessing. -->
+  <span class=lab>lift</span>
+  <input id=bana type=range min=-10 max=90 step=0.5><span class=val id=banav></span>
+  <!-- A FULL-WIDTH ROW, not the `wide` two-column one the depth modes use: `haze dark off` fits
+       beside its name and `small medium large` does not, so in `wide` the third button wrapped
+       onto a line of its own with the label stranded beside the gap. -->
+  <span class="full" id=bansize><span class=lab>size</span><span id=bansb></span></span>
+  <span class=note id=bann></span>
 
   <!-- THE PER-PLATE CONTROLS ARE NOT HERE ANY MORE. They are at the top of the picker column on
        the right, above the list of plates -- see `#platenow`. The plate you are tuning and the
@@ -1190,6 +1243,14 @@ function settingsFor(name){
 }
 var BANNER_TOP = __BANNERTOP__, BANNER_FS = __BANNERFS__,
     BANNER_TRACK = __BANNERTRACK__, BANNER_INK = __BANNERINK__;
+// THE TWO THE PANEL MOVES, kept apart from the four above them: those are constants shared with
+// the board checker and describe how a title is INKED on the parchment, these are the parchment
+// itself.
+var BAN = __BANNER__;
+// PER CENT OF THE TILE in the control, a fraction in the file. The slider has to cross most of a
+// tile to reach the top edge, so a percentage is the unit that reads: 25.5 is a quarter of the
+// way up, on any window, and the note below it says what that comes to in pixels here.
+var BAN_SIZE = BAN.size, BAN_LIFT = Math.round((BAN.lift || 0) * 1000) / 10;
 // One illustrative deal for the wheel: nine tiles carrying nought to five, with the seats mixed
 // so a frame is judged against colours next to each other rather than against one player's row.
 // Every arrangement in detail is what the other view is for.
@@ -1243,7 +1304,9 @@ function drawWheel(){
   var side = Math.max(300,
                       Math.min(innerWidth - panel - pickW - 48, innerHeight - headH - 34));
   var BUD = Math.floor(side * DPR), CELL = BUD / 3;
-  var L = dutyTileLayout(CELL, figH, RANK, BACK, {icons: false});
+  var L = dutyTileLayout(CELL, figH, RANK, BACK,
+                         {icons: false, banner: DUTY_BANNER.sizes[BAN_SIZE],
+                          lift: BAN_LIFT / 100});
   var floor = L.top + L.field;
   var CAP = dutyCapacityBox(5, SPREAD, BACK, RANK, widest, figH, WIDE);
   // Room above the floor line is the frame's height less however far its base sits below it.
@@ -1306,7 +1369,7 @@ function drawWheel(){
            + ';filter:' + figFilter(p.y, shadowOn) + '"><img src="' + f.uri + '"></div>';
       });
     h += '</div>';
-    h += '<div class=ban style="top:' + px(floor + L.gapA) + ';width:' + px(L.banW)
+    h += '<div class=ban style="top:' + px(floor + L.banY) + ';width:' + px(L.banW)
        + ';height:' + px(L.banH) + '">' + (C.ban ? '<img src="' + C.ban + '">' : "")
        + '<b style="top:' + (BANNER_TOP * 100).toFixed(2) + '%;color:' + BANNER_INK
        + ';font-size:' + px(L.banH * BANNER_FS) + ';letter-spacing:'
@@ -1326,6 +1389,7 @@ function drawWheel(){
   drawPicker();
   syncGroundSliders();
   sayLift(L, floor);
+  sayBanner(L, CELL);
   // The column's width is only knowable once it is in the document, and it changes the board's
   // budget. One re-measure, guarded, rather than a layout loop.
   var after = pick.hidden ? 0 : pick.getBoundingClientRect().width;
@@ -1402,7 +1466,9 @@ function bannerClear(L, floor){
     var gs = settingsFor(name);
     var gw = FRAME.w * gs.scale / 100, gh = gw * plate.h / plate.w;
     // the plate's own bottom edge, against the top of the parchment below the floor line
-    var gap = (floor + L.gapA) - (floor - LIFT + gh * (1 - gs.anchor / 100));
+    // `banY`, NOT `gapA`: with the banner lifted, the parchment is not where the stack put it,
+    // and a clearance measured against the old line would report an overlap that is not there.
+    var gap = (floor + L.banY) - (floor - LIFT + gh * (1 - gs.anchor / 100));
     if (worst === null || gap < worst.gap) worst = {gap: gap, name: name};
   }
   return worst;
@@ -1422,6 +1488,28 @@ function sayLift(L, floor){
         : n < 0
           ? "<b>" + (-n) + "</b> px of " + w.name + " still lies over the banner"
           : "<b style='color:#8fae6a'>just clear</b> of the banner on " + w.name);
+}
+
+// WHAT THE TWO BANNER CONTROLS COME TO, in the pixels you are looking at. The slider says 46
+// and the panel cannot otherwise tell you whether that is ten pixels or forty on this window --
+// and the number that actually matters is the one the negative end is for: how far the parchment
+// has climbed over the floor line, where the sculpts are standing.
+function sayBanner(L, cell){
+  var e = document.getElementById("bann");
+  if (!e) return;
+  var gap = Math.round(L.banY / DPR), w = Math.round(L.banW / DPR);
+  // AND HOW MUCH TILE IS LEFT ABOVE IT, which is the number the top end of the slider is for:
+  // "almost at the top edge" is a thing you can see, but not a thing the other readouts say.
+  var head = Math.round((L.top + L.field + L.banY) / DPR);
+  e.innerHTML = "parchment <b>" + w + "</b> px wide &#183; "
+    + (gap > 0
+        ? "<b>" + gap + "</b> px below the floor line"
+        : gap < 0
+          ? "<b>" + (-gap) + "</b> px above it"
+          : "<b>on</b> the floor line")
+    + " &#183; " + (head > 0
+        ? "<b style='color:#8fae6a'>" + head + "</b> px of tile above the parchment"
+        : "<b>" + (-head) + "</b> px over the tile's top edge");
 }
 
 // The ground sliders act on the plate under the CHOSEN tile, or on the default when no tile is
@@ -1633,6 +1721,15 @@ slider("frd", FRAME.drop, function(v){ FRAME.drop = v; });
 // from the plan rather than from whichever plate happens to be picked, and it is never disabled,
 // because it still means something on a tile standing on bare floor.
 slider("glift", LIFT, function(v){ LIFT = v; });
+// THE BANNER. Thousandths in the slider, a fraction in the file: the panel's other numbers are
+// whole pixels and a control that read 0.046 would be the only one on the page you could not
+// nudge with an arrow key.
+slider("bana", BAN_LIFT, function(v){ BAN_LIFT = v; });
+// SMALL FIRST, because the row reads as a scale and a scale runs upward. The names come from the
+// board module, which is also what refuses a fourth one on save -- a button offering a size the
+// file would reject is a control that fails at the moment it matters.
+buttons(document.getElementById("bansb"), __BANSIZES__,
+        function(){ return BAN_SIZE; }, function(v){ BAN_SIZE = v; });
 // EVERY PLATE AT ONCE. Opacity is per plate in the file and always will be -- a plate can want
 // its own -- but the thing actually being chosen is how solid the GROUND is, and setting that
 // one plate at a time means six passes and six chances to leave one behind. So this writes the
@@ -1786,7 +1883,12 @@ function settings(){
     gsets[L] = {lift: GWORK[L].lift, grounds: GWORK[L].grounds};
   }
   var base = GWORK[BASE_SET] || GWORK[SIZE];
+  // BACK TO A FRACTION on the way out. The slider works in per cent because that is what reads
+  // on a control that crosses most of a tile; the file stores the fraction the layout actually
+  // multiplies by, because a unit that exists only to suit a control is one the next reader has
+  // to decode.
   return {order: ORDER, marks: MARK_BY, sets: sets,
+          banner: {size: BAN_SIZE, lift: BAN_LIFT / 100},
           grounds: {by_duty: BY_DUTY, grounds: base.grounds, lift: base.lift,
                     transparency: TRANSP, sets: gsets}};
 }

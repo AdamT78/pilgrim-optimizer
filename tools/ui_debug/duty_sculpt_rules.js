@@ -131,6 +131,41 @@ function dutyDepth(y, ref) {
 // haze at all rather than as an error. They were written out separately in each page.
 var DUTY_HAZE = {steps: 8, max: 0.62};
 
+// THE BANNER: how big the parchment is, where the stack rests it, and how far it may be
+// raised off that resting place.
+//
+// `large` is 0.55 of the cell, which is what every page has drawn since the banner existed; the
+// two smaller steps are new and go down from it by about a sixth each. Nothing here changes how
+// legible a title is: banH is banW/3 and the font is a fraction of banH, so the parchment and
+// the lettering on it scale together and the text/parchment ratio is the same at all three. The
+// choice is how much of a tile the banner claims, not whether it can be read.
+//
+// `lift` RAISES THE BANNER OFF ITS RESTING PLACE AND MOVES NOTHING ELSE, which is the whole
+// point of it being separate from `above`.
+//
+// The first version of this control tuned `above` -- the gap inside the stack -- and that was
+// wrong in a way that is obvious once seen: `total` is field + above + banH and `top` centres
+// the stack, so shrinking the gap shrank the stack, which pushed `top` down, which took the
+// floor line and everything standing on it down with it. Measured at cell 288: moving `above`
+// from 0.046 to -0.150 lifted the banner 28 px and dropped the ground plate 28 px. Half the
+// travel went to the wrong thing, in the wrong direction.
+//
+// So `lift` is applied to the banner's own top and to nothing in `total`. The layout reserves
+// the same room it always did and the banner floats out of it, exactly the way the ground's
+// `lift` moves a plate off the floor line without rearranging the tile around it.
+//
+// A FRACTION OF THE CELL, not real pixels, and unlike the ground's lift for a reason: this one
+// has to travel most of a tile to put the banner near the top edge, and tiles run from about
+// 230 px to 650 px depending on the window. In pixels, a lift that sat the banner on the top
+// edge in one window would throw it off the board in another.
+// THE THREE SIZES SIT IN THEIR OWN BOX, not beside `above` and `lift` in one flat object.
+// Flat, the pages looked up a size by name straight off it -- DUTY_BANNER[BAN.size] -- and a
+// size called `lift` would have resolved to 0 and drawn a banner with no width at all, while
+// `above` would have quietly drawn one at 0.046 of the tile. Neither can arrive from the file,
+// because the placement guard only admits the three names; but the trap was one typo deep and
+// the nesting costs nothing.
+var DUTY_BANNER = {sizes: {large: 0.55, medium: 0.46, small: 0.38}, above: 0.046, lift: 0};
+
 // WHERE THE PARTS OF A TILE SIT. One copy, like the formation.
 //
 // This was written out in each page that draws the wheel, and the copies had already drifted:
@@ -143,7 +178,10 @@ var DUTY_HAZE = {steps: 8, max: 0.62};
 // the deepest slot they can stand in -- those are real pixels and do not scale with the tile.
 //
 //   banW/banH  the parchment
-//   gapA       floor line to the top of the parchment
+//   gapA       floor line to the top of the parchment, AS THE STACK RESERVES IT -- what
+//              `total` is built from, and not necessarily where the parchment ends up
+//   banY       floor line to the top of the parchment AS DRAWN, which is gapA less the
+//              lift. Pages draw with this one; `total` and `top` never see it
 //   gapB       parchment to the action icons, and `icon` their size (icons are the board
 //              checker's; the sow page passes icons: false and gets the same numbers otherwise)
 //   field      floor to the tallest head
@@ -152,8 +190,9 @@ var DUTY_HAZE = {steps: 8, max: 0.62};
 //   mark       the width a tile claims on the floor -- the banner's, with a little over
 function dutyTileLayout(cell, figH, rank, back, opts) {
   var o = opts || {};
-  var banW = cell * 0.55, banH = banW / 3;
-  var gapA = cell * 0.046, gapB = cell * 0.010;
+  var banW = cell * (o.banner === undefined ? DUTY_BANNER.sizes.large : o.banner),
+      banH = banW / 3;
+  var gapA = cell * DUTY_BANNER.above, gapB = cell * 0.010;
   var icon = Math.round(cell * 0.168);
   // THE FIELD HAS TO CLEAR THE DEEPEST SLOT, and the deepest slot is the rank gap at four and
   // five but the SET-BACK at three. One copy took only the rank gap, which clips the middle
@@ -161,8 +200,19 @@ function dutyTileLayout(cell, figH, rank, back, opts) {
   // broken at 21 against 52, which is how every other copy in this toolchain has behaved too.
   var field = figH + Math.max(rank, back, 0);
   var total = field + gapA + banH + (o.icons ? gapB + icon : 0);
-  return {banW: banW, banH: banH, gapA: gapA, gapB: gapB, icon: icon,
-          field: field, total: total, top: (cell - total) / 2, mark: banW * 1.06};
+  // `mark` STAYS ON THE FULL-SIZE BANNER rather than on whichever size is chosen. It is how
+  // much floor a tile claims -- the sow reads it as the width its foot markers spread across --
+  // and that was tuned against the banner at 0.55. Letting it follow the size button would mean
+  // picking a smaller parchment for looks quietly narrowed the sow's footwork, which is a rule
+  // change wearing a decoration's clothes. Couple them here if that is ever what is wanted.
+
+  // `banY` IS WHERE THE BANNER ACTUALLY GOES, measured down from the floor line, and it is what
+  // every page draws with. `gapA` stays what the stack was built with, so `total` and `top` --
+  // and therefore the floor, the plate and the sculpts -- do not feel the lift at all.
+  var banY = gapA - cell * (o.lift === undefined ? DUTY_BANNER.lift : o.lift);
+  return {banW: banW, banH: banH, gapA: gapA, banY: banY, gapB: gapB, icon: icon,
+          field: field, total: total, top: (cell - total) / 2,
+          mark: cell * DUTY_BANNER.sizes.large * 1.06};
 }
 
 // THE ROOM A GROUP TAKES UP, as a box around it.
