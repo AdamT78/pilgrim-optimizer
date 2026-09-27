@@ -115,6 +115,62 @@
       ]
     },
     {
+      "path": "merchant/pedlar_with_pack.png",
+      "subject": "merchant",
+      "kind": "pedlar_with_pack",
+      "original_filename": "16421806-image.png",
+      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
+      "committed": true,
+      "bytes": 1616807,
+      "sha256": "cc2a8e2aa139886bf69a7ad7e513df0403996c6ea9006aabeae5776097058fb3",
+      "pixels": [
+        1122,
+        1402
+      ]
+    },
+    {
+      "path": "merchant/trader_with_purse.png",
+      "subject": "merchant",
+      "kind": "trader_with_purse",
+      "original_filename": "b151bc79-image.png",
+      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
+      "committed": true,
+      "bytes": 1524019,
+      "sha256": "f58926d321b9f6622b221bd8e7d1078184221551a1a8cdb1ff77f437c230b2d0",
+      "pixels": [
+        1122,
+        1402
+      ]
+    },
+    {
+      "path": "merchant/hooded_pedlar.png",
+      "subject": "merchant",
+      "kind": "hooded_pedlar",
+      "original_filename": "ceb5e373-image.png",
+      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
+      "committed": true,
+      "bytes": 1704174,
+      "sha256": "096aeef1fb3b9279be69366c9411e26b81e5560d7a86e06a7ec893feeb847f55",
+      "pixels": [
+        1122,
+        1402
+      ]
+    },
+    {
+      "path": "merchant/on_a_duty_tile.png",
+      "subject": "merchant",
+      "kind": "on_a_duty_tile",
+      "original_filename": "375a7501-image.png",
+      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
+      "committed": true,
+      "bytes": 1565330,
+      "sha256": "fa04c6d8903e90ebcb3648f9dc812878e48e8a537a278c7ef468d3c607701fc0",
+      "pixels": [
+        1122,
+        1402
+      ]
+    },
+    {
       "path": "player_1/concept.png",
       "subject": "player_1",
       "kind": "concept",

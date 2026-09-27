@@ -344,6 +344,32 @@ SUBJECTS.append({
 #
 # They are drawn on the tile ground rather than on nothing, because they are cut out and half of
 # each file is transparent: on the page's own background the stones would float.
+# THE MERCHANT, WHO IS NOT A PLAYER AND NOT AN ACOLYTE. A proposal rather than a decision: the
+# idea is one figure travelling the outer duty tiles, so what has to be judged is not the drawing
+# on its own but the drawing at tile scale, standing on a plate, beside a banner that names the
+# duty rather than him. `on_a_duty_tile` is that test and it is the reason the other three are
+# here at all -- a merchant that reads beautifully at 1402px and as a smudge at 150 is not a
+# merchant this game can use.
+#
+# NO `ground` ON THE MOCK-UP. The three figures are cut out and want the token ground behind them
+# like every other miniature on this page; the fourth arrived with its own dark field and its own
+# banner already in it, and putting a second ground behind that would draw a card that is two
+# pictures deep and pretend it is one.
+SUBJECTS.append({
+    "id": "merchant",
+    "label": "Merchant",
+    "tag": "concept",
+    "ink": "#a6763f",
+    "kinds": [
+        {"kind": "pedlar_with_pack", "title": "Pedlar with pack, staff and lantern",
+         "ground": TOKEN_GROUND},
+        {"kind": "trader_with_purse", "title": "Trader with purse and ledger",
+         "ground": TOKEN_GROUND},
+        {"kind": "hooded_pedlar", "title": "Hooded pedlar with staff and bedroll",
+         "ground": TOKEN_GROUND},
+        {"kind": "on_a_duty_tile", "title": "On a duty tile, at tile scale"},
+    ],
+})
 SUBJECTS.append({
     "id": "grounds",
     "label": "Ground plates",
