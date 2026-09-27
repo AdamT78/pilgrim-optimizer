@@ -181,6 +181,12 @@ var BANNER_TOP = __BANNERTOP__, BANNER_INK = __BANNERINK__;
 // the set before it did. `order` and `mark` stay on the document: both are conventions about
 // reading a tile rather than facts about how big the sculpts are.
 var ORDER = PLACE.order;
+// THE BANNER THE SHEET TUNED. Read off the placement document this page already carries, so
+// there is no new placeholder and no second copy of the defaults -- absent means whatever
+// duty_sculpt_rules.js draws with, which is what this page drew before the control existed.
+var BAN = PLACE.banner || {};
+var BAN_OPTS = {banner: DUTY_BANNER.sizes[BAN.size], lift: BAN.lift};
+
 // WHAT THE ENGINE OFFERS, recorded. Not what this page works out -- it does not work anything
 // out any more. tools/capture_sow_offers.py walks legal_actions over a scenario and
 // writes, for every point in the turn, which positions are on offer and which decision is
@@ -334,8 +340,10 @@ function build(){
   var FOOTW = dutySetWidth([FIG[0] || []]);
   // Where the parts of a tile sit comes from the shared rules, not from here: this was one of
   // two copies that had already drifted apart on the gap above the banner.
-  var L = dutyTileLayout(CELL, figH, RANK, BACK, {icons: false});
-  var banW = L.banW, banH = L.banH, gapA = L.gapA, top = L.top;
+  var L = dutyTileLayout(CELL, figH, RANK, BACK,
+                         {icons: false, banner: BAN_OPTS.banner,
+                          lift: BAN_OPTS.lift});
+  var banW = L.banW, banH = L.banH, banY = L.banY, top = L.top;
   FIELD = L.field;
   var total = L.total;
   TOTALH = total;                       // the whole stack: figures, gap, banner
@@ -452,7 +460,7 @@ function build(){
       h += '<div class="gauge foot" style="left:' + px(CELL / 2 - FOOTW / 2) + ';top:'
          + px(top) + ';width:' + px(FOOTW) + ';height:' + px(TOTALH) + '"></div>';
     }
-    h += '<div class=ban style="top:' + px(top + FIELD + gapA) + ';width:' + px(banW)
+    h += '<div class=ban style="top:' + px(top + FIELD + banY) + ';width:' + px(banW)
        + ';height:' + px(banH) + '">' + (C.ban ? '<img src="' + C.ban + '">' : "")
        + '<b style="top:' + (BANNER_TOP * 100).toFixed(2) + '%;color:' + BANNER_INK
        + ';font-size:' + px(banH * BANNER_FS) + ';letter-spacing:'
