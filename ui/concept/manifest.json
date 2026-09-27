@@ -171,6 +171,132 @@
       ]
     },
     {
+      "path": "merchant/grim_pedlar_with_cage.png",
+      "subject": "merchant",
+      "kind": "grim_pedlar_with_cage",
+      "original_filename": "ChatGPT Image Sep 27, 2026, 02_37_50 AM-1.png",
+      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
+      "committed": true,
+      "bytes": 1724161,
+      "sha256": "41e13597294685197a970f253c47523454cb575ad4d77cd3956515e04c31eb72",
+      "pixels": [
+        1254,
+        1254
+      ]
+    },
+    {
+      "path": "merchant/grim_pedlar_with_scales.png",
+      "subject": "merchant",
+      "kind": "grim_pedlar_with_scales",
+      "original_filename": "ChatGPT Image Sep 27, 2026, 02_37_52 AM-2.png",
+      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
+      "committed": true,
+      "bytes": 1526468,
+      "sha256": "1156a8744a047c359a60bd5107f50bf6d867c4cb66282465cd08f0848743e65f",
+      "pixels": [
+        1254,
+        1254
+      ]
+    },
+    {
+      "path": "merchant/grim_pedlar_with_bedroll.png",
+      "subject": "merchant",
+      "kind": "grim_pedlar_with_bedroll",
+      "original_filename": "ChatGPT Image Sep 27, 2026, 02_37_53 AM-3.png",
+      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
+      "committed": true,
+      "bytes": 1769494,
+      "sha256": "304e8e4adbca4cd1181f9120c0d6efdc735769527eccce16eacb0b8acfc3225a",
+      "pixels": [
+        1254,
+        1254
+      ]
+    },
+    {
+      "path": "merchant/grim_pedlar_woman_with_lantern.png",
+      "subject": "merchant",
+      "kind": "grim_pedlar_woman_with_lantern",
+      "original_filename": "ChatGPT Image Sep 27, 2026, 02_46_01 AM-1.png",
+      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
+      "committed": true,
+      "bytes": 1869531,
+      "sha256": "789a7fd9423bf65d6d8989311a19d49a3babb475b7894d9e492bb5a3b05d1fb5",
+      "pixels": [
+        1254,
+        1254
+      ]
+    },
+    {
+      "path": "merchant/grim_pedlar_woman_with_scales.png",
+      "subject": "merchant",
+      "kind": "grim_pedlar_woman_with_scales",
+      "original_filename": "ChatGPT Image Sep 27, 2026, 02_46_02 AM-2.png",
+      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
+      "committed": true,
+      "bytes": 1943408,
+      "sha256": "9d0c5c5a8a1f2f95e61d6146a66e2c49269756e4e9950d05985a9b0ce7843453",
+      "pixels": [
+        1254,
+        1254
+      ]
+    },
+    {
+      "path": "merchant/grim_pedlar_woman_with_pack.png",
+      "subject": "merchant",
+      "kind": "grim_pedlar_woman_with_pack",
+      "original_filename": "ChatGPT Image Sep 27, 2026, 02_46_03 AM-3.png",
+      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
+      "committed": true,
+      "bytes": 1986853,
+      "sha256": "b014597a64c4c50ed2519e105401fc7aab714283c44e6b928a762324bef480e8",
+      "pixels": [
+        1254,
+        1254
+      ]
+    },
+    {
+      "path": "merchant/handcart.png",
+      "subject": "merchant",
+      "kind": "handcart",
+      "original_filename": "ChatGPT Image Sep 27, 2026, 02_42_17 AM-1.png",
+      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
+      "committed": true,
+      "bytes": 2453058,
+      "sha256": "df870ee501d30a1a1d7e7af4e6e7c4023886bf4bb4604156e568926843b0484a",
+      "pixels": [
+        1254,
+        1254
+      ]
+    },
+    {
+      "path": "merchant/market_stall.png",
+      "subject": "merchant",
+      "kind": "market_stall",
+      "original_filename": "ChatGPT Image Sep 27, 2026, 02_42_18 AM-2.png",
+      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
+      "committed": true,
+      "bytes": 2657546,
+      "sha256": "ea609eae1f4e9655a2ba819182dffd88ca0d4e381ec6c7f4fa2814e6610c7ec0",
+      "pixels": [
+        1254,
+        1254
+      ]
+    },
+    {
+      "path": "merchant/strongbox_and_scales.png",
+      "subject": "merchant",
+      "kind": "strongbox_and_scales",
+      "original_filename": "ChatGPT Image Sep 27, 2026, 02_42_20 AM-3.png",
+      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
+      "committed": true,
+      "bytes": 2813139,
+      "sha256": "1149137e86c5a4cbeac1b27632650ec7c15865142a484d2e9f7ff68910384ac3",
+      "pixels": [
+        1254,
+        1254
+      ]
+    },
+    {
       "path": "player_1/concept.png",
       "subject": "player_1",
       "kind": "concept",

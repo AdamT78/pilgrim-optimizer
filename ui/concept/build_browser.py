@@ -368,6 +368,32 @@ SUBJECTS.append({
         {"kind": "hooded_pedlar", "title": "Hooded pedlar with staff and bedroll",
          "ground": TOKEN_GROUND},
         {"kind": "on_a_duty_tile", "title": "On a duty tile, at tile scale"},
+        # A SECOND FAMILY, GRIMMER, and filed beside the first rather than instead of it: three
+        # poses of a man and the same three of a woman, so the question "does this merchant have
+        # to be a man" can be looked at rather than assumed. Same three props in each hand across
+        # the pair -- lantern, scales, pack -- which is what makes them comparable at all.
+        {"kind": "grim_pedlar_with_cage", "title": "Grim pedlar, lantern staff and bird cage",
+         "ground": TOKEN_GROUND, "row_break": True},
+        {"kind": "grim_pedlar_with_scales", "title": "Grim pedlar, scales and ledger",
+         "ground": TOKEN_GROUND},
+        {"kind": "grim_pedlar_with_bedroll", "title": "Grim pedlar, lantern and bedroll",
+         "ground": TOKEN_GROUND},
+        {"kind": "grim_pedlar_woman_with_lantern", "title": "Grim pedlar woman, lantern staff",
+         "ground": TOKEN_GROUND},
+        {"kind": "grim_pedlar_woman_with_scales", "title": "Grim pedlar woman, scales and ledger",
+         "ground": TOKEN_GROUND},
+        {"kind": "grim_pedlar_woman_with_pack", "title": "Grim pedlar woman, lantern and pack",
+         "ground": TOKEN_GROUND},
+        # WHAT THE MERCHANT ARRIVES WITH, rather than who he is. Not figures at all, so nothing
+        # here stands on a plinth or gets levelled against one -- they are here because a
+        # merchant who travels the outer tiles needs somewhere to trade FROM, and the cart, the
+        # stall and the strongbox are three different answers to how much of the board that
+        # would occupy.
+        {"kind": "handcart", "title": "Handcart, covered", "ground": TOKEN_GROUND,
+         "row_break": True},
+        {"kind": "market_stall", "title": "Market stall, open", "ground": TOKEN_GROUND},
+        {"kind": "strongbox_and_scales", "title": "Strongbox, scales and coin",
+         "ground": TOKEN_GROUND},
     ],
 })
 SUBJECTS.append({
@@ -720,7 +746,8 @@ def collect(out_dir: pathlib.Path) -> tuple[list, list, list]:
                     panels.append({"kind": kind, "title": title, "uri": None, "w": 4.0, "h": 3.0,
                                    "src": str(path), "name": path.name, "bytes": 0,
                                    "dims": "not in this checkout", "note": "",
-                                   "origin": spec.get("origin"), "source": None})
+                                   "origin": spec.get("origin"), "source": None,
+                                   "row_break": bool(spec.get("row_break"))})
                 else:
                     missing.append("%s / %s: %s" % (ch["label"], kind, path))
                 continue
@@ -758,6 +785,7 @@ def collect(out_dir: pathlib.Path) -> tuple[list, list, list]:
                 note = "base levelled to %d px" % lift if lift else ""
                 dims = "%d \u00d7 %d" % source
             panels.append({"kind": kind, "title": title, "uri": uri, "w": w, "h": h,
+                           "row_break": bool(spec.get("row_break")),
                            "src": str(path), "name": path.name, "bytes": size,
                            "dims": dims, "note": note, "origin": spec.get("origin"),
                            "source": source_link(path, out_dir),
@@ -808,6 +836,14 @@ def render(chars: list, missing: list) -> str:
 
         cards = ""
         for p in ch["panels"]:
+            # A ROW BREAK IS AN EMPTY FLEX ITEM, not a second container. `.sheet` already wraps;
+            # what stops it is that every card is `flex: <aspect> 1 0` with `min-width:0`, so
+            # thirteen of them share one line and shrink to 76px rather than ever reaching the
+            # wrap. A full-width item of zero height fills the line and pushes what follows onto
+            # the next one, which leaves the cards' own sizing rule untouched -- they still grow
+            # to fill whatever row they land in.
+            if p.get("row_break") and cards:
+                cards += '<div class="brk" aria-hidden="true"></div>'
             a = p["w"] / max(p["h"], 1)
             if p["uri"] is None:
                 # No file, and that is the expected state off this machine. Say where it lives
@@ -896,6 +932,11 @@ PAGE = """<!doctype html>
     WIDTH at aspect x a height limit -- which caps the height without letterboxing the image.
     With three cards sharing a row the cap never binds. */
  .card{margin:0;min-width:0;max-width:calc(var(--a) * min(72vh, 720px))}
+ .brk{flex:0 0 100%;height:0;margin:0;padding:0}
+ /* The stacked sheet is one card per line already, and the narrow layout below turns the sheet
+    into `display:block`. A break means nothing in either, and a stray 100% item in a block
+    container is an empty div nobody asked for. */
+ .sheet.stack .brk{display:none}
  .shot{width:100%;aspect-ratio:var(--a);background:#17130d;
    border:1px solid #221d16;border-radius:4px;overflow:hidden;cursor:zoom-in}
  .sheet.stack{display:block}
@@ -904,6 +945,7 @@ PAGE = """<!doctype html>
  @media (max-width:900px){
    /* three in a row is unreadable on a phone; stack them and let each take the full width */
    .sheet{display:block}
+   .brk{display:none}
    .card{margin-bottom:22px}
  }
  .shot img{display:block;width:100%;height:100%;object-fit:contain}
