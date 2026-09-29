@@ -803,3 +803,49 @@ interaction states are for the real UI to implement; this page only decides wher
 The one question it exists to answer: do the v2 wheel, the two action artworks, realistically
 sized acolytes, the eight reference cards, Tithe and the City fit clearly and attractively inside
 one fixed 1400 × 1200 module — in all three of the states the player will actually see?
+
+## Development history
+
+The V1, V2, V3 and V4.1 briefs are filed in `../docs/`. The V4, V4.2 and V4.2.1 briefs are not:
+they were given in conversations whose history was compacted before they could be saved. What
+follows records what each decided, which is the part worth keeping — a brief reconstructed from
+its own implementation would agree with the code by construction and could never contradict it,
+so it would be documentation that cannot be wrong and therefore cannot be useful.
+
+**V4 — three view states, and the wheel takes the module.** The layout concept rather than the
+dimensions: still 1400 × 1200, but the wheel grew to nearly fill it, the eight duty summaries
+became a ribbon of reference cards across the top, and READY / SOWING / ACTION SELECTION replaced
+the earlier two states. Described as built throughout this file.
+
+**V4.1 — four corrections before the first commit.** A loaded wheel asset no longer reshapes the
+layout; a preview is dismissed only by an empty-stage click; the Game Layout export carries the
+presentation settings the real UI needs; and the duty cards stop advertising a click in ACTION
+SELECTION where none does anything. Filed as `../docs/layout_lab_v4_1_brief.md`.
+
+**V4.2 — layout helpers.** Studio-only convenience controls for the fiddly part of composing:
+wheel width with automatic horizontal centring, a standalone centre-wheel-x repair, one height
+across all eight duty cards, align card tops, linked width and height for the two shared action
+artworks, one shared gap for the three spaces in the action row, align row top, and FIT ACTION
+ROW. Alongside them a live readout: dimensions for the duty cards, both artworks, Tithe, the City
+and the wheel, the three gaps measured individually, and the cards-to-row spacing with an overlap
+warning.
+
+The architectural rule that makes the panel worth having is that **no persistent helper state was
+added** — no `groupHeight`, no `rowGap`, no linked-width memory. The helpers derive every value
+they show from the actual objects and write geometry only when used, so individual editing stays
+available after every group operation and nothing can drift out of step with a hand-dragged card.
+
+**V4.2.1 — helper consistency.** The layout helpers now respect object locks, and a group
+operation refuses atomically rather than partially mutating its unlocked members. Helper inputs
+stay synchronised with the real geometry after a manual edit, an undo, a reset or an import, and
+never overwrite the control being manipulated. FIT ACTION ROW normalises a negative suggested gap
+into the legal helper range, while the actual negative geometry stays visible in the metrics.
+`setArtWidth()` samples the existing gap before changing widths. Lock refusals name both the
+operation and the locked object.
+
+The deliberate distinction introduced here, and the one most likely to look like a bug on a quick
+read: **the metrics report the actual geometry; the helper controls show a legal, actionable
+value.** With gaps of `-20 / -10 / 12` the readout says so and colours it as a warning, while the
+gap control reads `0`, because `0` is the nearest spacing that control could actually apply.
+Displaying it changes nothing — the row keeps its overlap until the control is operated. This is
+intended UI behaviour, not a rounding artefact or a known defect.

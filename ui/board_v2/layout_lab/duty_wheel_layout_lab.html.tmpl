@@ -1086,9 +1086,20 @@ function syncHelperInputs(){
   var gp = helperGap();
   set("hpGapN", gp);               set("hpGapR", gp);
 }
-// What the gap CONTROL shows, as opposed to what the metrics report. Clamped into the control's
-// own range so the number and the slider agree; the metrics keep telling the truth about the
-// three actual gaps, negative ones included.
+// TWO DIFFERENT QUESTIONS, deliberately given two different answers:
+//
+//   THE METRICS        report the actual geometry -- what the row IS, overlaps and all.
+//   THE HELPER CONTROL reports the nearest value this control could legally apply.
+//
+// So with gaps of -20 / -10 / 12 the readout says "-20 / -10 / 12 px mixed" and colours it as a
+// warning, while the gap control shows 0: the slider's range is 0-80 and a number box reading
+// -10 beside a slider that cannot reach -10 is a trap, since touching either one would then jump
+// the row somewhere nobody asked for.
+//
+// DISPLAYING 0 CHANGES NOTHING. This is a reading, not an edit: the row keeps its overlap until
+// the control is actually operated. That is also why it is not rowGapSuggested() itself that is
+// clamped -- FIT ACTION ROW and the row-gap operation each decide separately what to do with a
+// negative suggestion, and only the fit normalises it.
 function helperGap(){ return clamp(rowGapSuggested(), HELPERS.gap[0], HELPERS.gap[1]); }
 
 function statusText(){
