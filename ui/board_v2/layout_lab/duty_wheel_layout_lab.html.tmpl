@@ -332,6 +332,52 @@ function putImage(url){ var k = "im" + (++IMG_SEQ); IMAGES[k] = url; return k; }
 function imgSrc(key){ return (key && IMAGES[key]) || null; }
 function haveImage(key){ return !!(key && IMAGES[key]); }
 
+// PIXEL DIMENSIONS, cached beside the pool for the same reason the bytes are: they are a fact
+// about the image, not a layout decision, so they have no business in the state, in an undo
+// snapshot or in a saved session. An image restored from a session arrives with no entry here,
+// so the first ask probes it once and repaints.
+var IMG_DIMS = {};
+var DIM_PENDING = {};
+function noteDims(key, w, h){ if (key && w && h) IMG_DIMS[key] = {w: w, h: h}; }
+function dimsOf(key){
+  if (!key) return null;
+  if (IMG_DIMS[key]) return IMG_DIMS[key];
+  var url = imgSrc(key);
+  // `Image` is a browser thing. The source-level guards run this file's logic under Node, where
+  // asking for one throws -- and a readout that cannot be filled in is not worth taking the page
+  // down for, so the probe is simply skipped and the panel shows no dimensions.
+  if (!url || DIM_PENDING[key] || typeof Image === "undefined") return null;
+  DIM_PENDING[key] = true;
+  var p = new Image();
+  p.onload = function(){ DIM_PENDING[key] = false;
+                         noteDims(key, p.naturalWidth, p.naturalHeight); panels(); };
+  p.onerror = function(){ DIM_PENDING[key] = false; };
+  p.src = url;
+  return null;
+}
+function ratioText(w, h){ return h ? (w / h).toFixed(3) : "--"; }
+
+// WHICH DISPLAY SLOT IS SHOWING AN ACTION. The slots own geometry and the actions own artwork,
+// so this is a lookup rather than a stored link -- and it answers honestly when both slots have
+// been pointed at the same action.
+function slotForAction(key){
+  var sides = ["left", "right"], i;
+  for (i = 0; i < sides.length; i++){ if (artOf(sides[i]).slot === key) return artOf(sides[i]); }
+  return null;
+}
+
+// HOW MUCH `cover` WILL EAT. Informational only: nothing here resizes a slot or touches a file.
+function coverCrop(imgW, imgH, slotW, slotH){
+  if (!imgW || !imgH || !slotW || !slotH) return null;
+  var ir = imgW / imgH, sr = slotW / slotH;
+  var lost = ir > sr ? 1 - sr / ir : 1 - ir / sr;
+  return {pct: lost * 100, imgRatio: ir, slotRatio: sr,
+          // 2.000 against the slot's 2.038 is 1.9% and must not read as a problem; a 1.50
+          // image in a 2.04 slot loses a quarter of its width and must.
+          word: lost < 0.05 ? "minimal" : lost < 0.15 ? "slight" : "substantial",
+          bad: lost >= 0.15};
+}
+
 function clone(o){ return JSON.parse(JSON.stringify(o)); }
 function clamp(v, lo, hi){ v = +v; if (!isFinite(v)) return lo; return Math.min(hi, Math.max(lo, v)); }
 function el(id){ return document.getElementById(id); }
@@ -1650,6 +1696,14 @@ function svgViewBoxRatio(dataUrl){
 function readImage(input, done){
   var f = input.files && input.files[0];
   if (!f) return;
+  readImageFile(f, done);
+  input.value = "";
+}
+// THE SAME READ, from a File rather than from a live input. DUTY ART PAIR holds its chosen files
+// in `pairPick` across panel repaints, by which time the input that produced them has been
+// rebuilt and is empty.
+function readImageFile(f, done){
+  if (!f) return;
   var rd = new FileReader();
   rd.onload = function(){
     // A data URL into the POOL, not into the state. The state gets the key back.
@@ -1657,13 +1711,13 @@ function readImage(input, done){
     var key = putImage(url);
     var probe = new Image();
     probe.onload = function(){
+      noteDims(key, probe.naturalWidth, probe.naturalHeight);
       done(key, f.name, probe.naturalWidth ? probe.naturalHeight / probe.naturalWidth : 0, url);
     };
     probe.onerror = function(){ done(key, f.name, 0, url); };
     probe.src = url;
   };
   rd.readAsDataURL(f);
-  input.value = "";
 }
 
 function resetOne(kind, id){
@@ -1706,6 +1760,71 @@ function resetOne(kind, id){
 // SIDE PANELS
 // =============================================================================================
 var actionPanelDuty = "clerical";
+
+// THE STAGED PAIR. Files chosen for DUTY ART PAIR are held here rather than left sitting in the
+// file inputs, because any panel repaint rebuilds that markup and would silently drop them. The
+// duty is remembered with them: switching duty abandons a staging that was never applied, which
+// is the only reading of "choose Clerical's art, then switch to Produce" that cannot surprise.
+var artPairDuty = "clerical";
+var pairPick = {actionA: null, actionB: null};
+function clearPick(){ pairPick = {actionA: null, actionB: null}; }
+
+function stepArtPairDuty(dir){
+  var i = DUTY_ORDER.indexOf(artPairDuty);
+  if (i < 0) i = 0;
+  artPairDuty = DUTY_ORDER[(i + dir + DUTY_ORDER.length) % DUTY_ORDER.length];
+  // Anything staged belonged to the duty being left, so it goes with it.
+  clearPick();
+  panels();
+  say("duty art pair · " + S.duties[artPairDuty].name);
+}
+
+// ONE ACTION'S ARTWORK, and nothing else: not the other action, not the seal, not the names, and
+// not another duty. Clearing is the ONLY way art is removed -- an empty file input never means
+// "remove", because the commonest thing anyone does with a file dialog is change their mind.
+function clearActionArt(key){
+  var D = S.duties[artPairDuty], act = D && D[key];
+  if (!act) return;
+  if (!act.scenic && !act.scenicName){ say("no artwork on that action to clear"); return; }
+  var was = act.scenicName || "the artwork";
+  act.scenic = null;
+  act.scenicName = null;
+  commitPanels();
+  say("cleared " + was + " from " + D.name + " · " + (act.name || key));
+}
+
+// LOAD PAIR. Both files land as ONE editor operation -- one undo takes both back -- and a file
+// that was not chosen leaves its action exactly as it was.
+function loadDutyArtPair(){
+  var slug = artPairDuty, chosen = [];
+  ACTIONS.forEach(function(a){ if (pairPick[a.key]) chosen.push(a.key); });
+  if (!chosen.length){ say("choose an image for at least one action first", true); return; }
+  var pending = chosen.length, loaded = [];
+  chosen.forEach(function(key){
+    readImageFile(pairPick[key], function(imgKey, name){
+      var act = S.duties[slug][key];
+      act.scenic = imgKey;
+      act.scenicName = name;
+      loaded.push((act.name || key) + " · " + name);
+      pending -= 1;
+      // THE COMMIT WAITS FOR BOTH READS. FileReader is asynchronous, so committing inside the
+      // callback would make a two-file load into two undo entries, and the second one would land
+      // whenever the larger file happened to finish.
+      if (pending === 0) finishDutyArtPair(slug, loaded);
+    });
+  });
+}
+
+function finishDutyArtPair(slug, loaded){
+  clearPick();
+  // AN EDITOR CONVENIENCE, not a rule about the game: show what was just imported instead of
+  // making somebody go and find it. In ACTION SELECTION the duty's two actions ARE the choice on
+  // screen, so the import becomes the selection; before that, it becomes the preview.
+  if (S.view === "action") S.selectedDuty = slug;
+  else S.previewDuty = slug;
+  commitPanels();
+  say("loaded into " + S.duties[slug].name + " · " + loaded.join(" · "));
+}
 
 function panels(){
   var A = S.acolytes;
@@ -1830,6 +1949,71 @@ function panels(){
         + '<div class=hint style="margin-left:74px">' + Math.round(e.width) + ' × '
         + Math.round(e.height) + ' at ' + Math.round(e.x) + ', ' + Math.round(e.y) + '</div>';
   });
+  // ---- DUTY ART PAIR --------------------------------------------------------------------
+  // The production workflow in one place: pick a duty, give its two ACTIONS their artwork.
+  //
+  // Artwork belongs to the action, never to the box it happens to appear in. The duty picker
+  // here is what decides ownership, and the file input decides which action -- deliberately NOT
+  // the filename, because a file named ..._gain_coins_... dropped into the Action A input has to
+  // become Action A's art or the tool would be quietly overruling the person using it.
+  var apD = S.duties[artPairDuty] || S.duties[DUTY_ORDER[0]];
+  var apIdx = DUTY_ORDER.indexOf(artPairDuty);
+  ex += '<div class=sub>duty art pair</div>'
+      + '<div class=hint>one wide master per duty, cropped into two overlapping action images. '
+      + 'See tools/duty_art/README.md.</div>'
+      + '<div class=row><span>duty</span><select id=apDuty>'
+      + DUTY_ORDER.map(function(s){
+          return '<option value="' + s + '"' + (s === artPairDuty ? " selected" : "") + '>'
+               + esc(S.duties[s].name) + '</option>'; }).join("")
+      + '</select></div>'
+      + '<div class=btns>' + btn("← previous duty", function(){ stepArtPairDuty(-1); })
+      + btn("next duty →", function(){ stepArtPairDuty(1); }) + '</div>';
+  ACTIONS.forEach(function(a){
+    var act = apD[a.key], slot = slotForAction(a.key), d = dimsOf(act.scenic);
+    var cc = (d && slot) ? coverCrop(d.w, d.h, slot.width, slot.height) : null;
+    ex += '<div class=hint style="color:#c9b27a;margin-top:8px">' + a.label + ' · '
+        + esc(act.name || a.label) + '</div>';
+    // The thumbnail only exists when the BYTES do. A remembered filename with no bytes is the
+    // state after a session was saved without images, and it says so rather than showing a gap.
+    if (haveImage(act.scenic)){
+      ex += '<div style="margin:4px 0"><img src="' + imgSrc(act.scenic) + '" alt="" '
+          + 'style="width:100px;height:50px;object-fit:cover;border:1px solid var(--line);'
+          + 'border-radius:2px;background:#000"></div>';
+    } else {
+      ex += '<div style="width:100px;height:50px;margin:4px 0;border:1px dashed var(--line);'
+          + 'border-radius:2px;display:flex;align-items:center;justify-content:center;'
+          + 'color:var(--dim);font-size:10px">'
+          + (act.scenicName ? "not loaded" : "no art") + '</div>';
+    }
+    if (act.scenicName){
+      ex += '<div class=hint>' + esc(act.scenicName) + '</div>';
+    }
+    if (d){
+      ex += '<div class=hint>image ' + d.w + ' × ' + d.h + ' · ratio ' + ratioText(d.w, d.h)
+          + '</div>';
+    }
+    if (cc && slot){
+      ex += '<div class=hint' + (cc.bad ? ' style="color:var(--warn)"' : '') + '>slot '
+          + Math.round(slot.width) + ' × ' + Math.round(slot.height) + ' · ratio '
+          + cc.slotRatio.toFixed(3) + ' · cover crop ' + cc.word
+          + (cc.bad ? ' (' + cc.pct.toFixed(0) + '% lost)' : '') + '</div>';
+    } else if (!slot){
+      ex += '<div class=hint style="color:var(--warn)">no display slot is showing this action</div>';
+    }
+    ex += '<div class=row><span>choose</span><span style="text-align:left">'
+        + '<input type=file data-pair="' + a.key + '" '
+        + 'accept="image/png,image/jpeg,image/webp"></span></div>'
+        + (pairPick[a.key]
+            ? '<div class=hint style="color:#c9b27a">staged: ' + esc(pairPick[a.key].name)
+              + '</div>' : '')
+        + (act.scenic || act.scenicName
+            ? '<div class=btns>' + btn("clear " + a.label, function(){ clearActionArt(a.key); })
+              + '</div>' : '');
+  });
+  ex += '<div class=btns>' + btn("load pair", loadDutyArtPair) + '</div>'
+      + '<div class=hint>a field left empty is left alone — clearing is the button above, never '
+      + 'an empty file input</div>';
+
   ex += '<div class=hint>reached-duty highlight on the wheel</div>'
       + '<div class=btns>'
       + btn(S.display.highlight.visible ? "highlight on" : "highlight off",
@@ -1847,6 +2031,15 @@ function panels(){
   el("artCtl").innerHTML = ex;
   [].forEach.call(el("artCtl").querySelectorAll("[data-artslot]"), function(s){
     s.onchange = function(){ artOf(s.dataset.artslot).slot = s.value; commitPanels(); };
+  });
+  el("apDuty").onchange = function(){ artPairDuty = this.value; clearPick(); panels(); };
+  // The chosen File is kept in `pairPick`, not read here: nothing is written to the layout until
+  // LOAD PAIR, so choosing a file and changing your mind costs nothing and makes no undo entry.
+  [].forEach.call(el("artCtl").querySelectorAll("[data-pair]"), function(inp){
+    inp.onchange = function(){
+      pairPick[inp.dataset.pair] = (inp.files && inp.files[0]) || null;
+      panels();
+    };
   });
   el("hlW").oninput = function(){ S.display.highlight.width = clamp(Math.round(this.value), 20, 800);
                                   render(); recordSoon(); save(true); };

@@ -1,0 +1,3 @@
+Production crops for construct -> construct_road: construct_construct_road_vNN.png
+Cropped from the master by tools/duty_art/crop_duty_master.py.
+Never overwrite an older variant; add the next vNN.

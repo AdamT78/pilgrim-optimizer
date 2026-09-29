@@ -164,7 +164,7 @@ def viewbox_of(text: str) -> tuple:
 # wheel-centre medallions retire, the status line loses its context field -- so the version moves
 # with it and older files are migrated rather than reinterpreted.
 STATE_VERSION = 4
-BUILD_VERSION = "4.2.1"
+BUILD_VERSION = "4.3"
 
 # ---- the design envelope -------------------------------------------------------------------
 CANVAS_W, CANVAS_H = 1400, 1200

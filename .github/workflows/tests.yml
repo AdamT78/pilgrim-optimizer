@@ -64,8 +64,11 @@ jobs:
           else
             echo "ui=false" >>"$GITHUB_OUTPUT"
           fi
-          # The layout lab: its generator and template, and the suites that test them. Nothing
-          # here imports playwright, so this lane installs no browser and takes seconds.
+          # The layout lab: its generator and template, the suites that test them, and the duty
+          # action art under ui/board_v2/duty_actions/, which is where the generated masters and
+          # crops live. Nothing here imports playwright, so this lane installs no browser and
+          # takes seconds -- which matters most for the art, since adding a duty's pair is a
+          # frequent commit that has nothing to say to the engine.
           if echo "$changed" | grep -qE '^(ui/board_v2/|tests/layout_lab/)'; then
             echo "lab=true" >>"$GITHUB_OUTPUT"
           else
