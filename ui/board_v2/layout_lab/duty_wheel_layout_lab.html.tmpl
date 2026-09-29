@@ -336,6 +336,26 @@ var scale = 1;                           // stage display scale, CSS px per desi
 var IMAGES = {};
 var IMG_SEQ = 0;
 function putImage(url){ var k = "im" + (++IMG_SEQ); IMAGES[k] = url; return k; }
+
+// EVERY KEY THE STATE STILL CLAIMS, whether or not its bytes survived.
+//
+// THE BUG THIS EXISTS TO PREVENT, because it is not obvious and it was live: the pool counter
+// starts at 0 on every page load, while the autosave keeps image KEYS and strips only the BYTES.
+// Reload a lab that had two action artworks and the state still says actionA is "im1" -- with
+// nothing behind it -- but the counter says the next key to hand out is "im1". So the very next
+// image loaded, a tithe token say, was handed "im1" and INSTANTLY BECAME the action artwork as
+// well: one file, two owners, and a wheat token filling the Gain Piety slot.
+//
+// importSession already did this for keys whose bytes were in the file. That was the narrow
+// case. The broad one is any state that outlives its pool -- an autosave, a geometry-only
+// session, a hand-written file -- so the reservation belongs where the state arrives.
+function reserveImageKeys(d){
+  var max = 0;
+  JSON.stringify(d).replace(/"im(\d+)"/g, function(m, n){
+    n = +n; if (n > max) max = n; return m;
+  });
+  if (max > IMG_SEQ) IMG_SEQ = max;
+}
 function imgSrc(key){ return (key && IMAGES[key]) || null; }
 function haveImage(key){ return !!(key && IMAGES[key]); }
 
@@ -2770,6 +2790,9 @@ function applyState(d){
   d = migrate(d);
   validate(d);
   S = deepMerge(clone(DEFAULT_STATE), d);
+  // Before anything can hand out a new key, take every one this state already uses out of
+  // circulation -- see reserveImageKeys.
+  reserveImageKeys(S);
 
   // THE 32 DEGREE RATIO IS A DESIGN INVARIANT, so it is imposed rather than trusted. An older
   // V4 session may carry a ratio taken from whatever asset was loaded at the time, and a file

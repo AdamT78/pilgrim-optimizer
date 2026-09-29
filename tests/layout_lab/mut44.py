@@ -82,6 +82,23 @@ MUTS = [
  ('    (S.tithe.resources || []).forEach(function(r){ mark(r.icon); });', '',
   "a session exported with images losing the token art"),
 
+ # ---- the image pool: a key must never be handed out twice -----------------------------------
+ ('''  S = deepMerge(clone(DEFAULT_STATE), d);
+  // Before anything can hand out a new key, take every one this state already uses out of
+  // circulation -- see reserveImageKeys.
+  reserveImageKeys(S);''',
+  '''  S = deepMerge(clone(DEFAULT_STATE), d);''',
+  "the pool counter left behind the keys the state already claims"),
+ ('  if (max > IMG_SEQ) IMG_SEQ = max;', '  if (max > IMG_SEQ) IMG_SEQ = max - 1;',
+  "the reservation off by one, so the last remembered key is handed out again"),
+ ('''  JSON.stringify(d).replace(/"im(\\d+)"/g, function(m, n){
+    n = +n; if (n > max) max = n; return m;
+  });''',
+  '''  JSON.stringify(d).replace(/"im(\\d+)"/g, function(m, n){
+    n = +n; if (n < max) max = n; return m;
+  });''',
+  "the reservation taking the lowest key rather than the highest"),
+
  # ---- the production export -------------------------------------------------------------------
  ('''            tokenSize: tokenSize(), tokenGap: tokenGap(),
 ''', '',

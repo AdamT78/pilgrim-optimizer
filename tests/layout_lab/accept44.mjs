@@ -262,6 +262,43 @@ ck('§22', 'the filename is there', gt.resources[0].iconName === 'token_wheat.pn
 ck('§22', 'no image bytes', game.indexOf('data:image') < 0 && game.indexOf('blob:') < 0);
 ck('§22', 'and no image-pool key', !/"icon"\s*:/.test(game));
 
+// ============================================================ §6 — POOL KEYS ARE NEVER REUSED
+// THE BUG: the pool counter restarts at 0 on every page load, while the autosave keeps image
+// KEYS and strips only the BYTES. So after a reload the state still claimed "im1" with nothing
+// behind it, and the next image loaded was handed "im1" and instantly became that asset too --
+// a wheat token appearing in the Gain Piety slot. One file, two owners.
+await reset();
+// stand in for "a previous session left these keys behind, bytes long gone"
+await p.evaluate(() => {
+  S.duties.clerical.actionA.scenic = "im1";
+  S.duties.clerical.actionA.scenicName = "clerical_gain_piety_v01.png";
+  S.duties.clerical.actionB.scenic = "im2";
+  S.duties.clerical.actionB.scenicName = "clerical_gain_coins_v01.png";
+  applyState(JSON.parse(JSON.stringify(S)));
+  render(); panels();
+});
+await p.waitForTimeout(250);
+const orphaned = await p.evaluate(() => ({
+  aBytes: haveImage(S.duties.clerical.actionA.scenic),
+  bBytes: haveImage(S.duties.clerical.actionB.scenic), seq: IMG_SEQ}));
+ck('§6', 'the remembered keys have no bytes, as after a reload',
+   !orphaned.aBytes && !orphaned.bBytes);
+ck('§6', 'and the pool counter has been moved past them', orphaned.seq >= 2, orphaned.seq);
+await loadTokens([0]);
+const collide = await p.evaluate(() => {
+  const k = S.tithe.resources[0].icon;
+  return {tokenKey: k,
+          stolenBy: [['actionA', S.duties.clerical.actionA.scenic],
+                     ['actionB', S.duties.clerical.actionB.scenic]]
+                    .filter(x => x[1] === k).map(x => x[0]),
+          aStillEmpty: !haveImage(S.duties.clerical.actionA.scenic),
+          tokenDrawn: haveImage(k)};
+});
+ck('§6', 'a newly loaded token gets a fresh key, not a remembered one',
+   collide.stolenBy.length === 0, collide.tokenKey + ' stolen by ' + collide.stolenBy);
+ck('§6', 'the action artwork still reports itself as not loaded', collide.aStillEmpty);
+ck('§6', 'and the token itself is drawn', collide.tokenDrawn);
+
 ck('ALL', 'no page or console errors', errs.length === 0, errs.slice(0,3).join(' | '));
 } catch (e) {
   ck('ALL', 'the run completed without throwing', false,
