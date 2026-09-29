@@ -45,3 +45,9 @@ Claude outputs/
 # and build_browser.py draws a card that links out when the file is not there.
 ui/concept/_reference/
 noun_wagon_7392556.svg
+
+# The layout lab's build output. generate_layout_lab.py writes it on demand and the suites in
+# tests/layout_lab/ read it from here; it is a build artefact, not a source file.
+/out/
+# The mutation suite in tests/layout_lab/ writes its working copies beside the page.
+tests/layout_lab/_to_delete/

@@ -293,6 +293,320 @@ def test_the_cards_only_advertise_a_click_where_one_does_something(lab):
     assert 'cls += " reached"' in render
 
 
+
+def test_the_layout_helpers_read_the_geometry_rather_than_remembering_it(lab):
+    """The one rule that decides whether this panel is useful or a liar.
+
+    A `groupHeight` or a `rowGap` kept in the state is a second opinion about geometry that is
+    already there, and the moment somebody drags one card by hand it is wrong. So the panel asks
+    the eight cards what height they are, and measures the three gaps between the four objects in
+    the action row, every time it paints.
+
+    That is also what lets it report MIXED honestly. A panel that showed 159 x 150 while three
+    cards were 184 would be worse than no panel, because it would be believed.
+
+    Falsified by storing either value in the state, or by reporting one card as if it spoke for
+    eight.
+    """
+    d = lab.default_state()
+    flat = json.dumps(d)
+    for banned in ("groupHeight", "rowGap", "cardHeight", "linked", "helperState"):
+        assert banned not in flat, (
+            "the starting layout stores %r, which is a remembered copy of geometry that is "
+            "already in the objects" % banned)
+
+    tmpl = TMPL.read_text(encoding="utf-8")
+    # The readings are functions of S, not fields on it.
+    for fn in ("function cardGroup()", "function rowGaps()", "function rowGapCommon()",
+               "function rowGapSuggested()", "function cardsToRowGap()"):
+        assert fn in tmpl, "the derived reading %s is missing" % fn
+    for banned in ("S.rowGap", "S.groupHeight", "S.helpers"):
+        assert banned not in tmpl, "the panel keeps %r in the state" % banned
+
+    # And the readout distinguishes uniform from mixed rather than always showing one number.
+    paint = tmpl[tmpl.index("function paintMetrics()"):tmpl.index("function statusText()")]
+    assert "mixed" in paint and "spreadText(" in paint, (
+        "the readout has no mixed case, so eight different cards would be shown as one")
+    assert "uniform" in tmpl[tmpl.index("function spread("):tmpl.index("function cardGroup()")]
+
+
+def test_the_helper_ranges_are_studio_only_and_bounded_by_the_module(lab):
+    """What the sliders may try, and the fact that none of it is the layout.
+
+    These bound the controls, not the module: they say what is worth experimenting with while
+    composing. They live in the generator so a test can read them and so the one place that knows
+    the module's dimensions is the one place that bounds controls against it.
+
+    Falsified by exporting a helper setting, or by a range that lets a slider leave the module.
+    """
+    r = lab.HELPER_RANGES
+    assert set(r) == {"wheelW", "cardH", "artW", "artH", "gap", "rowRight"}, sorted(r)
+    for key in ("wheelW", "cardH", "artW", "artH", "gap"):
+        lo, hi = r[key]
+        assert lo < hi, "%s is not a range: %s" % (key, r[key])
+
+    # The wheel may fill the module but never exceed it, and at full width it still fits under
+    # the action band -- otherwise the top of the range would produce a layout off the bottom.
+    assert r["wheelW"][1] == lab.CANVAS_W, r["wheelW"]
+    assert lab.WHEEL_Y + round(r["wheelW"][1] * lab.WHEEL_RATIO) <= lab.CANVAS_H, (
+        "a full-width wheel would run off the bottom of the module")
+    assert r["wheelW"][0] >= 200
+
+    # FIT ACTION ROW leaves the band's own right margin, so a fitted row ends where the ribbon
+    # above it does rather than at some number picked separately.
+    assert r["rowRight"] == lab.CANVAS_W - (lab.BAND["x"] + lab.BAND["width"]), r["rowRight"]
+
+    # The starting layout sits inside every range, or the panel would open out of bounds.
+    d = lab.default_state()
+    assert r["wheelW"][0] <= d["wheel"]["width"] <= r["wheelW"][1]
+    for D in d["duties"].values():
+        assert r["cardH"][0] <= D["card"]["height"] <= r["cardH"][1]
+    for side in ("artLeft", "artRight"):
+        e = d["display"][side]
+        assert r["artW"][0] <= e["width"] <= r["artW"][1]
+        assert r["artH"][0] <= e["height"] <= r["artH"][1]
+
+    # NOT GAME STATE. The production export is built field by field, so the check is that these
+    # names appear nowhere in it.
+    tmpl = TMPL.read_text(encoding="utf-8")
+    game = tmpl[tmpl.index("function gameLayout()"):tmpl.index("function validate(")]
+    for banned in ("HELPERS", "rowGapSuggested", "cardGroup"):
+        assert banned not in game, (
+            "the game layout export reaches for the studio helper %r" % banned)
+
+
+def test_no_helper_pushes_a_band_it_was_not_asked_about(lab):
+    """The absence that makes the panel worth having, asserted at the source.
+
+    Taller duty cards must not shove the action row down, and taller artwork must not move the
+    wheel. The module is a fixed 1400 x 1200 and the point of the exercise is to watch these
+    bands compete for it -- automatic reflow would hide the trade-off the designer is trying to
+    judge. Only the explicit buttons move more than one thing.
+
+    Falsified by any cascade, which is the tempting thing to add the first time two objects
+    overlap.
+    """
+    tmpl = TMPL.read_text(encoding="utf-8")
+
+    def body(name):
+        """A function's LIVE lines, with its commentary stripped.
+
+        The comments in these functions say exactly which objects they deliberately leave alone,
+        so scanning the raw text finds the words it is looking for in the sentences explaining
+        why they are absent.
+        """
+        start = tmpl.index("function %s(" % name)
+        text = tmpl[start:tmpl.index("\nfunction ", start + 1)]
+        return "\n".join(line for line in text.splitlines()
+                          if not line.lstrip().startswith("//"))
+
+    cards = body("setCardHeights")
+    for banned in ("artLeft", "artRight", "artOf", "S.tithe", "S.city", "S.wheel"):
+        assert banned not in cards, (
+            "the card height control touches %s -- taller cards are meant to overlap the row "
+            "visibly, not push it out of the way" % banned)
+
+    art_h = body("setArtHeight")
+    for banned in ("S.tithe", "S.city", "S.wheel", "card"):
+        assert banned not in art_h, (
+            "the linked artwork height touches %s; Tithe and the City keep their own" % banned)
+
+    wheel = body("setWheelWidth")
+    for banned in ("card", "S.tithe", "S.city", "artOf"):
+        assert banned not in wheel, "the wheel control touches %s" % banned
+    # It does move the acolytes, and it must: they are wheel-relative and would be left behind.
+    assert "syncAttached()" in wheel
+
+    # The row's left edge is the anchor and nothing rebuilds it.
+    row = body("layoutActionRow")
+    assert "L.x =" not in row, (
+        "layoutActionRow writes the left anchor, so every gap change would walk the row sideways")
+    assert "R.x =" in row and "T.x =" in row and "C.x =" in row
+
+    # The centre button is the narrowest operation in the panel: it WRITES one field. It has to
+    # read the width to know where the middle is, so the ban is on assignment rather than on the
+    # word -- a check that forbade reading it would forbid the arithmetic.
+    centre = body("centreWheelX")
+    assert "S.wheel.x =" in centre, "centre wheel x does not set x"
+    for banned in ("width =", "height =", ".y =", "clone("):
+        assert banned not in centre, (
+            "centre wheel x writes %s as well as x, so it is a reset rather than a repair"
+            % banned)
+
+
+# The nine operations the Layout Helpers panel offers, each with the set of objects it is about.
+# "About" is not the same as "writes": ALIGN CARD TOPS never assigns Clerical's y, because
+# Clerical's y is the value the other seven are levelled to -- and yet a locked Clerical must
+# still refuse, because levelling seven cards to an eighth you were told not to touch is not an
+# alignment. The same reasoning keeps the left artwork OUT of the row-gap set: the row is spaced
+# from that anchor without writing it, so locking it does not stand in the way.
+HELPER_OPERATIONS = {
+    "setWheelWidth":   ("resize the wheel", "[WHEEL_O()]"),
+    "centreWheelX":    ("centre the wheel", "[WHEEL_O()]"),
+    "setCardHeights":  ("resize the duty cards", "ALL_CARDS()"),
+    "alignCardTops":   ("align the duty cards", "ALL_CARDS()"),
+    "setArtWidth":     ("resize the action artwork", "[ART_L(), ART_R(), TITHE_O(), CITY_O()]"),
+    "setArtHeight":    ("resize the action artwork", "[ART_L(), ART_R()]"),
+    "setRowGap":       ("re-space the action row", "[ART_R(), TITHE_O(), CITY_O()]"),
+    "alignRowTop":     ("align the action row", "[ART_R(), TITHE_O(), CITY_O()]"),
+    "fitActionRow":    ("fit the action row", "[ART_L(), ART_R(), TITHE_O(), CITY_O()]"),
+}
+
+
+def _helper_body(tmpl, name):
+    """A helper function's live lines, with its commentary stripped."""
+    start = tmpl.index("function %s(" % name)
+    text = tmpl[start:tmpl.index("\nfunction ", start + 1)]
+    return "\n".join(line for line in text.splitlines()
+                     if not line.lstrip().startswith("//"))
+
+
+def test_every_helper_refuses_as_a_whole_or_not_at_all(lab):
+    """A helper either does the whole operation or does none of it, and says which.
+
+    The failure this forbids is the plausible one: check the locks as you go, move the six
+    objects that are free, skip the two that are not. That leaves a layout nobody asked for and
+    an undo entry recording it, and the designer's next act is to hunt for what moved.
+
+    So the guard is one function, consulted once, before anything is written -- which is also
+    what makes the refusal cheap to prove: no geometry changed and no history entry exists,
+    because the operation never began.
+
+    The message has to carry the VERB as well as the object. "Ordination's card is locked" does
+    not say which of the two card helpers was pressed, and the build where the verb read off the
+    wrong array said "cannot undefined" to every refusal while every browser test still passed,
+    because they were all checking for the word "lock" and the object's name.
+
+    Falsified by a per-object skip, by a refusal that still records, or by a message assembled
+    from anything but the operation's own set.
+    """
+    tmpl = TMPL.read_text(encoding="utf-8")
+
+    guard = _helper_body(tmpl, "requireUnlocked")
+    # THE VERB COMES OFF THE SET THAT WAS PASSED IN. `stuck` is built inside the guard out of the
+    # labels and carries no verb, so reading it there is the exact bug this line pins down.
+    assert "needed.verb" in guard, "the refusal does not name the operation it refused"
+    assert "stuck.verb" not in guard, (
+        "the verb is read off the array the guard builds, which has none -- every refusal would "
+        "read 'cannot undefined'")
+    for banned in ("commit(", "record(", "recordSoon("):
+        assert banned not in guard, (
+            "a refusal calls %s, so being told no leaves an undo entry behind" % banned)
+
+    for name, (verb, objects) in HELPER_OPERATIONS.items():
+        text = _helper_body(tmpl, name)
+        # THE WHOLE CALL, closing brackets included. Matching the set as a fragment lets
+        # `ALL_CARDS().slice(1)` -- seven of the eight cards, which is the partial alignment this
+        # test exists to forbid -- satisfy a check for `ALL_CARDS()`.
+        call = 'requireUnlocked(needs("%s", %s))' % (verb, " ".join(objects.split()))
+        assert call in " ".join(text.split()), (
+            "%s does not open with the shared guard over exactly the set it is about; "
+            "expected %s" % (name, call))
+        # The guard is the FIRST thing, so nothing is half-done when it refuses.
+        first = [ln for ln in text.splitlines()[1:] if ln.strip()][0]
+        assert "requireUnlocked" in first, (
+            "%s does work before checking the locks: %r" % (name, first.strip()))
+        # And no helper consults a lock on its own; that is what makes the behaviour uniform.
+        assert "lockedOf(" not in text, (
+            "%s checks a lock itself rather than through the guard, so its refusal can drift "
+            "out of step with the other eight" % name)
+
+    # Direct manipulation is deliberately NOT routed through this: dragging a locked object and
+    # arrow-keying one simply do nothing, because a mouse that announces a refusal on every
+    # movement is noise rather than information.
+    for name in ("onDown", "onKey"):
+        if "function %s(" % name in tmpl:
+            assert "lockedOf(" in _helper_body(tmpl, name), (
+                "%s no longer checks locks at all" % name)
+
+
+def test_the_helper_controls_are_refreshed_from_render_and_never_rebuilt(lab):
+    """Why the controls cannot go stale, and why refreshing them does not fight the typist.
+
+    Every path that changes geometry ends in a render -- drag, resize, inspector, arrow key,
+    helper, undo, redo, reset, import -- so hanging the refresh off that one place makes "the
+    controls always show the truth" true by construction instead of by remembering to call it
+    from nine buttons.
+
+    Two things it must not do. It must not REBUILD the panel: replacing the markup under a
+    half-typed number throws the caret out and drops the field's focus, so the refresh has to
+    write `.value` into the controls that are already there. And it must skip whichever control
+    has the caret, or a typed "1500" never survives its own first digit.
+
+    Falsified by a refresh that rebuilds, one that overwrites a focused field, or a control that
+    echoes what was typed instead of reading back what the geometry actually became.
+    """
+    tmpl = TMPL.read_text(encoding="utf-8")
+
+    render = tmpl[tmpl.index("function render()"):]
+    render = render[:render.index("\nfunction ")]
+    assert "syncHelperInputs()" in render, (
+        "render does not refresh the helper controls, so an undo or a drag leaves them stale")
+    assert render.index("paintMetrics()") < render.index("syncHelperInputs()"), (
+        "the controls are synced before the metrics, so the two readings can disagree")
+
+    sync = _helper_body(tmpl, "syncHelperInputs")
+    assert "document.activeElement" in sync, (
+        "the refresh writes over whichever box has the caret")
+    for banned in ("innerHTML", "panels()", "createElement", "appendChild"):
+        assert banned not in sync, (
+            "the refresh reaches for %s -- it rebuilds the panel rather than updating the "
+            "controls in place, which takes the caret with it" % banned)
+    # It reads the geometry, not some remembered copy.
+    for reading in ("S.wheel.width", "cardGroup()", "helperGap()"):
+        assert reading in sync, "the refresh does not read %s from the objects" % reading
+    # The GROUP value, not one end of a mixed range: the number shown is the one the control
+    # would apply to all eight if it were touched.
+    assert "cg.h.lo" in sync and "cg.h.hi" not in sync, (
+        "the card control shows one end of a mixed range rather than the group value")
+    # And the control is clamped into its own range, or the number box displays something the
+    # slider beside it cannot reach. The METRICS are the place a negative gap is reported.
+    helper_gap = _helper_body(tmpl, "helperGap")
+    assert "clamp(" in helper_gap and "HELPERS.gap" in helper_gap, (
+        "the gap control is not bounded by its own range")
+
+    pair = tmpl[tmpl.index("function pair(numId"):]
+    pair = pair[:pair.index("\n  pair(")]
+    assert "var actual = read();" in pair, (
+        "the control echoes the typed number instead of reading the geometry back, so a clamped "
+        "or refused value leaves it armed to jump there on the next touch")
+    assert "document.activeElement !== n" in pair, (
+        "the number box is rewritten while it has the caret")
+
+
+def test_only_the_repair_button_normalises_the_gap(lab):
+    """The one place a gap may be changed behind the designer's back, and the one place it may not.
+
+    FIT ACTION ROW is restorative. Hand-dragging can leave gaps of -20 / -10 / 12, whose median
+    is negative, and rebuilding the row at that median would be a repair that carefully preserved
+    the overlap it was pressed to remove. So the fit clamps into the control's range and says so.
+
+    The ordinary linked resize must NOT do this. Someone mid-composition with a deliberate
+    overlap types a new width and gets their overlap quietly corrected -- a slider that edits
+    more than the thing it is labelled with.
+
+    Falsified by an unclamped fit, or by the clamp spreading to the resize.
+    """
+    tmpl = TMPL.read_text(encoding="utf-8")
+
+    fit = _helper_body(tmpl, "fitActionRow")
+    assert "clamp(raw, HELPERS.gap[0], HELPERS.gap[1])" in fit, (
+        "the fit rebuilds the row at whatever gap it measured, overlap included")
+    assert "normalised from" in fit, (
+        "the fit changes a number it was not asked to change without saying so")
+    assert 'raw !== gap ? " · normalised from "' in fit, (
+        "the fit claims to have normalised the gap even when it did not")
+
+    resize = _helper_body(tmpl, "setArtWidth")
+    assert "HELPERS.gap" not in resize, (
+        "the ordinary resize clamps the gap, so it repairs a composition in progress")
+    # AND IT MEASURES BEFORE IT MOVES. Reading the gap after the widths change measures the hole
+    # the change just opened, which made shrinking scatter the row and widening pack it negative.
+    assert resize.index("var gap = rowGapSuggested();") < resize.index('artOf("left").width ='), (
+        "the gap is measured after the widths move, so it measures the change rather than the "
+        "spacing the row had")
+
+
 def test_the_vendored_drawing_matches_the_layout_it_was_built_from(lab):
     """A copy's whole failure mode is going quietly out of step with its source.
 

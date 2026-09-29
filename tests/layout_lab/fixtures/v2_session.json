@@ -1,0 +1,611 @@
+{
+ "kind": "duty-wheel-lab-session",
+ "version": 2,
+ "state": {
+  "version": 2,
+  "canvas": {
+   "width": 1200,
+   "height": 1200
+  },
+  "background": "black",
+  "attachToWheel": true,
+  "wheel": {
+   "x": 210,
+   "y": 334,
+   "width": 780,
+   "height": 468,
+   "naturalRatio": 0.6,
+   "ratioSource": "viewBox",
+   "opacity": 1,
+   "locked": false,
+   "image": "im3",
+   "imageName": "wheel_real.svg"
+  },
+  "duties": {
+   "clerical": {
+    "name": "Clerical",
+    "clock": 0,
+    "actionA": {
+     "art": {
+      "x": 372,
+      "y": 150,
+      "width": 246,
+      "height": 241,
+      "opacity": 1,
+      "fit": "contain",
+      "z": 3,
+      "locked": false,
+      "visible": true,
+      "image": "im4",
+      "imageName": "clerical_piety.png"
+     }
+    },
+    "actionB": {
+     "art": {
+      "x": 737,
+      "y": 261,
+      "width": 175,
+      "height": 145,
+      "opacity": 1,
+      "fit": "contain",
+      "z": 39,
+      "locked": false,
+      "visible": true,
+      "image": "im5",
+      "imageName": "clerical_coins.png"
+     }
+    },
+    "label": {
+     "x": 545,
+     "y": 273,
+     "u": 0.4295,
+     "v": -0.1308,
+     "width": 110,
+     "visible": true,
+     "attached": true
+    },
+    "figures": {
+     "x": 600,
+     "y": 381,
+     "u": 0.5,
+     "v": 0.1005,
+     "count": 4,
+     "spacing": 46,
+     "arrangement": "row",
+     "seats": [
+      "p1",
+      "p1",
+      "p2",
+      "p3"
+     ],
+     "attached": true
+    }
+   },
+   "taxation": {
+    "name": "Taxation",
+    "clock": 45,
+    "actionA": {
+     "art": {
+      "x": 1150,
+      "y": 213,
+      "width": 175,
+      "height": 145,
+      "opacity": 1,
+      "fit": "contain",
+      "z": 3,
+      "locked": false,
+      "visible": true,
+      "image": null,
+      "imageName": null
+     }
+    },
+    "actionB": {
+     "art": {
+      "x": 898,
+      "y": 309,
+      "width": 175,
+      "height": 145,
+      "opacity": 1,
+      "fit": "contain",
+      "z": 4,
+      "locked": false,
+      "visible": true,
+      "image": null,
+      "imageName": null
+     }
+    },
+    "label": {
+     "x": 853,
+     "y": 355,
+     "u": 0.8238,
+     "v": 0.0448,
+     "width": 110,
+     "visible": true,
+     "attached": true
+    },
+    "figures": {
+     "x": 812,
+     "y": 436,
+     "u": 0.772,
+     "v": 0.2175,
+     "count": 3,
+     "spacing": 46,
+     "arrangement": "row",
+     "seats": [
+      "p1",
+      "p1",
+      "p1",
+      "p1"
+     ],
+     "attached": true
+    }
+   },
+   "produce": {
+    "name": "Produce",
+    "clock": 90,
+    "actionA": {
+     "art": {
+      "x": 956,
+      "y": 400,
+      "width": 175,
+      "height": 145,
+      "opacity": 1,
+      "fit": "contain",
+      "z": 5,
+      "locked": false,
+      "visible": true,
+      "image": null,
+      "imageName": null
+     }
+    },
+    "actionB": {
+     "art": {
+      "x": 956,
+      "y": 535,
+      "width": 175,
+      "height": 145,
+      "opacity": 1,
+      "fit": "contain",
+      "z": 6,
+      "locked": false,
+      "visible": true,
+      "image": null,
+      "imageName": null
+     }
+    },
+    "label": {
+     "x": 980,
+     "y": 553,
+     "u": 0.9872,
+     "v": 0.4685,
+     "width": 110,
+     "visible": true,
+     "attached": true
+    },
+    "figures": {
+     "x": 900,
+     "y": 568,
+     "u": 0.8846,
+     "v": 0.5,
+     "count": 2,
+     "spacing": 46,
+     "arrangement": "row",
+     "seats": [
+      "p1",
+      "p1",
+      "p1",
+      "p1"
+     ],
+     "attached": true
+    }
+   },
+   "build_roads": {
+    "name": "Build Roads",
+    "clock": 135,
+    "actionA": {
+     "art": {
+      "x": 898,
+      "y": 626,
+      "width": 175,
+      "height": 145,
+      "opacity": 1,
+      "fit": "contain",
+      "z": 7,
+      "locked": false,
+      "visible": true,
+      "image": null,
+      "imageName": null
+     }
+    },
+    "actionB": {
+     "art": {
+      "x": 754,
+      "y": 722,
+      "width": 175,
+      "height": 145,
+      "opacity": 1,
+      "fit": "contain",
+      "z": 8,
+      "locked": false,
+      "visible": true,
+      "image": null,
+      "imageName": null
+     }
+    },
+    "label": {
+     "x": 853,
+     "y": 752,
+     "u": 0.8238,
+     "v": 0.8923,
+     "width": 110,
+     "visible": true,
+     "attached": true
+    },
+    "figures": {
+     "x": 812,
+     "y": 700,
+     "u": 0.772,
+     "v": 0.7825,
+     "count": 2,
+     "spacing": 46,
+     "arrangement": "row",
+     "seats": [
+      "p1",
+      "p1",
+      "p1",
+      "p1"
+     ],
+     "attached": true
+    }
+   },
+   "construct": {
+    "name": "Construct",
+    "clock": 180,
+    "actionA": {
+     "art": {
+      "x": 615,
+      "y": 760,
+      "width": 175,
+      "height": 145,
+      "opacity": 1,
+      "fit": "contain",
+      "z": 9,
+      "locked": false,
+      "visible": true,
+      "image": null,
+      "imageName": null
+     }
+    },
+    "actionB": {
+     "art": {
+      "x": 410,
+      "y": 760,
+      "width": 175,
+      "height": 145,
+      "opacity": 1,
+      "fit": "contain",
+      "z": 10,
+      "locked": false,
+      "visible": true,
+      "image": null,
+      "imageName": null
+     }
+    },
+    "label": {
+     "x": 545,
+     "y": 834,
+     "u": 0.4295,
+     "v": 1.0678,
+     "width": 110,
+     "visible": true,
+     "attached": true
+    },
+    "figures": {
+     "x": 600,
+     "y": 755,
+     "u": 0.5,
+     "v": 0.8995,
+     "count": 1,
+     "spacing": 46,
+     "arrangement": "row",
+     "seats": [
+      "p1",
+      "p1",
+      "p1",
+      "p1"
+     ],
+     "attached": true
+    }
+   },
+   "give_alms": {
+    "name": "Give Alms",
+    "clock": 225,
+    "actionA": {
+     "art": {
+      "x": 271,
+      "y": 722,
+      "width": 175,
+      "height": 145,
+      "opacity": 1,
+      "fit": "contain",
+      "z": 11,
+      "locked": false,
+      "visible": true,
+      "image": null,
+      "imageName": null
+     }
+    },
+    "actionB": {
+     "art": {
+      "x": 127,
+      "y": 626,
+      "width": 175,
+      "height": 145,
+      "opacity": 1,
+      "fit": "contain",
+      "z": 12,
+      "locked": false,
+      "visible": true,
+      "image": null,
+      "imageName": null
+     }
+    },
+    "label": {
+     "x": 237,
+     "y": 752,
+     "u": 0.0351,
+     "v": 0.8923,
+     "width": 110,
+     "visible": true,
+     "attached": true
+    },
+    "figures": {
+     "x": 388,
+     "y": 700,
+     "u": 0.228,
+     "v": 0.7825,
+     "count": 4,
+     "spacing": 46,
+     "arrangement": "row",
+     "seats": [
+      "p1",
+      "p1",
+      "p1",
+      "p1"
+     ],
+     "attached": true
+    }
+   },
+   "ordination": {
+    "name": "Ordination",
+    "clock": 270,
+    "actionA": {
+     "art": {
+      "x": 69,
+      "y": 535,
+      "width": 175,
+      "height": 145,
+      "opacity": 1,
+      "fit": "contain",
+      "z": 13,
+      "locked": false,
+      "visible": true,
+      "image": null,
+      "imageName": null
+     }
+    },
+    "actionB": {
+     "art": {
+      "x": 69,
+      "y": 400,
+      "width": 175,
+      "height": 145,
+      "opacity": 1,
+      "fit": "contain",
+      "z": 14,
+      "locked": false,
+      "visible": true,
+      "image": null,
+      "imageName": null
+     }
+    },
+    "label": {
+     "x": 110,
+     "y": 553,
+     "u": -0.1282,
+     "v": 0.4685,
+     "width": 110,
+     "visible": true,
+     "attached": true
+    },
+    "figures": {
+     "x": 300,
+     "y": 568,
+     "u": 0.1154,
+     "v": 0.5,
+     "count": 1,
+     "spacing": 46,
+     "arrangement": "row",
+     "seats": [
+      "p1",
+      "p1",
+      "p1",
+      "p1"
+     ],
+     "attached": true
+    }
+   },
+   "allocation": {
+    "name": "Allocation",
+    "clock": 315,
+    "actionA": {
+     "art": {
+      "x": 127,
+      "y": 309,
+      "width": 175,
+      "height": 145,
+      "opacity": 1,
+      "fit": "contain",
+      "z": 15,
+      "locked": false,
+      "visible": true,
+      "image": null,
+      "imageName": null
+     }
+    },
+    "actionB": {
+     "art": {
+      "x": 271,
+      "y": 213,
+      "width": 175,
+      "height": 145,
+      "opacity": 1,
+      "fit": "contain",
+      "z": 16,
+      "locked": false,
+      "visible": true,
+      "image": null,
+      "imageName": null
+     }
+    },
+    "label": {
+     "x": 237,
+     "y": 355,
+     "u": 0.0351,
+     "v": 0.0448,
+     "width": 110,
+     "visible": true,
+     "attached": true
+    },
+    "figures": {
+     "x": 388,
+     "y": 436,
+     "u": 0.228,
+     "v": 0.2175,
+     "count": 3,
+     "spacing": 46,
+     "arrangement": "row",
+     "seats": [
+      "p1",
+      "p1",
+      "p1",
+      "p1"
+     ],
+     "attached": true
+    }
+   }
+  },
+  "acolytes": {
+   "height": 120,
+   "style": "colored",
+   "ratios": {
+    "duty": 100,
+    "city": 75,
+    "inHand": 85
+   },
+   "painted": {
+    "p1": "im6",
+    "p2": null,
+    "p3": null,
+    "p4": null
+   },
+   "paintedNames": {
+    "p1": "acolyte_painted.png",
+    "p2": null,
+    "p3": null,
+    "p4": null
+   },
+   "colored": {
+    "p1": null,
+    "p2": null,
+    "p3": null,
+    "p4": null
+   },
+   "coloredNames": {
+    "p1": null,
+    "p2": null,
+    "p3": null,
+    "p4": null
+   }
+  },
+  "players": [
+   {
+    "id": "p1",
+    "label": "Player 1",
+    "colour": "#8fae6a"
+   },
+   {
+    "id": "p2",
+    "label": "Player 2",
+    "colour": "#7fa7c8"
+   },
+   {
+    "id": "p3",
+    "label": "Player 3",
+    "colour": "#c88fb8"
+   },
+   {
+    "id": "p4",
+    "label": "Player 4",
+    "colour": "#d6a45c"
+   }
+  ],
+  "city": {
+   "x": 390,
+   "y": 980,
+   "width": 420,
+   "height": 190,
+   "locked": false,
+   "visible": true,
+   "image": "im7",
+   "imageName": "city_walls.jpg",
+   "fit": "cover",
+   "opacity": 1,
+   "counts": {
+    "p1": 7,
+    "p2": 4,
+    "p3": 2,
+    "p4": 5
+   },
+   "shown": {
+    "p1": true,
+    "p2": true,
+    "p3": true,
+    "p4": true
+   },
+   "label": {
+    "x": 545,
+    "y": 948,
+    "width": 110,
+    "visible": true
+   }
+  },
+  "inHand": {
+   "x": 525,
+   "y": 483,
+   "width": 150,
+   "height": 150,
+   "locked": false,
+   "visible": true,
+   "count": 6,
+   "textMode": "times",
+   "seat": "p1",
+   "u": 0.4038,
+   "v": 0.3184,
+   "attached": true
+  },
+  "guides": {
+   "bounds": true,
+   "centreH": true,
+   "centreV": true,
+   "grid": false,
+   "safe": true,
+   "wheelCentre": true,
+   "warnings": true
+  },
+  "zoom": "fit",
+  "mode": "edit",
+  "groupMove": false
+ },
+ "images": {}
+}

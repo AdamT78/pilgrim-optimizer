@@ -164,7 +164,7 @@ def viewbox_of(text: str) -> tuple:
 # wheel-centre medallions retire, the status line loses its context field -- so the version moves
 # with it and older files are migrated rather than reinterpreted.
 STATE_VERSION = 4
-BUILD_VERSION = "4.1"
+BUILD_VERSION = "4.2.1"
 
 # ---- the design envelope -------------------------------------------------------------------
 CANVAS_W, CANVAS_H = 1400, 1200
@@ -308,6 +308,27 @@ CITY = {"x": TITHE["x"] + TITHE["width"] + 12, "y": BAND["y"],
 TITHE_RESOURCES = (("W", "Wheat"), ("S", "Stone"), ("Ag", "Silver"))
 
 SAFE_MARGIN = 50
+
+# ---- the layout helpers' control ranges --------------------------------------------------------
+# STUDIO ONLY. These bound the sliders in the LAYOUT HELPERS panel and never reach the game
+# layout: they say what is worth trying while composing, not what the module is. They are here
+# rather than in the template so a test can read them, and so the one place that knows the
+# module's dimensions is the one place that bounds controls against them.
+#
+# The wheel's upper bound is the canvas itself -- a wheel that touches both edges is a
+# composition somebody may want to look at, and the auto-centre makes it symmetrical rather than
+# off-centre. The artwork's lower bound is the smallest box worth judging a scenic illustration
+# in, and FIT ACTION ROW refuses rather than going under it.
+HELPER_RANGES = {
+    "wheelW": [600, CANVAS_W],
+    "cardH": [80, 300],
+    "artW": [150, 600],
+    "artH": [80, 400],
+    "gap": [0, 80],
+    # What FIT ACTION ROW leaves at the right-hand end: the band's own right margin, so a fitted
+    # row ends where the ribbon above it does.
+    "rowRight": CANVAS_W - (BAND["x"] + BAND["width"]),
+}
 
 # The figure anchors ring the wheel's own face, as a fraction of the wheel so they scale with it.
 #
@@ -492,7 +513,7 @@ def default_state() -> dict:
 # and putting it in first would mean every remaining replace scanning it.
 _TOKENS = ("__BUILD_VERSION__", "__DEFAULT_STATE__", "__CANVAS_W__", "__CANVAS_H__",
            "__DUTY_ORDER__", "__DUTY_ACTIONS__", "__FULL_BOARDS__", "__SAFE_MARGIN__",
-           "__WHEEL_RATIO__", "__WHEEL_VIEWBOX__", "__ELEVATION__",
+           "__WHEEL_RATIO__", "__WHEEL_VIEWBOX__", "__ELEVATION__", "__HELPER_RANGES__",
            "__STATE_VERSION__", "__ACOLYTE_RANGE__", "__ACOLYTE_ASPECT__",
            "__BACKGROUNDS__", "__ZOOM_STEPS__", "__PLAYER_IDS__", "__VIEW_STATES__",
            "__SEAL_SIZE__", "__WHEEL_SVG__")
@@ -511,6 +532,7 @@ def build() -> str:
         "__WHEEL_RATIO__": json.dumps(WHEEL_RATIO),
         "__WHEEL_VIEWBOX__": json.dumps("%g x %g" % (WHEEL_VIEW_W, WHEEL_VIEW_H)),
         "__ELEVATION__": json.dumps(WHEEL_ELEVATION_DEG),
+        "__HELPER_RANGES__": json.dumps(HELPER_RANGES),
         # THE ASSET GOES IN LAST AND RAW. It is 60KB of path data with no tokens in it, so
         # substituting it before the others would mean scanning it for every remaining token --
         # and, worse, a coordinate that happened to spell one would be replaced.
