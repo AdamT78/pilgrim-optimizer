@@ -40,13 +40,19 @@ jobs:
           # "nothing outside these directories" rather than "something inside them", so a new
           # top-level directory is treated as engine work until someone decides otherwise --
           # the failure that costs fifteen minutes is cheaper than the one that ships a bug.
-          if echo "$changed" | grep -qvE '^(ui/|docs/)'; then
+          #
+          # tests/layout_lab/ is design-only despite living under tests/. It holds the layout
+          # lab's browser acceptance suites and their mutation suites, which read the generated
+          # page and nothing else; pilgrim/ imports nothing from ui/ at all, so no change in
+          # there can reach the engine. It is listed in the UI condition below as well, because
+          # a path that stops triggering the engine lanes must start triggering something.
+          if echo "$changed" | grep -qvE '^(ui/|docs/|tests/layout_lab/)'; then
             echo "engine=true" >>"$GITHUB_OUTPUT"
           else
             echo "engine=false" >>"$GITHUB_OUTPUT"
             echo "design-only change: skipping the engine lanes"
           fi
-          if echo "$changed" | grep -qE '^ui/'; then
+          if echo "$changed" | grep -qE '^(ui/|tests/layout_lab/)'; then
             echo "ui=true" >>"$GITHUB_OUTPUT"
           else
             echo "ui=false" >>"$GITHUB_OUTPUT"
@@ -106,6 +112,14 @@ jobs:
             tests/test_gothic_asset_guards.py tests/test_gothic_resource_boxes.py \
             tests/test_gothic_population_rows.py \
             tests/test_duty_wheel_guards.py tests/test_ground_guards.py -q
+      - name: The duty wheel layout lab still holds its own invariants
+        # Same reasoning as the block above, and it had been missed: nothing in this lane built
+        # or tested the layout lab. rebuild_ui_pages.py builds duty-border-studio.html from
+        # gen_border_studio.py, which is a different tool, so a change confined to
+        # ui/board_v2/layout_lab/ used to run no test of the layout lab anywhere in CI -- the 57
+        # guards only ever ran by accident, when a pull request happened to touch the engine too.
+        if: needs.changes.outputs.ui == 'true'
+        run: pytest tests/test_board_v2_layout_lab.py tests/layout_lab/ -q
 
   fast:
     needs: changes
