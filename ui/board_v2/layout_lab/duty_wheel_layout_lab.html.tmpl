@@ -1,0 +1,2324 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Duty Wheel Layout Lab</title>
+<style>
+/* ---- application chrome ------------------------------------------------------------------
+   Deliberately plain. Everything with a colour in it competes with the composition being
+   judged, so the tool is grey and the stage is the only lit thing on the page. */
+:root{
+  --ink:#b9b2a5; --dim:#6e675b; --line:#2a2823; --panel:#161512; --chrome:#0e0d0b;
+  --hot:#c9b27a; --warn:#e0705f; --ok:#8fae6a;
+  --stage-bg:#000000;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--chrome);color:var(--ink);
+  font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;overflow:hidden}
+#app{display:grid;grid-template-columns:1fr 340px;grid-template-rows:auto 1fr;height:100%}
+#bar{grid-column:1/-1;display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+  padding:7px 10px;background:var(--panel);border-bottom:1px solid var(--line)}
+#bar .sp{flex:1}
+#bar .gap{width:6px}
+#wrap{position:relative;overflow:auto;display:grid;place-items:safe center;
+  background:var(--stage-bg);padding:12px}
+#side{background:var(--panel);border-left:1px solid var(--line);overflow-y:auto;padding:10px}
+body.full #bar,body.full #side{display:none}
+body.full #app{grid-template-columns:1fr;grid-template-rows:1fr}
+
+button,select,input[type=text],input[type=number]{font:inherit;color:var(--ink);
+  background:#1c1a16;border:1px solid #33302a;border-radius:3px;padding:3px 7px}
+button{cursor:pointer}
+button:hover{border-color:#4a453b}
+button[aria-pressed=true]{background:var(--hot);border-color:var(--hot);color:#12100c}
+button:disabled{opacity:.35;cursor:default}
+input[type=number]{width:62px;padding:2px 4px}
+input[type=text]{width:100%}
+input[type=range]{width:100%;accent-color:var(--hot)}
+input[type=file]{max-width:100%;font-size:10px}
+label.chk{display:inline-flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap}
+.tag{color:var(--dim)}
+#bView button{font-weight:700}
+
+/* ---- the stage ---------------------------------------------------------------------------
+   ALWAYS 1400x1200, made to fit only by a CSS transform, so every number stored, shown and
+   exported is a true design coordinate. See toDesign() and relayout(). */
+#fit{position:relative;flex:none}
+#stage{position:relative;width:__CANVAS_W__px;height:__CANVAS_H__px;background:var(--stage-bg);
+  transform-origin:0 0;overflow:hidden;outline:1px solid #262420}
+.obj{position:absolute}
+#wheelObj svg{width:100%;height:100%;display:block}
+/* A LOADED ASSET IS CONTAINED, NEVER STRETCHED. Its shape has no say over the box, so one that
+   does not match the 32 degree ratio is shown at its own proportions inside the box -- which is
+   how a person sees that the file is wrong for the layout. Stretching would hide exactly that. */
+#wheelObj img{width:100%;height:100%;display:block;object-fit:contain}
+/* THE ASSET CARRIES ITS OWN GROUND, a dark rectangle filling its whole viewBox with 5 units of
+   bare board outside the ellipse. Inside a layout module that rectangle is a claim about the
+   board's colour that only applies to the wheel's own bounding box, which is not a thing the
+   real board will have -- so it is hidden unless asked for, and the stage background is where
+   the board's colour is actually decided. Selected by attribute rather than by #ground so the
+   rule cannot be confused with a lab element of the same name. */
+#wheelObj.noground [id="ground"]{display:none}
+
+/* Editing chrome, all hung off body.clean so Clean Preview is one class away. */
+.box{outline:1px dashed #6a6252;outline-offset:0}
+.box .nm{position:absolute;left:0;top:-15px;font-size:10px;color:#7d7566;white-space:nowrap}
+body.clean .box,body.clean .sel,body.clean .oob{outline:none !important}
+body.clean .nm,body.clean .h,body.clean #guides,body.clean .oobtag,
+body.clean .anchor{display:none !important}
+body.clean .ghost{display:none !important}
+.sel{outline:1px solid var(--hot) !important}
+.ghost{opacity:.22;outline:1px dashed #4b6a7d !important}
+.h{position:absolute;width:9px;height:9px;background:var(--hot);border:1px solid #12100c;
+  border-radius:1px;z-index:5}
+.h.nw{left:-5px;top:-5px;cursor:nwse-resize} .h.ne{right:-5px;top:-5px;cursor:nesw-resize}
+.h.sw{left:-5px;bottom:-5px;cursor:nesw-resize} .h.se{right:-5px;bottom:-5px;cursor:nwse-resize}
+.h.n{left:50%;top:-5px;margin-left:-4px;cursor:ns-resize}
+.h.s{left:50%;bottom:-5px;margin-left:-4px;cursor:ns-resize}
+.h.w{left:-5px;top:50%;margin-top:-4px;cursor:ew-resize}
+.h.e{right:-5px;top:50%;margin-top:-4px;cursor:ew-resize}
+
+.oob{outline:1px solid var(--warn) !important}
+.oobtag{position:absolute;left:0;top:-15px;font-size:10px;color:var(--warn);white-space:nowrap;
+  background:#1a0f0d;padding:0 3px;border-radius:2px;z-index:6}
+.oobtag.low{top:auto;bottom:-15px}
+
+#guides{position:absolute;inset:0;pointer-events:none;z-index:90}
+#guides .l{position:absolute;background:#c9b27a2e}
+#guides .safe{position:absolute;outline:1px dashed #c9b27a33}
+#guides .grid{position:absolute;inset:0;
+  background-image:linear-gradient(#ffffff08 1px,transparent 1px),
+                   linear-gradient(90deg,#ffffff08 1px,transparent 1px);
+  background-size:50px 50px}
+#guides .wc{position:absolute;width:16px;height:16px;margin:-8px 0 0 -8px;
+  border:1px solid #c9b27a66;border-radius:50%}
+#guides .wc::after{content:"";position:absolute;inset:6px;background:#c9b27a66;border-radius:50%}
+
+/* ---- the composition ---------------------------------------------------------------------- */
+.fig{position:absolute;bottom:0;transform:translateX(-50%);line-height:0}
+.fig svg,.fig img{display:block;height:100%;width:auto}
+.fig{height:var(--fh)}
+/* THE COUNT GOES INSIDE THE FIGURE, not beside it as "x7". Four seats and four counts have to
+   fit one row of a 379-wide box, and a number on the robe costs no width at all. */
+.fig .ct{position:absolute;left:50%;top:58%;transform:translate(-50%,-50%);
+  font:700 var(--cs)/1 ui-monospace,monospace;color:#12100c;
+  text-shadow:0 1px 0 #ffffff55;pointer-events:none}
+.fig.lt .ct{color:#f4ecdc;text-shadow:0 1px 2px #000a}
+.anchor{position:absolute;left:50%;top:50%;width:9px;height:9px;margin:-5px 0 0 -5px;
+  border:1px solid #c9b27a99;border-radius:50%;background:#c9b27a22}
+
+/* Band 1: one line of instruction. No parchment, no frame, nothing to compete with the wheel. */
+#statusObj{display:flex;align-items:center;padding:0 10px}
+#statusObj .main{width:100%;font:400 var(--main-size)/1.2 Georgia,serif;color:#ece2cb;
+  letter-spacing:.01em}
+
+/* Band 2: the eight duty reference cards. Reference, not controls -- clicking one previews and
+   chooses nothing. The panel is an editing affordance and goes in Clean Preview. */
+.card{padding:9px 10px;border-radius:4px;background:#ffffff06;border:1px solid #ffffff12;
+  display:flex;flex-direction:column;gap:7px;overflow:hidden}
+.card h4{margin:0;font:600 14px/1.1 Georgia,serif;letter-spacing:.11em;text-transform:uppercase;
+  color:#d8cdb4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .act{display:flex;align-items:center;gap:8px;flex:1;min-height:0}
+.card .act span{font:400 12px/1.25 Georgia,serif;color:#b6ab94;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+body.clean .card{background:none;border-color:transparent;border-radius:0;padding:7px 3px}
+body.clean .card h4{color:#e6dcc2}
+body.clean .card .act span{color:#c6bba3}
+/* HOVER ONLY WHERE A CLICK DOES SOMETHING. Cards preview in READY and SOWING and are inert in
+   ACTION SELECTION, so only the first two get the affordance -- a card that brightens under the
+   cursor and then ignores the click is the interface making a promise it does not keep. The
+   class is set in render() from the view, so the two cannot disagree. */
+body.clean .card.previewable:hover{filter:brightness(1.12);cursor:pointer}
+/* The card whose duty the sow reached. Only in ACTION SELECTION -- in the other two states
+   nothing has been reached and a highlight would be claiming otherwise. */
+.card.reached{background:#c9b27a14;border-color:#c9b27a55}
+body.clean .card.reached{background:#c9b27a12;border-color:#c9b27a44;border-radius:4px;
+  padding:7px 8px}
+/* The card being previewed, which is a different and quieter thing: you are reading, not doing. */
+.card.previewing{border-color:#8fae6a66}
+body.clean .card.previewing{border-color:#8fae6a44;border-radius:4px;padding:7px 8px}
+
+.seal{flex:none;width:__SEAL_SIZE__px;height:__SEAL_SIZE__px;border-radius:50%;display:grid;
+  place-items:center;background:radial-gradient(70% 70% at 35% 30%,#8f3f36,#5e241f);
+  border:1px solid #3a1512;color:#e8cdb0;font:700 13px/1 ui-monospace,monospace;
+  box-shadow:0 1px 2px #0008}
+.seal img{width:100%;height:100%;object-fit:contain;display:block;border-radius:50%}
+
+/* Band 3a: the two scenic action artworks. They fade into black at their edges, so no border
+   and no radius -- the art is the edge. */
+.art{overflow:hidden}
+.art img{width:100%;height:100%;display:block}
+.art.contain img{object-fit:contain} .art.cover img{object-fit:cover}
+.art .ph{width:100%;height:100%;display:grid;place-items:center;text-align:center;padding:10px;
+  color:#6a6250;font:400 13px/1.6 Georgia,serif;letter-spacing:.06em;
+  background:radial-gradient(72% 72% at 50% 45%,#1a1713,#000 80%)}
+.art .ph b{display:block;font:600 19px/1.3 Georgia,serif;color:#9a8f77;letter-spacing:.09em;
+  text-transform:uppercase}
+.art.missing .ph{color:#d3b06a}
+.art .cap{position:absolute;left:0;right:0;bottom:0;padding:6px 10px;
+  font:600 var(--cap)/1.2 Georgia,serif;letter-spacing:.11em;text-transform:uppercase;
+  color:#e2d7bc;background:linear-gradient(transparent,#000000cc 62%)}
+/* PREVIEW is informational. It says so, and it does not respond to the pointer the way a choice
+   does -- the brief's point is that reading about a duty must not look like taking it. */
+.art .pv{position:absolute;left:8px;top:8px;font:600 10px/1 ui-monospace,monospace;
+  letter-spacing:.18em;color:#9fc49a;background:#0d140c;border:1px solid #8fae6a44;
+  border-radius:2px;padding:3px 6px}
+body.clean .art.choice:hover{filter:brightness(1.08);cursor:pointer}
+body.clean .art.choice:hover::after{content:"";position:absolute;inset:0;
+  box-shadow:inset 0 0 0 1px #c9b27a44}
+
+/* Band 3b: Tithe. The alternative to the two actions, and visibly a different kind of card --
+   no scenic art, a plain field, its three resources as a pyramid. No "OR" anywhere: the card
+   being a separate card is the separation. */
+#titheObj{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+  border-radius:5px;background:#ffffff08;border:1px solid #ffffff1c;padding:10px}
+#titheObj .tl{font:600 14px/1.1 Georgia,serif;letter-spacing:.15em;text-transform:uppercase;
+  color:#ddd2b8}
+#titheObj .pyr{display:flex;flex-direction:column;align-items:center;gap:7px}
+#titheObj .pr{display:flex;gap:9px}
+.res{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;
+  background:radial-gradient(70% 70% at 35% 30%,#3c3527,#241d14);
+  border:1px solid #6b5c3e;color:#e4d6b4;font:700 13px/1 ui-monospace,monospace}
+.res img{width:100%;height:100%;object-fit:contain;display:block;border-radius:50%}
+body.clean #titheObj.choice:hover{filter:brightness(1.1);cursor:pointer}
+
+/* Band 3c: the City, and the acolytes in hand that borrow its region while sowing. */
+#cityObj{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+  border-radius:5px;background:#ffffff05;border:1px solid #ffffff10;padding:9px}
+body.clean #cityObj{background:#ffffff04}
+#cityObj .cl{font:600 13px/1.1 Georgia,serif;letter-spacing:.16em;text-transform:uppercase;
+  color:#b9ae96}
+#cityObj .row{display:flex;align-items:flex-end;justify-content:center;gap:14px;flex:1;
+  min-height:0}
+#cityObj .row .fig{position:static;transform:none}
+#cityObj.hand .cl{color:#cdbf9f}
+
+/* The selected-duty highlight: an overlay, never a change to the imported asset. */
+.hl{position:absolute;pointer-events:none;z-index:22}
+.hl.glow{border-radius:50%;
+  background:radial-gradient(58% 58% at 50% 50%,var(--hl) 0%,transparent 74%);filter:blur(2px)}
+.hl.ring{border-radius:50%;border:2px solid var(--hl);box-shadow:0 0 18px var(--hl)}
+
+/* Inspector */
+#side h3{margin:12px 0 5px;font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--dim);border-bottom:1px solid var(--line);padding-bottom:3px;cursor:pointer;
+  display:flex;justify-content:space-between}
+#side h3:first-child{margin-top:0}
+#side h3::after{content:"–";color:var(--dim)}
+#side h3.shut::after{content:"+"}
+#side h3.shut + div{display:none}
+.row{display:grid;grid-template-columns:70px 1fr;gap:5px;align-items:center;margin:3px 0}
+.row.two{grid-template-columns:70px 1fr 1fr}
+.row.four{grid-template-columns:70px repeat(4,1fr)}
+.row span{color:var(--dim);text-align:right}
+.btns{display:flex;gap:5px;flex-wrap:wrap;margin:5px 0}
+#status{color:var(--dim);min-height:17px;margin-top:8px;font-size:11px}
+#status.ok{color:var(--ok)} #status.bad{color:var(--warn)}
+#scaleTag{color:var(--dim)}
+.hint{color:var(--dim);font-size:11px;line-height:1.5;margin:4px 0}
+.sw{display:inline-block;width:11px;height:11px;border-radius:2px;vertical-align:-1px;
+  border:1px solid #0008}
+</style>
+
+<div id=app>
+  <div id=bar>
+    <span id=bView></span>
+    <span class=gap></span>
+    <button id=bMode aria-pressed="true">EDIT MODE</button>
+    <span class=gap></span>
+    <button id=bUndo title="Ctrl/Cmd+Z">undo</button>
+    <button id=bRedo title="Ctrl/Cmd+Shift+Z">redo</button>
+    <span class=gap></span>
+    <span class=tag>zoom</span>
+    <span id=zoomBtns></span>
+    <span class=gap></span>
+    <span class=tag>bg</span>
+    <span id=bgBtns></span>
+    <span class=gap></span>
+    <span class=tag id=scaleTag></span>
+    <span class=tag>· 1 / 2 / 3 state · f full screen</span>
+    <span class=tag id=buildTag></span>
+    <span class=sp></span>
+    <button id=bReset>reset lab</button>
+    <button id=bExport>export lab session</button>
+    <button id=bImport>import lab session</button>
+    <button id=bGame>export game layout</button>
+    <button id=bCopy>copy game layout</button>
+    <button id=bPng>export png</button>
+    <input id=fImport type=file accept=".json,application/json" hidden>
+  </div>
+
+  <div id=wrap>
+    <div id=fit>
+      <div id=stage>
+        <div id=guides></div>
+      </div>
+    </div>
+  </div>
+
+  <div id=side>
+    <h3>view</h3>          <div id=viewCtl></div>
+    <h3>selection</h3>     <div id=insp><div class=hint>Click an object on the stage.</div></div>
+    <h3>status</h3>        <div id=statusCtl></div>
+    <h3>duty actions</h3>  <div id=actionCtl></div>
+    <h3>action artwork</h3><div id=artCtl></div>
+    <h3>tithe</h3>         <div id=titheCtl></div>
+    <h3>acolytes</h3>      <div id=acoCtl></div>
+    <h3>duty occupancy</h3><div id=duties></div>
+    <h3>players</h3>       <div id=playerCtl></div>
+    <h3>city &amp; in hand</h3><div id=cityCtl></div>
+    <h3>wheel attachment</h3><div id=attachCtl></div>
+    <h3>guides</h3>        <div id=guideCtl></div>
+    <h3>the module in a full board</h3><div id=fitInfo class=hint></div>
+    <div id=status></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+// =============================================================================================
+// CONSTANTS FROM THE GENERATOR. Facts about the design, not about the page, so they are
+// substituted in rather than written here twice.
+// =============================================================================================
+var CANVAS_W     = __CANVAS_W__;
+var CANVAS_H     = __CANVAS_H__;
+var DUTY_ORDER   = __DUTY_ORDER__;            // north, then clockwise -- the ribbon's order too
+var ACTIONS      = __DUTY_ACTIONS__;
+var FULL_BOARDS  = __FULL_BOARDS__;
+var SAFE_MARGIN  = __SAFE_MARGIN__;
+var WHEEL_RATIO  = __WHEEL_RATIO__;            // the built-in wheel's own viewBox ratio
+var WHEEL_VIEWBOX = __WHEEL_VIEWBOX__;
+// FOR SAYING SO, NOT FOR COMPUTING WITH. The elevation is derived from the ratio by the
+// generator; nothing here turns it back into one.
+var ELEVATION    = __ELEVATION__;
+var STATE_VERSION = __STATE_VERSION__;
+var BUILD_VERSION = __BUILD_VERSION__;
+var ACO_RANGE    = __ACOLYTE_RANGE__;
+var ACO_ASPECT   = __ACOLYTE_ASPECT__;
+var BACKGROUNDS  = __BACKGROUNDS__;
+var ZOOM_STEPS   = __ZOOM_STEPS__;
+var PLAYER_IDS   = __PLAYER_IDS__;
+var VIEW_STATES  = __VIEW_STATES__;           // ready, sow, action
+var SEAL_SIZE    = __SEAL_SIZE__;
+var DEFAULT_STATE = __DEFAULT_STATE__;
+
+var STORE_KEY = "duty_wheel_layout_lab_v4";
+var MIN_SIZE = 20;
+var HIST_MAX = 50;
+var WHEEL_Z = 20;                        // the one z value nothing else may take
+
+var S = null;                            // the live state; the only source of truth
+var sel = null;                          // {kind, id} of the selected object
+var scale = 1;                           // stage display scale, CSS px per design px
+
+// =============================================================================================
+// THE IMAGE POOL. An asset field stores a KEY and a filename; the bytes live here, outside the
+// state, and are never cloned with it. That is why the autosave carries no image data, fifty
+// undo snapshots cost kilobytes, a Lab Session exports with or without bytes from the same
+// object, and a lost asset can say which file to reload.
+// =============================================================================================
+var IMAGES = {};
+var IMG_SEQ = 0;
+function putImage(url){ var k = "im" + (++IMG_SEQ); IMAGES[k] = url; return k; }
+function imgSrc(key){ return (key && IMAGES[key]) || null; }
+function haveImage(key){ return !!(key && IMAGES[key]); }
+
+function clone(o){ return JSON.parse(JSON.stringify(o)); }
+function clamp(v, lo, hi){ v = +v; if (!isFinite(v)) return lo; return Math.min(hi, Math.max(lo, v)); }
+function el(id){ return document.getElementById(id); }
+function esc(s){ return String(s === null || s === undefined ? "" : s).replace(/[&<>"]/g,
+  function(c){ return ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]; }); }
+
+// =============================================================================================
+// COORDINATE CONVERSION.
+//
+// (1) SCREEN TO DESIGN. The stage is 1400x1200 scaled by a CSS transform, so a design coordinate
+// is (client - stage origin) / scale, with both read from getBoundingClientRect() each time so a
+// scroll, a resize or a zoom step cannot put the model out of step with the pointer.
+//
+// (2) DESIGN TO WHEEL-RELATIVE. The duty figure anchors store u and v as fractions of the
+// wheel's box, so they keep their place on it when it moves or scales. Values outside 0..1 are
+// ordinary and nothing is clamped. Both representations are kept current: moveTo writes x/y and
+// u/v, and any change to the wheel re-derives x/y.
+//
+// V4 NOTE: the anchors are now the ONLY wheel-relative objects. The in-hand pool and Tithe both
+// left the wheel's centre -- in-hand borrows the City's region while sowing, Tithe is a card in
+// the band -- so the centre-anchor mode V3.1 needed for them has gone with them.
+// =============================================================================================
+function toDesign(ev){
+  var r = el("stage").getBoundingClientRect();
+  var k = r.width / CANVAS_W;
+  return {x: (ev.clientX - r.left) / k, y: (ev.clientY - r.top) / k};
+}
+function fromUV(u, v){ var w = S.wheel; return {x: w.x + u * w.width, y: w.y + v * w.height}; }
+function toUV(x, y){ var w = S.wheel; return {u: (x - w.x) / w.width, v: (y - w.y) / w.height}; }
+
+function attachable(kind){ return kind === "figs"; }
+function attachedOf(kind, id){
+  if (!attachable(kind) || !S.attachToWheel) return false;
+  var o = objOf(kind, id);
+  return !!(o && o.attached);
+}
+function eachAttachable(fn){ DUTY_ORDER.forEach(function(s){ fn(objOf("figs", s)); }); }
+function writeUV(o){ var uv = toUV(o.x, o.y); o.u = +uv.u.toFixed(4); o.v = +uv.v.toFixed(4); }
+function placeFromUV(o){ var p = fromUV(o.u, o.v); o.x = Math.round(p.x); o.y = Math.round(p.y); }
+// THE WHEEL MOVED: re-derive x/y from u/v. Guarded by the global switch as well as the
+// per-object flag, so "all free" really does mean the wheel can move without dragging anything.
+function syncAttached(){
+  if (!S.attachToWheel) return;
+  eachAttachable(function(o){ if (o && o.attached) placeFromUV(o); });
+}
+// THE SWITCH WENT ON: re-derive u/v from where things are, so attaching records the present
+// composition rather than restoring an older one. The opposite direction, hence both.
+function reanchorAll(){ eachAttachable(function(o){ if (o) writeUV(o); }); }
+
+function relayout(){
+  var w = el("wrap").clientWidth - 26, h = el("wrap").clientHeight - 26;
+  scale = (S.zoom === "fit") ? Math.min(w / CANVAS_W, h / CANVAS_H, 1) : (+S.zoom / 100);
+  if (!isFinite(scale) || scale <= 0) scale = 1;
+  el("stage").style.transform = "scale(" + scale + ")";
+  el("fit").style.width  = (CANVAS_W * scale) + "px";
+  el("fit").style.height = (CANVAS_H * scale) + "px";
+  el("scaleTag").textContent = "stage " + CANVAS_W + " × " + CANVAS_H + " · "
+    + (S.zoom === "fit" ? "fit " : "") + Math.round(scale * 1000) / 10 + "%";
+  paintZoom();
+}
+addEventListener("resize", function(){ if (S) relayout(); });
+
+// =============================================================================================
+// THE OBJECT MODEL. Every editable thing answers the same questions, so drag, resize, nudge,
+// the inspector and the boundary check are each written once rather than once per kind.
+// =============================================================================================
+function actionOf(slug, slot){ var d = S.duties[slug]; return d && d[slot]; }
+function artOf(side){ return side === "left" ? S.display.artLeft : S.display.artRight; }
+function reachedDuty(){ return S.duties[S.selectedDuty] ? S.selectedDuty : DUTY_ORDER[0]; }
+
+// WHICH DUTY THE TWO ARTWORK BOXES ARE SHOWING, which is the hinge of the whole V4 interaction.
+//
+// In ACTION SELECTION it is the duty the sow reached, and the player did not have to ask for it.
+// In READY and SOWING it is whichever reference card was clicked, or nothing -- the artwork is
+// not on screen until somebody wants to read about a duty. Those are different things and the
+// page says so: a preview is badged and inert, a choice is not.
+function shownDuty(){
+  if (S.view === "action") return reachedDuty();
+  return (S.previewDuty && S.duties[S.previewDuty]) ? S.previewDuty : null;
+}
+function previewing(){ return S.view !== "action" && !!shownDuty(); }
+function artLabel(side){
+  var d = shownDuty();
+  if (!d) return "";
+  var a = actionOf(d, artOf(side).slot);
+  return (a && (a.name || a.shortLabel)) || artOf(side).slot;
+}
+
+function objOf(kind, id){
+  if (kind === "wheel")  return S.wheel;
+  if (kind === "status") return S.status;
+  if (kind === "card")   return S.duties[id] && S.duties[id].card;
+  if (kind === "figs")   return S.duties[id] && S.duties[id].figures;
+  if (kind === "art")    return artOf(id);
+  if (kind === "tithe")  return S.tithe;
+  if (kind === "city")   return S.city;
+  return null;
+}
+function posOf(kind, id){
+  var o = objOf(kind, id);
+  if (attachedOf(kind, id)) return fromUV(o.u, o.v);
+  return {x: o.x, y: o.y};
+}
+// Figure anchors are a point, not a box. Giving them a rect here keeps the drag code from
+// growing a special case.
+function rectOf(kind, id){
+  var o = objOf(kind, id), p = posOf(kind, id);
+  if (kind === "figs") return {x: p.x - 8, y: p.y - 8, width: 16, height: 16};
+  return {x: p.x, y: p.y, width: o.width, height: o.height};
+}
+function moveTo(kind, id, x, y){
+  var o = objOf(kind, id);
+  if (kind === "figs"){ x += 8; y += 8; }
+  o.x = Math.round(x); o.y = Math.round(y);
+  if (attachable(kind)) writeUV(o);
+}
+function lockedOf(kind, id){ var o = objOf(kind, id); return !!(o && o.locked); }
+function resizableOf(kind){
+  return kind === "wheel" || kind === "status" || kind === "card" || kind === "art"
+      || kind === "tithe" || kind === "city";
+}
+// The wheel is the one object whose proportions are not the layout's to change: it arrives drawn
+// at 32 degrees of elevation and re-shaping it would be re-projecting it.
+function aspectLockedOf(kind){ return kind === "wheel"; }
+
+// WHICH STATES AN OBJECT APPEARS IN -- the single table the whole three-state design hangs off,
+// so render, Clean Preview and the ghosting all agree by construction.
+//
+// The wheel, the cards, the acolytes, the status line and the City are in ALL THREE, and the
+// wheel and the City are not merely present in all three but IDENTICAL: nothing in this file
+// writes their geometry per state, which is what makes the three comparable.
+//
+// The artwork is the conditional one -- present whenever a duty is being shown, which is always
+// in ACTION and only on request before it -- so it answers through shownDuty() rather than
+// through a fixed list.
+function statesOf(kind){
+  if (kind === "tithe") return ["action"];
+  if (kind === "art")   return shownDuty() ? ["ready", "sow", "action"] : [];
+  return ["ready", "sow", "action"];
+}
+function activeHere(kind){ return statesOf(kind).indexOf(S.view) >= 0; }
+
+// =============================================================================================
+// THE MODULE BOUNDARY. Nothing is clamped: composing something that bleeds off the edge is a
+// legitimate thing to try, and a tool that silently prevented it would be answering a design
+// question on the designer's behalf. So the overshoot is measured and shown instead.
+// =============================================================================================
+function overflowOf(r){
+  var o = {};
+  if (r.x < 0) o.left = Math.round(-r.x);
+  if (r.y < 0) o.top = Math.round(-r.y);
+  if (r.x + r.width  > CANVAS_W) o.right  = Math.round(r.x + r.width  - CANVAS_W);
+  if (r.y + r.height > CANVAS_H) o.bottom = Math.round(r.y + r.height - CANVAS_H);
+  return Object.keys(o).length ? o : null;
+}
+function overflowText(o){
+  return Object.keys(o).map(function(k){ return k + " +" + o[k]; }).join("  ");
+}
+
+// =============================================================================================
+// RENDER. One pass rebuilds the stage from state.
+// =============================================================================================
+function figureSvg(colour, painted){
+  var body = painted ? "#7d7568" : colour;
+  var trim = painted ? "#57514a" : "#00000055";
+  return '<svg viewBox="0 0 42 100" xmlns="http://www.w3.org/2000/svg">'
+    + '<ellipse cx="21" cy="95" rx="15" ry="5" fill="' + trim + '"/>'
+    + '<path d="M21 14c-6 0-9 5-9 11 0 5 2 8 2 11l-6 40c-1 7-2 12-2 15h30c0-3-1-8-2-15l-6-40'
+    + 'c0-3 2-6 2-11 0-6-3-11-9-11z" fill="' + body + '"/>'
+    + '<circle cx="21" cy="11" r="8" fill="' + body + '"/>'
+    + '<path d="M21 3a8 8 0 0 0-8 8c0 2 1 4 2 5 1-5 3-8 6-8s5 3 6 8c1-1 2-3 2-5a8 8 0 0 0-8-8z"'
+    + ' fill="' + trim + '"/>'
+    + '<ellipse cx="21" cy="92" rx="13" ry="4.5" fill="' + body + '" opacity=".85"/>'
+    + '</svg>';
+}
+function seatColour(pid){
+  var p = S.players.filter(function(q){ return q.id === pid; })[0];
+  return (p && p.colour) || S.players[0].colour;
+}
+// Is a colour dark enough that a dark number on it would disappear? Cheap relative luminance:
+// the four seats are all mid-tone today, but a person can set any colour they like in the panel
+// and a count that vanishes into a dark robe is a count nobody can read.
+function darkSeat(hex){
+  var m = /^#?([0-9a-f]{6})$/i.exec(hex || "");
+  if (!m) return false;
+  var n = parseInt(m[1], 16);
+  var r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) < 118;
+}
+// One acolyte. `count` draws the number ON the figure rather than beside it -- see the .ct rule.
+function acolyteHtml(pid, h, count){
+  var A = S.acolytes, key = A.style === "painted" ? A.painted[pid] : A.colored[pid];
+  var src = imgSrc(key);
+  var col = seatColour(pid);
+  var inner = src ? '<img src="' + src + '" alt="">'
+                  : figureSvg(col, A.style === "painted");
+  var ct = (count === undefined || count === null) ? ""
+         : '<b class=ct style="--cs:' + Math.max(9, Math.round(h * 0.30)) + 'px">'
+           + esc(count) + '</b>';
+  var lt = (A.style === "painted" || darkSeat(col)) ? " lt" : "";
+  return '<div class="fig' + lt + '" style="--fh:' + h + 'px;height:' + h + 'px;position:relative">'
+       + inner + ct + '</div>';
+}
+function acolyteHeight(which){
+  var A = S.acolytes;
+  return Math.max(6, Math.round(A.height * (A.ratios[which] || 100) / 100));
+}
+function figureRowHtml(seats, n, spacing, arrangement, h){
+  if (n <= 0) return "";
+  var out = "", per = arrangement === "compact" ? spacing * 0.58 : spacing;
+  var span = (n - 1) * per;
+  for (var i = 0; i < n; i++){
+    var dx = -span / 2 + i * per, dy = 0;
+    if (arrangement === "compact") dy = (i % 2 === 1) ? -Math.round(h * 0.10) : 0;
+    if (arrangement === "arc" && n > 1){
+      var t = (i / (n - 1)) * 2 - 1;
+      dy = Math.round((1 - t * t) * h * 0.16);
+    }
+    out += '<div style="position:absolute;left:' + dx + 'px;bottom:' + dy + 'px">'
+         + acolyteHtml(seats[i] || seats[0] || PLAYER_IDS[0], h) + '</div>';
+  }
+  return out;
+}
+// A wax seal, or a stand-in that says which action it is. The cards have to stay readable before
+// any final art exists, which is why the placeholder carries a letter.
+function sealHtml(asset, letter){
+  var src = imgSrc(asset);
+  return '<span class="seal">'
+       + (src ? '<img src="' + src + '" alt="">' : esc(letter)) + '</span>';
+}
+
+function render(){
+  var st = el("stage");
+  [].slice.call(st.querySelectorAll(".obj, .hl")).forEach(function(e){ e.remove(); });
+  var frag = document.createDocumentFragment();
+  var editing = S.mode !== "clean";
+
+  function make(kind, id, rect, cls, inner, z, ghost){
+    var d = document.createElement("div");
+    d.className = "obj " + cls + " box" + (ghost ? " ghost" : "");
+    d.dataset.kind = kind; if (id) d.dataset.id = id;
+    d.style.cssText = "left:" + rect.x + "px;top:" + rect.y + "px;width:" + rect.width
+                    + "px;height:" + rect.height + "px;z-index:" + z;
+    d.innerHTML = inner;
+    if (sel && sel.kind === kind && (sel.id || null) === (id || null)) d.classList.add("sel");
+    var ov = (S.guides.warnings && !ghost) ? overflowOf(rect) : null;
+    if (ov){
+      d.classList.add("oob");
+      var t = document.createElement("span");
+      t.className = "oobtag" + (rect.y < 18 ? " low" : "");
+      t.textContent = "OUTSIDE MODULE  " + overflowText(ov);
+      d.appendChild(t);
+    }
+    frag.appendChild(d);
+    return d;
+  }
+  function handles(d, kind){
+    var names = aspectLockedOf(kind) ? ["nw","ne","sw","se"]
+              : ["nw","ne","sw","se","n","s","e","w"];
+    names.forEach(function(n){
+      var h = document.createElement("div"); h.className = "h " + n; h.dataset.handle = n;
+      d.appendChild(h);
+    });
+  }
+  // Shown, hidden, or shown faintly as a ghost. A ghost is editing chrome: it lets an object
+  // that belongs to another state be composed without leaving this one, and Clean Preview -- the
+  // view that exists to show one state honestly -- never contains one.
+  function shows(kind){
+    if (activeHere(kind)) return "yes";
+    return (editing && S.showGhosts) ? "ghost" : "no";
+  }
+
+  // ---- 1. the wheel --------------------------------------------------------------------------
+  // IDENTICAL IN ALL THREE STATES. Nothing in this file writes wheel geometry per view state.
+  // Its centre is deliberately empty: nothing is drawn there at all.
+  var w = S.wheel;
+  var wheelInner = haveImage(w.image)
+    ? '<img src="' + imgSrc(w.image) + '" alt="">'
+    : builtinWheel();
+  var dw = make("wheel", null, rectOf("wheel", null), w.ground ? "" : "noground",
+                '<span class=nm>wheel</span>' + wheelInner, WHEEL_Z);
+  dw.id = "wheelObj";
+  dw.style.opacity = w.opacity;
+  if (!w.locked) handles(dw, "wheel");
+
+  // ---- 2. the reached duty's highlight -------------------------------------------------------
+  // An overlay at that duty's own anchor, in ACTION SELECTION only -- before then nothing has
+  // been reached and a highlight would be claiming otherwise. Never a change to the wheel asset.
+  var H = S.display.highlight;
+  if (S.view === "action" && H.visible){
+    var fa = rectOf("figs", reachedDuty());
+    var hd = document.createElement("div");
+    hd.className = "hl " + H.style;
+    hd.style.cssText = "left:" + Math.round(fa.x + 8 - H.width / 2) + "px;top:"
+      + Math.round(fa.y + 8 + H.dy - H.height / 2) + "px;width:" + H.width + "px;height:"
+      + H.height + "px;opacity:" + H.opacity + ";--hl:" + H.colour;
+    frag.appendChild(hd);
+  }
+
+  // ---- 3. the acolytes on the wheel ----------------------------------------------------------
+  var fh = acolyteHeight("duty");
+  DUTY_ORDER.forEach(function(slug){
+    var f = S.duties[slug].figures;
+    var d = make("figs", slug, rectOf("figs", slug), "",
+                 '<span class=nm>' + esc(S.duties[slug].name) + ' figures</span>'
+                 + '<span class=anchor></span>', WHEEL_Z + 25);
+    d.style.overflow = "visible";
+    var holder = document.createElement("div");
+    holder.style.cssText = "position:absolute;left:8px;bottom:8px;width:0;height:0";
+    holder.innerHTML = figureRowHtml(f.seats, f.count, f.spacing, f.arrangement, fh);
+    d.appendChild(holder);
+  });
+
+  // ---- 4. the two scenic artworks ------------------------------------------------------------
+  var shown = shownDuty(), isPreview = previewing();
+  var artMode = shows("art");
+  if (artMode !== "no"){
+    ["left", "right"].forEach(function(side){
+      var e = artOf(side);
+      if (!e.visible) return;
+      var a = shown ? (actionOf(shown, e.slot) || {}) : {};
+      var cls = "art " + e.fit + (isPreview ? "" : " choice");
+      var inner;
+      if (haveImage(a.scenic)) inner = '<img src="' + imgSrc(a.scenic) + '" alt="">';
+      else if (a.scenic && a.scenicName){
+        cls += " missing";
+        inner = '<div class=ph><b>' + esc(a.name || e.slot) + '</b>Reload: '
+              + esc(a.scenicName) + '</div>';
+      } else {
+        inner = '<div class=ph><b>' + esc(a.name || e.slot) + '</b>scenic artwork</div>';
+      }
+      var d = make("art", side, rectOf("art", side), cls,
+                   '<span class=nm>artwork ' + side + ' · ' + esc(e.slot) + '</span>' + inner,
+                   WHEEL_Z - 5, artMode === "ghost");
+      d.style.opacity = e.opacity;
+      if (e.labelVisible && artLabel(side)){
+        var cap = document.createElement("div");
+        cap.className = "cap"; cap.style.setProperty("--cap", e.labelSize + "px");
+        cap.textContent = artLabel(side);
+        d.appendChild(cap);
+      }
+      // THE BADGE IS THE POINT OF THE PREVIEW. Reading about a duty must not look like taking it.
+      if (isPreview){
+        var pv = document.createElement("span");
+        pv.className = "pv"; pv.textContent = "PREVIEW";
+        d.appendChild(pv);
+      }
+      if (!e.locked && artMode === "yes") handles(d, "art");
+    });
+  }
+
+  // ---- 5. Tithe ------------------------------------------------------------------------------
+  // ACTION SELECTION only, and never in a preview: it is not something a duty offers, it is the
+  // alternative to taking what a duty offers, so it has no business on screen while you are
+  // still reading.
+  var titheMode = shows("tithe");
+  if (titheMode !== "no" && S.tithe.visible){
+    var T = S.tithe;
+    var res = (T.resources || []);
+    var pyr = '<div class=pyr><div class=pr>' + res.slice(0, 1).map(function(r){
+                return '<span class=res>' + esc(r.key) + '</span>'; }).join("")
+            + '</div><div class=pr>' + res.slice(1, 3).map(function(r){
+                return '<span class=res>' + esc(r.key) + '</span>'; }).join("")
+            + '</div></div>';
+    var dt = make("tithe", null, rectOf("tithe", null),
+                  S.view === "action" ? "choice" : "",
+                  '<span class=nm>tithe</span><div class=tl>' + esc(T.label) + '</div>' + pyr,
+                  WHEEL_Z + 15, titheMode === "ghost");
+    dt.id = "titheObj";
+    if (!T.locked && titheMode === "yes") handles(dt, "tithe");
+  }
+
+  // ---- 6. the City, which is the acolytes in hand while sowing --------------------------------
+  // ONE REGION, TWO JOBS. The count in hand used to sit in the wheel's centre; it reads better
+  // here, beside the other reserve, and it leaves the centre quiet.
+  if (S.city.visible){
+    var c = S.city, hand = (S.view === "sow");
+    var body;
+    if (hand){
+      var ih = S.inHand;
+      body = '<div class=cl>' + esc(ih.label) + '</div><div class=row>'
+           + acolyteHtml(ih.seat, acolyteHeight("inHand"), ih.count) + '</div>';
+    } else {
+      var ch = acolyteHeight("city");
+      body = '<div class=cl>' + esc(c.label) + '</div><div class=row>'
+           + PLAYER_IDS.filter(function(p){ return c.shown[p]; }).map(function(p){
+               return acolyteHtml(p, ch, c.counts[p] || 0); }).join("")
+           + '</div>';
+    }
+    var dc = make("city", null, rectOf("city", null), hand ? "hand" : "",
+                  '<span class=nm>' + (hand ? "acolytes in hand" : "city") + '</span>' + body,
+                  WHEEL_Z + 30);
+    dc.id = "cityObj";
+    if (!c.locked) handles(dc, "city");
+  }
+
+  // ---- 7. the duty reference cards ------------------------------------------------------------
+  // Eight, in the wheel's own order. Reference in every state: clicking one previews and chooses
+  // nothing. Nothing here knows which side of the row a duty is on.
+  DUTY_ORDER.forEach(function(slug){
+    var D = S.duties[slug], cd = D.card;
+    if (!cd.visible) return;
+    var acts = ACTIONS.map(function(a, i){
+      var act = D[a.key] || {};
+      return '<div class=act>' + sealHtml(act.seal, i === 0 ? "A" : "B")
+           + '<span>' + esc(act.shortLabel || act.name || a.label) + '</span></div>';
+    }).join("");
+    // `previewable` is the affordance and nothing else: it says a click here will do something,
+    // which is true in READY and SOWING and false in ACTION SELECTION. It is deliberately not
+    // the same class as `reached`, which is a statement about the game rather than the pointer.
+    var cls = "card";
+    if (S.view !== "action") cls += " previewable";
+    if (S.view === "action" && slug === reachedDuty()) cls += " reached";
+    else if (slug === shown && isPreview) cls += " previewing";
+    var d = make("card", slug, rectOf("card", slug), cls,
+                 '<span class=nm>' + esc(D.name) + ' card</span>'
+                 + '<h4>' + esc(D.name) + '</h4>' + acts, WHEEL_Z + 12);
+    if (!cd.locked) handles(d, "card");
+  });
+
+  // ---- 8. the instruction ---------------------------------------------------------------------
+  if (S.status.visible){
+    var T2 = S.status;
+    var ds = make("status", null, rectOf("status", null), "",
+                  '<span class=nm>instruction</span>', WHEEL_Z + 45);
+    ds.id = "statusObj";
+    ds.style.opacity = T2.opacity;
+    ds.style.setProperty("--main-size", T2.size + "px");
+    var mn = document.createElement("div");
+    mn.className = "main"; mn.style.textAlign = T2.align;
+    mn.textContent = statusText();
+    ds.appendChild(mn);
+    if (!T2.locked) handles(ds, "status");
+  }
+
+  st.appendChild(frag);
+  drawGuides();
+}
+
+// ONE LINE, and the sow line counts down with what is in hand. {n} is substituted rather than
+// typed so the instruction and the figure in the City's region cannot disagree.
+function statusText(){
+  var b = (S.status.byView || {})[S.view] || {};
+  return String(b.main || "").replace("{n}", S.inHand.count);
+}
+
+// THE BUILT-IN WHEEL, inlined by the generator from the vendored copy of
+// tools/ui_debug/prototypes/duty_wheel_v2.svg. Not a stand-in any more: this is the drawing the
+// board is being composed around, which is why nothing here redraws, recolours or re-projects
+// it. Its own geometry names the nine faces by WHERE THEY ARE -- north_west, north, centre --
+// and it carries no text at all, so nothing in it says which duty stands on which space. That
+// is the same absence the rest of V4 keeps; see the note on statesOf().
+//
+// Written into the page as markup rather than as a data: URL so it inherits the page's own
+// colours if it is ever given any, and so the acceptance run can look inside it.
+var WHEEL_SVG = __WHEEL_SVG__;
+
+function builtinWheel(){ return WHEEL_SVG; }
+
+function drawGuides(){
+  var g = el("guides"), G = S.guides, h = "";
+  if (G.grid) h += '<div class=grid></div>';
+  if (G.safe) h += '<div class=safe style="left:' + SAFE_MARGIN + 'px;top:' + SAFE_MARGIN
+                +  'px;right:' + SAFE_MARGIN + 'px;bottom:' + SAFE_MARGIN + 'px"></div>';
+  if (G.centreH) h += '<div class=l style="left:0;right:0;top:' + (CANVAS_H/2) + 'px;height:1px"></div>';
+  if (G.centreV) h += '<div class=l style="top:0;bottom:0;left:' + (CANVAS_W/2) + 'px;width:1px"></div>';
+  if (G.wheelCentre){
+    var w = S.wheel;
+    h += '<div class=wc style="left:' + (w.x + w.width/2) + 'px;top:' + (w.y + w.height/2) + 'px"></div>';
+  }
+  g.style.outline = G.bounds ? "1px solid #c9b27a55" : "none";
+  g.innerHTML = h;
+}
+
+// =============================================================================================
+// HISTORY. Snapshots are cheap because the images are not in the state, which is what makes
+// "clone the whole thing" the right answer instead of a diff or a command log.
+//
+// ONE ENTRY PER GESTURE: a drag writes the model on every pointermove, and pushing each would
+// fill the stack with one motion. Sliders record on a short debounce for the same reason.
+//
+// SELECTION IS NOT HISTORY, and neither is the view state, the preview, the mode or the zoom.
+// =============================================================================================
+var HIST = [], HPOS = -1, gesture = false, histTimer = null;
+
+function histReset(){ HIST = [JSON.stringify(S)]; HPOS = 0; paintHistory(); }
+function record(){
+  if (gesture) return;
+  clearTimeout(histTimer); histTimer = null;
+  var snap = JSON.stringify(S);
+  if (HPOS >= 0 && HIST[HPOS] === snap) return;
+  HIST = HIST.slice(0, HPOS + 1);
+  HIST.push(snap);
+  if (HIST.length > HIST_MAX) HIST.shift();
+  HPOS = HIST.length - 1;
+  paintHistory();
+}
+function recordSoon(){
+  if (gesture) return;
+  clearTimeout(histTimer);
+  histTimer = setTimeout(function(){ histTimer = null; record(); }, 400);
+}
+function stepHistory(d){
+  clearTimeout(histTimer); histTimer = null;
+  var n = HPOS + d;
+  if (n < 0 || n >= HIST.length) return false;
+  HPOS = n;
+  // THE VIEW IS NOT UNDONE. Mode, zoom, which state is on screen and which card is being
+  // previewed are all how the layout is being LOOKED at rather than part of it -- they are among
+  // the fields the Game Layout export leaves out for the same reason. So they are carried over
+  // rather than restored; otherwise undoing a move would also throw the page into another state.
+  var view = {mode: S.mode, zoom: S.zoom, view: S.view, previewDuty: S.previewDuty};
+  S = JSON.parse(HIST[HPOS]);
+  S.mode = view.mode; S.zoom = view.zoom; S.view = view.view; S.previewDuty = view.previewDuty;
+  rebuild();
+  paintHistory();
+  return true;
+}
+function paintHistory(){
+  var u = el("bUndo"), r = el("bRedo");
+  if (u) u.disabled = HPOS <= 0;
+  if (r) r.disabled = HPOS < 0 || HPOS >= HIST.length - 1;
+}
+function rebuild(){
+  setBackground(S.background, true);
+  setMode(S.mode === "clean" ? "clean" : "edit");
+  render(); inspector(); panels(); relayout(); save(true);
+}
+
+// =============================================================================================
+// DRAG AND RESIZE.
+//
+// NO CUMULATIVE DELTAS: the object's origin and the pointer's design position are recorded once
+// at pointerdown and every move sets the object from those plus the CURRENT pointer, so rounding
+// error in the conversion cannot accumulate over a long drag.
+//
+// Pointer capture keeps the gesture alive when the cursor leaves the element, which it always
+// does on a fast drag, and means there is no document-level listener to leak.
+// =============================================================================================
+var drag = null;
+
+el("stage").addEventListener("pointerdown", function(ev){
+  var handle = ev.target.closest ? ev.target.closest(".h") : null;
+  var node = ev.target.closest ? ev.target.closest(".obj") : null;
+
+  // CLEAN PREVIEW IS THE GAME, so the pointer means what it will mean in the game: a duty card
+  // opens or closes its preview, the background closes it, and nothing can be dragged. Edit Mode
+  // is the studio and the pointer means selection and geometry, with the preview driven from the
+  // panel instead -- two jobs that would fight over the same click if they shared a mode.
+  if (document.body.classList.contains("clean")){
+    // THREE OUTCOMES, AND THE THIRD IS DOING NOTHING.
+    //
+    // A card opens, switches or closes a preview. EMPTY STAGE closes it. Anything else -- the
+    // preview artwork, the wheel, the City, an acolyte, Tithe -- is left alone, because a
+    // preview is something you are reading and clicking the thing you are reading is not a
+    // request to put it away. The earlier version closed on "anything that is not a card",
+    // which made the artwork dismiss itself the moment you touched it.
+    if (node && node.dataset.kind === "card" && S.view !== "action"){
+      togglePreview(node.dataset.id);
+    } else if (!node){
+      if (S.previewDuty){ S.previewDuty = null; render(); panels(); save(true); }
+    }
+    return;
+  }
+
+  if (!node){ select(null); return; }
+  var kind = node.dataset.kind, id = node.dataset.id || null;
+  select(kind, id);
+  if (lockedOf(kind, id)) return;
+
+  var p = toDesign(ev), r = rectOf(kind, id);
+  drag = {kind: kind, id: id, handle: handle ? handle.dataset.handle : null,
+          px: p.x, py: p.y, ox: r.x, oy: r.y, ow: r.width, oh: r.height,
+          ratio: r.height / r.width};
+  node.setPointerCapture(ev.pointerId);
+  drag.node = node; drag.pid = ev.pointerId;
+  gesture = true;
+  ev.preventDefault();
+  ev.stopPropagation();
+});
+
+el("stage").addEventListener("pointermove", function(ev){
+  if (!drag) return;
+  var p = toDesign(ev), dx = p.x - drag.px, dy = p.y - drag.py;
+  if (!drag.handle){
+    moveTo(drag.kind, drag.id, drag.ox + dx, drag.oy + dy);
+  } else {
+    var o = objOf(drag.kind, drag.id);
+    var x = drag.ox, y = drag.oy, w = drag.ow, h = drag.oh, k = drag.handle;
+    if (k.indexOf("e") >= 0) w = drag.ow + dx;
+    if (k.indexOf("s") >= 0) h = drag.oh + dy;
+    if (k.indexOf("w") >= 0){ w = drag.ow - dx; x = drag.ox + dx; }
+    if (k.indexOf("n") >= 0){ h = drag.oh - dy; y = drag.oy + dy; }
+    if (aspectLockedOf(drag.kind)){
+      // Uniform only. The corner being dragged decides which dimension leads; the other follows
+      // from the asset's own ratio, so the wheel can never be squashed.
+      var lead = Math.abs(dx) > Math.abs(dy) ? "w" : "h";
+      if (lead === "w") h = w * drag.ratio; else w = h / drag.ratio;
+      if (k.indexOf("w") >= 0) x = drag.ox + (drag.ow - w);
+      if (k.indexOf("n") >= 0) y = drag.oy + (drag.oh - h);
+    }
+    if (w < MIN_SIZE){ if (k.indexOf("w") >= 0) x = drag.ox + drag.ow - MIN_SIZE; w = MIN_SIZE; }
+    if (h < MIN_SIZE){ if (k.indexOf("n") >= 0) y = drag.oy + drag.oh - MIN_SIZE; h = MIN_SIZE; }
+    o.x = Math.round(x); o.y = Math.round(y);
+    o.width = Math.round(w); o.height = Math.round(h);
+    if (attachable(drag.kind)) writeUV(o);
+  }
+  // THE WHEEL CARRIES ITS PASSENGERS: moving or scaling it re-derives every attached anchor, and
+  // the full rebuild is what puts them on screen -- which is why the wheel is the one kind that
+  // does not take the cheap in-place path.
+  if (drag.kind === "wheel"){
+    syncAttached();
+    render();
+    drag.node = el("wheelObj");
+    try { drag.node.setPointerCapture(drag.pid); } catch (e){}
+  } else {
+    applyGeom(drag.node, drag.kind, drag.id);
+  }
+  drawGuides(); inspector();
+});
+
+function applyGeom(node, kind, id){
+  var r = rectOf(kind, id);
+  node.style.left = r.x + "px";
+  node.style.top = r.y + "px";
+  node.style.width = r.width + "px";
+  node.style.height = r.height + "px";
+  var ov = (S.guides.warnings && !node.classList.contains("ghost")) ? overflowOf(r) : null;
+  node.classList.toggle("oob", !!ov);
+  var tag = node.querySelector(".oobtag");
+  if (ov && !tag){ tag = document.createElement("span"); tag.className = "oobtag";
+                   node.appendChild(tag); }
+  if (tag){
+    if (!ov) tag.remove();
+    else { tag.textContent = "OUTSIDE MODULE  " + overflowText(ov);
+           tag.classList.toggle("low", r.y < 18); }
+  }
+}
+
+function endDrag(ev){
+  if (!drag) return;
+  try { drag.node.releasePointerCapture(drag.pid); } catch (e){}
+  drag = null;
+  gesture = false;
+  render();
+  record();
+  save(true);
+}
+el("stage").addEventListener("pointerup", endDrag);
+el("stage").addEventListener("pointercancel", endDrag);
+
+// THE PREVIEW, which is the one interaction V4 adds.
+//
+// Same card again closes it, another card switches straight to it, the background closes it, and
+// changing state closes it -- because the artwork then means something different and a stale
+// preview would be indistinguishable from a choice.
+function togglePreview(slug){
+  if (S.view === "action") return;
+  S.previewDuty = (S.previewDuty === slug) ? null : slug;
+  render(); panels(); save(true);
+}
+
+// =============================================================================================
+// SELECTION, KEYBOARD
+// =============================================================================================
+function select(kind, id){
+  sel = kind ? {kind: kind, id: id || null} : null;
+  paintSelection(); inspector();
+}
+// SELECTION IS A CLASS, NOT A REBUILD. Rebuilding on pointerdown detached the very node the
+// gesture had just captured, so a drag stopped after its first frame.
+function paintSelection(){
+  [].forEach.call(el("stage").querySelectorAll(".obj"), function(n){
+    var mine = sel && n.dataset.kind === sel.kind && (n.dataset.id || null) === sel.id;
+    n.classList.toggle("sel", !!mine);
+  });
+}
+
+addEventListener("keydown", function(ev){
+  var t = ev.target, typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA"
+                                    || t.tagName === "SELECT" || t.isContentEditable);
+  // Undo carries a modifier, cannot be typed by accident, and is the one shortcut a person
+  // expects to work everywhere -- so it is not behind the caret guard.
+  if ((ev.ctrlKey || ev.metaKey) && (ev.key === "z" || ev.key === "Z")){
+    ev.preventDefault();
+    var ok = ev.shiftKey ? stepHistory(1) : stepHistory(-1);
+    say(ok ? (ev.shiftKey ? "redo" : "undo")
+           : (ev.shiftKey ? "nothing to redo" : "nothing to undo"));
+    return;
+  }
+  if ((ev.ctrlKey || ev.metaKey) && (ev.key === "y" || ev.key === "Y")){
+    ev.preventDefault(); say(stepHistory(1) ? "redo" : "nothing to redo"); return;
+  }
+  if (typing) return;
+  if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+  // 1, 2 and 3 flip between the three compositions, which is the comparison this version is for.
+  for (var i = 0; i < VIEW_STATES.length; i++){
+    if (ev.key === String(i + 1)){ ev.preventDefault(); setView(VIEW_STATES[i].key); return; }
+  }
+  if (ev.key === "f" || ev.key === "F"){ ev.preventDefault(); toggleFull(); return; }
+  if (ev.key === "Escape" && S.previewDuty){ S.previewDuty = null; render(); panels(); return; }
+  if (!sel || ev.key.indexOf("Arrow") !== 0) return;
+  if (lockedOf(sel.kind, sel.id)) return;
+  var step = ev.shiftKey ? 10 : 1;
+  var r = rectOf(sel.kind, sel.id);
+  var dx = (ev.key === "ArrowLeft" ? -step : ev.key === "ArrowRight" ? step : 0);
+  var dy = (ev.key === "ArrowUp"   ? -step : ev.key === "ArrowDown"  ? step : 0);
+  moveTo(sel.kind, sel.id, r.x + dx, r.y + dy);
+  ev.preventDefault();
+  if (sel.kind === "wheel"){ syncAttached(); render(); }
+  else {
+    var n = el("stage").querySelector('.obj[data-kind="' + sel.kind + '"]'
+              + (sel.id ? '[data-id="' + sel.id + '"]' : ":not([data-id])"));
+    if (n) applyGeom(n, sel.kind, sel.id); else render();
+  }
+  drawGuides(); inspector(); recordSoon(); save(true);
+});
+
+// =============================================================================================
+// SMALL CONTROL BUILDERS
+// =============================================================================================
+function field(value, oninput, attrs){
+  var id = "f_" + Math.random().toString(36).slice(2, 8);
+  var a = attrs || {};
+  setTimeout(function(){
+    var e = el(id); if (!e) return;
+    e.oninput = function(){ oninput(e.value); };
+  }, 0);
+  return '<input id=' + id + ' type=' + (a.type || "number")
+       + (a.min !== undefined ? ' min=' + a.min : '')
+       + (a.max !== undefined ? ' max=' + a.max : '')
+       + (a.step !== undefined ? ' step=' + a.step : '')
+       + ' value="' + esc(value) + '">';
+}
+function btn(text, fn, pressed){
+  var id = "b_" + Math.random().toString(36).slice(2, 8);
+  setTimeout(function(){ var e = el(id); if (e) e.onclick = fn; }, 0);
+  return '<button id=' + id + (pressed !== undefined ? ' aria-pressed=' + pressed : '') + '>'
+       + text + '</button>';
+}
+function commit(soon){
+  render(); inspector();
+  if (soon) recordSoon(); else record();
+  save(true);
+}
+function commitPanels(soon){ commit(soon); panels(); }
+
+// =============================================================================================
+// INSPECTOR
+// =============================================================================================
+function inspector(){
+  var host = el("insp");
+  if (!sel){ host.innerHTML = '<div class=hint>Click an object on the stage.</div>'; return; }
+  var kind = sel.kind, id = sel.id, o = objOf(kind, id);
+  if (!o){ sel = null; host.innerHTML = '<div class=hint>Click an object on the stage.</div>'; return; }
+  var r = rectOf(kind, id), h = "";
+  var title = kind === "card" ? S.duties[id].name + " · card"
+            : kind === "figs" ? S.duties[id].name + " · figures"
+            : kind === "art" ? "artwork " + id
+            : kind === "status" ? "instruction" : kind;
+  h += '<div class=hint style="color:#c9b27a">' + esc(title) + '</div>';
+  if (!activeHere(kind))
+    h += '<div class=hint style="color:#5c7f93">not on screen in this state · shown as a ghost</div>';
+
+  if (kind === "figs"){
+    h += '<div class="row two"><span>anchor</span>'
+       + field(Math.round(r.x + 8), function(v){ moveTo(kind, id, clamp(v, -400, CANVAS_W + 400) - 8, r.y); commit(true); })
+       + field(Math.round(r.y + 8), function(v){ moveTo(kind, id, r.x, clamp(v, -400, CANVAS_H + 400) - 8); commit(true); })
+       + '</div>';
+    if (attachedOf(kind, id))
+      h += '<div class=row><span>u / v</span><span style="text-align:left;color:var(--hot)">'
+         + o.u.toFixed(4) + ' , ' + o.v.toFixed(4) + '</span></div>';
+    h += '<div class=row><span>count</span>'
+       + field(o.count, function(v){ o.count = clamp(Math.round(v), 0, 4); commitPanels(); },
+               {min: 0, max: 4}) + '</div>';
+    h += '<div class=row><span>spacing</span>'
+       + field(o.spacing, function(v){ o.spacing = clamp(v, 4, 400); commit(true); }) + '</div>';
+    h += '<div class=btns>' + ["row","compact","arc"].map(function(a){
+           return btn(a, function(){ o.arrangement = a; commit(); }, o.arrangement === a);
+         }).join("") + '</div>';
+    h += '<div class=hint>seats · which player each figure belongs to</div>';
+    h += '<div class="row four"><span>1-4</span>' + [0,1,2,3].map(function(i){
+           var pid = o.seats[i] || PLAYER_IDS[0];
+           return '<select data-seat="' + i + '">' + PLAYER_IDS.map(function(p){
+             return '<option value="' + p + '"' + (p === pid ? " selected" : "") + '>'
+                  + p + '</option>'; }).join("") + '</select>';
+         }).join("") + '</div>';
+    h += '<div class=btns>' + PLAYER_IDS.map(function(p){
+           return btn("all " + p, function(){ o.seats = [p,p,p,p]; commitPanels(); });
+         }).join("") + '</div>';
+    h += '<div class=btns>' + btn(o.attached ? "on the wheel" : "free",
+           function(){ o.attached = !o.attached; if (o.attached) writeUV(o); commit(); },
+           !!o.attached) + '</div>';
+  } else {
+    h += '<div class="row two"><span>x / y</span>'
+       + field(r.x, function(v){ moveTo(kind, id, clamp(v, -800, CANVAS_W + 800), r.y); commit(true); })
+       + field(r.y, function(v){ moveTo(kind, id, r.x, clamp(v, -800, CANVAS_H + 800)); commit(true); })
+       + '</div>';
+    if (resizableOf(kind)){
+      h += '<div class="row two"><span>w / h</span>'
+         + field(o.width, function(v){
+             o.width = clamp(Math.round(v), MIN_SIZE, 4000);
+             if (aspectLockedOf(kind)){ o.height = Math.round(o.width * S.wheel.naturalRatio);
+                                        syncAttached(); }
+             commit(true); })
+         + field(o.height, function(v){
+             o.height = clamp(Math.round(v), MIN_SIZE, 4000);
+             if (aspectLockedOf(kind)){ o.width = Math.round(o.height / S.wheel.naturalRatio);
+                                        syncAttached(); }
+             commit(true); })
+         + '</div>';
+    }
+    if (o.opacity !== undefined){
+      h += '<div class=row><span>opacity</span>'
+         + field(o.opacity, function(v){ o.opacity = clamp(v, 0, 1); commit(true); },
+                 {min: 0, max: 1, step: 0.05}) + '</div>';
+    }
+  }
+
+  var ov = overflowOf(r);
+  if (ov) h += '<div class=hint style="color:var(--warn)">outside the module · '
+             + overflowText(ov) + '</div>';
+
+  if (kind === "art"){
+    h += '<div class=row><span>shows</span><select id=selSlot>'
+       + ACTIONS.map(function(a){ return '<option value="' + a.key + '"'
+           + (o.slot === a.key ? " selected" : "") + '>' + a.label + '</option>'; }).join("")
+       + '</select></div>';
+    h += '<div class=row><span>fit</span><select id=selFit>'
+       + '<option value=cover' + (o.fit === "cover" ? " selected" : "") + '>cover</option>'
+       + '<option value=contain' + (o.fit === "contain" ? " selected" : "") + '>contain</option>'
+       + '</select></div>';
+    h += '<div class="row two"><span>caption</span>'
+       + btn(o.labelVisible ? "on" : "off",
+             function(){ o.labelVisible = !o.labelVisible; commit(); }, !!o.labelVisible)
+       + field(o.labelSize, function(v){ o.labelSize = clamp(Math.round(v), 8, 60); commit(true); })
+       + '</div>';
+    h += '<div class=hint>the picture comes from whichever duty is on screen ('
+       + esc(shownDuty() ? S.duties[shownDuty()].name : "none") + ') — load it in '
+       + '<b>duty actions</b></div>';
+  }
+  if (kind === "card"){
+    h += '<div class=hint>the name, the seals and the action text come from this duty — edit '
+       + 'them in <b>duty actions</b>. The card is reference: clicking it in Clean Preview '
+       + 'previews the two artworks and selects nothing.</div>';
+  }
+  if (kind === "status"){
+    h += '<div class=hint>one line per state, in <b>status</b></div>';
+  }
+  if (kind === "tithe"){
+    h += '<div class=row><span>label</span>'
+       + '<input type=text id=tiLabel value="' + esc(o.label) + '"></div>'
+       + '<div class=hint>the three resources are edited in <b>tithe</b></div>';
+  }
+  if (kind === "city"){
+    h += '<div class=row><span>label</span>'
+       + '<input type=text id=ciLabel value="' + esc(o.label) + '"></div>'
+       + '<div class=hint>this region becomes <b>acolytes in hand</b> while sowing · counts and '
+       + 'seats are in <b>city &amp; in hand</b></div>';
+  }
+  if (kind === "wheel"){
+    h += '<div class=hint>uniform scale only · layout ratio ' + WHEEL_RATIO.toFixed(4)
+       + ' · ' + ELEVATION + '° of elevation, from the built-in wheel\'s viewBox '
+       + WHEEL_VIEWBOX + '</div>';
+    h += '<div class=hint>a loaded asset is <b>art placed in this box</b> · it never changes the '
+       + 'wheel\'s size, its ratio or where the acolytes stand</div>';
+    if (o.image && typeof o.assetRatio === "number"){
+      h += ratioMatches(o.assetRatio)
+        ? '<div class=hint>asset ratio ' + o.assetRatio.toFixed(4) + ' · <b style="color:#8fae6a">'
+          + 'matches the ' + ELEVATION + '° wheel</b></div>'
+        : '<div class=hint><b style="color:var(--warn)">asset ratio ' + o.assetRatio.toFixed(4)
+          + ' differs from the ' + ELEVATION + '° wheel ratio ' + WHEEL_RATIO.toFixed(4)
+          + '</b> · drawn contained inside the box rather than stretched to fill it</div>';
+    }
+    h += '<div class=hint>identical in all three states · nothing writes wheel geometry per '
+       + 'state, which is what makes the three comparable</div>';
+    if (!o.image){
+      h += '<div class=btns>'
+         + btn(o.ground ? "asset ground on" : "asset ground off",
+               function(){ o.ground = !o.ground; commit(); }, !!o.ground)
+         + '</div>'
+         + '<div class=hint>the built-in wheel carries a dark rectangle filling its own box. '
+         + 'Off by default: that rectangle is the board\'s colour inside the wheel\'s bounding '
+         + 'box only, and the board\'s colour belongs to <b>preview background</b></div>';
+    }
+    h += '<div class=btns><input id=fWheel type=file accept="image/svg+xml,image/png,image/webp">'
+       + (o.image ? btn("clear svg", function(){
+            // Back to the built-in drawing. The box is untouched, because loading the asset did
+            // not move it either.
+            o.image = null; o.imageName = null;
+            o.assetRatio = null; o.assetRatioSource = null;
+            commit(); }) : "")
+       + '</div>';
+    if (o.imageName) h += '<div class=hint>' + esc(o.imageName)
+       + (haveImage(o.image) ? "" : ' <b style="color:var(--warn)">not loaded</b>') + '</div>';
+  }
+  h += '<div class=btns>'
+     + btn(o.locked ? "locked" : "unlocked", function(){ o.locked = !o.locked; commit(); }, !!o.locked)
+     + (o.visible !== undefined
+        ? btn(o.visible ? "visible" : "hidden", function(){ o.visible = !o.visible; commit(); }, !!o.visible)
+        : "")
+     + btn("reset", function(){ resetOne(kind, id); })
+     + '</div>';
+  host.innerHTML = h;
+  wireInspector(kind, id, o);
+}
+
+function wireInspector(kind, id, o){
+  var host = el("insp");
+  [].forEach.call(host.querySelectorAll("[data-seat]"), function(s){
+    s.onchange = function(){ o.seats[+s.dataset.seat] = s.value; commitPanels(); };
+  });
+  var ss = el("selSlot");
+  if (ss) ss.onchange = function(){ o.slot = ss.value; commitPanels(); };
+  var sf = el("selFit");
+  if (sf) sf.onchange = function(){ o.fit = sf.value; commit(); };
+  var tl = el("tiLabel");
+  if (tl) tl.oninput = function(){ o.label = tl.value; render(); recordSoon(); save(true); };
+  var cl = el("ciLabel");
+  if (cl) cl.oninput = function(){ o.label = cl.value; render(); recordSoon(); save(true); };
+  var fw = el("fWheel");
+  if (fw) fw.onchange = function(){ readImage(fw, function(key, name, ratio, src){
+    // THE LAYOUT IS THE AUTHORITY AND THE FILE IS ART PLACED INTO IT.
+    //
+    // This used to work the other way round: the incoming file's ratio became the wheel's, and
+    // the height was recomputed from it. That made LOADING A PICTURE a layout edit -- the wheel
+    // grew or shrank, its lower edge could leave the module, every attached acolyte moved with
+    // it, and the 32 degree projection the whole composition is built on quietly became
+    // whatever the file happened to be. Nothing in the page said so.
+    //
+    // So the box does not move. The file's own ratio is still read, because it is worth
+    // knowing, but it is recorded as information and reported rather than adopted.
+    var vb = (name && /\.svg$/i.test(name)) ? svgViewBoxRatio(src) : 0;
+    o.image = key; o.imageName = name;
+    o.assetRatio = vb > 0 ? vb : (ratio > 0 ? ratio : null);
+    o.assetRatioSource = vb > 0 ? "viewBox" : (ratio > 0 ? "natural" : null);
+    commit();
+    if (o.assetRatio === null){
+      say("loaded " + name + " · its shape could not be read", true);
+    } else if (ratioMatches(o.assetRatio)){
+      say("loaded " + name + " · ratio " + o.assetRatio.toFixed(4) + " · matches the "
+          + ELEVATION + "° wheel");
+    } else {
+      say("loaded " + name + " · ratio " + o.assetRatio.toFixed(4) + " differs from the "
+          + ELEVATION + "° wheel ratio " + WHEEL_RATIO.toFixed(4)
+          + " · shown contained, the layout is unchanged", true);
+    }
+  }); };
+}
+
+// THE VIEWBOX IS THE AUTHORITATIVE ASPECT RATIO of an SVG, read from the file's own text rather
+// than inferred from how a browser chose to lay the element out. Split in three because only the
+// middle step needs a browser: decoding and judging are ordinary string work and are where the
+// interesting refusals live. Every one returns 0 rather than a guess, and 0 is what makes the
+// caller fall back instead of adopting a nonsense shape.
+// HOW CLOSE COUNTS AS MATCHING. 0.005 of ratio is about 7px of height on a 1372px wheel --
+// under that an asset is drawn at the same elevation and the difference is rounding; over it,
+// the file was drawn for a different projection and the person should be told.
+var RATIO_TOLERANCE = 0.005;
+function ratioMatches(r){ return typeof r === "number" && Math.abs(r - WHEEL_RATIO) <= RATIO_TOLERANCE; }
+
+function svgTextOf(dataUrl){
+  try {
+    var m = /^data:image\/svg\+xml[^,]*,([\s\S]*)$/.exec(dataUrl || "");
+    if (!m) return "";
+    return /;base64/.test(dataUrl) ? atob(m[1]) : decodeURIComponent(m[1]);
+  } catch (e){ return ""; }
+}
+function ratioFromViewBox(vb){
+  if (!vb || typeof vb !== "string") return 0;
+  var n = vb.trim().split(/[\s,]+/).map(Number);
+  if (n.length !== 4) return 0;
+  if (!isFinite(n[2]) || !isFinite(n[3]) || n[2] <= 0 || n[3] <= 0) return 0;
+  return n[3] / n[2];
+}
+function svgViewBoxRatio(dataUrl){
+  try {
+    var text = svgTextOf(dataUrl);
+    if (!text) return 0;
+    var doc = new DOMParser().parseFromString(text, "image/svg+xml");
+    var svg = doc.documentElement;
+    if (!svg || doc.getElementsByTagName("parsererror").length) return 0;
+    return ratioFromViewBox(svg.getAttribute("viewBox"));
+  } catch (e){ return 0; }
+}
+
+function readImage(input, done){
+  var f = input.files && input.files[0];
+  if (!f) return;
+  var rd = new FileReader();
+  rd.onload = function(){
+    // A data URL into the POOL, not into the state. The state gets the key back.
+    var url = rd.result;
+    var key = putImage(url);
+    var probe = new Image();
+    probe.onload = function(){
+      done(key, f.name, probe.naturalWidth ? probe.naturalHeight / probe.naturalWidth : 0, url);
+    };
+    probe.onerror = function(){ done(key, f.name, 0, url); };
+    probe.src = url;
+  };
+  rd.readAsDataURL(f);
+  input.value = "";
+}
+
+function resetOne(kind, id){
+  var d = DEFAULT_STATE;
+  if (kind === "wheel"){
+    // RESETTING THE GEOMETRY IS NOT REMOVING THE ARTWORK. The box, the size and the layout ratio
+    // all go back to the defaults; a loaded asset stays loaded, because it is art in that box
+    // and has no say in its shape. The ratio is NOT preserved from the asset -- it is the
+    // design invariant, and an earlier build kept an asset-derived one here, which is how a
+    // reset could leave the wheel at somebody else's projection.
+    var keepImg = S.wheel.image, keepName = S.wheel.imageName;
+    var keepAR = S.wheel.assetRatio, keepARS = S.wheel.assetRatioSource;
+    S.wheel = clone(d.wheel);
+    S.wheel.image = keepImg; S.wheel.imageName = keepName;
+    S.wheel.assetRatio = keepAR === undefined ? null : keepAR;
+    S.wheel.assetRatioSource = keepARS === undefined ? null : keepARS;
+    syncAttached();
+  }
+  else if (kind === "card") S.duties[id].card = clone(d.duties[id].card);
+  else if (kind === "figs") S.duties[id].figures = clone(d.duties[id].figures);
+  else if (kind === "art"){ var key = id === "left" ? "artLeft" : "artRight";
+                            S.display[key] = clone(d.display[key]); }
+  // Presentation back to the defaults, words kept: retyping is not what anyone means by putting
+  // a box back where it started.
+  else if (kind === "status"){ var keepByView = clone(S.status.byView);
+                               S.status = clone(d.status);
+                               S.status.byView = keepByView; }
+  else if (kind === "tithe"){ var tl = S.tithe.label, tr = clone(S.tithe.resources),
+                                  ti = S.tithe.image, tn = S.tithe.imageName;
+                              S.tithe = clone(d.tithe);
+                              S.tithe.label = tl; S.tithe.resources = tr;
+                              S.tithe.image = ti; S.tithe.imageName = tn; }
+  else if (kind === "city"){ var co = S.city.counts, sh = S.city.shown, cl = S.city.label;
+                             S.city = clone(d.city);
+                             S.city.counts = co; S.city.shown = sh; S.city.label = cl; }
+  commitPanels(); say("reset " + kind + (id ? " " + id : ""));
+}
+
+// =============================================================================================
+// SIDE PANELS
+// =============================================================================================
+var actionPanelDuty = "clerical";
+
+function panels(){
+  var A = S.acolytes;
+
+  // ---- view -----------------------------------------------------------------------------------
+  var shown = shownDuty();
+  var v = '<div class=hint>the wheel and the City are identical in all three states — that is '
+        + 'what makes them comparable. Press <b>1</b>, <b>2</b>, <b>3</b> to flip.</div>'
+        + '<div class=row><span>reached</span><select id=selDuty>'
+        + DUTY_ORDER.map(function(s){
+            return '<option value="' + s + '"' + (s === reachedDuty() ? " selected" : "") + '>'
+                 + esc(S.duties[s].name) + '</option>'; }).join("")
+        + '</select></div>'
+        + '<div class=hint>the duty the sow reached · drives ACTION SELECTION</div>'
+        + '<div class=row><span>preview</span><select id=selPrev'
+        + (S.view === "action" ? " disabled" : "") + '>'
+        + '<option value="">— none —</option>'
+        + DUTY_ORDER.map(function(s){
+            return '<option value="' + s + '"' + (s === S.previewDuty ? " selected" : "") + '>'
+                 + esc(S.duties[s].name) + '</option>'; }).join("")
+        + '</select></div>'
+        + '<div class=hint>' + (S.view === "action"
+            ? 'in ACTION SELECTION the artwork is the reached duty’s and is a choice, not a preview'
+            : 'in Clean Preview, clicking a duty card does this. Same card again closes it, '
+              + 'background closes it, Escape closes it.') + '</div>'
+        + '<div class=btns>'
+        + btn("show ghosts", function(){ S.showGhosts = !S.showGhosts; commitPanels(); }, S.showGhosts)
+        + '</div>'
+        + '<div class=hint>ghosts show objects that are not on screen in this state, faintly, so '
+        + 'they can be composed without leaving it. Editing chrome — never in Clean Preview.</div>';
+  el("viewCtl").innerHTML = v;
+  el("selDuty").onchange = function(){ S.selectedDuty = this.value; commitPanels(); };
+  el("selPrev").onchange = function(){ S.previewDuty = this.value || null; commitPanels(); };
+
+  // ---- status ----------------------------------------------------------------------------------
+  var T = S.status;
+  var sh = '<div class=hint>one line, per state. No context field: V3 carried a small SOW / '
+         + 'CLERICAL line above this one that said what the rest of the screen already said.</div>';
+  VIEW_STATES.forEach(function(vs){
+    sh += '<div class=row><span>' + vs.key + '</span><input type=text data-st="' + vs.key
+        + '" value="' + esc((T.byView[vs.key] || {}).main || "") + '"></div>';
+  });
+  sh += '<div class=hint>{n} in the sow line is replaced by the acolytes in hand</div>'
+      + '<div class="row two"><span>size</span>'
+      + '<input type=number id=stSize min=10 max=80 value="' + T.size + '">'
+      + '<span></span></div>'
+      + '<div class=btns>' + ["left","center","right"].map(function(a){
+          return btn(a, function(){ T.align = a; commitPanels(); }, T.align === a); }).join("")
+      + '</div>'
+      + '<div class=hint>fits on one line at ' + Math.round(T.width) + ' px wide: '
+      + '<b style="color:' + (statusFits() ? "#8fae6a" : "#e0705f") + '">'
+      + (statusFits() ? "yes" : "no — raise the width or lower the size") + '</b></div>';
+  el("statusCtl").innerHTML = sh;
+  [].forEach.call(el("statusCtl").querySelectorAll("[data-st]"), function(inp){
+    inp.oninput = function(){
+      T.byView[inp.dataset.st] = T.byView[inp.dataset.st] || {};
+      T.byView[inp.dataset.st].main = inp.value;
+      render(); recordSoon(); save(true);
+    };
+  });
+  el("stSize").oninput = function(){ T.size = clamp(Math.round(this.value), 10, 80);
+                                     render(); recordSoon(); save(true); };
+
+  // ---- duty actions ------------------------------------------------------------------------------
+  var ac = '<div class=hint>the assets each duty owns. The SCENIC image is shown by the two '
+         + 'artwork boxes when this duty is previewed or reached — it has no box of its own.</div>'
+         + '<div class=row><span>duty</span><select id=actDuty>'
+         + DUTY_ORDER.map(function(s){
+             return '<option value="' + s + '"' + (s === actionPanelDuty ? " selected" : "") + '>'
+                  + esc(S.duties[s].name) + '</option>'; }).join("")
+         + '</select></div>';
+  var D = S.duties[actionPanelDuty];
+  ACTIONS.forEach(function(a){
+    var act = D[a.key];
+    ac += '<div class=hint style="color:#c9b27a;margin-top:8px">' + a.label + '</div>'
+        + '<div class=row><span>name</span><input type=text data-act="' + a.key
+        + ':name" value="' + esc(act.name) + '"></div>'
+        + '<div class=row><span>short</span><input type=text data-act="' + a.key
+        + ':shortLabel" value="' + esc(act.shortLabel) + '"></div>'
+        + '<div class=row><span>seal</span><span style="text-align:left">'
+        + '<input type=file data-asset="' + a.key + ':seal" '
+        + 'accept="image/png,image/webp,image/svg+xml"></span></div>'
+        + (act.sealName ? '<div class=hint style="margin-left:74px">' + esc(act.sealName)
+            + (haveImage(act.seal) ? "" : ' <b style="color:var(--warn)">not loaded</b>')
+            + ' <button data-clr="' + a.key + ':seal" style="padding:1px 5px">clear</button></div>' : "")
+        + '<div class=row><span>scenic</span><span style="text-align:left">'
+        + '<input type=file data-asset="' + a.key + ':scenic" '
+        + 'accept="image/png,image/jpeg,image/webp"></span></div>'
+        + (act.scenicName ? '<div class=hint style="margin-left:74px">' + esc(act.scenicName)
+            + (haveImage(act.scenic) ? "" : ' <b style="color:var(--warn)">not loaded</b>')
+            + ' <button data-clr="' + a.key + ':scenic" style="padding:1px 5px">clear</button></div>' : "");
+  });
+  el("actionCtl").innerHTML = ac;
+  el("actDuty").onchange = function(){ actionPanelDuty = this.value; panels(); };
+  [].forEach.call(el("actionCtl").querySelectorAll("[data-act]"), function(inp){
+    var q = inp.dataset.act.split(":");
+    inp.oninput = function(){ S.duties[actionPanelDuty][q[0]][q[1]] = inp.value;
+                              render(); recordSoon(); save(true); };
+  });
+  [].forEach.call(el("actionCtl").querySelectorAll("[data-asset]"), function(inp){
+    var q = inp.dataset.asset.split(":");
+    inp.onchange = function(){ readImage(inp, function(key, name){
+      var act = S.duties[actionPanelDuty][q[0]];
+      act[q[1]] = key; act[q[1] + "Name"] = name;
+      commitPanels(); say("loaded " + name); }); };
+  });
+  [].forEach.call(el("actionCtl").querySelectorAll("[data-clr]"), function(b){
+    var q = b.dataset.clr.split(":");
+    b.onclick = function(){ var act = S.duties[actionPanelDuty][q[0]];
+                            act[q[1]] = null; act[q[1] + "Name"] = null; commitPanels(); };
+  });
+
+  // ---- action artwork ------------------------------------------------------------------------------
+  var ex = '<div class=hint>two boxes, not sixteen. Whichever duty is previewed or reached lends '
+         + 'them its two scenic images.</div>';
+  ["left", "right"].forEach(function(side){
+    var e = artOf(side);
+    ex += '<div class=row><span>' + side + '</span><span style="text-align:left">'
+        + '<select data-artslot="' + side + '">' + ACTIONS.map(function(a){
+            return '<option value="' + a.key + '"' + (e.slot === a.key ? " selected" : "") + '>'
+                 + a.label + '</option>'; }).join("") + '</select></span></div>'
+        + '<div class=hint style="margin-left:74px">' + Math.round(e.width) + ' × '
+        + Math.round(e.height) + ' at ' + Math.round(e.x) + ', ' + Math.round(e.y) + '</div>';
+  });
+  ex += '<div class=hint>reached-duty highlight on the wheel</div>'
+      + '<div class=btns>'
+      + btn(S.display.highlight.visible ? "highlight on" : "highlight off",
+            function(){ S.display.highlight.visible = !S.display.highlight.visible; commitPanels(); },
+            S.display.highlight.visible)
+      + ["glow","ring"].map(function(stl){
+          return btn(stl, function(){ S.display.highlight.style = stl; commitPanels(); },
+                     S.display.highlight.style === stl); }).join("")
+      + '</div>'
+      + '<div class="row two"><span>w / h</span>'
+      + '<input type=number id=hlW min=20 max=800 value="' + S.display.highlight.width + '">'
+      + '<input type=number id=hlH min=10 max=500 value="' + S.display.highlight.height + '"></div>'
+      + '<div class=row><span>offset y</span>'
+      + '<input type=number id=hlDy min=-300 max=300 value="' + S.display.highlight.dy + '"></div>';
+  el("artCtl").innerHTML = ex;
+  [].forEach.call(el("artCtl").querySelectorAll("[data-artslot]"), function(s){
+    s.onchange = function(){ artOf(s.dataset.artslot).slot = s.value; commitPanels(); };
+  });
+  el("hlW").oninput = function(){ S.display.highlight.width = clamp(Math.round(this.value), 20, 800);
+                                  render(); recordSoon(); save(true); };
+  el("hlH").oninput = function(){ S.display.highlight.height = clamp(Math.round(this.value), 10, 500);
+                                  render(); recordSoon(); save(true); };
+  el("hlDy").oninput = function(){ S.display.highlight.dy = clamp(Math.round(this.value), -300, 300);
+                                   render(); recordSoon(); save(true); };
+
+  // ---- tithe ---------------------------------------------------------------------------------------
+  var th = '<div class=hint>the alternative to taking a duty action, and only on screen in '
+         + 'ACTION SELECTION — never in a preview. The three resources sit one over two.</div>';
+  (S.tithe.resources || []).forEach(function(r, i){
+    th += '<div class="row two"><span>' + (i === 0 ? "top" : "bottom") + '</span>'
+        + '<input type=text data-res="' + i + ':key" value="' + esc(r.key) + '" maxlength=3>'
+        + '<input type=text data-res="' + i + ':name" value="' + esc(r.name) + '"></div>';
+  });
+  th += '<div class=hint>the letters are placeholders for icons · the full words are '
+      + 'deliberately not spelled out on the card</div>';
+  el("titheCtl").innerHTML = th;
+  [].forEach.call(el("titheCtl").querySelectorAll("[data-res]"), function(inp){
+    var q = inp.dataset.res.split(":");
+    inp.oninput = function(){ S.tithe.resources[+q[0]][q[1]] = inp.value;
+                              render(); recordSoon(); save(true); };
+  });
+
+  // ---- acolytes ---------------------------------------------------------------------------------------
+  var a = '<div class=btns>'
+        + '<button data-sty=colored aria-pressed="' + (A.style === "colored") + '">COLORED</button>'
+        + '<button data-sty=painted aria-pressed="' + (A.style === "painted") + '">PAINTED</button>'
+        + '</div>'
+        + '<div class=row><span>height</span><input type=number id=acoNum min=' + ACO_RANGE[0]
+        + ' max=' + ACO_RANGE[1] + ' value="' + A.height + '"></div>'
+        + '<input type=range id=acoRange min=' + ACO_RANGE[0] + ' max=' + ACO_RANGE[1]
+        + ' step=1 value="' + A.height + '">'
+        + '<div class=hint>' + ACO_RANGE[0] + '–' + ACO_RANGE[1]
+        + ' px tall in design coordinates · the wheel is ' + S.wheel.width + ' px wide</div>'
+        + '<div class="row two"><span>city / hand %</span>'
+        + '<input type=number id=ratCity min=20 max=150 value="' + A.ratios.city + '">'
+        + '<input type=number id=ratHand min=20 max=150 value="' + A.ratios.inHand + '"></div>'
+        + '<div class=hint>' + (A.style === "painted" ? "painted" : "colored")
+        + ' assets · one per player, transparent png or webp</div>';
+  PLAYER_IDS.forEach(function(p){
+    var key = A.style === "painted" ? A.painted[p] : A.colored[p];
+    var nm = A.style === "painted" ? A.paintedNames[p] : A.coloredNames[p];
+    a += '<div class=row><span>' + p + '</span><span style="text-align:left">'
+       + '<input type=file data-aco="' + p + '" accept="image/png,image/webp,image/jpeg,image/svg+xml">'
+       + '</span></div>';
+    if (nm) a += '<div class=hint style="margin-left:74px">' + esc(nm)
+               + (haveImage(key) ? "" : ' <b style="color:var(--warn)">not loaded</b>')
+               + ' <button data-acoclr="' + p + '" style="padding:1px 5px">clear</button></div>';
+  });
+  a += '<div class=btns><button id=acoAll>reuse ' + PLAYER_IDS[0] + "'s asset for all</button></div>";
+  el("acoCtl").innerHTML = a;
+  [].forEach.call(el("acoCtl").querySelectorAll("[data-sty]"), function(b){
+    b.onclick = function(){ A.style = b.dataset.sty; commitPanels(); };
+  });
+  var an = el("acoNum"), ar = el("acoRange");
+  function setAco(v){
+    A.height = clamp(Math.round(v), ACO_RANGE[0], ACO_RANGE[1]);
+    an.value = A.height; ar.value = A.height;
+    render(); recordSoon(); save(true);
+  }
+  an.oninput = function(){ setAco(an.value); };
+  ar.oninput = function(){ setAco(ar.value); };
+  el("ratCity").oninput = function(){ A.ratios.city = clamp(Math.round(this.value), 20, 150);
+                                      render(); recordSoon(); save(true); };
+  el("ratHand").oninput = function(){ A.ratios.inHand = clamp(Math.round(this.value), 20, 150);
+                                      render(); recordSoon(); save(true); };
+  [].forEach.call(el("acoCtl").querySelectorAll("[data-aco]"), function(inp){
+    inp.onchange = function(){ readImage(inp, function(key, name){
+      var p = inp.dataset.aco;
+      if (A.style === "painted"){ A.painted[p] = key; A.paintedNames[p] = name; }
+      else { A.colored[p] = key; A.coloredNames[p] = name; }
+      commitPanels(); say("loaded " + name + " for " + p); }); };
+  });
+  [].forEach.call(el("acoCtl").querySelectorAll("[data-acoclr]"), function(b){
+    b.onclick = function(){ var p = b.dataset.acoclr;
+      if (A.style === "painted"){ A.painted[p] = null; A.paintedNames[p] = null; }
+      else { A.colored[p] = null; A.coloredNames[p] = null; }
+      commitPanels(); };
+  });
+  el("acoAll").onclick = function(){
+    var first = PLAYER_IDS[0];
+    var bank = A.style === "painted" ? A.painted : A.colored;
+    var names = A.style === "painted" ? A.paintedNames : A.coloredNames;
+    if (!bank[first]){ say("load an asset for " + first + " first", true); return; }
+    PLAYER_IDS.forEach(function(p){ bank[p] = bank[first]; names[p] = names[first]; });
+    commitPanels(); say("reusing " + names[first] + " for all four players");
+  };
+
+  // ---- occupancy -----------------------------------------------------------------------------------------
+  var h = "";
+  DUTY_ORDER.forEach(function(slug){
+    var f = S.duties[slug].figures;
+    h += '<div class=row><span>' + slug.replace(/_/g, " ") + '</span><span style="text-align:left">'
+       + [0,1,2,3,4].map(function(n){
+           return '<button data-occ="' + slug + ':' + n + '" aria-pressed="'
+                + (f.count === n ? "true" : "false") + '" style="padding:2px 6px">' + n + '</button>';
+         }).join("")
+       + ' <span class=tag>' + f.seats.slice(0, Math.max(f.count, 0)).map(function(p){
+           return '<span class=sw style="background:' + seatColour(p) + '"></span>';
+         }).join("") + '</span></span></div>';
+  });
+  el("duties").innerHTML = h;
+  [].forEach.call(el("duties").querySelectorAll("[data-occ]"), function(b){
+    b.onclick = function(){
+      var p = b.dataset.occ.split(":");
+      S.duties[p[0]].figures.count = +p[1];
+      commitPanels();
+    };
+  });
+
+  // ---- players --------------------------------------------------------------------------------------------
+  var pc = "";
+  S.players.forEach(function(p, i){
+    pc += '<div class="row two"><span>' + p.id + '</span>'
+       + '<input type=text data-pl="' + i + ':label" value="' + esc(p.label) + '">'
+       + '<input type=color data-pl="' + i + ':colour" value="' + p.colour + '" style="padding:0">'
+       + '</div>';
+  });
+  el("playerCtl").innerHTML = pc;
+  [].forEach.call(el("playerCtl").querySelectorAll("[data-pl]"), function(inp){
+    var q = inp.dataset.pl.split(":"), pl = S.players[+q[0]], key = q[1];
+    inp.oninput = inp.onchange = function(){ pl[key] = inp.value; render(); recordSoon(); save(true); };
+  });
+
+  // ---- city and in hand ------------------------------------------------------------------------------------
+  var c = '<div class=hint>one region, two jobs: the City normally, the acolytes in hand while '
+        + 'sowing. Counts are drawn INSIDE each figure — four seats and four counts have to fit '
+        + 'one row, and a number on the robe costs no width.</div>';
+  PLAYER_IDS.forEach(function(p){
+    c += '<div class="row two"><span>' + p + '</span>'
+       + '<input type=number min=0 max=99 data-city="' + p + ':count" value="'
+       + (S.city.counts[p] || 0) + '">'
+       + '<label class=chk><input type=checkbox data-city="' + p + ':shown"'
+       + (S.city.shown[p] ? " checked" : "") + '> show</label></div>';
+  });
+  c += '<div class=hint>acolytes in hand — drives the sow instruction too</div>'
+     + '<div class="row two"><span>in hand</span>'
+     + '<input type=number id=ihCount min=0 max=99 value="' + S.inHand.count + '">'
+     + '<select id=ihSeat>' + PLAYER_IDS.map(function(p){
+         return '<option value="' + p + '"' + (p === S.inHand.seat ? " selected" : "") + '>' + p
+              + '</option>'; }).join("") + '</select></div>';
+  el("cityCtl").innerHTML = c;
+  [].forEach.call(el("cityCtl").querySelectorAll("[data-city]"), function(inp){
+    var q = inp.dataset.city.split(":");
+    inp.oninput = inp.onchange = function(){
+      if (q[1] === "count") S.city.counts[q[0]] = clamp(Math.round(inp.value), 0, 99);
+      else S.city.shown[q[0]] = inp.checked;
+      render(); recordSoon(); save(true);
+    };
+  });
+  el("ihCount").oninput = function(){ S.inHand.count = clamp(Math.round(this.value), 0, 99);
+                                      render(); recordSoon(); save(true); };
+  el("ihSeat").onchange = function(){ S.inHand.seat = this.value; commit(); };
+
+  // ---- wheel attachment ---------------------------------------------------------------------------------------
+  el("attachCtl").innerHTML =
+      '<div class=btns><button id=attAll aria-pressed="' + S.attachToWheel + '">'
+    + (S.attachToWheel ? "anchors on the wheel" : "anchors free") + '</button></div>'
+    + '<div class=hint>the eight duty figure anchors ride the wheel, so they keep their places '
+    + 'on it when it moves or scales. Nothing else does: the bands above are furniture of the '
+    + 'module, not of the wheel.</div>';
+  el("attAll").onclick = function(){
+    S.attachToWheel = !S.attachToWheel;
+    // NOTHING MOVES EITHER WAY. Off, the absolute cache is already current and simply becomes
+    // authoritative. On, u/v is re-derived from where things are now.
+    if (S.attachToWheel) reanchorAll();
+    commitPanels();
+  };
+
+  // ---- guides ----------------------------------------------------------------------------------------------------
+  var G = S.guides, names = {bounds: "stage boundary", centreH: "centre line ↔",
+    centreV: "centre line ↕", grid: "50 px grid", safe: "safe area",
+    wheelCentre: "wheel centre", warnings: "out-of-bounds warnings"};
+  el("guideCtl").innerHTML = Object.keys(names).map(function(k){
+    return '<label class=chk style="display:flex"><input type=checkbox data-g="' + k + '"'
+         + (G[k] ? " checked" : "") + '> ' + names[k] + '</label>';
+  }).join("");
+  [].forEach.call(el("guideCtl").querySelectorAll("[data-g]"), function(cb){
+    cb.onchange = function(){ S.guides[cb.dataset.g] = cb.checked; render(); record(); save(true); };
+  });
+
+  el("fitInfo").innerHTML = FULL_BOARDS.map(function(w){
+    return w + " × " + CANVAS_H + " → <b style='color:#c9b27a'>" + (w - CANVAS_W)
+         + "</b> px beside the module";
+  }).join("<br>");
+
+  paintView();
+}
+
+// Does the instruction fit on one line? Measured rather than guessed -- the sow line is the long
+// one and "does the text fit" is not something to find out from a screenshot afterwards.
+function statusFits(){
+  var n = el("statusObj");
+  if (!n) return true;
+  var m = n.querySelector(".main");
+  return !m || m.scrollWidth <= m.clientWidth + 1;
+}
+
+// =============================================================================================
+// SERIALISATION. Two outputs, because they answer to two different readers.
+//
+//   A LAB SESSION is for this page: everything, including which state was on screen, which duty
+//   was being previewed, the occupancy counts being tested, the guides, and optionally the image
+//   bytes. Its only contract is with a future version of this tool.
+//
+//   A GAME LAYOUT is for the real UI: geometry and the action wording, nothing else. Built field
+//   by field rather than by deleting keys from the state -- a subtractive export leaks every new
+//   editor setting into production the day it is added.
+// =============================================================================================
+function labSession(withImages){
+  var used = {};
+  if (withImages){
+    function mark(k){ if (k && IMAGES[k]) used[k] = IMAGES[k]; }
+    mark(S.wheel.image); mark(S.tithe.image);
+    DUTY_ORDER.forEach(function(s){
+      ACTIONS.forEach(function(a){
+        var act = S.duties[s][a.key]; mark(act.seal); mark(act.scenic);
+      });
+    });
+    PLAYER_IDS.forEach(function(p){ mark(S.acolytes.painted[p]); mark(S.acolytes.colored[p]); });
+  }
+  return {kind: "duty-wheel-lab-session", version: STATE_VERSION,
+          state: clone(S), images: used};
+}
+
+// THE PRODUCTION EXPORT. The line it draws is not "geometry in, everything else out" -- it is
+// DESIGN DECISIONS IN, SESSION STATE OUT.
+//
+// A box alone was too little: the real UI could place the instruction and then not know what it
+// says, how big it is or whether it is centred, and could place the two artwork slots without
+// knowing whether they cover or contain. Those were decided here and are part of the design.
+//
+// What stays out is what somebody happened to be doing while composing: which object is
+// selected, which duty is reached or previewed, the mode, the zoom, the guides, the ghosts, the
+// undo history, the locks, the image pool, and the occupancy counts and seats being used to
+// test crowding. The layout says where the pieces go; it does not say which pieces are on the
+// board in this lab session.
+//
+// BUILT FIELD BY FIELD, never by cloning the state and deleting keys -- a subtractive export
+// leaks each new editor setting into production on the day it is added.
+function gameLayout(){
+  function box(o){ return {x: o.x, y: o.y, width: o.width, height: o.height}; }
+  var msgs = {};
+  VIEW_STATES.forEach(function(vs){
+    msgs[vs.key] = {main: ((S.status.byView || {})[vs.key] || {}).main || ""};
+  });
+  var H = S.display.highlight;
+  var out = {
+    version: STATE_VERSION,
+    canvas: {width: CANVAS_W, height: CANVAS_H},
+    // The instruction: where it sits AND what it says in each state, because the typography and
+    // the wording were both decided here.
+    status: {x: S.status.x, y: S.status.y, width: S.status.width, height: S.status.height,
+             size: S.status.size, align: S.status.align, opacity: S.status.opacity,
+             visible: !!S.status.visible, byView: msgs},
+    // RATIO IS EXPORTED BECAUSE IT IS A DESIGN INVARIANT, not a consequence of the box: the
+    // production UI has to know the wheel is a circle at this elevation, not a free rectangle.
+    wheel: {x: S.wheel.x, y: S.wheel.y, width: S.wheel.width, height: S.wheel.height,
+            ratio: WHEEL_RATIO, ground: !!S.wheel.ground, opacity: S.wheel.opacity},
+    duties: {},
+    artwork: {},
+    // The mark on the reached duty, which was sized and coloured here and cannot be recreated
+    // from anything else in this file.
+    highlight: {width: H.width, height: H.height, dy: H.dy, style: H.style,
+                visible: !!H.visible, opacity: H.opacity, colour: H.colour},
+    // WHEN Tithe and the City are on screen is a phase the game already knows; WHAT they look
+    // like and WHERE they go is this file's business, so the labels and the resources come too
+    // and nothing about the phase does.
+    tithe: {x: S.tithe.x, y: S.tithe.y, width: S.tithe.width, height: S.tithe.height,
+            visible: !!S.tithe.visible, label: S.tithe.label,
+            resources: (S.tithe.resources || []).map(function(r){
+              return {key: r.key, name: r.name}; })},
+    city: {x: S.city.x, y: S.city.y, width: S.city.width, height: S.city.height,
+           visible: !!S.city.visible, label: S.city.label},
+    acolytes: {height: S.acolytes.height, ratios: clone(S.acolytes.ratios)},
+  };
+  DUTY_ORDER.forEach(function(slug){
+    var D = S.duties[slug], F = D.figures, cd = D.card;
+    var d = {name: D.name,
+             card: {x: cd.x, y: cd.y, width: cd.width, height: cd.height,
+                    visible: !!cd.visible}};
+    ACTIONS.forEach(function(a){
+      // THE ACTION CARRIES ITS WORDING AND NOT A BOX. The two shared artwork slots own the
+      // geometry, so there are no sixteen large boxes to export.
+      var act = D[a.key];
+      d[a.key] = {name: act.name, shortLabel: act.shortLabel};
+    });
+    // WHERE the acolytes stand, not WHO is standing there: count and seats are the crowding
+    // test this session happens to be running.
+    d.figures = {x: F.x, y: F.y, u: F.u, v: F.v,
+                 spacing: F.spacing, arrangement: F.arrangement, attached: !!F.attached};
+    out.duties[slug] = d;
+  });
+  ["left", "right"].forEach(function(side){
+    var e = artOf(side);
+    out.artwork[side] = {x: e.x, y: e.y, width: e.width, height: e.height, slot: e.slot,
+                         fit: e.fit, opacity: e.opacity, visible: !!e.visible,
+                         labelVisible: !!e.labelVisible, labelSize: e.labelSize};
+  });
+  return out;
+}
+
+function validate(d){
+  if (!d || typeof d !== "object" || Array.isArray(d)) throw new Error("not an object");
+  if (!d.canvas || d.canvas.width !== CANVAS_W || d.canvas.height !== CANVAS_H)
+    throw new Error("canvas is not " + CANVAS_W + "x" + CANVAS_H);
+  if (!d.duties || typeof d.duties !== "object") throw new Error("no duties");
+  DUTY_ORDER.forEach(function(s){
+    if (!d.duties[s]) throw new Error("no duty '" + s + "'");
+  });
+  var extra = Object.keys(d.duties).filter(function(s){ return DUTY_ORDER.indexOf(s) < 0; });
+  if (extra.length) throw new Error("duties this module does not have: " + extra.join(", "));
+  return true;
+}
+
+// =============================================================================================
+// MIGRATION. One function, called on everything that comes in from outside, so nothing
+// downstream has to know which shape it started as.
+//
+//   V1 -> V2  one artwork per duty became two, each with a box.
+//   V2 -> V3  the boxes went away; assets moved to two shared slots; the module widened to 1400.
+//   V3 -> V4  the composition rearranged. The per-duty summary becomes a reference card in the
+//             top ribbon; the wheel-centre medallions retire; the status line loses its context
+//             field; the duty labels on the wheel go, because nothing identifies a duty space on
+//             the wheel now and a hidden object that could is worth removing rather than keeping.
+//
+// GEOMETRY IS NOT CARRIED ACROSS THE V4 BOUNDARY. Every band moved, so a V3 summary's position
+// is a position in a layout that no longer exists -- keeping it would put eight cards where the
+// old two columns were, off the ribbon and over the wheel. What IS carried is everything that is
+// not a coordinate: the wording, the assets, the counts, the seats, the player colours, the
+// guides and the acolyte settings, which is the part somebody actually spent time on.
+// =============================================================================================
+function migrate(d){
+  if (!d || typeof d !== "object") return d;
+  d = clone(d);
+  var def = DEFAULT_STATE;
+
+  function hoist(o){
+    if (o && typeof o.image === "string" && o.image.slice(0, 5) === "data:") o.image = putImage(o.image);
+  }
+  hoist(d.wheel); hoist(d.city);
+
+  // ---- V1 -> V2 ------------------------------------------------------------------------------
+  if (d.duties){
+    DUTY_ORDER.forEach(function(s){
+      var D = d.duties[s];
+      if (!D) return;
+      if (D.art && !D.actionA){
+        hoist(D.art);
+        D.actionA = {art: D.art};
+        D.actionB = {art: {image: null, imageName: null}};
+      }
+      delete D.art;
+      ACTIONS.forEach(function(a){ if (D[a.key]) hoist(D[a.key].art); });
+      var F = D.figures;
+      if (F){
+        if (F.anchorX !== undefined && F.x === undefined){ F.x = F.anchorX; F.y = F.anchorY; }
+        delete F.anchorX; delete F.anchorY;
+        if (F.arrangement === undefined) F.arrangement = F.compact ? "compact" : "row";
+        delete F.compact;
+        if (!Array.isArray(F.seats)) F.seats = clone(def.duties[s].figures.seats);
+      }
+    });
+  }
+  if (d.city && Array.isArray(d.city.players)){
+    var counts = {}, shown = {}, players = [];
+    d.city.players.slice(0, 4).forEach(function(p, i){
+      var id = PLAYER_IDS[i];
+      players.push({id: id, label: p.label || def.players[i].label,
+                    colour: p.colour || def.players[i].colour});
+      counts[id] = p.count; shown[id] = !!p.visible;
+    });
+    while (players.length < 4){ var j = players.length; players.push(clone(def.players[j])); }
+    if (!d.players) d.players = players;
+    if (!d.city.counts) d.city.counts = counts;
+    if (!d.city.shown) d.city.shown = shown;
+    delete d.city.players;
+  }
+
+  // ---- V2 -> V3: assets keep, boxes go --------------------------------------------------------
+  if (d.duties){
+    DUTY_ORDER.forEach(function(s){
+      var D = d.duties[s];
+      if (!D) return;
+      ACTIONS.forEach(function(a){
+        var slot = D[a.key];
+        if (!slot) return;
+        if (slot.art){
+          var art = slot.art;
+          hoist(art);
+          D[a.key] = {
+            name: slot.name || def.duties[s][a.key].name,
+            shortLabel: slot.shortLabel || def.duties[s][a.key].shortLabel,
+            seal: slot.seal || null, sealName: slot.sealName || null,
+            scenic: art.image || null, scenicName: art.imageName || null,
+          };
+        }
+      });
+    });
+  }
+
+  // ---- V3 -> V4: the rearrangement --------------------------------------------------------------
+  var oldW = d.canvas && d.canvas.width;
+  if (oldW && oldW !== CANVAS_W){
+    // A V1/V2 file on the 1200 module. Widening its coordinates would place them precisely in a
+    // layout V4 has replaced, so the canvas is simply declared and the geometry comes from the
+    // defaults below.
+    d.canvas = {width: CANVAS_W, height: CANVAS_H};
+  }
+  var fromOlder = !(d.version >= STATE_VERSION);
+  if (fromOlder){
+    // The V3 summary becomes the V4 reference card -- same duty, same contents, new place in the
+    // ribbon. The old position is dropped on purpose; see the note above.
+    if (d.duties) DUTY_ORDER.forEach(function(s){
+      var D = d.duties[s];
+      if (!D) return;
+      delete D.summary;
+      delete D.label;              // nothing identifies a duty space on the wheel in V4
+      delete D.titheLabel;
+      D.card = clone(def.duties[s].card);
+      if (D.figures){
+        // The anchors ring a wheel that is now 1372 wide rather than 950, and u/v is a fraction
+        // of THAT wheel -- so the ring is re-derived rather than reused at a different scale.
+        delete D.figures.u; delete D.figures.v;
+        D.figures.x = def.duties[s].figures.x;
+        D.figures.y = def.duties[s].figures.y;
+        D.figures.spacing = def.duties[s].figures.spacing;
+      }
+    });
+    // Geometry that has no V4 equivalent, or whose band moved.
+    ["wheel", "status", "city", "tithe"].forEach(function(k){
+      if (!d[k]) return;
+      ["x", "y", "width", "height"].forEach(function(f){ delete d[k][f]; });
+    });
+    if (d.display){ delete d.display.expandedLeft; delete d.display.expandedRight; }
+    // V3's status had a context line and per-view presets; V4 has one line per state.
+    if (d.status){
+      var main = {};
+      VIEW_STATES.forEach(function(vs){
+        var old = (d.status.byView || {})[vs.key];
+        main[vs.key] = {main: (old && old.main) || def.status.byView[vs.key].main};
+      });
+      d.status.byView = main;
+      ["context", "main", "preset", "contextVisible", "contextSize", "mainSize", "autoContext",
+       "accent", "accentColour"].forEach(function(f){ delete d.status[f]; });
+    }
+    // The in-hand pool kept a box while it lived in the wheel's centre. It does not have one now.
+    if (d.inHand){
+      var keep = {count: d.inHand.count, seat: d.inHand.seat,
+                  label: def.inHand.label};
+      d.inHand = keep;
+    }
+    if (d.tithe){
+      delete d.tithe.u; delete d.tithe.v; delete d.tithe.attached; delete d.tithe.uvAnchor;
+      delete d.tithe.resourceText;
+    }
+    if (d.city){ delete d.city.label; delete d.city.fit; delete d.city.opacity;
+                 delete d.city.image; delete d.city.imageName; }
+    delete d.summaryDim; delete d.connectors; delete d.titheInSummary;
+    delete d.inHandOverride;
+  }
+  d.version = STATE_VERSION;
+  return d;
+}
+
+function deepMerge(base, over){
+  // Defaults win where the file is silent, the file wins where it speaks. Arrays are replaced
+  // wholesale -- a four-player list merged element-wise is a way to end up with a fifth player.
+  if (over === null || over === undefined) return base;
+  if (Array.isArray(base) || Array.isArray(over)) return clone(over);
+  if (typeof base !== "object" || typeof over !== "object") return over;
+  var out = clone(base);
+  Object.keys(over).forEach(function(k){
+    out[k] = (k in base) ? deepMerge(base[k], over[k]) : clone(over[k]);
+  });
+  return out;
+}
+
+// EVERY NUMBER OFF THE WIRE IS CLAMPED rather than trusted. A NaN width renders an invisible box
+// that cannot be selected to fix it, which is a state a person cannot get out of.
+function applyState(d){
+  d = migrate(d);
+  validate(d);
+  S = deepMerge(clone(DEFAULT_STATE), d);
+
+  // THE 32 DEGREE RATIO IS A DESIGN INVARIANT, so it is imposed rather than trusted. An older
+  // V4 session may carry a ratio taken from whatever asset was loaded at the time, and a file
+  // written by hand may carry anything at all; either way the height follows the width at the
+  // layout's own ratio. This is a normalisation, not a migration -- the schema is unchanged and
+  // an existing V4 session still opens.
+  S.wheel.width = clamp(S.wheel.width, MIN_SIZE, 4000);
+  S.wheel.naturalRatio = WHEEL_RATIO;
+  S.wheel.ratioSource = "builtin";
+  S.wheel.height = Math.round(S.wheel.width * WHEEL_RATIO);
+  DUTY_ORDER.forEach(function(s){
+    var D = S.duties[s];
+    ACTIONS.forEach(function(act){
+      var a = D[act.key];
+      a.name = String(a.name === undefined || a.name === null ? "" : a.name).slice(0, 80);
+      a.shortLabel = String(a.shortLabel === undefined || a.shortLabel === null
+                            ? a.name : a.shortLabel).slice(0, 80);
+    });
+    var cd = D.card;
+    cd.width = clamp(Math.round(cd.width), MIN_SIZE, 1000);
+    cd.height = clamp(Math.round(cd.height), MIN_SIZE, 1000);
+    var f = D.figures;
+    f.count = clamp(Math.round(f.count), 0, 4);
+    f.spacing = clamp(f.spacing, 4, 400);
+    if (["row","compact","arc"].indexOf(f.arrangement) < 0) f.arrangement = "row";
+    f.seats = (Array.isArray(f.seats) ? f.seats : []).slice(0, 4)
+                .map(function(p){ return PLAYER_IDS.indexOf(p) >= 0 ? p : PLAYER_IDS[0]; });
+    while (f.seats.length < 4) f.seats.push(PLAYER_IDS[0]);
+  });
+  ["left", "right"].forEach(function(side){
+    var e = artOf(side);
+    e.width = clamp(Math.round(e.width), MIN_SIZE, 4000);
+    e.height = clamp(Math.round(e.height), MIN_SIZE, 4000);
+    e.opacity = clamp(e.opacity, 0, 1);
+    e.fit = (e.fit === "contain") ? "contain" : "cover";
+    if (ACTIONS.map(function(a){ return a.key; }).indexOf(e.slot) < 0)
+      e.slot = side === "left" ? "actionA" : "actionB";
+    e.labelSize = clamp(Math.round(e.labelSize), 8, 60);
+  });
+  S.players = (Array.isArray(S.players) ? S.players : []).slice(0, 4).map(function(p, i){
+    var d0 = DEFAULT_STATE.players[i];
+    return {id: d0.id, label: p && p.label ? p.label : d0.label,
+            colour: /^#[0-9a-fA-F]{6}$/.test((p && p.colour) || "") ? p.colour : d0.colour};
+  });
+  while (S.players.length < 4) S.players.push(clone(DEFAULT_STATE.players[S.players.length]));
+  PLAYER_IDS.forEach(function(p){
+    S.city.counts[p] = clamp(Math.round(S.city.counts[p]), 0, 99);
+    S.city.shown[p] = !!S.city.shown[p];
+  });
+  S.inHand.count = clamp(Math.round(S.inHand.count), 0, 99);
+  if (PLAYER_IDS.indexOf(S.inHand.seat) < 0) S.inHand.seat = PLAYER_IDS[0];
+  S.acolytes.height = clamp(Math.round(S.acolytes.height), ACO_RANGE[0], ACO_RANGE[1]);
+  S.acolytes.style = (S.acolytes.style === "painted") ? "painted" : "colored";
+  ["duty","city","inHand"].forEach(function(k){
+    S.acolytes.ratios[k] = clamp(Math.round(S.acolytes.ratios[k]), 20, 150); });
+  S.status.size = clamp(Math.round(S.status.size), 10, 80);
+  if (["left","center","right"].indexOf(S.status.align) < 0) S.status.align = "center";
+  if (DUTY_ORDER.indexOf(S.selectedDuty) < 0) S.selectedDuty = DUTY_ORDER[0];
+  if (S.previewDuty && DUTY_ORDER.indexOf(S.previewDuty) < 0) S.previewDuty = null;
+  if (!VIEW_STATES.some(function(v){ return v.key === S.view; })) S.view = VIEW_STATES[0].key;
+  if (S.zoom !== "fit" && ZOOM_STEPS.indexOf(+S.zoom) < 0) S.zoom = "fit";
+  if (!BACKGROUNDS.some(function(b){ return b.key === S.background; }))
+    S.background = BACKGROUNDS[0].key;
+  S.attachToWheel = S.attachToWheel !== false;
+  // The absolute cache may be stale in an imported file -- the wheel it was saved against may
+  // have been a different size. The normalized coordinates are the authority.
+  syncAttached();
+
+  setBackground(S.background, true);
+  setMode(S.mode === "clean" ? "clean" : "edit");
+  sel = null;
+  render(); inspector(); panels(); relayout();
+}
+
+// =============================================================================================
+// PERSISTENCE. The autosave is geometry and settings only: a handful of full-resolution images
+// as data URLs is tens of megabytes and localStorage gives a page about five. The pool makes
+// that structural -- there are no image bytes in S to save -- and the strip pass below is the
+// belt to those braces, so a future field holding a data URL cannot reintroduce the problem.
+// =============================================================================================
+function stripDataUrls(o){
+  if (o === null || typeof o !== "object") return o;
+  if (Array.isArray(o)) return o.map(stripDataUrls);
+  var out = {};
+  Object.keys(o).forEach(function(k){
+    var v = o[k];
+    out[k] = (typeof v === "string" && v.slice(0, 5) === "data:") ? null : stripDataUrls(v);
+  });
+  return out;
+}
+function say(msg, bad){
+  var e = el("status");
+  if (!e) return;
+  e.textContent = msg; e.className = bad ? "bad" : "ok";
+  clearTimeout(say._t); say._t = setTimeout(function(){ e.className = ""; }, 4000);
+}
+function save(quiet){
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(stripDataUrls(S))); }
+  catch (e){ if (!quiet) say("could not save: " + e.message, true); return; }
+  if (!quiet) say("saved to this browser");
+}
+function load(){
+  var raw = null;
+  try { raw = localStorage.getItem(STORE_KEY); } catch (e){}
+  if (!raw) return false;
+  try { applyState(JSON.parse(raw)); return true; }
+  catch (e){ say("saved layout could not be read, starting fresh: " + e.message, true); return false; }
+}
+
+// =============================================================================================
+// VIEW STATE, BACKGROUND, ZOOM, CLEAN PREVIEW, FULL SCREEN
+// =============================================================================================
+// THE VIEW STATE IS NOT A LAYOUT CHANGE, so it is saved but never recorded on the undo stack --
+// flipping between the three compositions twenty times to compare them costs nothing.
+//
+// CHANGING STATE CLOSES A PREVIEW. The artwork means something different in the next state, and
+// a preview left open would be indistinguishable from a choice.
+function setView(v){
+  if (!VIEW_STATES.some(function(x){ return x.key === v; })) return;
+  S.view = v;
+  S.previewDuty = null;
+  render(); inspector(); panels(); save(true);
+}
+function paintView(){
+  var host = el("bView"); if (!host) return;
+  host.innerHTML = VIEW_STATES.map(function(v){
+    return '<button data-view="' + v.key + '" aria-pressed="' + (S.view === v.key) + '">'
+         + v.label + '</button>'; }).join("");
+  [].forEach.call(host.querySelectorAll("[data-view]"), function(b){
+    b.onclick = function(){ setView(b.dataset.view); };
+  });
+}
+function bgCss(key){
+  var b = BACKGROUNDS.filter(function(x){ return x.key === key; })[0] || BACKGROUNDS[0];
+  return b.css;
+}
+function setBackground(key, quiet){
+  S.background = BACKGROUNDS.some(function(b){ return b.key === key; }) ? key : BACKGROUNDS[0].key;
+  document.documentElement.style.setProperty("--stage-bg", bgCss(S.background));
+  paintBg();
+  if (!quiet){ record(); save(true); }
+}
+function paintBg(){
+  var host = el("bgBtns"); if (!host) return;
+  host.innerHTML = BACKGROUNDS.map(function(b){
+    return '<button data-bg="' + b.key + '" aria-pressed="' + (S.background === b.key) + '">'
+         + b.label + '</button>'; }).join("");
+  [].forEach.call(host.querySelectorAll("[data-bg]"), function(b){
+    b.onclick = function(){ setBackground(b.dataset.bg); };
+  });
+}
+function paintZoom(){
+  var host = el("zoomBtns"); if (!host) return;
+  var opts = ["fit"].concat(ZOOM_STEPS);
+  host.innerHTML = opts.map(function(z){
+    return '<button data-zoom="' + z + '" aria-pressed="' + (String(S.zoom) === String(z)) + '">'
+         + (z === "fit" ? "FIT" : z + "%") + '</button>'; }).join("");
+  [].forEach.call(host.querySelectorAll("[data-zoom]"), function(b){
+    b.onclick = function(){ setZoom(b.dataset.zoom === "fit" ? "fit" : +b.dataset.zoom); };
+  });
+}
+// ZOOM IS DISPLAY ONLY: one number and a relayout, never an object's geometry, which is why an
+// export taken at 125% is identical to one taken at FIT.
+function setZoom(z){ S.zoom = z; relayout(); save(true); }
+
+// FULL SCREEN. THE CLASS FOLLOWS THE BROWSER, not the keypress: Escape leaves full screen
+// without going through this code, so a page that toggled its own class on F would sit there
+// with its chrome hidden and no way back except pressing F twice.
+function setFull(on){
+  document.body.classList.toggle("full", !!on);
+  relayout();
+}
+addEventListener("fullscreenchange", function(){ setFull(!!document.fullscreenElement); });
+
+function toggleFull(){
+  if (document.fullscreenElement){ document.exitFullscreen(); return; }
+  var root = document.documentElement;
+  var req = root.requestFullscreen && root.requestFullscreen();
+  if (req && req.then){
+    req.catch(function(){
+      setFull(!document.body.classList.contains("full"));
+      say("this browser would not go full screen · chrome hidden instead");
+    });
+  } else {
+    setFull(!document.body.classList.contains("full"));
+  }
+}
+
+function setMode(m){
+  document.body.classList.toggle("clean", m === "clean");
+  S.mode = m;
+  el("bMode").textContent = m === "clean" ? "CLEAN PREVIEW" : "EDIT MODE";
+  el("bMode").setAttribute("aria-pressed", m === "edit" ? "true" : "false");
+}
+
+[].forEach.call(document.querySelectorAll("#side h3"), function(h){
+  h.onclick = function(){ h.classList.toggle("shut"); };
+});
+
+// =============================================================================================
+// TOOLBAR
+// =============================================================================================
+el("bMode").onclick = function(){ setMode(S.mode === "edit" ? "clean" : "edit"); render();
+                                  save(true); };
+el("bUndo").onclick = function(){ say(stepHistory(-1) ? "undo" : "nothing to undo"); };
+el("bRedo").onclick = function(){ say(stepHistory(1) ? "redo" : "nothing to redo"); };
+el("bReset").onclick = function(){ applyState(clone(DEFAULT_STATE)); histReset(); save(true);
+                                   say("lab reset"); };
+
+function download(name, text, type){
+  var blob = new Blob([text], {type: type || "application/json"});
+  var a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); }, 2000);
+}
+
+el("bExport").onclick = function(){
+  var withImg = confirm("Include loaded images in the Lab Session?\n\nOK = yes, the session "
+                      + "reopens exactly as it looks now but the file may be large.\n"
+                      + "Cancel = geometry and settings only.");
+  var d = labSession(withImg);
+  download("duty_wheel_lab_session.json", JSON.stringify(d, null, 1));
+  say("lab session exported " + (withImg ? "with " + Object.keys(d.images).length + " image(s)"
+                                         : "geometry only"));
+};
+el("bGame").onclick = function(){
+  download("duty_wheel_game_layout.json", JSON.stringify(gameLayout(), null, 1));
+  say("game layout exported · geometry and wording, no editor state");
+};
+el("bCopy").onclick = function(){
+  var t = JSON.stringify(gameLayout(), null, 1);
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(t).then(function(){ say("game layout copied"); },
+                                          function(){ fallbackCopy(t); });
+  } else fallbackCopy(t);
+};
+function fallbackCopy(t){
+  var a = document.createElement("textarea");
+  a.value = t; document.body.appendChild(a); a.select();
+  try { document.execCommand("copy"); say("game layout copied"); }
+  catch (e){ say("could not copy", true); }
+  a.remove();
+}
+el("bImport").onclick = function(){ el("fImport").click(); };
+el("fImport").onchange = function(){
+  var f = this.files && this.files[0]; if (!f) return;
+  var rd = new FileReader();
+  rd.onload = function(){
+    try { importSession(JSON.parse(rd.result)); say("imported " + f.name); }
+    catch (e){ say("import refused: " + e.message, true); }
+  };
+  rd.readAsText(f); this.value = "";
+};
+// Accepts a Lab Session envelope of any version, a bare state object (V1's export), or a bare
+// V2/V3/V4 state.
+function importSession(d){
+  var state = d, imgs = null;
+  if (d && d.kind === "duty-wheel-lab-session"){ state = d.state; imgs = d.images; }
+  if (imgs && typeof imgs === "object"){
+    Object.keys(imgs).forEach(function(k){
+      if (typeof imgs[k] === "string" && imgs[k].slice(0, 5) === "data:"){
+        IMAGES[k] = imgs[k];
+        var n = +String(k).replace(/^im/, "");
+        if (isFinite(n) && n > IMG_SEQ) IMG_SEQ = n;
+      }
+    });
+  }
+  applyState(state);
+  histReset();
+  save(true);
+}
+
+// PNG export. Best effort and said so: an <img> holding a data: URL draws fine, but a page that
+// ever gained a cross-origin image would taint the canvas, so the failure is caught and reported
+// rather than producing a blank file.
+el("bPng").onclick = function(){
+  var cv = document.createElement("canvas");
+  cv.width = CANVAS_W; cv.height = CANVAS_H;
+  var ctx = cv.getContext("2d");
+  ctx.fillStyle = bgCss(S.background); ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  var xml = new XMLSerializer().serializeToString(buildSvgSnapshot());
+  var img = new Image();
+  img.onload = function(){
+    ctx.drawImage(img, 0, 0);
+    try {
+      cv.toBlob(function(b){
+        var a = document.createElement("a");
+        a.href = URL.createObjectURL(b);
+        a.download = "duty_wheel_" + S.view + ".png"; a.click();
+        setTimeout(function(){ URL.revokeObjectURL(a.href); }, 2000);
+        say("png exported · " + S.view + " state, " + CANVAS_W + " × " + CANVAS_H);
+      });
+    } catch (e){ say("png export blocked by the browser: " + e.message, true); }
+  };
+  img.onerror = function(){ say("png export failed -- use a screenshot instead", true); };
+  img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(xml);
+};
+function buildSvgSnapshot(){
+  // foreignObject carries the live DOM into an SVG, which is the only way to snapshot CSS layout
+  // without a library. Editing chrome -- ghosts, warnings, handles -- is excluded by snapshotting
+  // in clean mode.
+  var was = S.mode;
+  setMode("clean"); render();
+  var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  svg.setAttribute("width", CANVAS_W); svg.setAttribute("height", CANVAS_H);
+  var fo = document.createElementNS("http://www.w3.org/2000/svg", "foreignObject");
+  fo.setAttribute("width", CANVAS_W); fo.setAttribute("height", CANVAS_H);
+  var copy = el("stage").cloneNode(true);
+  copy.style.transform = "none";
+  var div = document.createElement("div");
+  div.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
+  div.appendChild(copy);
+  fo.appendChild(div); svg.appendChild(fo);
+  setMode(was); render();
+  return svg;
+}
+
+// =============================================================================================
+// START
+// =============================================================================================
+el("buildTag").textContent = "· lab v" + BUILD_VERSION;
+S = clone(DEFAULT_STATE);
+if (!load()){ applyState(clone(DEFAULT_STATE)); }
+histReset();
+relayout();
+</script>
