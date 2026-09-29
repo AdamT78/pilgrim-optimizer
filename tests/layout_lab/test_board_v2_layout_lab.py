@@ -22,7 +22,10 @@ import tempfile
 
 import pytest
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
+# tests/layout_lab/ -> tests/ -> the repo root. This file sits beside the browser suites
+# it shares a subject with, which is also what keeps every layout lab path inside one
+# design-only directory for CI to route on.
+ROOT = pathlib.Path(__file__).resolve().parents[2]
 LAB = ROOT / "ui" / "board_v2" / "layout_lab"
 GEN = LAB / "generate_layout_lab.py"
 TMPL = LAB / "duty_wheel_layout_lab.html.tmpl"

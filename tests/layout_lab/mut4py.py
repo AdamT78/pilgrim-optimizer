@@ -18,7 +18,7 @@ from mutation_tools import (MutationRun, MutationTargetError, replace_exactly_on
 HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 LAB = ROOT / "ui" / "board_v2" / "layout_lab"
-TESTS = ROOT / "tests"
+TESTS = HERE          # the layout lab guards live beside this file
 T = LAB / "duty_wheel_layout_lab.html.tmpl"
 G = LAB / "generate_layout_lab.py"
 TB, GB = T.read_text(), G.read_text()
