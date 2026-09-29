@@ -1,6 +1,6 @@
 # Layout Lab test suites
 
-The pytest guards in `tests/test_board_v2_layout_lab.py` read the generator and the template as
+The pytest guards in `test_board_v2_layout_lab.py`, beside this file, read the generator and the template as
 text: they check what the source says. These suites check what the built page *does*, by driving
 it in a real browser, and then check the checks by deliberately breaking the page and confirming
 something fails.

@@ -14,6 +14,7 @@ jobs:
     outputs:
       engine: ${{ steps.what.outputs.engine }}
       ui: ${{ steps.what.outputs.ui }}
+      lab: ${{ steps.what.outputs.lab }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -31,6 +32,7 @@ jobs:
           if [ "${{ github.event_name }}" != "pull_request" ]; then
             echo "engine=true" >>"$GITHUB_OUTPUT"
             echo "ui=true" >>"$GITHUB_OUTPUT"
+            echo "lab=true" >>"$GITHUB_OUTPUT"
             echo "not a pull request: running every lane"
             exit 0
           fi
@@ -52,10 +54,22 @@ jobs:
             echo "engine=false" >>"$GITHUB_OUTPUT"
             echo "design-only change: skipping the engine lanes"
           fi
-          if echo "$changed" | grep -qE '^(ui/|tests/layout_lab/)'; then
+          # The UI lane is the gothic tree, the page rebuilds and the asset licences. It drives
+          # a browser, so it is the expensive one, and ui/board_v2/ needs none of it: no page in
+          # rebuild_ui_pages.py comes from there (duty-border-studio.html is built by
+          # ui/render/gen_border_studio.py), and its assets are not in the trees verify_assets.py
+          # walks. So board_v2 is excluded here and answered by the lab lane instead.
+          if echo "$changed" | grep -E '^ui/' | grep -qvE '^ui/board_v2/'; then
             echo "ui=true" >>"$GITHUB_OUTPUT"
           else
             echo "ui=false" >>"$GITHUB_OUTPUT"
+          fi
+          # The layout lab: its generator and template, and the suites that test them. Nothing
+          # here imports playwright, so this lane installs no browser and takes seconds.
+          if echo "$changed" | grep -qE '^(ui/board_v2/|tests/layout_lab/)'; then
+            echo "lab=true" >>"$GITHUB_OUTPUT"
+          else
+            echo "lab=false" >>"$GITHUB_OUTPUT"
           fi
 
   ui:
@@ -72,6 +86,8 @@ jobs:
         if: needs.changes.outputs.ui == 'true'
         with:
           python-version: "3.13"
+          cache: pip
+          cache-dependency-path: pyproject.toml
       # pillow and numpy used to be installed by hand here. They are in the dev extras now, which
       # is where the fast lane picks them up too -- installing them only here is what let an
       # undeclared dependency sit unnoticed until a test outside ui/ imported the measuring.
@@ -112,14 +128,38 @@ jobs:
             tests/test_gothic_asset_guards.py tests/test_gothic_resource_boxes.py \
             tests/test_gothic_population_rows.py \
             tests/test_duty_wheel_guards.py tests/test_ground_guards.py -q
-      - name: The duty wheel layout lab still holds its own invariants
-        # Same reasoning as the block above, and it had been missed: nothing in this lane built
-        # or tested the layout lab. rebuild_ui_pages.py builds duty-border-studio.html from
-        # gen_border_studio.py, which is a different tool, so a change confined to
-        # ui/board_v2/layout_lab/ used to run no test of the layout lab anywhere in CI -- the 57
-        # guards only ever ran by accident, when a pull request happened to touch the engine too.
-        if: needs.changes.outputs.ui == 'true'
-        run: pytest tests/test_board_v2_layout_lab.py tests/layout_lab/ -q
+
+  lab:
+    # The duty wheel layout lab, and deliberately nothing else. These guards read the generator
+    # and the template as text and import no browser, so this lane skips the Playwright install
+    # and the apt step that go with it -- which is the whole reason it is not part of the ui
+    # lane. Seconds rather than minutes.
+    #
+    # It exists at all because the layout lab used to have no lane: the ui lane never named it,
+    # and rebuild_ui_pages.py does not build it, so its guards only ran when a pull request
+    # happened to touch the engine as well.
+    needs: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        if: needs.changes.outputs.lab == 'true'
+      - uses: actions/setup-python@v5
+        if: needs.changes.outputs.lab == 'true'
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      # NOT the dev extras. These guards read the generator and the template as text; between
+      # them and the generator the only third-party import is pytest, and pilgrim itself is pure
+      # stdlib. numpy, scipy, pillow and playwright are four large wheels this lane would fetch
+      # and never import. The editable install is still needed because tests/conftest.py imports
+      # pilgrim at collection time.
+      - if: needs.changes.outputs.lab == 'true'
+        run: pip install -e . "pytest>=8.0.0"
+      - name: The layout lab still holds its own invariants
+        if: needs.changes.outputs.lab == 'true'
+        run: pytest tests/layout_lab/ -q
 
   fast:
     needs: changes
@@ -134,6 +174,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+          cache: pip
+          cache-dependency-path: pyproject.toml
       - run: pip install -e ".[dev]"
       # Deliberately narrow: undefined/shadowed names must gate, while existing E501s do not.
       # This one runs on EVERY change, design-only included: it is repo-wide, it takes seconds,
@@ -168,6 +210,8 @@ jobs:
         if: needs.changes.outputs.engine == 'true'
         with:
           python-version: "3.13"
+          cache: pip
+          cache-dependency-path: pyproject.toml
       - if: needs.changes.outputs.engine == 'true'
         run: pip install -e ".[dev]"
       - name: Run deep-fixture slow guards
@@ -185,6 +229,8 @@ jobs:
         if: needs.changes.outputs.engine == 'true'
         with:
           python-version: "3.13"
+          cache: pip
+          cache-dependency-path: pyproject.toml
       - if: needs.changes.outputs.engine == 'true'
         run: pip install -e ".[dev]"
       - name: Use the canonical Ubuntu mirror
@@ -213,6 +259,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+          cache: pip
+          cache-dependency-path: pyproject.toml
       - name: Install the package for generation captures
         run: pip install -e .
       - name: Detect capture-tooling changes
