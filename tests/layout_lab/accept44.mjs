@@ -299,6 +299,69 @@ ck('§6', 'a newly loaded token gets a fresh key, not a remembered one',
 ck('§6', 'the action artwork still reports itself as not loaded', collide.aStillEmpty);
 ck('§6', 'and the token itself is drawn', collide.tokenDrawn);
 
+// ============================================================ §7 — A DRAG MUST SURVIVE ITSELF
+// THE BUG: the token setters called panels(), which replaces titheCtl.innerHTML and throws away
+// the very slider the mouse is holding. The element leaves the document, the browser loses the
+// drag target, and the gesture ends after one step. It reads as a slider that will not move.
+//
+// Asserting the VALUE alone would not have caught it: synthetic events keep working, because the
+// test holds its own reference to a control the page has already discarded. What has to be
+// asserted is that the control is still IN THE DOCUMENT after the event it just handled.
+await reset();
+await loadTokens([0]);
+const drag = await p.evaluate(() => {
+  const out = {};
+  function sweep(sel, from, to, read){
+    const el = document.querySelector(sel);
+    if (!el) return {error: 'missing ' + sel};
+    let detached = 0;
+    for (let v = from; v <= to; v++){
+      el.value = v;
+      el.dispatchEvent(new Event('input', {bubbles: true}));
+      if (!document.contains(el)) detached += 1;
+    }
+    return {detached: detached, steps: to - from + 1, ended: read(), live: document.contains(el)};
+  }
+  out.scale = sweep('#titheCtl [data-tscr="0"]', 101, 130, () => S.tithe.resources[0].scale);
+  out.size  = sweep('#tkSizeR', 39, 70, () => S.tithe.tokenSize);
+  out.gap   = sweep('#tkGapR', 10, 28, () => S.tithe.tokenGap);
+  return out;
+});
+['scale','size','gap'].forEach(k => {
+  ck('§7', 'dragging the ' + k + ' control never detaches it',
+     drag[k].detached === 0 && drag[k].live,
+     drag[k].detached + ' of ' + drag[k].steps + ' events hit a discarded element');
+});
+ck('§7', 'and the whole sweep lands, not just its first step',
+   drag.scale.ended === 130 && drag.size.ended === 70 && drag.gap.ended === 28,
+   [drag.scale.ended, drag.size.ended, drag.gap.ended].join(' / '));
+// the readout and the number box follow without a rebuild
+const mirrored = await p.evaluate(() => ({
+  num: document.querySelector('#titheCtl [data-tsc="0"]').value,
+  read: document.querySelector('#titheCtl [data-tread="0"]').textContent,
+  sizeNum: document.getElementById('tkSizeN').value}));
+ck('§7', 'the number box mirrors the slider', mirrored.num === '130', mirrored.num);
+ck('§7', 'the shared size box too', mirrored.sizeNum === '70', mirrored.sizeNum);
+ck('§7', 'and the derived readout is rewritten in place',
+   /130% of 70 px/.test(mirrored.read), mirrored.read);
+// TYPING IS A GESTURE TOO. The sync must skip whichever box has the caret, or a typed "130"
+// never survives its own first digit: "1" applies, clamps to 60, and the box is rewritten to 60
+// before the "3" arrives.
+const typed = await p.evaluate(() => {
+  const n = document.querySelector('#titheCtl [data-tsc="0"]');
+  n.focus();
+  n.value = '1';                       // the first keystroke of "130"
+  n.dispatchEvent(new Event('input', {bubbles: true}));
+  const afterFirst = n.value;
+  n.value = '13';
+  n.dispatchEvent(new Event('input', {bubbles: true}));
+  return {afterFirst: afterFirst, afterSecond: n.value,
+          focused: document.activeElement === n};
+});
+ck('§7', 'a half-typed scale is not overwritten while it has the caret',
+   typed.afterFirst === '1' && typed.afterSecond === '13' && typed.focused,
+   JSON.stringify(typed));
+
 ck('ALL', 'no page or console errors', errs.length === 0, errs.slice(0,3).join(' | '));
 } catch (e) {
   ck('ALL', 'the run completed without throwing', false,

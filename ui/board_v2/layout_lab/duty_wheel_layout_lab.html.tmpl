@@ -1082,6 +1082,7 @@ function render(){
   // key, a helper, undo, redo, a reset and an import all arrive here.
   paintMetrics();
   syncHelperInputs();
+  syncTokenInputs();
 }
 
 // ONE LINE, and the sow line counts down with what is in hand. {n} is substituted rather than
@@ -1202,13 +1203,20 @@ function tokenOverflow(){
   return need > have ? Math.ceil(need - have) : 0;
 }
 
+// NONE OF THESE REBUILD THE PANEL, and that is the whole point of them being separate from the
+// loaders. `panels()` replaces titheCtl.innerHTML, which throws away the very slider the mouse
+// is holding: the element leaves the document, the browser loses the drag target, and the
+// gesture ends after ONE step. It looked like a broken slider; it was a destroyed one.
+//
+// So they end in commit(), which renders, and render() syncs the controls in place -- the same
+// arrangement the layout helpers use, for the same reason.
 function setTokenSize(v, soon){
   S.tithe.tokenSize = clamp(Math.round(v), HELPERS.tokenSize[0], HELPERS.tokenSize[1]);
-  commit(soon); panels();
+  commit(soon);
 }
 function setTokenGap(v, soon){
   S.tithe.tokenGap = clamp(Math.round(v), HELPERS.tokenGap[0], HELPERS.tokenGap[1]);
-  commit(soon); panels();
+  commit(soon);
 }
 // OPTICAL CORRECTION, ONE RESOURCE AT A TIME. It changes how big the picture is drawn and
 // nothing else: the slot stays tokenSize square, so raising wheat to 110% cannot move stone or
@@ -1217,7 +1225,7 @@ function setTokenScale(i, v, soon){
   var r = S.tithe.resources[i];
   if (!r) return;
   r.scale = clamp(Math.round(v), HELPERS.tokenScale[0], HELPERS.tokenScale[1]);
-  commit(soon); panels();
+  commit(soon);
 }
 function clearTokenIcon(i){
   var r = S.tithe.resources[i];
@@ -1261,6 +1269,32 @@ function tokenHTML(r){
        + 'px;height:' + px + 'px">' + esc(r.key) + '</span></span>';
 }
 
+
+// The tithe controls, refreshed from render() without rebuilding them -- see setTokenSize.
+function syncTokenInputs(){
+  if (!el("tkSizeN")) return;                  // the panel has not been built yet
+  function set(e, v){
+    if (!e || e === document.activeElement) return;
+    if (String(e.value) !== String(v)) e.value = v;
+  }
+  set(el("tkSizeN"), tokenSize()); set(el("tkSizeR"), tokenSize());
+  set(el("tkGapN"), tokenGap());   set(el("tkGapR"), tokenGap());
+  (S.tithe.resources || []).forEach(function(r, i){
+    set(document.querySelector('#titheCtl [data-tsc="' + i + '"]'), tokenScale(r));
+    set(document.querySelector('#titheCtl [data-tscr="' + i + '"]'), tokenScale(r));
+    // The derived line under each slider is text, not a control, so it is simply rewritten.
+    var out = document.querySelector('#titheCtl [data-tread="' + i + '"]');
+    if (out) out.innerHTML = tokenScale(r) + '% of ' + tokenSize() + ' px → <b>' + tokenPx(r)
+                           + ' px</b>';
+  });
+  var warn = document.querySelector('#titheCtl [data-tover]');
+  if (warn){
+    var over = tokenOverflow();
+    warn.innerHTML = over ? 'resource tokens exceed the Tithe content area by ' + over
+                          + ' px · nothing is resized for you' : '';
+    warn.style.display = over ? "" : "none";
+  }
+}
 
 function statusText(){
   var b = (S.status.byView || {})[S.view] || {};
@@ -2208,14 +2242,16 @@ function panels(){
         + '"></div>'
         + '<input type=range data-tscr="' + i + '" min=' + HELPERS.tokenScale[0] + ' max='
         + HELPERS.tokenScale[1] + ' step=1 value="' + tokenScale(r) + '">'
-        + '<div class=hint>' + tokenScale(r) + '% of ' + tokenSize() + ' px → <b>' + px
-        + ' px</b></div>';
+        + '<div class=hint data-tread="' + i + '">' + tokenScale(r) + '% of ' + tokenSize()
+        + ' px → <b>' + px + ' px</b></div>';
   });
   var over = tokenOverflow();
   th += '<div class=hint>the letters are placeholders for icons · the full words are '
       + 'deliberately not spelled out on the card</div>'
-      + (over ? '<div class=hint style="color:var(--warn)">resource tokens exceed the Tithe '
-              + 'content area by ' + over + ' px · nothing is resized for you</div>' : '');
+      + '<div class=hint data-tover style="color:var(--warn)'
+      + (over ? '' : ';display:none') + '">'
+      + (over ? 'resource tokens exceed the Tithe content area by ' + over
+              + ' px · nothing is resized for you' : '') + '</div>';
   el("titheCtl").innerHTML = th;
   [].forEach.call(el("titheCtl").querySelectorAll("[data-res]"), function(inp){
     var q = inp.dataset.res.split(":");

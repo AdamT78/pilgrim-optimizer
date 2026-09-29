@@ -82,6 +82,36 @@ MUTS = [
  ('    (S.tithe.resources || []).forEach(function(r){ mark(r.icon); });', '',
   "a session exported with images losing the token art"),
 
+ # ---- a drag must survive itself -------------------------------------------------------------
+ ('''function setTokenSize(v, soon){
+  S.tithe.tokenSize = clamp(Math.round(v), HELPERS.tokenSize[0], HELPERS.tokenSize[1]);
+  commit(soon);
+}''',
+  '''function setTokenSize(v, soon){
+  S.tithe.tokenSize = clamp(Math.round(v), HELPERS.tokenSize[0], HELPERS.tokenSize[1]);
+  commit(soon); panels();
+}''',
+  "the size control rebuilding the panel it is being dragged in"),
+ ('''  r.scale = clamp(Math.round(v), HELPERS.tokenScale[0], HELPERS.tokenScale[1]);
+  commit(soon);
+}''',
+  '''  r.scale = clamp(Math.round(v), HELPERS.tokenScale[0], HELPERS.tokenScale[1]);
+  commit(soon); panels();
+}''',
+  "the scale control rebuilding the panel it is being dragged in"),
+ ('''  syncHelperInputs();
+  syncTokenInputs();''', '''  syncHelperInputs();''',
+  "the tithe controls never re-synced from render"),
+ ('''function syncTokenInputs(){
+  if (!el("tkSizeN")) return;''',
+  '''function syncTokenInputs(){
+  if (!el("tkSizeN")) return;
+  panels();''',
+  "the sync rebuilding the panel instead of writing into it"),
+ ('    if (!e || e === document.activeElement) return;\n    if (String(e.value) !== String(v)) e.value = v;\n  }\n  set(el("tkSizeN")',
+  '    if (!e) return;\n    if (String(e.value) !== String(v)) e.value = v;\n  }\n  set(el("tkSizeN")',
+  "the tithe sync stamping on the control the caret is in"),
+
  # ---- the image pool: a key must never be handed out twice -----------------------------------
  ('''  S = deepMerge(clone(DEFAULT_STATE), d);
   // Before anything can hand out a new key, take every one this state already uses out of
