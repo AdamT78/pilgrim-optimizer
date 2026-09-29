@@ -164,7 +164,7 @@ def viewbox_of(text: str) -> tuple:
 # wheel-centre medallions retire, the status line loses its context field -- so the version moves
 # with it and older files are migrated rather than reinterpreted.
 STATE_VERSION = 4
-BUILD_VERSION = "4.3"
+BUILD_VERSION = "4.4"
 
 # ---- the design envelope -------------------------------------------------------------------
 CANVAS_W, CANVAS_H = 1400, 1200
@@ -307,6 +307,21 @@ CITY = {"x": TITHE["x"] + TITHE["width"] + 12, "y": BAND["y"],
 # designing around the icons not existing yet.
 TITHE_RESOURCES = (("W", "Wheat"), ("S", "Stone"), ("Ag", "Silver"))
 
+# THE TOKEN DEFAULTS ARE THE CURRENT RENDERING, NOT ROUND NUMBERS. The placeholder disc is 38px
+# and the two rows sit 7px apart with 9px between the lower pair, so opening this build with no
+# icons loaded has to reproduce exactly that rather than quietly enlarging the card. The brief
+# suggested 50 and 8-10; those would have grown the pyramid on first open, which its own section
+# 6 rules out ("preserve the current overall Tithe composition rather than enlarge the card").
+#
+# ONE GAP, and it cannot match both axes. 9 is the horizontal value and the more visible one, so
+# the vertical spacing moves 7 -> 9: two pixels inside a fixed card, nothing outside it moves.
+TOKEN_SIZE_DEFAULT = 38
+TOKEN_GAP_DEFAULT = 9
+# Optical correction only. A sheaf and a coin of the same diameter do not carry the same weight,
+# and this is the range in which that is worth fixing -- not a licence to make one token twice
+# the size of another, which is what the shared size control is for.
+TOKEN_SCALE_DEFAULT = 100
+
 SAFE_MARGIN = 50
 
 # ---- the layout helpers' control ranges --------------------------------------------------------
@@ -324,6 +339,9 @@ HELPER_RANGES = {
     "cardH": [80, 300],
     "artW": [150, 600],
     "artH": [80, 400],
+    "tokenSize": [28, 100],
+    "tokenGap": [0, 30],
+    "tokenScale": [60, 140],
     "gap": [0, 80],
     # What FIT ACTION ROW leaves at the right-hand end: the band's own right margin, so a fitted
     # row ends where the ribbon above it does.
@@ -484,7 +502,10 @@ def default_state() -> dict:
         },
         "tithe": dict(TITHE, label="TAKE TITHE", visible=True, locked=False,
                       image=None, imageName=None,
-                      resources=[{"key": k, "name": n} for k, n in TITHE_RESOURCES]),
+                      tokenSize=TOKEN_SIZE_DEFAULT, tokenGap=TOKEN_GAP_DEFAULT,
+                      resources=[{"key": k, "name": n, "icon": None, "iconName": None,
+                                  "scale": TOKEN_SCALE_DEFAULT}
+                                 for k, n in TITHE_RESOURCES]),
         "acolytes": {
             "height": ACOLYTE_DEFAULT,
             "style": "colored",

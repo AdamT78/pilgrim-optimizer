@@ -172,12 +172,19 @@ body.clean .art.choice:hover::after{content:"";position:absolute;inset:0;
   border-radius:5px;background:#ffffff08;border:1px solid #ffffff1c;padding:10px}
 #titheObj .tl{font:600 14px/1.1 Georgia,serif;letter-spacing:.15em;text-transform:uppercase;
   color:#ddd2b8}
-#titheObj .pyr{display:flex;flex-direction:column;align-items:center;gap:7px}
-#titheObj .pr{display:flex;gap:9px}
-.res{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;
-  background:radial-gradient(70% 70% at 35% 30%,#3c3527,#241d14);
-  border:1px solid #6b5c3e;color:#e4d6b4;font:700 13px/1 ui-monospace,monospace}
-.res img{width:100%;height:100%;object-fit:contain;display:block;border-radius:50%}
+#titheObj .pyr{display:flex;flex-direction:column;align-items:center}
+#titheObj .pr{display:flex}
+/* THE SLOT IS FIXED AND THE TOKEN GROWS INSIDE IT. Per-resource scale is optical correction,
+     so raising wheat from 100% to 110% has to make the sheaf bigger without shoving stone and
+     silver sideways -- which is what would happen if the scale changed the slot. The slot is
+     tokenSize square, the image is centred in it, and only the image knows about scale. */
+  .slot{display:grid;place-items:center;flex:0 0 auto}
+  .res{border-radius:50%;display:grid;place-items:center;
+    background:radial-gradient(70% 70% at 35% 30%,#3c3527,#241d14);
+    border:1px solid #6b5c3e;color:#e4d6b4;font:700 13px/1 ui-monospace,monospace}
+  /* THE PNG IS THE COMPLETE TOKEN -- rim, disc and motif are painted into it -- so it gets no
+     disc behind it and no border around it. Either would give it a second rim. */
+  .tok{display:block;object-fit:contain;background:none;border:0;border-radius:0}
 body.clean #titheObj.choice:hover{filter:brightness(1.1);cursor:pointer}
 
 /* Band 3c: the City, and the acolytes in hand that borrow its region while sowing. */
@@ -336,6 +343,10 @@ function haveImage(key){ return !!(key && IMAGES[key]); }
 // about the image, not a layout decision, so they have no business in the state, in an undo
 // snapshot or in a saved session. An image restored from a session arrives with no entry here,
 // so the first ask probes it once and repaints.
+// The Tithe card's own furniture: 10px padding top and bottom, the TAKE TITHE line, and the
+// 10px gap between that line and the pyramid. What is left is what the tokens have to live in.
+var TITHE_CHROME = 10 + 10 + 16 + 10;
+
 var IMG_DIMS = {};
 var DIM_PENDING = {};
 function noteDims(key, w, h){ if (key && w && h) IMG_DIMS[key] = {w: w, h: h}; }
@@ -967,10 +978,10 @@ function render(){
   if (titheMode !== "no" && S.tithe.visible){
     var T = S.tithe;
     var res = (T.resources || []);
-    var pyr = '<div class=pyr><div class=pr>' + res.slice(0, 1).map(function(r){
-                return '<span class=res>' + esc(r.key) + '</span>'; }).join("")
-            + '</div><div class=pr>' + res.slice(1, 3).map(function(r){
-                return '<span class=res>' + esc(r.key) + '</span>'; }).join("")
+    var pyr = '<div class=pyr style="gap:' + tokenGap() + 'px"><div class=pr style="gap:'
+            + tokenGap() + 'px">' + res.slice(0, 1).map(tokenHTML).join("")
+            + '</div><div class=pr style="gap:' + tokenGap() + 'px">'
+            + res.slice(1, 3).map(tokenHTML).join("")
             + '</div></div>';
     var dt = make("tithe", null, rectOf("tithe", null),
                   S.view === "action" ? "choice" : "",
@@ -1147,6 +1158,89 @@ function syncHelperInputs(){
 // clamped -- FIT ACTION ROW and the row-gap operation each decide separately what to do with a
 // negative suggestion, and only the fit normalises it.
 function helperGap(){ return clamp(rowGapSuggested(), HELPERS.gap[0], HELPERS.gap[1]); }
+
+// THE TOKEN READINGS. Derived from the state every time, never stored alongside it.
+function tokenSize(){ return clamp(Math.round(S.tithe.tokenSize), HELPERS.tokenSize[0],
+                                   HELPERS.tokenSize[1]); }
+function tokenGap(){ return clamp(Math.round(S.tithe.tokenGap), HELPERS.tokenGap[0],
+                                  HELPERS.tokenGap[1]); }
+function tokenScale(r){ return clamp(Math.round((r && r.scale) || 100), HELPERS.tokenScale[0],
+                                     HELPERS.tokenScale[1]); }
+// What one token actually draws at: the shared size, corrected per resource.
+function tokenPx(r){ return Math.round(tokenSize() * tokenScale(r) / 100); }
+
+// HOW FAR THE PYRAMID OVERRUNS THE CARD, in pixels, or 0 when it fits. Informational only --
+// nothing here shrinks a token or grows the box. The whole point of a fixed Tithe region is that
+// the trade-off stays visible; resizing the card to hide it would answer the question the
+// designer is asking.
+function tokenOverflow(){
+  var box = tokenSize(), gap = tokenGap();
+  // one slot over two, plus the gap between the rows; the card's own padding and its label are
+  // what is left over.
+  var need = box * 2 + gap;
+  var have = S.tithe.height - TITHE_CHROME;
+  return need > have ? Math.ceil(need - have) : 0;
+}
+
+function setTokenSize(v, soon){
+  S.tithe.tokenSize = clamp(Math.round(v), HELPERS.tokenSize[0], HELPERS.tokenSize[1]);
+  commit(soon); panels();
+}
+function setTokenGap(v, soon){
+  S.tithe.tokenGap = clamp(Math.round(v), HELPERS.tokenGap[0], HELPERS.tokenGap[1]);
+  commit(soon); panels();
+}
+// OPTICAL CORRECTION, ONE RESOURCE AT A TIME. It changes how big the picture is drawn and
+// nothing else: the slot stays tokenSize square, so raising wheat to 110% cannot move stone or
+// silver a single pixel.
+function setTokenScale(i, v, soon){
+  var r = S.tithe.resources[i];
+  if (!r) return;
+  r.scale = clamp(Math.round(v), HELPERS.tokenScale[0], HELPERS.tokenScale[1]);
+  commit(soon); panels();
+}
+function clearTokenIcon(i){
+  var r = S.tithe.resources[i];
+  if (!r) return;
+  if (!r.icon && !r.iconName){ say("no icon on that resource to clear"); return; }
+  var was = r.iconName || "the icon";
+  r.icon = null;
+  r.iconName = null;
+  commitPanels();
+  say("cleared " + was + " from " + (r.name || r.key) + " · the letter returns");
+}
+
+// A number box and its slider, kept in step, reading the geometry back the way the layout
+// helpers' own pairs do.
+function pairNum(numId, rangeId, apply, read){
+  var n = el(numId), r = el(rangeId);
+  if (!n || !r) return;
+  function go(v){
+    apply(v, true);
+    var actual = read();
+    r.value = actual;
+    if (document.activeElement !== n) n.value = actual;
+  }
+  n.oninput = function(){ go(n.value); };
+  n.onchange = function(){ go(n.value); n.value = read(); };
+  r.oninput = function(){ go(r.value); };
+}
+
+// ONE RESOURCE, either as its artwork or as the letter that stands in for it. The letter is not
+// a degraded mode: the tool has to stay usable with no assets loaded at all, which is why a
+// missing token is a disc with `W` in it rather than a broken image.
+function tokenHTML(r){
+  var box = tokenSize(), px = tokenPx(r);
+  var slot = '<span class=slot style="width:' + box + 'px;height:' + box + 'px">';
+  if (haveImage(r.icon)){
+    return slot + '<img class=tok src="' + imgSrc(r.icon) + '" alt="' + esc(r.name || r.key)
+         + '" title="' + esc(r.name || r.key) + '" style="width:' + px + 'px;height:' + px
+         + 'px"></span>';
+  }
+  return slot + '<span class=res title="' + esc(r.name || r.key) + '" style="width:' + px
+       + 'px;height:' + px + 'px">' + esc(r.key) + '</span></span>';
+}
+
 
 function statusText(){
   var b = (S.status.byView || {})[S.view] || {};
@@ -2050,20 +2144,80 @@ function panels(){
 
   // ---- tithe ---------------------------------------------------------------------------------------
   var th = '<div class=hint>the alternative to taking a duty action, and only on screen in '
-         + 'ACTION SELECTION — never in a preview. The three resources sit one over two.</div>';
+         + 'ACTION SELECTION — never in a preview. The three resources sit one over two.</div>'
+    + '<div class=sub>token size</div>'
+    + '<div class=row><span>base</span><input type=number id=tkSizeN min=' + HELPERS.tokenSize[0]
+    + ' max=' + HELPERS.tokenSize[1] + ' value="' + tokenSize() + '"></div>'
+    + '<input type=range id=tkSizeR min=' + HELPERS.tokenSize[0] + ' max=' + HELPERS.tokenSize[1]
+    + ' step=1 value="' + tokenSize() + '">'
+    + '<div class=hint>all three slots together · the Tithe box does not follow, so crowding '
+    + 'stays visible</div>'
+    + '<div class=sub>token gap</div>'
+    + '<div class=row><span>gap</span><input type=number id=tkGapN min=' + HELPERS.tokenGap[0]
+    + ' max=' + HELPERS.tokenGap[1] + ' value="' + tokenGap() + '"></div>'
+    + '<input type=range id=tkGapR min=' + HELPERS.tokenGap[0] + ' max=' + HELPERS.tokenGap[1]
+    + ' step=1 value="' + tokenGap() + '">';
+
   (S.tithe.resources || []).forEach(function(r, i){
-    th += '<div class="row two"><span>' + (i === 0 ? "top" : "bottom") + '</span>'
+    var px = tokenPx(r);
+    th += '<div class=sub>' + esc(r.name || r.key) + '</div>'
+        + '<div class="row two"><span>key / name</span>'
         + '<input type=text data-res="' + i + ':key" value="' + esc(r.key) + '" maxlength=3>'
         + '<input type=text data-res="' + i + ':name" value="' + esc(r.name) + '"></div>';
+    // THE THUMBNAIL IS THE STUDIO'S, not the stage's: a fixed 48px so three tokens of different
+    // scales stay comparable in the panel while the stage shows them at their real sizes.
+    if (haveImage(r.icon)){
+      th += '<div style="margin:4px 0"><img src="' + imgSrc(r.icon) + '" alt="'
+          + esc(r.name || r.key) + '" style="width:48px;height:48px;object-fit:contain;'
+          + 'display:block"></div>';
+    } else if (r.iconName){
+      th += '<div class=hint style="color:var(--warn)">' + esc(r.iconName)
+          + ' · not loaded — choose it again to restore the picture</div>';
+    }
+    if (haveImage(r.icon) && r.iconName){
+      th += '<div class=hint>' + esc(r.iconName) + '</div>';
+    }
+    th += '<div class=row><span>icon</span><span style="text-align:left">'
+        + '<input type=file data-tok="' + i + '" '
+        + 'accept="image/png,image/webp,image/svg+xml"></span></div>'
+        + (r.icon || r.iconName
+            ? '<div class=btns>' + btn("clear " + (r.name || r.key), (function(n){
+                return function(){ clearTokenIcon(n); }; })(i)) + '</div>' : '')
+        + '<div class=row><span>scale</span><input type=number data-tsc="' + i + '" min='
+        + HELPERS.tokenScale[0] + ' max=' + HELPERS.tokenScale[1] + ' value="' + tokenScale(r)
+        + '"></div>'
+        + '<input type=range data-tscr="' + i + '" min=' + HELPERS.tokenScale[0] + ' max='
+        + HELPERS.tokenScale[1] + ' step=1 value="' + tokenScale(r) + '">'
+        + '<div class=hint>' + tokenScale(r) + '% of ' + tokenSize() + ' px → <b>' + px
+        + ' px</b></div>';
   });
+  var over = tokenOverflow();
   th += '<div class=hint>the letters are placeholders for icons · the full words are '
-      + 'deliberately not spelled out on the card</div>';
+      + 'deliberately not spelled out on the card</div>'
+      + (over ? '<div class=hint style="color:var(--warn)">resource tokens exceed the Tithe '
+              + 'content area by ' + over + ' px · nothing is resized for you</div>' : '');
   el("titheCtl").innerHTML = th;
   [].forEach.call(el("titheCtl").querySelectorAll("[data-res]"), function(inp){
     var q = inp.dataset.res.split(":");
     inp.oninput = function(){ S.tithe.resources[+q[0]][q[1]] = inp.value;
                               render(); recordSoon(); save(true); };
   });
+  // The loaders go through the existing pool: a key into the state, the bytes into IMAGES.
+  [].forEach.call(el("titheCtl").querySelectorAll("[data-tok]"), function(inp){
+    var i = +inp.dataset.tok;
+    inp.onchange = function(){ readImage(inp, function(key, name){
+      var r = S.tithe.resources[i];
+      r.icon = key; r.iconName = name;
+      commitPanels(); say("loaded " + name + " as " + (r.name || r.key)); }); };
+  });
+  [].forEach.call(el("titheCtl").querySelectorAll("[data-tsc]"), function(inp){
+    inp.oninput = function(){ setTokenScale(+inp.dataset.tsc, inp.value, true); };
+  });
+  [].forEach.call(el("titheCtl").querySelectorAll("[data-tscr]"), function(inp){
+    inp.oninput = function(){ setTokenScale(+inp.dataset.tscr, inp.value, true); };
+  });
+  pairNum("tkSizeN", "tkSizeR", setTokenSize, tokenSize);
+  pairNum("tkGapN", "tkGapR", setTokenGap, tokenGap);
 
   // ---- layout helpers ----------------------------------------------------------------------------------
   // SHORTCUTS FOR THE FIDDLY PART. Every one of these can be done by hand with the inspector and
@@ -2338,6 +2492,9 @@ function labSession(withImages){
   if (withImages){
     function mark(k){ if (k && IMAGES[k]) used[k] = IMAGES[k]; }
     mark(S.wheel.image); mark(S.tithe.image);
+    // The three resource tokens, or a session exported "with images" would reopen showing the
+    // letters again and look like the art had been lost.
+    (S.tithe.resources || []).forEach(function(r){ mark(r.icon); });
     DUTY_ORDER.forEach(function(s){
       ACTIONS.forEach(function(a){
         var act = S.duties[s][a.key]; mark(act.seal); mark(act.scenic);
@@ -2392,10 +2549,15 @@ function gameLayout(){
     // WHEN Tithe and the City are on screen is a phase the game already knows; WHAT they look
     // like and WHERE they go is this file's business, so the labels and the resources come too
     // and nothing about the phase does.
+    // THE TOKEN SIZING IS A DESIGN DECISION AND TRAVELS; the image POOL KEY is session state
+    // and does not. `iconName` is what the production asset pipeline resolves against, the same
+    // way the action artwork is identified by filename rather than by bytes.
     tithe: {x: S.tithe.x, y: S.tithe.y, width: S.tithe.width, height: S.tithe.height,
             visible: !!S.tithe.visible, label: S.tithe.label,
+            tokenSize: tokenSize(), tokenGap: tokenGap(),
             resources: (S.tithe.resources || []).map(function(r){
-              return {key: r.key, name: r.name}; })},
+              return {key: r.key, name: r.name, iconName: r.iconName || null,
+                      scale: tokenScale(r)}; })},
     city: {x: S.city.x, y: S.city.y, width: S.city.width, height: S.city.height,
            visible: !!S.city.visible, label: S.city.label},
     acolytes: {height: S.acolytes.height, ratios: clone(S.acolytes.ratios)},
@@ -2614,6 +2776,29 @@ function applyState(d){
   // written by hand may carry anything at all; either way the height follows the width at the
   // layout's own ratio. This is a normalisation, not a migration -- the schema is unchanged and
   // an existing V4 session still opens.
+  // THE TITHE TOKENS, NORMALISED RATHER THAN MIGRATED. `resources` is an ARRAY, and deepMerge
+  // replaces arrays wholesale, so a V4 session written before tokens existed brings back three
+  // objects shaped {key, name} with no icon, iconName or scale -- the defaults do not survive the
+  // merge the way an object's keys would. Filling them in here is what lets an older session open
+  // without a schema bump. Imported numbers are clamped: a hand-edited file is not to be trusted
+  // with a scale of 4000.
+  if (!Array.isArray(S.tithe.resources) || !S.tithe.resources.length){
+    S.tithe.resources = clone(DEFAULT_STATE.tithe.resources);
+  }
+  S.tithe.resources.forEach(function(r){
+    if (r.icon === undefined) r.icon = null;
+    if (r.iconName === undefined) r.iconName = null;
+    r.scale = clamp(Math.round(+r.scale || 100), HELPERS.tokenScale[0], HELPERS.tokenScale[1]);
+  });
+  S.tithe.tokenSize = clamp(Math.round(+S.tithe.tokenSize || DEFAULT_STATE.tithe.tokenSize),
+                            HELPERS.tokenSize[0], HELPERS.tokenSize[1]);
+  // NOT `|| default`: a gap of 0 is a legitimate choice and must survive the round trip, which
+  // `0 || 9` would quietly turn into 9.
+  S.tithe.tokenGap = clamp(Math.round(
+      S.tithe.tokenGap === undefined || S.tithe.tokenGap === null || isNaN(+S.tithe.tokenGap)
+        ? DEFAULT_STATE.tithe.tokenGap : +S.tithe.tokenGap),
+      HELPERS.tokenGap[0], HELPERS.tokenGap[1]);
+
   S.wheel.width = clamp(S.wheel.width, MIN_SIZE, 4000);
   S.wheel.naturalRatio = WHEEL_RATIO;
   S.wheel.ratioSource = "builtin";

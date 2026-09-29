@@ -343,10 +343,24 @@ def test_the_helper_ranges_are_studio_only_and_bounded_by_the_module(lab):
     Falsified by exporting a helper setting, or by a range that lets a slider leave the module.
     """
     r = lab.HELPER_RANGES
-    assert set(r) == {"wheelW", "cardH", "artW", "artH", "gap", "rowRight"}, sorted(r)
-    for key in ("wheelW", "cardH", "artW", "artH", "gap"):
+    assert set(r) == {"wheelW", "cardH", "artW", "artH", "gap", "rowRight",
+                      "tokenSize", "tokenGap", "tokenScale"}, sorted(r)
+    for key in ("wheelW", "cardH", "artW", "artH", "gap", "tokenSize", "tokenGap", "tokenScale"):
         lo, hi = r[key]
         assert lo < hi, "%s is not a range: %s" % (key, r[key])
+
+    # THE TITHE TOKENS. Scale is optical correction, not a second size control: a range wide
+    # enough to make one token twice another would make the shared size meaningless, and the two
+    # controls would then disagree about what "the token size" is.
+    assert r["tokenScale"] == [60, 140], r["tokenScale"]
+    assert r["tokenSize"][0] >= 20 and r["tokenSize"][1] <= 160, r["tokenSize"]
+    assert r["tokenGap"][0] == 0, "a gap of zero has to be reachable: %s" % (r["tokenGap"],)
+    # The starting layout sits inside every token range, or the panel opens out of bounds.
+    d0 = lab.default_state()["tithe"]
+    assert r["tokenSize"][0] <= d0["tokenSize"] <= r["tokenSize"][1], d0["tokenSize"]
+    assert r["tokenGap"][0] <= d0["tokenGap"] <= r["tokenGap"][1], d0["tokenGap"]
+    for res in d0["resources"]:
+        assert r["tokenScale"][0] <= res["scale"] <= r["tokenScale"][1], res
 
     # The wheel may fill the module but never exceed it, and at full width it still fits under
     # the action band -- otherwise the top of the range would produce a layout off the bottom.
@@ -1950,10 +1964,23 @@ process.stdout.write(JSON.stringify({layout: g, text: JSON.stringify(g)}));
 
     assert set(g["highlight"]) == {"width", "height", "dy", "style", "visible", "opacity",
                                    "colour"}, sorted(g["highlight"])
-    assert set(g["tithe"]) == {"x", "y", "width", "height", "visible", "label", "resources"}, \
-        sorted(g["tithe"])
+    # THE TOKEN SIZING TRAVELS, THE POOL KEY DOES NOT. How big the tokens are and how far apart
+    # they sit were decided here and the real UI cannot recompute them; which slot in this
+    # session's image pool happens to hold the bytes is not a fact about the layout at all.
+    # `iconName` is the handle production resolves against, exactly as the action artwork is
+    # identified by filename rather than by bytes.
+    assert set(g["tithe"]) == {"x", "y", "width", "height", "visible", "label", "resources",
+                               "tokenSize", "tokenGap"}, sorted(g["tithe"])
+    assert isinstance(g["tithe"]["tokenSize"], int) and g["tithe"]["tokenSize"] > 0
+    assert isinstance(g["tithe"]["tokenGap"], int) and g["tithe"]["tokenGap"] >= 0
     assert [r["key"] for r in g["tithe"]["resources"]] == ["W", "S", "Ag"]
-    assert all(set(r) == {"key", "name"} for r in g["tithe"]["resources"])
+    assert all(set(r) == {"key", "name", "iconName", "scale"}
+               for r in g["tithe"]["resources"]), g["tithe"]["resources"]
+    assert all(r["iconName"] is None for r in g["tithe"]["resources"]), (
+        "the default state names an icon it has not got")
+    assert all(r["scale"] == 100 for r in g["tithe"]["resources"])
+    assert '"icon"' not in text.replace('"iconName"', ""), (
+        "the production export carries an image-pool key for a tithe token")
     assert set(g["city"]) == {"x", "y", "width", "height", "visible", "label"}, sorted(g["city"])
     assert "counts" not in g["city"] and "shown" not in g["city"], (
         "the City exports this session's occupancy as production layout")

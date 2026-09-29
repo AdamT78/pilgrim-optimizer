@@ -804,6 +804,31 @@ The one question it exists to answer: do the v2 wheel, the two action artworks, 
 sized acolytes, the eight reference cards, Tithe and the City fit clearly and attractively inside
 one fixed 1400 × 1200 module — in all three of the states the player will actually see?
 
+## The tithe tokens
+
+The Tithe card's three resources are circular token artwork: wheat on top, stone and silver
+below. Each PNG under `../tokens/resources/` is the **complete** token — rim, disc and motif are
+painted into it — so the card draws the image and nothing else. Putting one inside the old brown
+`.res` disc would give it two rims.
+
+With no icon loaded a resource falls back to its letter, `W` / `S` / `Ag`, in that disc. That is
+not a degraded mode: the tool has to stay usable with no assets at all, so a missing token reads
+as a letter rather than as a broken image.
+
+Sizing is two controls and one rule. **Token size** sets one slot size for all three. **Scale**,
+per resource, is optical correction between 60% and 140% — a sheaf and a coin of the same
+diameter do not carry the same visual weight — and it changes only how large that picture is
+drawn. The slot stays square at the shared size, so raising wheat to 110% cannot move stone or
+silver a single pixel. **Token gap** is one value for both axes of the pyramid.
+
+**The Tithe box never follows the tokens.** Grow them past what the card holds and the crowding
+shows, with a note in the panel saying by how much. Resizing the card to hide that would answer
+the question the composition is asking.
+
+The production export carries `tokenSize`, `tokenGap` and each resource's `iconName` and `scale`,
+because those are design decisions the real UI cannot recompute. It never carries the image-pool
+key or the bytes.
+
 ## Development history
 
 The V1, V2, V3 and V4.1 briefs are filed in `../docs/`. The V4, V4.2 and V4.2.1 briefs are not:
