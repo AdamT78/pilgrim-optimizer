@@ -285,8 +285,14 @@ MUTS = [
   "refreshed_from_render", "the controls never re-synced from render"),
  ("tmpl", '  paintMetrics();\n  syncHelperInputs();', '  syncHelperInputs();\n  paintMetrics();',
   "refreshed_from_render", "the controls synced before the metrics, so the two can disagree"),
- ("tmpl", '    if (!e || e === document.activeElement) return;', '    if (!e) return;',
-  "refreshed_from_render", "the refresh stamping on the box the caret is in"),
+ # ANCHORED ON THE LINE ABOVE IT. There are two of these now -- syncHelperInputs() and
+ # syncTokenInputs() protect their controls the same way -- so the guard alone is ambiguous, and
+ # a mutation that hit both would not say which one the failing test was about. This is exactly
+ # the case replace_exactly_once() exists to refuse: `source.replace` would have changed both
+ # and reported a clean result.
+ ("tmpl", '    var e = el(id);\n    if (!e || e === document.activeElement) return;',
+          '    var e = el(id);\n    if (!e) return;',
+  "refreshed_from_render", "the helper refresh stamping on the box the caret is in"),
  ("tmpl", 'function syncHelperInputs(){\n  if (!el("hpWheelN")) return;',
           'function syncHelperInputs(){\n  if (!el("hpWheelN")) return;\n  panels();',
   "refreshed_from_render", "the refresh rebuilding the panel instead of writing into it"),

@@ -100,9 +100,13 @@ MUTS = [
   '  paintMetrics();',
   "the helper controls never re-synced from render"),
 
- ('    if (!e || e === document.activeElement) return;',
-  '    if (!e) return;',
-  "the sync stamping on the box the caret is in"),
+ # Anchored on the line above it: syncTokenInputs() guards its own controls the same way,
+ # so the bare line matches twice and says nothing about which sync the failure is in.
+ ('''    var e = el(id);
+    if (!e || e === document.activeElement) return;''',
+  '''    var e = el(id);
+    if (!e) return;''',
+  "the helper sync stamping on the box the caret is in"),
 
  ('  set("hpCardN", cg.h.lo);         set("hpCardR", cg.h.lo);',
   '  set("hpCardN", cg.h.hi);         set("hpCardR", cg.h.hi);',

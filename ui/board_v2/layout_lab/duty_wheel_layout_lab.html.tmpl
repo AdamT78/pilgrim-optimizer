@@ -169,16 +169,26 @@ body.clean .art.choice:hover::after{content:"";position:absolute;inset:0;
    no scenic art, a plain field, its three resources as a pyramid. No "OR" anywhere: the card
    being a separate card is the separation. */
 #titheObj{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
-  border-radius:5px;background:#ffffff08;border:1px solid #ffffff1c;padding:10px}
-#titheObj .tl{font:600 14px/1.1 Georgia,serif;letter-spacing:.15em;text-transform:uppercase;
-  color:#ddd2b8}
-#titheObj .pyr{display:flex;flex-direction:column;align-items:center}
-#titheObj .pr{display:flex}
-/* THE SLOT IS FIXED AND THE TOKEN GROWS INSIDE IT. Per-resource scale is optical correction,
-     so raising wheat from 100% to 110% has to make the sheaf bigger without shoving stone and
-     silver sideways -- which is what would happen if the scale changed the slot. The slot is
-     tokenSize square, the image is centred in it, and only the image knows about scale. */
-  .slot{display:grid;place-items:center;flex:0 0 auto}
+  border-radius:5px;background:#ffffff08;border:1px solid #ffffff1c;padding:10px;
+  /* room for the caption pinned at the bottom, so the tokens centre in what is left */
+  padding-bottom:36px}
+/* THE SAME TYPOGRAPHY AS THE ACTION ARTWORK'S CAPTION -- Georgia 600 at 17px with .11em of
+   tracking, matching `.art .cap` -- so TAKE TITHE and GAIN COINS read as the same kind of thing
+   said about the same kind of choice. It sits at the BOTTOM of the card and centred, where the
+   captions sit, rather than heading the card from the top.
+   No scrim: the caption over artwork needs one to stay legible, this card is plain dark. */
+#titheObj .tl{position:absolute;left:0;right:0;bottom:10px;text-align:center;
+  font:600 17px/1.2 Georgia,serif;letter-spacing:.11em;text-transform:uppercase;
+  color:#e2d7bc}
+/* THE ARRANGEMENT IS A TRIANGLE, NOT A STACK OF ROWS. Flex rows can only space tokens by the
+   gap BETWEEN their boxes, so every step of the size control also shoved the tokens apart and
+   the two controls fought each other: you could not make them bigger without spreading them,
+   or closer without shrinking them. Here the three CENTRES sit on the vertices of an invisible
+   equilateral triangle, apex up, and each token is centred on its vertex by translate(-50%,-50%).
+   Spread moves the vertices; size grows the tokens where they stand; neither touches the other,
+   and at a large enough size they are free to overlap. */
+#titheObj .pyr{position:relative}
+  .slot{position:absolute;display:grid;place-items:center;transform:translate(-50%,-50%)}
   .res{border-radius:50%;display:grid;place-items:center;
     background:radial-gradient(70% 70% at 35% 30%,#3c3527,#241d14);
     border:1px solid #6b5c3e;color:#e4d6b4;font:700 13px/1 ui-monospace,monospace}
@@ -365,7 +375,8 @@ function haveImage(key){ return !!(key && IMAGES[key]); }
 // so the first ask probes it once and repaints.
 // The Tithe card's own furniture: 10px padding top and bottom, the TAKE TITHE line, and the
 // 10px gap between that line and the pyramid. What is left is what the tokens have to live in.
-var TITHE_CHROME = 10 + 10 + 16 + 10;
+var TITHE_CHROME = 10 + 36 + 4;
+var TITHE_SIDES = 20;
 
 var IMG_DIMS = {};
 var DIM_PENDING = {};
@@ -998,14 +1009,16 @@ function render(){
   if (titheMode !== "no" && S.tithe.visible){
     var T = S.tithe;
     var res = (T.resources || []);
-    var pyr = '<div class=pyr style="gap:' + tokenGap() + 'px"><div class=pr style="gap:'
-            + tokenGap() + 'px">' + res.slice(0, 1).map(tokenHTML).join("")
-            + '</div><div class=pr style="gap:' + tokenGap() + 'px">'
-            + res.slice(1, 3).map(tokenHTML).join("")
-            + '</div></div>';
+    // The vertices are measured from the triangle box's own middle, so the three land exactly
+    // on its corners and apex however big the tokens themselves are.
+    var tb = tokenTriangle(), tp = tokenPoints();
+    var pyr = '<div class=pyr style="width:' + tb.width + 'px;height:' + tb.height + 'px">'
+            + res.slice(0, 3).map(function(r, i){ return tokenHTML(r, tp[i], tb); }).join("")
+            + '</div>';
     var dt = make("tithe", null, rectOf("tithe", null),
                   S.view === "action" ? "choice" : "",
-                  '<span class=nm>tithe</span><div class=tl>' + esc(T.label) + '</div>' + pyr,
+                  '<span class=nm>tithe</span>' + pyr + '<div class=tl>' + esc(T.label)
+                    + '</div>',
                   WHEEL_Z + 15, titheMode === "ghost");
     dt.id = "titheObj";
     if (!T.locked && titheMode === "yes") handles(dt, "tithe");
@@ -1183,24 +1196,44 @@ function helperGap(){ return clamp(rowGapSuggested(), HELPERS.gap[0], HELPERS.ga
 // THE TOKEN READINGS. Derived from the state every time, never stored alongside it.
 function tokenSize(){ return clamp(Math.round(S.tithe.tokenSize), HELPERS.tokenSize[0],
                                    HELPERS.tokenSize[1]); }
-function tokenGap(){ return clamp(Math.round(S.tithe.tokenGap), HELPERS.tokenGap[0],
-                                  HELPERS.tokenGap[1]); }
-function tokenScale(r){ return clamp(Math.round((r && r.scale) || 100), HELPERS.tokenScale[0],
-                                     HELPERS.tokenScale[1]); }
-// What one token actually draws at: the shared size, corrected per resource.
-function tokenPx(r){ return Math.round(tokenSize() * tokenScale(r) / 100); }
+function tokenSpread(){ return clamp(Math.round(S.tithe.tokenSpread), HELPERS.tokenSpread[0],
+                                     HELPERS.tokenSpread[1]); }
+
+// THE TRIANGLE THE THREE CENTRES SIT ON: equilateral, apex up, side = spread. Offsets are from
+// the arrangement's own centre, so nothing here depends on how big a token is -- which is the
+// entire point. Change the size and the centres do not move; change the spread and the sizes do
+// not change.
+function tokenPoints(){
+  var s = tokenSpread(), h = s * Math.sqrt(3) / 2;
+  return [{x: 0, y: -h / 2}, {x: -s / 2, y: h / 2}, {x: s / 2, y: h / 2}];
+}
+// THE CONTAINER IS THE TRIANGLE ITSELF, and the tokens overhang it by half their own size on
+// every side. The obvious alternative -- size it to the whole arrangement -- would put the token
+// size back into the container's dimensions, and a container that outgrows the Tithe card stops
+// being centred by the flex column and slides against one edge: the tokens would drift sideways
+// as you scaled them, which is the one thing this layout exists to prevent. The two boxes share
+// a centre, so while the arrangement fits there is nothing to choose between them on screen.
+function tokenTriangle(){
+  var s = tokenSpread();
+  return {width: s, height: s * Math.sqrt(3) / 2};
+}
+// The box the arrangement actually needs: the triangle plus half a token beyond each vertex.
+// Reported, not laid out -- see tokenOverflow().
+function tokenBounds(){
+  var s = tokenSpread(), box = tokenSize();
+  return {width: s + box, height: s * Math.sqrt(3) / 2 + box};
+}
 
 // HOW FAR THE PYRAMID OVERRUNS THE CARD, in pixels, or 0 when it fits. Informational only --
 // nothing here shrinks a token or grows the box. The whole point of a fixed Tithe region is that
 // the trade-off stays visible; resizing the card to hide it would answer the question the
 // designer is asking.
 function tokenOverflow(){
-  var box = tokenSize(), gap = tokenGap();
-  // one slot over two, plus the gap between the rows; the card's own padding and its label are
-  // what is left over.
-  var need = box * 2 + gap;
-  var have = S.tithe.height - TITHE_CHROME;
-  return need > have ? Math.ceil(need - have) : 0;
+  var b = tokenBounds();
+  var overV = b.height - (S.tithe.height - TITHE_CHROME);
+  var overH = b.width - (S.tithe.width - TITHE_SIDES);
+  var worst = Math.max(overV, overH);
+  return worst > 0 ? Math.ceil(worst) : 0;
 }
 
 // NONE OF THESE REBUILD THE PANEL, and that is the whole point of them being separate from the
@@ -1214,17 +1247,8 @@ function setTokenSize(v, soon){
   S.tithe.tokenSize = clamp(Math.round(v), HELPERS.tokenSize[0], HELPERS.tokenSize[1]);
   commit(soon);
 }
-function setTokenGap(v, soon){
-  S.tithe.tokenGap = clamp(Math.round(v), HELPERS.tokenGap[0], HELPERS.tokenGap[1]);
-  commit(soon);
-}
-// OPTICAL CORRECTION, ONE RESOURCE AT A TIME. It changes how big the picture is drawn and
-// nothing else: the slot stays tokenSize square, so raising wheat to 110% cannot move stone or
-// silver a single pixel.
-function setTokenScale(i, v, soon){
-  var r = S.tithe.resources[i];
-  if (!r) return;
-  r.scale = clamp(Math.round(v), HELPERS.tokenScale[0], HELPERS.tokenScale[1]);
+function setTokenSpread(v, soon){
+  S.tithe.tokenSpread = clamp(Math.round(v), HELPERS.tokenSpread[0], HELPERS.tokenSpread[1]);
   commit(soon);
 }
 function clearTokenIcon(i){
@@ -1257,18 +1281,37 @@ function pairNum(numId, rangeId, apply, read){
 // ONE RESOURCE, either as its artwork or as the letter that stands in for it. The letter is not
 // a degraded mode: the tool has to stay usable with no assets loaded at all, which is why a
 // missing token is a disc with `W` in it rather than a broken image.
-function tokenHTML(r){
-  var box = tokenSize(), px = tokenPx(r);
-  var slot = '<span class=slot style="width:' + box + 'px;height:' + box + 'px">';
+//
+// ALL THREE ARE THE SAME SIZE, and there is no per-resource correction any more. There was one,
+// and it was the wrong place for it: silver read about a ninth smaller than the others because
+// its PNG had more transparent margin, and a slider in the studio would have papered over a
+// fault in the artwork that the production pipeline would then have had to reproduce. The three
+// masters were re-exported to the same disc fraction instead, and the control went away with
+// the problem.
+function tokenHTML(r, pt, tb){
+  var box = tokenSize();
+  var slot = '<span class=slot style="left:' + (tb.width / 2 + pt.x) + 'px;top:'
+           + (tb.height / 2 + pt.y) + 'px;width:' + box + 'px;height:' + box + 'px">';
   if (haveImage(r.icon)){
     return slot + '<img class=tok src="' + imgSrc(r.icon) + '" alt="' + esc(r.name || r.key)
-         + '" title="' + esc(r.name || r.key) + '" style="width:' + px + 'px;height:' + px
+         + '" title="' + esc(r.name || r.key) + '" style="width:' + box + 'px;height:' + box
          + 'px"></span>';
   }
-  return slot + '<span class=res title="' + esc(r.name || r.key) + '" style="width:' + px
-       + 'px;height:' + px + 'px">' + esc(r.key) + '</span></span>';
+  // The stand-in letter tracks the disc it is in: at the top of the size range a fixed 13px
+  // would be a speck in a 160px circle, which reads as a bug rather than as a placeholder.
+  return slot + '<span class=res title="' + esc(r.name || r.key) + '" style="width:' + box
+       + 'px;height:' + box + 'px;font-size:' + Math.max(10, Math.round(box * 0.34))
+       + 'px">' + esc(r.key) + '</span></span>';
 }
 
+
+// The one phrasing of what the two controls add up to, so the panel and the live re-sync cannot
+// drift apart: what the arrangement needs is a derived box, not a stored one.
+function tokenReadout(){
+  var b = tokenBounds();
+  return 'triangle side <b>' + tokenSpread() + ' px</b> · token <b>' + tokenSize()
+       + ' px</b> · needs ' + Math.ceil(b.width) + ' × ' + Math.ceil(b.height) + ' px';
+}
 
 // The tithe controls, refreshed from render() without rebuilding them -- see setTokenSize.
 function syncTokenInputs(){
@@ -1277,16 +1320,11 @@ function syncTokenInputs(){
     if (!e || e === document.activeElement) return;
     if (String(e.value) !== String(v)) e.value = v;
   }
-  set(el("tkSizeN"), tokenSize()); set(el("tkSizeR"), tokenSize());
-  set(el("tkGapN"), tokenGap());   set(el("tkGapR"), tokenGap());
-  (S.tithe.resources || []).forEach(function(r, i){
-    set(document.querySelector('#titheCtl [data-tsc="' + i + '"]'), tokenScale(r));
-    set(document.querySelector('#titheCtl [data-tscr="' + i + '"]'), tokenScale(r));
-    // The derived line under each slider is text, not a control, so it is simply rewritten.
-    var out = document.querySelector('#titheCtl [data-tread="' + i + '"]');
-    if (out) out.innerHTML = tokenScale(r) + '% of ' + tokenSize() + ' px → <b>' + tokenPx(r)
-                           + ' px</b>';
-  });
+  set(el("tkSizeN"), tokenSize());     set(el("tkSizeR"), tokenSize());
+  set(el("tkSpreadN"), tokenSpread()); set(el("tkSpreadR"), tokenSpread());
+  // The reading under the two sliders is text, not a control, so it is simply rewritten.
+  var read = document.querySelector('#titheCtl [data-tread]');
+  if (read) read.innerHTML = tokenReadout();
   var warn = document.querySelector('#titheCtl [data-tover]');
   if (warn){
     var over = tokenOverflow();
@@ -2198,28 +2236,33 @@ function panels(){
 
   // ---- tithe ---------------------------------------------------------------------------------------
   var th = '<div class=hint>the alternative to taking a duty action, and only on screen in '
-         + 'ACTION SELECTION — never in a preview. The three resources sit one over two.</div>'
+         + 'ACTION SELECTION — never in a preview. The three resources stand on the vertices of '
+         + 'an invisible equilateral triangle, apex up.</div>'
     + '<div class=sub>token size</div>'
-    + '<div class=row><span>base</span><input type=number id=tkSizeN min=' + HELPERS.tokenSize[0]
+    + '<div class=row><span>size</span><input type=number id=tkSizeN min=' + HELPERS.tokenSize[0]
     + ' max=' + HELPERS.tokenSize[1] + ' value="' + tokenSize() + '"></div>'
     + '<input type=range id=tkSizeR min=' + HELPERS.tokenSize[0] + ' max=' + HELPERS.tokenSize[1]
     + ' step=1 value="' + tokenSize() + '">'
-    + '<div class=hint>all three slots together · the Tithe box does not follow, so crowding '
-    + 'stays visible</div>'
-    + '<div class=sub>token gap</div>'
-    + '<div class=row><span>gap</span><input type=number id=tkGapN min=' + HELPERS.tokenGap[0]
-    + ' max=' + HELPERS.tokenGap[1] + ' value="' + tokenGap() + '"></div>'
-    + '<input type=range id=tkGapR min=' + HELPERS.tokenGap[0] + ' max=' + HELPERS.tokenGap[1]
-    + ' step=1 value="' + tokenGap() + '">';
+    + '<div class=hint>all three at once · they are meant to be the same size, so there is one '
+    + 'control and no per-resource correction — a token that reads small is fixed in its '
+    + 'artwork, not here. The Tithe box does not follow, so crowding stays visible.</div>'
+    + '<div class=sub>token spread</div>'
+    + '<div class=row><span>side</span><input type=number id=tkSpreadN min='
+    + HELPERS.tokenSpread[0] + ' max=' + HELPERS.tokenSpread[1] + ' value="' + tokenSpread()
+    + '"></div>'
+    + '<input type=range id=tkSpreadR min=' + HELPERS.tokenSpread[0] + ' max='
+    + HELPERS.tokenSpread[1] + ' step=1 value="' + tokenSpread() + '">'
+    + '<div class=hint>the side of the triangle, measured centre to centre · it does not depend '
+    + 'on size, so growing the tokens crowds them together instead of pushing them apart</div>'
+    + '<div class=hint data-tread>' + tokenReadout() + '</div>';
 
   (S.tithe.resources || []).forEach(function(r, i){
-    var px = tokenPx(r);
     th += '<div class=sub>' + esc(r.name || r.key) + '</div>'
         + '<div class="row two"><span>key / name</span>'
         + '<input type=text data-res="' + i + ':key" value="' + esc(r.key) + '" maxlength=3>'
         + '<input type=text data-res="' + i + ':name" value="' + esc(r.name) + '"></div>';
-    // THE THUMBNAIL IS THE STUDIO'S, not the stage's: a fixed 48px so three tokens of different
-    // scales stay comparable in the panel while the stage shows them at their real sizes.
+    // THE THUMBNAIL IS THE STUDIO'S, not the stage's: a fixed 48px, so the panel stays readable
+    // whatever the stage is set to and the three can be compared against each other.
     if (haveImage(r.icon)){
       th += '<div style="margin:4px 0"><img src="' + imgSrc(r.icon) + '" alt="'
           + esc(r.name || r.key) + '" style="width:48px;height:48px;object-fit:contain;'
@@ -2236,14 +2279,7 @@ function panels(){
         + 'accept="image/png,image/webp,image/svg+xml"></span></div>'
         + (r.icon || r.iconName
             ? '<div class=btns>' + btn("clear " + (r.name || r.key), (function(n){
-                return function(){ clearTokenIcon(n); }; })(i)) + '</div>' : '')
-        + '<div class=row><span>scale</span><input type=number data-tsc="' + i + '" min='
-        + HELPERS.tokenScale[0] + ' max=' + HELPERS.tokenScale[1] + ' value="' + tokenScale(r)
-        + '"></div>'
-        + '<input type=range data-tscr="' + i + '" min=' + HELPERS.tokenScale[0] + ' max='
-        + HELPERS.tokenScale[1] + ' step=1 value="' + tokenScale(r) + '">'
-        + '<div class=hint data-tread="' + i + '">' + tokenScale(r) + '% of ' + tokenSize()
-        + ' px → <b>' + px + ' px</b></div>';
+                return function(){ clearTokenIcon(n); }; })(i)) + '</div>' : '');
   });
   var over = tokenOverflow();
   th += '<div class=hint>the letters are placeholders for icons · the full words are '
@@ -2266,14 +2302,8 @@ function panels(){
       r.icon = key; r.iconName = name;
       commitPanels(); say("loaded " + name + " as " + (r.name || r.key)); }); };
   });
-  [].forEach.call(el("titheCtl").querySelectorAll("[data-tsc]"), function(inp){
-    inp.oninput = function(){ setTokenScale(+inp.dataset.tsc, inp.value, true); };
-  });
-  [].forEach.call(el("titheCtl").querySelectorAll("[data-tscr]"), function(inp){
-    inp.oninput = function(){ setTokenScale(+inp.dataset.tscr, inp.value, true); };
-  });
   pairNum("tkSizeN", "tkSizeR", setTokenSize, tokenSize);
-  pairNum("tkGapN", "tkGapR", setTokenGap, tokenGap);
+  pairNum("tkSpreadN", "tkSpreadR", setTokenSpread, tokenSpread);
 
   // ---- layout helpers ----------------------------------------------------------------------------------
   // SHORTCUTS FOR THE FIDDLY PART. Every one of these can be done by hand with the inspector and
@@ -2610,10 +2640,9 @@ function gameLayout(){
     // way the action artwork is identified by filename rather than by bytes.
     tithe: {x: S.tithe.x, y: S.tithe.y, width: S.tithe.width, height: S.tithe.height,
             visible: !!S.tithe.visible, label: S.tithe.label,
-            tokenSize: tokenSize(), tokenGap: tokenGap(),
+            tokenSize: tokenSize(), tokenSpread: tokenSpread(),
             resources: (S.tithe.resources || []).map(function(r){
-              return {key: r.key, name: r.name, iconName: r.iconName || null,
-                      scale: tokenScale(r)}; })},
+              return {key: r.key, name: r.name, iconName: r.iconName || null}; })},
     city: {x: S.city.x, y: S.city.y, width: S.city.width, height: S.city.height,
            visible: !!S.city.visible, label: S.city.label},
     acolytes: {height: S.acolytes.height, ratios: clone(S.acolytes.ratios)},
@@ -2803,6 +2832,34 @@ function migrate(d){
     delete d.summaryDim; delete d.connectors; delete d.titheInSummary;
     delete d.inHandOverride;
   }
+
+  // ---- the flex pyramid becomes a triangle, inside V4 --------------------------------------------
+  // NOT GATED ON `fromOlder`. Both fields belong to V4 -- the token controls arrived in 4.4 and
+  // were replaced in 4.5 -- so `d.version` says nothing at all about which of them a file carries,
+  // and the only honest test is whether the field is there.
+  //
+  // AND IT HAS TO HAPPEN HERE, on the incoming data, rather than in applyState after the merge.
+  // deepMerge fills `tokenSpread` in from the defaults, so by the time applyState sees the state
+  // there is no absence left to detect -- and the file's own arrangement has silently become the
+  // default one. The first version of this was written after the merge and did exactly that: it
+  // ran, it was wrong, and nothing about the state afterwards showed it had not worked.
+  //
+  // `tokenGap` was the space BETWEEN two token boxes; `tokenSpread` is the distance between two
+  // token CENTRES. They differ by exactly one token, which is why the size is read here too.
+  if (d.tithe){
+    if (d.tithe.tokenSpread === undefined && d.tithe.tokenGap !== undefined
+        && d.tithe.tokenGap !== null && !isNaN(+d.tithe.tokenGap)){
+      var tsz = Math.round(+d.tithe.tokenSize);
+      if (isNaN(tsz)) tsz = DEFAULT_STATE.tithe.tokenSize;
+      d.tithe.tokenSpread = tsz + Math.round(+d.tithe.tokenGap);
+    }
+    delete d.tithe.tokenGap;
+    // The per-resource optical correction, dropped with the control: the three masters were
+    // re-exported to the same disc fraction instead.
+    if (Array.isArray(d.tithe.resources)){
+      d.tithe.resources.forEach(function(r){ if (r) delete r.scale; });
+    }
+  }
   d.version = STATE_VERSION;
   return d;
 }
@@ -2837,26 +2894,32 @@ function applyState(d){
   // an existing V4 session still opens.
   // THE TITHE TOKENS, NORMALISED RATHER THAN MIGRATED. `resources` is an ARRAY, and deepMerge
   // replaces arrays wholesale, so a V4 session written before tokens existed brings back three
-  // objects shaped {key, name} with no icon, iconName or scale -- the defaults do not survive the
-  // merge the way an object's keys would. Filling them in here is what lets an older session open
+  // objects shaped {key, name} with no icon or iconName -- the defaults do not survive the merge
+  // the way an object's keys would. Filling them in here is what lets an older session open
   // without a schema bump. Imported numbers are clamped: a hand-edited file is not to be trusted
-  // with a scale of 4000.
+  // with a spread of 4000.
   if (!Array.isArray(S.tithe.resources) || !S.tithe.resources.length){
     S.tithe.resources = clone(DEFAULT_STATE.tithe.resources);
   }
   S.tithe.resources.forEach(function(r){
     if (r.icon === undefined) r.icon = null;
     if (r.iconName === undefined) r.iconName = null;
-    r.scale = clamp(Math.round(+r.scale || 100), HELPERS.tokenScale[0], HELPERS.tokenScale[1]);
+    // The per-resource optical correction is stripped in migrate(), with the rest of the
+    // conversion from the flex build. Not here as well: a second delete would mean neither
+    // could be shown to matter.
   });
   S.tithe.tokenSize = clamp(Math.round(+S.tithe.tokenSize || DEFAULT_STATE.tithe.tokenSize),
                             HELPERS.tokenSize[0], HELPERS.tokenSize[1]);
-  // NOT `|| default`: a gap of 0 is a legitimate choice and must survive the round trip, which
-  // `0 || 9` would quietly turn into 9.
-  S.tithe.tokenGap = clamp(Math.round(
-      S.tithe.tokenGap === undefined || S.tithe.tokenGap === null || isNaN(+S.tithe.tokenGap)
-        ? DEFAULT_STATE.tithe.tokenGap : +S.tithe.tokenGap),
-      HELPERS.tokenGap[0], HELPERS.tokenGap[1]);
+  // A session saved before the triangle carried `tokenGap` instead; migrate() has already turned
+  // it into the equivalent spread, because after deepMerge there is nothing left to detect.
+  //
+  // NOT `|| default`: a spread of 0 is a legitimate choice -- three tokens concentric on one
+  // point -- and must survive the round trip, which `0 || 47` would quietly turn into 47.
+  S.tithe.tokenSpread = clamp(Math.round(
+      S.tithe.tokenSpread === undefined || S.tithe.tokenSpread === null
+        || isNaN(+S.tithe.tokenSpread)
+          ? DEFAULT_STATE.tithe.tokenSpread : +S.tithe.tokenSpread),
+      HELPERS.tokenSpread[0], HELPERS.tokenSpread[1]);
 
   S.wheel.width = clamp(S.wheel.width, MIN_SIZE, 4000);
   S.wheel.naturalRatio = WHEEL_RATIO;

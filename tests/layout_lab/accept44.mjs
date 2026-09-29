@@ -1,10 +1,20 @@
-// V4.4: tithe resource tokens. The brief's tests 24-31, in its own order.
+// V4.4: tithe resource tokens, arranged on an invisible equilateral triangle.
+//
+// The arrangement started as a flex pyramid with a gap control and a per-resource scale control,
+// and both were wrong for the same reason: a gap is the space BETWEEN two boxes, so it could not
+// be changed without also changing what "bigger" meant, and the three controls fought each other.
+// What is tested here is the replacement -- two numbers, size and spread, that do not interact --
+// and the two things that came out with the old model: the per-resource optical correction (the
+// artwork was corrected instead) and the token-gap control.
 import { chromium } from 'playwright';
 import path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CHROMIUM = process.env.LAYOUT_LAB_CHROMIUM
   || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+// The suite loads the REPOSITORY'S OWN token artwork, not a copy kept beside the tests: the
+// three PNGs were re-exported to match each other optically, and a private copy would go on
+// passing after somebody replaced them.
 const TOK = process.env.LAYOUT_LAB_TOKENS
   || path.join(HERE, '..', '..', 'ui', 'board_v2', 'tokens', 'resources');
 const F = n => path.join(TOK, n);
@@ -14,7 +24,7 @@ const p = await b.newPage({viewport:{width:1900,height:1400}, deviceScaleFactor:
 const errs = [];
 p.on('pageerror', e => errs.push('pageerror: ' + e.message));
 p.on('console', m => { if (m.type() === 'error') errs.push('console: ' + m.text()); });
-await p.goto(process.argv[2] || pathToFileURL(path.join(HERE, '..', '..', 'out', 'lab.html')).href);
+await p.goto(process.argv[2] || pathToFileURL(path.join(HERE, 'lab.html')).href);
 await p.evaluate(() => localStorage.clear());
 await p.reload(); await p.waitForTimeout(450);
 
@@ -37,19 +47,32 @@ const loadTokens = async (which) => {
     await p.waitForTimeout(420);
   }
 };
-// geometry of the three rendered tokens, measured off the DOM
+// GEOMETRY OF THE THREE RENDERED TOKENS, measured off the DOM and divided back out of the stage's
+// scale() transform. Every rect the browser hands back is already multiplied by it, and the
+// factor depends on the viewport -- so readings taken raw agree with the controls at one window
+// size and quietly disagree at another. Dividing it out means these numbers can be compared with
+// the state directly, whatever the window is.
 const pyramid = () => p.evaluate(() => {
+  const st = document.getElementById('stage');
+  const k = st.getBoundingClientRect().width / st.offsetWidth;
   const slots = [].slice.call(document.querySelectorAll('#titheObj .slot'));
   const card = document.querySelector('[data-kind=tithe]').getBoundingClientRect();
   return slots.map(s => {
     const r = s.getBoundingClientRect();
     const kid = s.firstElementChild.getBoundingClientRect();
-    return {slot: Math.round(r.width), cx: Math.round(r.x + r.width/2 - card.x),
-            cy: Math.round(r.y + r.height/2 - card.y),
-            img: Math.round(kid.width), tag: s.firstElementChild.tagName.toLowerCase(),
+    return {slot: Math.round(r.width / k), cx: (r.x + r.width/2 - card.x) / k,
+            cy: (r.y + r.height/2 - card.y) / k,
+            img: Math.round(kid.width / k), tag: s.firstElementChild.tagName.toLowerCase(),
             cls: s.firstElementChild.className};
   });
 });
+// The three side lengths of the triangle the centres stand on.
+const sidesOf = g => {
+  const d = (a, c) => Math.hypot(a.cx - c.cx, a.cy - c.cy);
+  return [d(g[0], g[1]), d(g[1], g[2]), d(g[2], g[0])];
+};
+const equilateral = g => { const s = sidesOf(g); return Math.max(...s) - Math.min(...s) < 0.75; };
+const at = g => g.map(s => s.cx.toFixed(2) + ',' + s.cy.toFixed(2)).join(' | ');
 
 try {
 await p.evaluate(() => setView('action'));
@@ -70,18 +93,58 @@ ck('TEST 24', 'no image element at all, so nothing can be broken', broken === 0,
 // AND THEY ARE ACTUALLY ON SCREEN. Reading textContent proves the letters exist in the DOM,
 // which a `display:none` placeholder satisfies perfectly while showing an empty card -- and the
 // whole point of the fallback is that the tool stays usable with no assets loaded.
-const shown24 = await p.evaluate(() =>
-  [].slice.call(document.querySelectorAll('#titheObj .res')).map(e => {
+const shown24 = await p.evaluate(() => {
+  const st = document.getElementById('stage');
+  const k = st.getBoundingClientRect().width / st.offsetWidth;
+  return [].slice.call(document.querySelectorAll('#titheObj .res')).map(e => {
     const r = e.getBoundingClientRect(), c = getComputedStyle(e);
-    return {w: Math.round(r.width), h: Math.round(r.height),
+    return {w: Math.round(r.width / k), h: Math.round(r.height / k),
             disp: c.display, vis: c.visibility, op: c.opacity};
-  }));
+  });
+});
 ck('TEST 24', 'and every placeholder is really drawn, not just present in the DOM',
    shown24.length === 3 && shown24.every(s => s.w > 0 && s.h > 0 && s.disp !== 'none'
                                           && s.vis !== 'hidden' && +s.op > 0),
    JSON.stringify(shown24[0]));
 ck('TEST 24', 'at the stated token size', shown24.every(s => s.w === 38 && s.h === 38),
    shown24.map(s => s.w + 'x' + s.h).join(' '));
+
+// ============================================================ TEST 24b — THE TRIANGLE
+// The arrangement is the claim, so it is measured rather than described: three equal sides, apex
+// up, base level, apex centred over it. None of this is asserted from the markup -- it is read
+// back out of where the browser actually put the three boxes.
+const tri = await pyramid();
+const s24 = sidesOf(tri);
+ck('TEST 24b', 'the three centres stand on an equilateral triangle', equilateral(tri),
+   s24.map(x => x.toFixed(2)).join(' / '));
+ck('TEST 24b', 'its side is the spread the state holds',
+   Math.abs(s24[0] - (await p.evaluate(() => tokenSpread()))) < 0.75, s24[0].toFixed(2));
+ck('TEST 24b', 'apex up: wheat sits above the other two',
+   tri[0].cy < tri[1].cy - 1 && tri[0].cy < tri[2].cy - 1,
+   tri.map(s => s.cy.toFixed(1)).join(' / '));
+ck('TEST 24b', 'stone and silver are level with each other',
+   Math.abs(tri[1].cy - tri[2].cy) < 0.5);
+ck('TEST 24b', 'and the apex is centred over them',
+   Math.abs(tri[0].cx - (tri[1].cx + tri[2].cx) / 2) < 0.5);
+// AND THE WHOLE ARRANGEMENT IS CENTRED IN THE CARD. Everything above is relative -- equal sides,
+// level base, apex over the middle -- and a triangle measured from the wrong origin satisfies
+// every one of them while sitting in a corner. This is the only check here that says where it
+// is, rather than what shape it is.
+const card24 = await p.evaluate(() => {
+  const st = document.getElementById('stage');
+  const k = st.getBoundingClientRect().width / st.offsetWidth;
+  const c = document.querySelector('[data-kind=tithe]').getBoundingClientRect();
+  return {w: c.width / k, h: c.height / k};
+});
+const mid24 = {x: tri.reduce((a, s) => a + s.cx, 0) / 3, y: tri.reduce((a, s) => a + s.cy, 0) / 3};
+ck('TEST 24b', 'the arrangement is horizontally centred in the card',
+   Math.abs(mid24.x - card24.w / 2) < 1,
+   mid24.x.toFixed(1) + ' vs ' + (card24.w / 2).toFixed(1));
+// Not the card's own middle: the caption is reserved space at the bottom, so the tokens are
+// centred in what is left above it.
+ck('TEST 24b', 'and sits above the middle, in the space the caption leaves',
+   mid24.y < card24.h / 2 && mid24.y > card24.h * 0.25,
+   mid24.y.toFixed(1) + ' of ' + card24.h.toFixed(1));
 
 // ============================================================ TEST 25 — THREE ICONS
 await loadTokens();
@@ -92,6 +155,8 @@ const names = await p.evaluate(() => S.tithe.resources.map(r => r.iconName));
 ck('TEST 25', 'wheat on top, stone bottom-left, silver bottom-right',
    JSON.stringify(names) === '["token_wheat.png","token_stone.png","token_silver.png"]',
    names.join(' / '));
+ck('TEST 25', 'and the artwork is arranged the same way the letters were', equilateral(g),
+   sidesOf(g).map(x => x.toFixed(2)).join(' / '));
 // THE PNG IS THE WHOLE TOKEN. A disc behind it or a border around it would be a second rim.
 const chrome = await p.evaluate(() =>
   [].slice.call(document.querySelectorAll('#titheObj .tok')).map(e => {
@@ -120,6 +185,7 @@ const before26 = await p.evaluate(() => {
   return {tithe: [Math.round(t.width), Math.round(t.height)],
           city: [Math.round(c.x), Math.round(c.width)], art: [a.x, a.width]};
 });
+const centres26 = await pyramid();
 await p.evaluate(() => { setTokenSize(70); });
 await p.waitForTimeout(300);
 g = await pyramid();
@@ -139,39 +205,87 @@ ck('TEST 26', 'the City did not move',
    JSON.stringify(after26.city) === JSON.stringify(before26.city));
 ck('TEST 26', 'the action row did not move',
    JSON.stringify(after26.art) === JSON.stringify(before26.art));
+// THE POINT OF THE TRIANGLE. Under the old flex rows, growing a token also pushed its neighbours
+// away, because the only spacing available was the gap between boxes. Here the centres are the
+// vertices and the size has nothing to do with them.
+const moved26 = centres26.map((c, i) => Math.hypot(c.cx - g[i].cx, c.cy - g[i].cy));
+ck('TEST 26', 'and not one centre moved: size does not spread them',
+   Math.max(...moved26) < 0.75,
+   'worst ' + Math.max(...moved26).toFixed(3) + ' px · ' + at(centres26) + ' -> ' + at(g));
+ck('TEST 26', 'the triangle is still equilateral at the larger size', equilateral(g),
+   sidesOf(g).map(x => x.toFixed(2)).join(' / '));
+ck('TEST 26', 'and at 70 px on a 47 px side they are free to overlap',
+   sidesOf(g)[0] < g[0].slot, sidesOf(g)[0].toFixed(1) + ' < ' + g[0].slot);
+// AND AGAIN PAST THE EDGE OF THE CARD, which is where the interesting version of this fails.
+// At 70 px the arrangement still fits, so a container sized to the whole thing rather than to
+// the triangle stays centred and nothing drifts; at 160 px it overflows, the flex column gives
+// up on centring it and pins it to one edge, and the tokens slide while you scale them. The test
+// has to reach the size where the difference shows.
+await p.evaluate(() => { setTokenSize(160); });
+await p.waitForTimeout(300);
+const huge = await pyramid();
+const over = await p.evaluate(() => tokenOverflow());
+ck('TEST 26', 'at the top of the range the arrangement really does outgrow the card', over > 0,
+   over + ' px over');
+const movedHuge = centres26.map((c, i) => Math.hypot(c.cx - huge[i].cx, c.cy - huge[i].cy));
+ck('TEST 26', 'and the centres still have not moved, overflowing or not',
+   Math.max(...movedHuge) < 0.75,
+   'worst ' + Math.max(...movedHuge).toFixed(3) + ' px · ' + at(centres26) + ' -> ' + at(huge));
+ck('TEST 26', 'the Tithe box still did not resize to hide it',
+   JSON.stringify(await p.evaluate(() => [S.tithe.width, S.tithe.height]))
+     === JSON.stringify(before26.tithe));
 
-// ============================================================ TEST 27 — PER-TOKEN SCALE
+// ============================================================ TEST 27 — ONE SIZE, NOT THREE
+// There is no per-resource correction any more, and its absence is part of the design rather than
+// an omission: silver read about a ninth smaller than the other two because its PNG carried more
+// transparent margin, and a slider in the studio would have papered over a fault in the artwork
+// that the production pipeline would then have had to reproduce. The three masters were
+// re-exported to the same disc fraction instead.
 await p.evaluate(() => { setTokenSize(60); });
 await p.waitForTimeout(250);
-const centresBefore = (await pyramid()).map(s => s.cx + ',' + s.cy);
-await p.evaluate(() => { setTokenScale(0, 110); setTokenScale(1, 90); setTokenScale(2, 100); });
-await p.waitForTimeout(300);
 g = await pyramid();
-ck('TEST 27', 'wheat draws at 66 px', g[0].img === 66, g[0].img);
-ck('TEST 27', 'stone at 54 px', g[1].img === 54, g[1].img);
-ck('TEST 27', 'silver at 60 px', g[2].img === 60, g[2].img);
-ck('TEST 27', 'the slots all stay 60 px', g.every(s => s.slot === 60),
-   g.map(s => s.slot).join(','));
-// THE WHOLE POINT: scaling one token must not shove its neighbours.
-const centresAfter = g.map(s => s.cx + ',' + s.cy);
-ck('TEST 27', 'and no token moved a pixel',
-   JSON.stringify(centresAfter) === JSON.stringify(centresBefore),
-   centresBefore.join(' | ') + '  ->  ' + centresAfter.join(' | '));
+ck('TEST 27', 'all three slots are the same size',
+   g.every(s => s.slot === 60), g.map(s => s.slot).join(','));
+ck('TEST 27', 'and all three pictures are drawn at that size',
+   g.every(s => s.img === 60), g.map(s => s.img).join(','));
+const noScale = await p.evaluate(() => ({
+  fn: typeof window.setTokenScale,
+  ctl: document.querySelectorAll('#titheCtl [data-tsc], #titheCtl [data-tscr]').length,
+  state: (S.tithe.resources || []).filter(r => 'scale' in r).length}));
+ck('TEST 27', 'there is no per-resource scale control in the panel', noScale.ctl === 0,
+   noScale.ctl + ' found');
+ck('TEST 27', 'no per-resource scale function', noScale.fn === 'undefined', noScale.fn);
+ck('TEST 27', 'and no per-resource scale left in the state', noScale.state === 0, noScale.state);
 
-// ============================================================ TEST 28 — TOKEN GAP
+// ============================================================ TEST 28 — TOKEN SPREAD
 const g28a = await pyramid();
 const imgsBefore = g28a.map(s => s.img).join(',');
-await p.evaluate(() => { setTokenGap(24); });
+await p.evaluate(() => { setTokenSpread(120); });
 await p.waitForTimeout(300);
 const g28b = await pyramid();
 const dxBefore = g28a[2].cx - g28a[1].cx, dxAfter = g28b[2].cx - g28b[1].cx;
 const dyBefore = g28a[1].cy - g28a[0].cy, dyAfter = g28b[1].cy - g28b[0].cy;
-ck('TEST 28', 'the horizontal spacing changed', dxAfter > dxBefore, dxBefore + ' -> ' + dxAfter);
-ck('TEST 28', 'the vertical spacing changed too', dyAfter > dyBefore, dyBefore + ' -> ' + dyAfter);
+ck('TEST 28', 'the horizontal spacing changed', dxAfter > dxBefore,
+   dxBefore.toFixed(1) + ' -> ' + dxAfter.toFixed(1));
+ck('TEST 28', 'the vertical spacing changed too', dyAfter > dyBefore,
+   dyBefore.toFixed(1) + ' -> ' + dyAfter.toFixed(1));
+ck('TEST 28', 'one control drives both axes, because it is the side of a triangle',
+   equilateral(g28b), sidesOf(g28b).map(x => x.toFixed(2)).join(' / '));
+ck('TEST 28', 'the side IS the number typed', Math.abs(sidesOf(g28b)[0] - 120) < 0.75,
+   sidesOf(g28b)[0].toFixed(2));
 ck('TEST 28', 'the artwork sizes are unchanged', g28b.map(s => s.img).join(',') === imgsBefore,
    imgsBefore + ' -> ' + g28b.map(s => s.img).join(','));
 const tithe28 = await p.evaluate(() => [S.tithe.width, S.tithe.height]);
 ck('TEST 28', 'the Tithe box is unchanged', JSON.stringify(tithe28) === '[178,184]', tithe28);
+// SPREAD 0 IS A REAL ARRANGEMENT, not an error: three tokens concentric on one point. It is the
+// bottom of the control's range, so it has to draw.
+await p.evaluate(() => { setTokenSpread(0); });
+await p.waitForTimeout(250);
+const g28z = await pyramid();
+ck('TEST 28', 'a spread of 0 stacks all three on one point',
+   Math.max(...sidesOf(g28z)) < 0.5, sidesOf(g28z).map(x => x.toFixed(3)).join(' / '));
+ck('TEST 28', 'and they are still drawn at full size there',
+   g28z.every(s => s.slot === 60), g28z.map(s => s.slot).join(','));
 
 // ============================================================ TEST 29 — LAB EXPORT
 await reset();
@@ -202,60 +316,106 @@ ck('TEST 29', 'reports the bytes as missing', bare.loaded.every(x => x === false
 ck('TEST 29', 'and falls back to the letters', JSON.stringify(bare.letters) === '["W","S","Ag"]',
    bare.letters.join(','));
 
-// ============================================================ TEST 30 — OLD SESSION
+// ============================================================ TEST 30 — OLD SESSIONS
 await reset();
 const old = await p.evaluate(() => {
   const d = labSession(false);
   // a V4.2.1 session: resources with no icon fields, and no token settings at all
   d.state.tithe.resources = [{key:'W',name:'Wheat'},{key:'S',name:'Stone'},{key:'Ag',name:'Silver'}];
   delete d.state.tithe.tokenSize;
-  delete d.state.tithe.tokenGap;
+  delete d.state.tithe.tokenSpread;
   return JSON.stringify(d);
 });
 const migrated = await p.evaluate(t => { importSession(JSON.parse(t));
-  return {res: S.tithe.resources.map(r => [r.icon, r.iconName, r.scale]),
-          size: S.tithe.tokenSize, gap: S.tithe.tokenGap,
+  return {res: S.tithe.resources.map(r => [r.icon, r.iconName, 'scale' in r]),
+          size: S.tithe.tokenSize, spread: S.tithe.tokenSpread,
           letters: [].slice.call(document.querySelectorAll('#titheObj .res')).map(e=>e.textContent)};
 }, old);
 ck('TEST 30', 'an old session gains icon = null',
    migrated.res.every(r => r[0] === null), JSON.stringify(migrated.res[0]));
 ck('TEST 30', 'iconName = null', migrated.res.every(r => r[1] === null));
-ck('TEST 30', 'scale = 100', migrated.res.every(r => r[2] === 100));
+ck('TEST 30', 'and no per-resource scale is invented for it',
+   migrated.res.every(r => r[2] === false));
 ck('TEST 30', 'tithe gains a token size', migrated.size === 38, migrated.size);
-ck('TEST 30', 'and a token gap', migrated.gap === 9, migrated.gap);
+ck('TEST 30', 'and a token spread', migrated.spread === 47, migrated.spread);
 ck('TEST 30', 'the letters still show', JSON.stringify(migrated.letters) === '["W","S","Ag"]',
    migrated.letters.join(','));
+
+// ---- a session saved by the FLEX build carries tokenGap, which means something else -----------
+// tokenGap was the space between two token BOXES; tokenSpread is the distance between two token
+// CENTRES. They differ by exactly one token, so the arrangement a V4.4 session was saved at can
+// be recovered rather than reset -- and a session that simply dropped the old field would silently
+// snap back to the default the next time it was opened.
+const gapped = await p.evaluate(() => {
+  const d = labSession(false);
+  d.state.tithe.tokenSize = 50;
+  d.state.tithe.tokenGap = 16;              // boxes 50 px wide, 16 px apart -> centres 66 apart
+  delete d.state.tithe.tokenSpread;
+  importSession(JSON.parse(JSON.stringify(d)));
+  return {size: S.tithe.tokenSize, spread: S.tithe.tokenSpread,
+          gapGone: !('tokenGap' in S.tithe)};
+});
+ck('TEST 30', 'a pre-triangle session keeps the size it was saved at',
+   gapped.size === 50, gapped.size);
+ck('TEST 30', 'its gap becomes the equivalent spread, size + gap', gapped.spread === 66,
+   gapped.spread + ' (wanted 50 + 16)');
+ck('TEST 30', 'and the old field is not carried forward', gapped.gapGone);
+// The per-resource scale goes the same way, and it has to be tested on a file that HAS one:
+// every other fixture here predates it, so nothing in them could tell a build that strips it
+// from one that carries it along forever in every session it writes.
+const scaled = await p.evaluate(() => {
+  const d = labSession(false);
+  d.state.tithe.resources.forEach(function(r){ r.scale = 130; });
+  importSession(JSON.parse(JSON.stringify(d)));
+  return {left: S.tithe.resources.filter(r => 'scale' in r).length,
+          saved: JSON.stringify(labSession(false)).indexOf('"scale"')};
+});
+ck('TEST 30', 'a session carrying the old per-resource scale has it stripped',
+   scaled.left === 0, scaled.left + ' still there');
+ck('TEST 30', 'so it is not written back out again', scaled.saved < 0, scaled.saved);
+const measuredMigration = await p.evaluate(() => {
+  const st = document.getElementById('stage');
+  const k = st.getBoundingClientRect().width / st.offsetWidth;
+  const c = [].slice.call(document.querySelectorAll('#titheObj .slot')).map(s => {
+    const r = s.getBoundingClientRect();
+    return [(r.x + r.width/2)/k, (r.y + r.height/2)/k];
+  });
+  return Math.hypot(c[1][0]-c[2][0], c[1][1]-c[2][1]);
+});
+ck('TEST 30', 'and the migrated session really draws at that spread',
+   Math.abs(measuredMigration - 66) < 0.75, measuredMigration.toFixed(2));
 
 // ---- §17: imported numbers are not trusted
 const wild = await p.evaluate(() => {
   const d = labSession(false);
-  d.state.tithe.tokenSize = 4000; d.state.tithe.tokenGap = -50;
-  d.state.tithe.resources.forEach(r => { r.scale = 9000; });
+  d.state.tithe.tokenSize = 4000; d.state.tithe.tokenSpread = -50;
   importSession(JSON.parse(JSON.stringify(d)));
-  return {size: S.tithe.tokenSize, gap: S.tithe.tokenGap,
-          scales: S.tithe.resources.map(r => r.scale)};
+  return {size: S.tithe.tokenSize, spread: S.tithe.tokenSpread};
 });
-ck('TEST 30', 'a hand-edited size is clamped', wild.size === 100, wild.size);
-ck('TEST 30', 'a negative gap is clamped to zero', wild.gap === 0, wild.gap);
-ck('TEST 30', 'and a wild scale to 140', wild.scales.every(s => s === 140), wild.scales.join(','));
-// a gap of zero is a real choice and must survive
+const bounds = await p.evaluate(() => ({size: HELPERS.tokenSize, spread: HELPERS.tokenSpread}));
+ck('TEST 30', 'a hand-edited size is clamped to the top of its range',
+   wild.size === bounds.size[1], wild.size + ' vs ' + bounds.size[1]);
+ck('TEST 30', 'a negative spread is clamped to the bottom of its range',
+   wild.spread === bounds.spread[0], wild.spread + ' vs ' + bounds.spread[0]);
+// a spread of zero is a real choice and must survive
 const zero = await p.evaluate(() => {
-  const d = labSession(false); d.state.tithe.tokenGap = 0;
+  const d = labSession(false); d.state.tithe.tokenSpread = 0;
   importSession(JSON.parse(JSON.stringify(d)));
-  return S.tithe.tokenGap;
+  return S.tithe.tokenSpread;
 });
-ck('TEST 30', 'but a deliberate gap of 0 survives the round trip', zero === 0, zero);
+ck('TEST 30', 'but a deliberate spread of 0 survives the round trip', zero === 0, zero);
 
 // ============================================================ §22 — PRODUCTION EXPORT
 await reset();
 await loadTokens();
 const game = await p.evaluate(() => JSON.stringify(gameLayout()));
 const gt = await p.evaluate(() => gameLayout().tithe);
-ck('§22', 'the export carries tokenSize and tokenGap',
-   typeof gt.tokenSize === 'number' && typeof gt.tokenGap === 'number',
-   gt.tokenSize + ' / ' + gt.tokenGap);
-ck('§22', 'and each resource carries iconName and scale',
-   gt.resources.every(r => 'iconName' in r && 'scale' in r),
+ck('§22', 'the export carries tokenSize and tokenSpread',
+   typeof gt.tokenSize === 'number' && typeof gt.tokenSpread === 'number',
+   gt.tokenSize + ' / ' + gt.tokenSpread);
+ck('§22', 'and not the field the flex build used', !('tokenGap' in gt));
+ck('§22', 'each resource carries exactly key, name and iconName',
+   gt.resources.every(r => Object.keys(r).sort().join(',') === 'iconName,key,name'),
    JSON.stringify(gt.resources[0]));
 ck('§22', 'the filename is there', gt.resources[0].iconName === 'token_wheat.png',
    gt.resources[0].iconName);
@@ -322,45 +482,100 @@ const drag = await p.evaluate(() => {
     }
     return {detached: detached, steps: to - from + 1, ended: read(), live: document.contains(el)};
   }
-  out.scale = sweep('#titheCtl [data-tscr="0"]', 101, 130, () => S.tithe.resources[0].scale);
-  out.size  = sweep('#tkSizeR', 39, 70, () => S.tithe.tokenSize);
-  out.gap   = sweep('#tkGapR', 10, 28, () => S.tithe.tokenGap);
+  out.size   = sweep('#tkSizeR', 39, 70, () => S.tithe.tokenSize);
+  out.spread = sweep('#tkSpreadR', 48, 96, () => S.tithe.tokenSpread);
   return out;
 });
-['scale','size','gap'].forEach(k => {
+['size','spread'].forEach(k => {
   ck('§7', 'dragging the ' + k + ' control never detaches it',
      drag[k].detached === 0 && drag[k].live,
      drag[k].detached + ' of ' + drag[k].steps + ' events hit a discarded element');
 });
 ck('§7', 'and the whole sweep lands, not just its first step',
-   drag.scale.ended === 130 && drag.size.ended === 70 && drag.gap.ended === 28,
-   [drag.scale.ended, drag.size.ended, drag.gap.ended].join(' / '));
-// the readout and the number box follow without a rebuild
+   drag.size.ended === 70 && drag.spread.ended === 96,
+   [drag.size.ended, drag.spread.ended].join(' / '));
+// the readout and the number boxes follow without a rebuild
 const mirrored = await p.evaluate(() => ({
-  num: document.querySelector('#titheCtl [data-tsc="0"]').value,
-  read: document.querySelector('#titheCtl [data-tread="0"]').textContent,
-  sizeNum: document.getElementById('tkSizeN').value}));
-ck('§7', 'the number box mirrors the slider', mirrored.num === '130', mirrored.num);
-ck('§7', 'the shared size box too', mirrored.sizeNum === '70', mirrored.sizeNum);
+  sizeNum: document.getElementById('tkSizeN').value,
+  spreadNum: document.getElementById('tkSpreadN').value,
+  read: document.querySelector('#titheCtl [data-tread]').textContent}));
+ck('§7', 'the size box mirrors its slider', mirrored.sizeNum === '70', mirrored.sizeNum);
+ck('§7', 'the spread box mirrors its slider', mirrored.spreadNum === '96', mirrored.spreadNum);
 ck('§7', 'and the derived readout is rewritten in place',
-   /130% of 70 px/.test(mirrored.read), mirrored.read);
-// TYPING IS A GESTURE TOO. The sync must skip whichever box has the caret, or a typed "130"
-// never survives its own first digit: "1" applies, clamps to 60, and the box is rewritten to 60
-// before the "3" arrives.
+   /side\s*96/.test(mirrored.read.replace(/\s+/g, ' '))
+   && /token\s*70/.test(mirrored.read.replace(/\s+/g, ' ')), mirrored.read);
+// TYPING IS A GESTURE TOO. The sync must skip whichever box has the caret, or a typed "120"
+// never survives its own first digit: "1" applies, clamps to the floor, and the box is rewritten
+// to the floor before the "2" arrives.
+//
+// IT HAS TO BE THE SIZE BOX. The spread's range starts at 0, so typing "1" into it clamps to
+// nothing and a sync with no caret guard writes back the same "1" the person typed -- the test
+// passes either way and proves nothing. Size starts at 28, so the unguarded version visibly
+// stamps "28" over the first keystroke. A mutation run found this by removing the guard and
+// watching the suite stay green.
+const floor = await p.evaluate(() => HELPERS.tokenSize[0]);
 const typed = await p.evaluate(() => {
-  const n = document.querySelector('#titheCtl [data-tsc="0"]');
+  const n = document.getElementById('tkSizeN');
   n.focus();
-  n.value = '1';                       // the first keystroke of "130"
+  n.value = '1';                       // the first keystroke of "120"
   n.dispatchEvent(new Event('input', {bubbles: true}));
   const afterFirst = n.value;
-  n.value = '13';
+  n.value = '12';
   n.dispatchEvent(new Event('input', {bubbles: true}));
   return {afterFirst: afterFirst, afterSecond: n.value,
           focused: document.activeElement === n};
 });
-ck('§7', 'a half-typed scale is not overwritten while it has the caret',
-   typed.afterFirst === '1' && typed.afterSecond === '13' && typed.focused,
+ck('§7', 'the half-typed value would be visibly clamped if it were written back', floor > 12,
+   'floor ' + floor);
+ck('§7', 'a half-typed size is not overwritten while it has the caret',
+   typed.afterFirst === '1' && typed.afterSecond === '12' && typed.focused,
    JSON.stringify(typed));
+
+// ============================================================ §10 — THE CAPTION
+// TAKE TITHE and GAIN COINS are the same kind of thing said about the same kind of choice, so
+// they are set identically. Comparing them to the OTHER CAPTION rather than to a literal 17px
+// is what keeps them matched: restyle the artwork caption and this fails, which is the point.
+//
+// THE CENTRING IS MEASURED ON THE GLYPHS, NOT ON THE BOX. `.tl` is stretched left:0;right:0
+// across the whole card, so its own rect is centred no matter what `text-align` says -- an
+// earlier version of this check compared box centres and sat there perfectly green with the
+// caption jammed against the left edge. A Range over the text node measures the ink instead.
+await reset();
+const caps = await p.evaluate(() => {
+  const tl = document.querySelector('#titheObj .tl');
+  const cap = document.querySelector('.art .cap');
+  if (!tl || !cap) return {error: !tl ? 'no tithe caption' : 'no artwork caption'};
+  const a = getComputedStyle(tl), b = getComputedStyle(cap);
+  const pick = s => [s.fontFamily.split(',')[0].replace(/["']/g, ''), s.fontWeight, s.fontSize,
+                     s.letterSpacing, s.textTransform, s.color];
+  const card = document.querySelector('[data-kind=tithe]').getBoundingClientRect();
+  const box = tl.getBoundingClientRect();
+  const rng = document.createRange(); rng.selectNodeContents(tl);
+  const ink = rng.getBoundingClientRect();
+  const pyr = document.querySelector('#titheObj .pyr').getBoundingClientRect();
+  return {tithe: pick(a), art: pick(b), text: tl.textContent, align: a.textAlign,
+          boxDx: Math.round((box.x + box.width / 2) - (card.x + card.width / 2)),
+          inkDx: Math.round((ink.x + ink.width / 2) - (card.x + card.width / 2)),
+          inkWidth: Math.round(ink.width), cardWidth: Math.round(card.width),
+          fromBottom: Math.round(card.bottom - box.bottom),
+          inkTop: ink.top, pyrBottom: pyr.bottom, cardTop: card.top, cardBottom: card.bottom};
+});
+ck('§10', 'the Tithe caption is set exactly like the action-artwork caption',
+   JSON.stringify(caps.tithe) === JSON.stringify(caps.art),
+   JSON.stringify(caps.tithe) + ' vs ' + JSON.stringify(caps.art));
+ck('§10', 'it reads TAKE TITHE', caps.text === 'TAKE TITHE', JSON.stringify(caps.text));
+ck('§10', 'the text itself is horizontally centred, not merely its box',
+   Math.abs(caps.inkDx) <= 1, caps.inkDx + ' px off (box ' + caps.boxDx + ')');
+ck('§10', 'and the check could tell the difference: the text is narrower than the card',
+   caps.inkWidth < caps.cardWidth - 12, caps.inkWidth + ' of ' + caps.cardWidth);
+ck('§10', 'text-align says centre too', caps.align === 'center', caps.align);
+ck('§10', 'it sits at the bottom', caps.fromBottom >= 0 && caps.fromBottom <= 20,
+   caps.fromBottom + ' px from the bottom edge');
+ck('§10', 'and below the tokens, not above them', caps.inkTop >= caps.pyrBottom - 0.5,
+   'caption ' + caps.inkTop.toFixed(1) + ' · tokens end ' + caps.pyrBottom.toFixed(1));
+ck('§10', 'in the lower half of the card, wherever the tokens happen to be',
+   caps.inkTop > (caps.cardTop + caps.cardBottom) / 2,
+   caps.inkTop.toFixed(1) + ' vs mid ' + ((caps.cardTop + caps.cardBottom) / 2).toFixed(1));
 
 ck('ALL', 'no page or console errors', errs.length === 0, errs.slice(0,3).join(' | '));
 } catch (e) {

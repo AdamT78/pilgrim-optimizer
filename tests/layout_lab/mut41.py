@@ -84,8 +84,10 @@ MUTS = [
                          labelVisible: !!e.labelVisible, labelSize: e.labelSize};''',
   '''                         };''',
   "the artwork slots exported without their presentation"),
+ # The exported resource gained `iconName` in V4.4, so this marker had been quietly matching
+ # nothing since then -- found by the exactly-once check, not by anything failing.
  ('''            resources: (S.tithe.resources || []).map(function(r){
-              return {key: r.key, name: r.name}; })},''',
+              return {key: r.key, name: r.name, iconName: r.iconName || null}; })},''',
   '''            },''',
   "Tithe exported without its resources"),
  ('''            ratio: WHEEL_RATIO, ground: !!S.wheel.ground, opacity: S.wheel.opacity},''',

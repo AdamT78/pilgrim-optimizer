@@ -11,10 +11,20 @@ They stand in for the letters `W`, `S` and `Ag` that the lab shows when no icon 
 fallback is deliberate: the tool has to stay usable with no assets at all, so a missing token is a
 letter rather than a broken image.
 
-Sizing lives in the lab's TITHE panel, not in these files: one shared `tokenSize` for all three,
-and a per-resource `scale` between 60% and 140% for optical correction, because a wheat sheaf and
-a coin of the same pixel diameter do not carry the same visual weight. Each token sits in a fixed
-square slot, so scaling one never pushes the other two.
+`masters/` holds the three as they were first generated; `resources/` holds what the lab and the
+game actually draw. They differ, and on purpose. Measured as a fraction of their own square, the
+solid discs came out at 0.906 for stone, 0.847 for wheat and 0.802 for silver -- so at the same
+`tokenSize` silver read about a ninth smaller than stone, which looks like a mistake in the
+layout rather than a difference in the drawings. Wheat was re-exported at x1.070 and silver at
+x1.129 about their own centres, stone untouched, which brings all three to 0.906; neither
+re-export clips at the canvas edge. **The three are meant to be interchangeable at one size, so
+the correction belongs here rather than in a control.**
+
+Sizing lives in the lab's TITHE panel, not in these files, and it is two numbers: one `tokenSize`
+for all three, and a `tokenSpread` that is the side of the invisible equilateral triangle their
+centres stand on. There is no per-resource scale. There was one, and it was a slider that let the
+studio correct silver by hand -- which would have papered over the fault above while leaving the
+production pipeline to reproduce it.
 
 `ui/assets/icons/resources/` is a different thing: flat single-colour glyphs, some of them
 third-party with attribution obligations. These are painted tokens with no third-party rights.

@@ -281,13 +281,27 @@ ck('7 tithe', 'absent in SOWING', !tithePresent.sow);
 ck('7 tithe', 'present in ACTION', tithePresent.action);
 const titheBody = await p.evaluate(() => { setView('action'); render();
   const e = document.getElementById('titheObj');
+  const st = document.getElementById('stage');
+  const k = st.getBoundingClientRect().width / st.offsetWidth;
   return {label: e.querySelector('.tl').textContent.trim(),
-          rows: [].slice.call(e.querySelectorAll('.pr')).map(r =>
-            [].slice.call(r.querySelectorAll('.res')).map(x => x.textContent.trim()))}; });
+          at: [].slice.call(e.querySelectorAll('.slot')).map(s => {
+            const r = s.getBoundingClientRect();
+            return {t: s.textContent.trim(), x: (r.x + r.width/2)/k, y: (r.y + r.height/2)/k};
+          })}; });
 ck('7 tithe', 'label reads TAKE TITHE', /TAKE TITHE/i.test(titheBody.label), titheBody.label);
-ck('7 tithe', 'resources make a 1-over-2 pyramid',
-   titheBody.rows.length === 2 && titheBody.rows[0].length === 1 && titheBody.rows[1].length === 2,
-   JSON.stringify(titheBody.rows));
+// ONE OVER TWO, read off the screen rather than off the markup. This used to count `.pr` rows,
+// which V4.5 removed: the three tokens now stand on the vertices of an invisible triangle, laid
+// out by position rather than by flex. The claim is unchanged -- three resources, one above the
+// other two, those two level with each other -- and stating it geometrically is what makes it
+// survive the next change to how they are arranged. The triangle's own geometry is accept44's.
+const TB = titheBody.at;
+ck('7 tithe', 'there are three resources', TB.length === 3, TB.length);
+ck('7 tithe', 'one sits above the other two',
+   TB.length === 3 && TB[0].y < TB[1].y - 1 && TB[0].y < TB[2].y - 1,
+   TB.map(s => s.t + '@' + s.y.toFixed(0)).join(' '));
+ck('7 tithe', 'and those two are level with each other',
+   TB.length === 3 && Math.abs(TB[1].y - TB[2].y) < 0.5,
+   TB.length === 3 ? (TB[1].y - TB[2].y).toFixed(2) : '-');
 
 // ---------------------------------------------------------------------------------------------
 // 8. PREVIEW: OPEN, SWITCH, CLOSE -- AND NEVER A CHOICE

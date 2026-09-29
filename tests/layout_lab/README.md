@@ -12,8 +12,8 @@ Nothing here is needed to build or run the lab. It is needed to trust it.
 ```
 npm install playwright                       # once; the suites import it directly
 python3 ui/board_v2/layout_lab/generate_layout_lab.py --out out/lab.html
-node  tests/layout_lab/accept421.mjs         # or accept4 / accept41 / accept42
-python3 tests/layout_lab/mut421.py           # or mut4 / mut41 / mut42 / mut4py
+node  tests/layout_lab/accept44.mjs          # or accept4 / accept41 / accept42 / accept421 / accept43
+python3 tests/layout_lab/mut44.py            # or mut4 / mut41 / mut42 / mut421 / mut43 / mut4py
 pytest tests/layout_lab/                     # the primitive's own tests
 ```
 
@@ -24,20 +24,33 @@ Three environment variables move the fixed points, all optional:
 | `LAYOUT_LAB_OUT` | `<repo>/out` | where the built `lab.html` is |
 | `LAYOUT_LAB_CHROMIUM` | a Playwright path | the browser binary |
 | `LAYOUT_LAB_ASSETS` | `tests/layout_lab/fixtures` | images, probe SVGs, legacy sessions |
+| `LAYOUT_LAB_TOKENS` | `ui/board_v2/tokens/resources` | the three tithe tokens accept44 loads |
+
+`accept44` loads the repository's own token artwork rather than a copy kept beside the tests: the
+three PNGs were re-exported to match each other optically, and a private copy would go on passing
+after somebody replaced them.
 
 A mutation suite takes several minutes: it rebuilds and re-runs the whole acceptance suite once
-per mutation, and there are 191 of them.
+per mutation, and there are 248 of them.
 
 ## What each file is
 
-**`accept4.mjs` · `accept41.mjs` · `accept42.mjs` · `accept421.mjs`** — the acceptance suites, one
-per release, each covering what that release introduced. They are kept separate rather than merged
-because each one is the record of a specific set of claims, and a merged suite would lose which
-release a failure belongs to. 150 + 71 + 66 + 129 checks.
+**`accept4.mjs` · `accept41.mjs` · `accept42.mjs` · `accept421.mjs` · `accept43.mjs` ·
+`accept44.mjs`** — the acceptance suites, one per release, each covering what that release
+introduced. They are kept separate rather than merged because each one is the record of a specific
+set of claims, and a merged suite would lose which release a failure belongs to.
+152 + 71 + 66 + 129 + 48 + 94 checks.
 
-**`mut4.py` · `mut41.py` · `mut42.py` · `mut421.py`** — break the built page in one specific way
-and confirm the matching acceptance suite fails. **`mut4py.py`** does the same to the generator
-and the template, and confirms the pytest guards fail.
+An earlier release's suite is amended only when its claim has actually been superseded, and then
+it is restated rather than deleted. `accept4` used to count the `.pr` rows of a flex pyramid to
+check that the tithe resources sat one over two; V4.5 replaced the rows with three tokens
+positioned on a triangle, so it now measures where the three are on screen instead. Same claim,
+read off the picture rather than off the markup — which is what makes it survive the next change
+to how they are arranged.
+
+**`mut4.py` · `mut41.py` · `mut42.py` · `mut421.py` · `mut43.py` · `mut44.py`** — break the built
+page in one specific way and confirm the matching acceptance suite fails. **`mut4py.py`** does the
+same to the generator and the template, and confirms the pytest guards fail.
 
 **`mutation_tools.py`** — the shared primitive, and the most important file here. See below.
 Its own tests are in `test_mutation_tools.py` and run with the ordinary suite, deliberately: the

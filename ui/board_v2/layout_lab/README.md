@@ -815,19 +815,42 @@ With no icon loaded a resource falls back to its letter, `W` / `S` / `Ag`, in th
 not a degraded mode: the tool has to stay usable with no assets at all, so a missing token reads
 as a letter rather than as a broken image.
 
-Sizing is two controls and one rule. **Token size** sets one slot size for all three. **Scale**,
-per resource, is optical correction between 60% and 140% — a sheaf and a coin of the same
-diameter do not carry the same visual weight — and it changes only how large that picture is
-drawn. The slot stays square at the shared size, so raising wheat to 110% cannot move stone or
-silver a single pixel. **Token gap** is one value for both axes of the pyramid.
+The three stand on the vertices of an **invisible equilateral triangle**, apex up, and sizing is
+two numbers that do not interact. **Token spread** is the triangle's side, measured centre to
+centre; **token size** is how big all three are. Move the spread and the sizes do not change;
+grow the tokens and not one centre moves, so at a large enough size they simply overlap. A spread
+of 0 is a real arrangement — three tokens concentric on one point — and is the bottom of its
+range rather than an error.
+
+It did not start this way. The first version was a flex pyramid with a **token gap** and a
+**per-resource scale**, and both were the wrong measurement. A gap is the space *between* two
+boxes, so it could not be set without also deciding what "bigger" meant: every step of the size
+control shoved the tokens apart, and the two controls fought each other. Scale existed because
+silver read about a ninth smaller than the other two — its PNG carried more transparent margin —
+which is a fault in the artwork, and a slider in the studio would have papered over it while
+leaving production to reproduce it. The three masters were re-exported to the same disc fraction
+instead, and the control went with the problem. The originals are kept beside them in
+`../tokens/masters/`.
+
+A session saved by the flex build is not lost: `tokenGap` is the space between two boxes and
+`tokenSpread` is the distance between two centres, so they differ by exactly one token, and the
+arrangement it was saved at is recovered rather than reset. That conversion happens in
+`migrate()`, on the incoming file, and it has to: after `deepMerge` the defaults have filled the
+hole it looks for, and a version written to run later did nothing at all while leaving no sign
+that it had not worked.
 
 **The Tithe box never follows the tokens.** Grow them past what the card holds and the crowding
 shows, with a note in the panel saying by how much. Resizing the card to hide that would answer
 the question the composition is asking.
 
-The production export carries `tokenSize`, `tokenGap` and each resource's `iconName` and `scale`,
-because those are design decisions the real UI cannot recompute. It never carries the image-pool
-key or the bytes.
+The caption sits at the bottom of the card, horizontally centred, set exactly as the action
+artwork's captions are — TAKE TITHE and GAIN COINS are the same kind of thing said about the
+same kind of choice. It is absolutely positioned, so where it falls in the markup decides
+nothing.
+
+The production export carries `tokenSize`, `tokenSpread` and each resource's `iconName`, because
+those are design decisions the real UI cannot recompute. It never carries the image-pool key or
+the bytes.
 
 ## Development history
 

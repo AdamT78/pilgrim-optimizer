@@ -344,23 +344,42 @@ def test_the_helper_ranges_are_studio_only_and_bounded_by_the_module(lab):
     """
     r = lab.HELPER_RANGES
     assert set(r) == {"wheelW", "cardH", "artW", "artH", "gap", "rowRight",
-                      "tokenSize", "tokenGap", "tokenScale"}, sorted(r)
-    for key in ("wheelW", "cardH", "artW", "artH", "gap", "tokenSize", "tokenGap", "tokenScale"):
+                      "tokenSize", "tokenSpread"}, sorted(r)
+    for key in ("wheelW", "cardH", "artW", "artH", "gap", "tokenSize", "tokenSpread"):
         lo, hi = r[key]
         assert lo < hi, "%s is not a range: %s" % (key, r[key])
 
-    # THE TITHE TOKENS. Scale is optical correction, not a second size control: a range wide
-    # enough to make one token twice another would make the shared size meaningless, and the two
-    # controls would then disagree about what "the token size" is.
-    assert r["tokenScale"] == [60, 140], r["tokenScale"]
-    assert r["tokenSize"][0] >= 20 and r["tokenSize"][1] <= 160, r["tokenSize"]
-    assert r["tokenGap"][0] == 0, "a gap of zero has to be reachable: %s" % (r["tokenGap"],)
+    # TWO NUMBERS, AND THEY DO NOT INTERACT. The tokens stand on the vertices of an invisible
+    # equilateral triangle: `tokenSpread` is its side, measured centre to centre, and `tokenSize`
+    # is how big the three are. Neither is expressed in terms of the other, which is what the two
+    # controls the triangle replaced could not manage -- a GAP is the space BETWEEN two boxes, so
+    # it could not be set without also deciding what "bigger" would mean.
+    assert "tokenGap" not in r, (
+        "the gap between token boxes is the flex pyramid's measurement, not the triangle's")
+    # NOR A PER-RESOURCE SCALE. Silver read about a ninth smaller than the other two because its
+    # PNG carried more transparent margin; that was corrected by re-exporting the three masters
+    # to the same disc fraction, not by a slider in the studio that production would then have
+    # had to reproduce.
+    assert "tokenScale" not in r, (
+        "optical correction belongs in the artwork, not in a control")
+
+    # THE TOP IS PAST WHAT THE CARD HOLDS, on purpose -- the Tithe box never follows the tokens,
+    # so the slider has to be able to reach the crowding rather than stop short of it.
+    assert r["tokenSize"][1] > 100, r["tokenSize"]
+    assert r["tokenSize"][0] >= 20 and r["tokenSize"][1] <= 400, r["tokenSize"]
+    # A SPREAD OF ZERO IS AN ARRANGEMENT, not an error: three tokens concentric on one point.
+    assert r["tokenSpread"][0] == 0, (
+        "a spread of zero has to be reachable: %s" % (r["tokenSpread"],))
+    # And the top has to clear the widest token, or at the top of the size range the three could
+    # never be pulled far enough apart to stop overlapping.
+    assert r["tokenSpread"][1] >= r["tokenSize"][1], (
+        "the tokens cannot be separated at their largest: %s vs %s"
+        % (r["tokenSpread"], r["tokenSize"]))
     # The starting layout sits inside every token range, or the panel opens out of bounds.
     d0 = lab.default_state()["tithe"]
     assert r["tokenSize"][0] <= d0["tokenSize"] <= r["tokenSize"][1], d0["tokenSize"]
-    assert r["tokenGap"][0] <= d0["tokenGap"] <= r["tokenGap"][1], d0["tokenGap"]
-    for res in d0["resources"]:
-        assert r["tokenScale"][0] <= res["scale"] <= r["tokenScale"][1], res
+    assert r["tokenSpread"][0] <= d0["tokenSpread"] <= r["tokenSpread"][1], d0["tokenSpread"]
+    assert not any("scale" in res for res in d0["resources"]), d0["resources"]
 
     # The wheel may fill the module but never exceed it, and at full width it still fits under
     # the action band -- otherwise the top of the range would produce a layout off the bottom.
@@ -1970,15 +1989,16 @@ process.stdout.write(JSON.stringify({layout: g, text: JSON.stringify(g)}));
     # `iconName` is the handle production resolves against, exactly as the action artwork is
     # identified by filename rather than by bytes.
     assert set(g["tithe"]) == {"x", "y", "width", "height", "visible", "label", "resources",
-                               "tokenSize", "tokenGap"}, sorted(g["tithe"])
+                               "tokenSize", "tokenSpread"}, sorted(g["tithe"])
     assert isinstance(g["tithe"]["tokenSize"], int) and g["tithe"]["tokenSize"] > 0
-    assert isinstance(g["tithe"]["tokenGap"], int) and g["tithe"]["tokenGap"] >= 0
+    assert isinstance(g["tithe"]["tokenSpread"], int) and g["tithe"]["tokenSpread"] >= 0
+    assert "tokenGap" not in g["tithe"], (
+        "the flex pyramid's gap exported beside the triangle's spread")
     assert [r["key"] for r in g["tithe"]["resources"]] == ["W", "S", "Ag"]
-    assert all(set(r) == {"key", "name", "iconName", "scale"}
+    assert all(set(r) == {"key", "name", "iconName"}
                for r in g["tithe"]["resources"]), g["tithe"]["resources"]
     assert all(r["iconName"] is None for r in g["tithe"]["resources"]), (
         "the default state names an icon it has not got")
-    assert all(r["scale"] == 100 for r in g["tithe"]["resources"])
     assert '"icon"' not in text.replace('"iconName"', ""), (
         "the production export carries an image-pool key for a tithe token")
     assert set(g["city"]) == {"x", "y", "width", "height", "visible", "label"}, sorted(g["city"])
