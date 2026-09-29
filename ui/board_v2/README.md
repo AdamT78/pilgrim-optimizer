@@ -79,15 +79,18 @@ wheel carries the acolytes standing on it and nothing else.
 - `docs/duty_wheel_spec.md` -- the design direction for the module.
 - `docs/layout_lab_brief.md` -- the brief the layout lab was built from, kept because it
   records what was asked for and what was left to judgement.
-- `layout_lab/` -- an interactive tool for deciding the module's geometry, currently at V4.
-  See its own README.
+- `layout_lab/` -- an interactive tool for deciding the module's geometry, currently at build
+  4.2.1. See its own README.
 - `docs/layout_lab_v2_brief.md` -- the V2 brief, kept for the same reason as the first.
 - `docs/layout_lab_v3_brief.md` -- the V3 brief, which changed the layout concept.
 - `docs/layout_lab_v4_1_brief.md` -- the V4.1 brief, four corrective fixes before the first
   commit. The V4 brief itself is NOT here: it was given in a conversation whose history was
   compacted before it could be filed, and rebuilding it from the implementation would produce a
   document that agrees with the code by construction, which is the one thing a brief must not
-  do. V4's design as built is described in `layout_lab/README.md`.
+  do. V4's design as built is described in `layout_lab/README.md`. The same is true of the
+  V4.2 brief, which added the layout helpers panel, and the V4.2.1 patch that settled how it
+  behaves: both were given in a conversation that was compacted before they could be filed, and
+  both are described as built in `layout_lab/README.md` under *Layout helpers*.
 
 ## What is not decided yet
 

@@ -8,11 +8,15 @@ back the exact coordinates.
 **V4** is the current build, and it changes the layout concept rather than the dimensions. The
 module is still 1400 × 1200, but the wheel now takes nearly all of it, the eight duty summaries
 have become a ribbon of reference cards across the top, and there are **three** presentation
-states rather than two. Build **4.1** corrects four things without changing any of those shapes:
+states rather than two. Build **4.1** corrected four things without changing any of those shapes:
 a loaded wheel asset no longer reshapes the layout, a preview is dismissed only by an empty-stage
 click, the Game Layout export carries the presentation settings the real UI needs, and the duty
-cards stop advertising a click in ACTION SELECTION where none does anything. See *The wheel itself*, *Why the wheel takes the module* and *The three
-view states* below. A V1, V2 or V3 layout still opens; see *Opening an older file*.
+cards stop advertising a click in ACTION SELECTION where none does anything. Build **4.2** adds
+the *Layout helpers* panel, which changes no geometry of its own — see below — and build **4.2.1**
+settles three things about how that panel behaves: a helper does the whole operation or none of
+it and says which, its controls are refreshed from every render rather than only when the panel is
+built, and *Fit action row* is the one control allowed to normalise a gap. See *The wheel itself*,
+*Why the wheel takes the module* and *The three view states* below. A V1, V2 or V3 layout still opens; see *Opening an older file*.
 
 The wheel is no longer a stand-in. The page draws the **v2 duty wheel at an aspect of 1.887** —
 the real vector geometry, nine faces on a true ellipse — recoloured into the slate the old
@@ -335,6 +339,112 @@ unchanged and the session still opens: `STATE_VERSION` stays at 4 and only the b
 because bumping the schema would send every existing V4 session through the V3 → V4 migration,
 which drops geometry on purpose.
 
+## Layout helpers
+
+A panel of shortcuts for the fiddly part of composing. Everything in it can be done by hand with
+the drag handles and the inspector, and still can be; what it removes is the arithmetic — eight
+cards to retype, a row to re-space, a wheel to re-centre after every resize.
+
+**Wheel width** resizes the wheel, derives the height from the 32° ratio, and re-centres it
+horizontally. Y is left where you put it, because how far down the module the wheel sits is a
+composition decision rather than arithmetic. **Centre wheel x** is the same centring on its own,
+for after you have dragged the wheel by hand: it writes x and nothing else.
+
+**Duty card height** writes one height into all eight cards. It leaves their x, y and widths
+alone, and — this is the point — it does not push the action row down to make room. **Align card
+tops** levels the eight y values to Clerical's.
+
+**Action art** sets both scenic boxes to the same width or the same height. A width change
+re-lays the row from the left artwork outwards at the current gap; a height change keeps the two
+boxes on the same line and leaves Tithe and the City at whatever height they were, because
+scenic art taller than the utility cards is a legitimate thing to want to look at.
+
+**Action row gap** is one number for all three spaces — artwork to artwork, artwork to Tithe,
+Tithe to City. The left artwork is the anchor and everything downstream is rebuilt from it.
+**Align row top** puts all four on the left artwork's y. **Fit action row** makes the two scenic
+boxes the largest equal width that lets the whole row finish on the band's right margin, keeping
+Tithe and the City at their own widths; it refuses rather than producing an artwork slot too
+small to judge anything by.
+
+*Fit* is also the one control that will change a number you did not ask it to change. It is a
+repair: it exists to put a row that has been experimented into a mess back into a valid fit, so
+if the spacing it finds is an overlap — gaps of `-20 / -10 / 12`, whose median is negative — it
+builds the row at the nearest gap the slider could have produced instead, and says
+`normalised from -10` so you know it did. Every other control leaves the spacing exactly as it
+found it, overlaps included, because an overlap you made on purpose is a composition and not a
+mistake to be tidied away behind you.
+
+**Nothing here links anything permanently.** Set both artworks to 400 wide, then drag one to 420
+by hand, and the tool lets you — the readout reports the mismatch, and using the linked control
+again makes them equal. There is no hidden coupling to discover later.
+
+**And nothing cascades.** Taller cards do not move the action row; taller artwork does not move
+the wheel. The module is a fixed 1400 × 1200 and the whole point of the exercise is to watch
+these bands compete for it. Automatic reflow would hide the trade-off you are trying to judge,
+so the overlap is measured and shown instead.
+
+### Locked objects
+
+A helper does its whole operation or none of it. If any object the operation is about is locked,
+nothing moves, no undo step is written, and the status line says what was refused and why —
+`cannot align the duty cards · Clerical's card is locked`. The alternative, moving the six objects
+that happen to be free and quietly skipping the two that are not, leaves a layout nobody asked
+for and an undo entry recording it.
+
+What counts as "about" is wider than what the operation writes. *Align card tops* never assigns
+Clerical's y — Clerical's y is the value the other seven are levelled *to* — and a locked Clerical
+still refuses, because levelling seven cards onto an eighth you were told not to touch is not an
+alignment. It runs the other way too: the **action row gap** rebuilds the row *from* the left
+artwork without writing it, so locking the left artwork does not stand in the way of re-spacing,
+and the linked **height** ignores Tithe's and the City's locks because it never touches their
+heights.
+
+Dragging and arrow-keying a locked object are different, and deliberately silent: they simply do
+nothing, because a mouse that announces a refusal on every movement is noise rather than
+information.
+
+### The controls always show the geometry
+
+The panel's numbers and sliders are refreshed at the end of every render — and every path that
+changes anything ends in a render, so a drag, a resize handle, an inspector edit, an arrow key,
+another helper, undo, redo, a reset and an import all move them. They are written in place rather
+than by rebuilding the panel, which would take the caret with it.
+
+Two consequences worth knowing. Whichever box you are typing in is left alone until you leave it
+or press Enter, or a typed `1500` would never survive its own first digit. And what settles into
+a control afterwards is what the geometry actually became, not what you typed: ask for 1500 on a
+wheel that maxes at 1400 and the box settles at 1400, because a control still displaying a number
+its object does not have is armed to jump it there the next time you touch it.
+
+The gap control is the one reading that is clamped to the control's own range: if the row's
+spacing is `-10`, the slider shows `0`, because a number box displaying something the slider
+beside it cannot reach is a trap. The **dimensions** readout below keeps telling the truth about
+all three gaps, negative ones included.
+
+### What the panel reads, and what it refuses to remember
+
+The controls open at whatever the geometry says and change nothing until moved. Opening a panel
+is not an edit: a layout whose gaps are 15 / 10 / 12 stays that way until you decide otherwise,
+and the gap slider merely opens at the median of the three.
+
+**Nothing is stored.** There is no `groupHeight` and no `rowGap` in the state, because either
+would be a second opinion about geometry that is already in the objects — and wrong the moment
+somebody drags one card. The panel asks the eight cards what height they are and measures the
+three gaps between the four objects in the row, every time it paints.
+
+That is also what lets the **dimensions** readout be honest. It shows the cards as `159 × 150
+each` only when all eight agree, and as `159 × 150–185 mixed` when they do not; the two artwork
+boxes are listed separately so a mismatch is visible; and the three gaps are shown individually
+until they agree. A panel that showed one card's numbers as if they spoke for eight would be
+worse than no panel, because it would be believed.
+
+Two readings are allowed to be bad news, and both are coloured as warnings rather than prevented:
+`cards → row` goes negative when the cards have grown into the action row, and a negative action
+gap means two boxes in the row overlap.
+
+The whole panel is studio furniture. None of it reaches the Game Layout export, which carries the
+geometry these controls happen to have produced and nothing about the controls themselves.
+
 ## Edit Mode and Clean Preview
 
 The toggle is top left.
@@ -493,7 +603,9 @@ with them.
 
 **Undo / Redo** are in the toolbar, on Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z (Ctrl+Y also redoes), up
 to 50 steps. A whole drag is one entry, not sixty — the gesture is recorded once at pointer-up —
-and a slider sweep collapses the same way on a short debounce. Selection is not history, and
+and a slider sweep collapses the same way on a short debounce, including the group sliders in
+*Layout helpers*: dragging card height from 150 to 190 is one press of undo, not forty. The
+helper buttons are one step each. Selection is not history, and
 neither are the mode toggle, the zoom, the view state or which duty is being previewed: those are
 how the layout is being *looked at* rather than part of it, so an undo carries the current view
 forward rather than restoring an old one. Flipping between the three states twenty times to

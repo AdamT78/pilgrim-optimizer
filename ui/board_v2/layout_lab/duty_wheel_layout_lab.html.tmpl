@@ -214,6 +214,15 @@ body.clean #cityObj{background:#ffffff04}
 #status.ok{color:var(--ok)} #status.bad{color:var(--warn)}
 #scaleTag{color:var(--dim)}
 .hint{color:var(--dim);font-size:11px;line-height:1.5;margin:4px 0}
+/* The metrics readout. A two-column grid rather than a table so it stays aligned while a slider
+   is being dragged and the numbers are changing width underneath the cursor. */
+.met{display:grid;grid-template-columns:86px 1fr;gap:1px 8px;font-size:11px;margin:4px 0}
+.met i{color:var(--dim);font-style:normal;text-align:right}
+.met b{font-weight:400;color:#b6ab94;font-variant-numeric:tabular-nums}
+.met b.mix{color:var(--hot)}
+.met b.bad{color:var(--warn)}
+.sub{color:var(--dim);font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+  margin:9px 0 3px}
 .sw{display:inline-block;width:11px;height:11px;border-radius:2px;vertical-align:-1px;
   border:1px solid #0008}
 </style>
@@ -256,6 +265,7 @@ body.clean #cityObj{background:#ffffff04}
 
   <div id=side>
     <h3>view</h3>          <div id=viewCtl></div>
+    <h3>layout helpers</h3><div id=helpCtl></div><div id=metCtl></div>
     <h3>selection</h3>     <div id=insp><div class=hint>Click an object on the stage.</div></div>
     <h3>status</h3>        <div id=statusCtl></div>
     <h3>duty actions</h3>  <div id=actionCtl></div>
@@ -289,6 +299,7 @@ var WHEEL_VIEWBOX = __WHEEL_VIEWBOX__;
 // FOR SAYING SO, NOT FOR COMPUTING WITH. The elevation is derived from the ratio by the
 // generator; nothing here turns it back into one.
 var ELEVATION    = __ELEVATION__;
+var HELPERS      = __HELPER_RANGES__;          // studio-only control ranges, never game state
 var STATE_VERSION = __STATE_VERSION__;
 var BUILD_VERSION = __BUILD_VERSION__;
 var ACO_RANGE    = __ACOLYTE_RANGE__;
@@ -462,6 +473,236 @@ function statesOf(kind){
   return ["ready", "sow", "action"];
 }
 function activeHere(kind){ return statesOf(kind).indexOf(S.view) >= 0; }
+
+// =============================================================================================
+// THE LAYOUT HELPERS: GROUP READINGS.
+//
+// Every one of these is DERIVED from the objects, and none of them is stored. A `groupHeight` or
+// a `rowGap` kept in the state is a second opinion about geometry that is already there, and the
+// moment somebody drags one card it is a lie -- so the panel asks the eight cards what height
+// they are rather than remembering what it last set them to.
+//
+// That is also why these report MIXED honestly instead of showing the first card's numbers as if
+// they spoke for all eight. The whole point of the panel is to tell you what the composition is
+// actually doing.
+// =============================================================================================
+function spread(values){
+  var lo = Math.min.apply(null, values), hi = Math.max.apply(null, values);
+  return {lo: lo, hi: hi, uniform: lo === hi};
+}
+function cardGroup(){
+  var ws = [], hs = [], ys = [];
+  DUTY_ORDER.forEach(function(s){
+    var c = S.duties[s].card; ws.push(c.width); hs.push(c.height); ys.push(c.y);
+  });
+  return {w: spread(ws), h: spread(hs), y: spread(ys)};
+}
+
+// THE THREE HORIZONTAL GAPS OF THE ACTION ROW, left to right, measured rather than remembered.
+function rowGaps(){
+  var L = artOf("left"), R = artOf("right"), T = S.tithe, C = S.city;
+  return [Math.round(R.x - (L.x + L.width)),
+          Math.round(T.x - (R.x + R.width)),
+          Math.round(C.x - (T.x + T.width))];
+}
+function rowGapCommon(){
+  var g = rowGaps();
+  return (g[0] === g[1] && g[1] === g[2]) ? g[0] : null;
+}
+// What the slider opens at. The median rather than the mean, because one wild gap should not
+// drag the suggestion away from the two that agree. IT IS A SUGGESTION AND NOTHING MORE: reading
+// it changes nothing, and the gaps are only levelled when somebody moves the control.
+function rowGapSuggested(){
+  var c = rowGapCommon();
+  if (c !== null) return c;
+  var s = rowGaps().slice().sort(function(a, b){ return a - b; });
+  return Math.round(s[1]);
+}
+// THE VERTICAL SQUEEZE, which is the whole reason the card height is worth experimenting with.
+// Negative means the cards have grown into the action row. Reported, never corrected: deciding
+// whether that composition works is what the lab is for.
+function cardsToRowGap(){
+  var top = Math.min(artOf("left").y, artOf("right").y, S.tithe.y, S.city.y);
+  var bottom = Math.max.apply(null, DUTY_ORDER.map(function(s){
+    var c = S.duties[s].card; return c.y + c.height;
+  }));
+  return Math.round(top - bottom);
+}
+
+// =============================================================================================
+// THE LAYOUT HELPERS: OPERATIONS.
+//
+// SHORTCUTS, NOT LINKS. Each one writes the existing geometry once and then lets go; nothing
+// stays coupled afterwards. Resizing one card by hand after using the group slider is allowed
+// and is reported as mixed rather than silently corrected.
+//
+// NOTHING HERE CASCADES. Taller cards do not push the action row down, taller artwork does not
+// move the wheel. The module is a fixed 1400 x 1200 and the point of the exercise is to see how
+// these bands compete for it; automatic reflow would hide exactly that.
+// =============================================================================================
+// A LOCKED OBJECT'S GEOMETRY CANNOT BE CHANGED -- and a group helper is not an exception to
+// that, however convenient it would be. The drag code and the arrow keys already honour the
+// lock; these write the objects directly, so without this they were a back door through it.
+//
+// ALL OR NOTHING. A group operation that skipped the locked member would resize seven cards and
+// leave the eighth, which is precisely the mixed geometry these helpers exist to repair --
+// the tool would be creating the mess it is meant to clean up.
+//
+// WHAT AN OPERATION WRITES IS WHAT IT REQUIRES, and nothing more. The row gap does not touch the
+// left artwork, so a locked left artwork does not block it; the linked height does not touch
+// Tithe or the City, so theirs is irrelevant. Anything else would make the lock mean "near this"
+// rather than "this".
+function requireUnlocked(needed){
+  var stuck = [];
+  needed.forEach(function(o){
+    if (lockedOf(o.kind, o.id)) stuck.push(o.label);
+  });
+  if (!stuck.length) return true;
+  // No geometry is touched and no history entry is made: a refusal is not an edit.
+  //
+  // THE VERB COMES OFF `needed`, NOT OFF `stuck`. They are different arrays -- stuck is built
+  // here out of the labels -- and reading it from the wrong one produced "cannot undefined ·
+  // Ordination's card is locked", which every test still passed because they were checking for
+  // the lock and the object name rather than reading the sentence.
+  say("cannot " + needed.verb + " · " + stuck.join(" and ") + (stuck.length > 1
+        ? " are locked" : " is locked"), true);
+  return false;
+}
+// The message reads better with the operation's own verb, and threading it through the array is
+// less noise at every call site than a second argument everywhere.
+function needs(verb, list){ list.verb = verb; return list; }
+
+function ART_L(){ return {kind: "art", id: "left", label: "the left artwork"}; }
+function ART_R(){ return {kind: "art", id: "right", label: "the right artwork"}; }
+function TITHE_O(){ return {kind: "tithe", id: null, label: "Tithe"}; }
+function CITY_O(){ return {kind: "city", id: null, label: "the City"}; }
+function WHEEL_O(){ return {kind: "wheel", id: null, label: "the wheel"}; }
+function ALL_CARDS(){
+  return DUTY_ORDER.map(function(s){
+    return {kind: "card", id: s, label: S.duties[s].name + "'s card"};
+  });
+}
+
+function setWheelWidth(w, soon){
+  if (!requireUnlocked(needs("resize the wheel", [WHEEL_O()]))) return;
+  var W = S.wheel;
+  W.width = clamp(Math.round(w), HELPERS.wheelW[0], HELPERS.wheelW[1]);
+  // The ratio is the design invariant, so the height follows rather than being offered.
+  W.height = Math.round(W.width * WHEEL_RATIO);
+  // AND THE HELPER CENTRES IT, because resizing from a corner handle leaves the wheel off
+  // centre and re-centring by hand is the fiddly part this panel exists to remove. Y is left
+  // alone: how far down the module the wheel sits is a composition decision, not arithmetic.
+  W.x = Math.round((CANVAS_W - W.width) / 2);
+  syncAttached();
+  commit(soon);
+}
+// THE REPAIR OPERATION, separate on purpose: the wheel can still be dragged and resized by hand,
+// and this puts it back on the module's centre line without touching anything else.
+function centreWheelX(){
+  if (!requireUnlocked(needs("centre the wheel", [WHEEL_O()]))) return;
+  S.wheel.x = Math.round((CANVAS_W - S.wheel.width) / 2);
+  syncAttached();
+  commit();
+}
+
+function setCardHeights(h, soon){
+  if (!requireUnlocked(needs("resize the duty cards", ALL_CARDS()))) return;
+  var v = clamp(Math.round(h), HELPERS.cardH[0], HELPERS.cardH[1]);
+  DUTY_ORDER.forEach(function(s){ S.duties[s].card.height = v; });
+  commit(soon);
+}
+function alignCardTops(){
+  // ALL EIGHT, even though Clerical's own y does not move: a partial alignment -- level the
+  // seven you can, leave the locked one where it is -- is not an alignment.
+  if (!requireUnlocked(needs("align the duty cards", ALL_CARDS()))) return;
+  // Clerical is the row anchor, as it is everywhere else in this file.
+  var y = S.duties[DUTY_ORDER[0]].card.y;
+  DUTY_ORDER.forEach(function(s){ S.duties[s].card.y = y; });
+  commit();
+}
+
+// THE LEFT ARTWORK IS THE ROW'S ANCHOR. Everything downstream is rebuilt from it so the reading
+// order -- two actions, then the alternative to them, then the reserve -- survives any resize.
+function layoutActionRow(gap){
+  var L = artOf("left"), R = artOf("right"), T = S.tithe, C = S.city;
+  R.x = Math.round(L.x + L.width + gap);
+  T.x = Math.round(R.x + R.width + gap);
+  C.x = Math.round(T.x + T.width + gap);
+}
+function setArtWidth(w, soon){
+  // The widths move both boxes and the new widths move Tithe and the City along the row, so all
+  // four are written and all four are required.
+  if (!requireUnlocked(needs("resize the action artwork",
+                             [ART_L(), ART_R(), TITHE_O(), CITY_O()]))) return;
+  var v = clamp(Math.round(w), HELPERS.artW[0], HELPERS.artW[1]);
+  // THE GAP IS READ BEFORE THE WIDTHS MOVE, which is the whole subtlety here. rowGapSuggested()
+  // measures the distances between the boxes, so asking it afterwards asks about a row that is
+  // already half-rebuilt: shrinking the artwork opens a huge hole where the second box still is,
+  // and the median of that nonsense becomes the new spacing. Widening does the reverse and packs
+  // the row at a negative gap.
+  var gap = rowGapSuggested();
+  artOf("left").width = v; artOf("right").width = v;
+  layoutActionRow(gap);
+  commit(soon);
+}
+function setArtHeight(h, soon){
+  // ONLY THE TWO BOXES. Tithe and the City keep their own height, so their locks say nothing
+  // about this operation -- which is the check that proves the rule is "what it writes".
+  if (!requireUnlocked(needs("resize the action artwork", [ART_L(), ART_R()]))) return;
+  var v = clamp(Math.round(h), HELPERS.artH[0], HELPERS.artH[1]);
+  var L = artOf("left"), R = artOf("right");
+  L.height = v; R.height = v;
+  R.y = L.y;
+  // TITHE AND THE CITY ARE LEFT ALONE. Scenic art taller than the utility cards is a legitimate
+  // thing to want to look at, and making them follow would answer that question by fiat.
+  commit(soon);
+}
+function setRowGap(g, soon){
+  // The left artwork is the anchor and is not written, so it may stay locked.
+  if (!requireUnlocked(needs("re-space the action row",
+                             [ART_R(), TITHE_O(), CITY_O()]))) return;
+  layoutActionRow(clamp(Math.round(g), HELPERS.gap[0], HELPERS.gap[1]));
+  commit(soon);
+}
+function alignRowTop(){
+  if (!requireUnlocked(needs("align the action row",
+                             [ART_R(), TITHE_O(), CITY_O()]))) return;
+  var y = artOf("left").y;
+  artOf("right").y = y; S.tithe.y = y; S.city.y = y;
+  commit();
+}
+// THE ROW CAN BE MADE TOO WIDE, and this is the way back. The two scenic boxes are the only
+// things that give: Tithe and the City keep their widths because they hold fixed content, and
+// the gap keeps whatever the person chose. Refused rather than applied when the answer would be
+// a box too small to judge anything by -- silently producing a 40px artwork slot would look like
+// the button being broken.
+function fitActionRow(){
+  if (!requireUnlocked(needs("fit the action row",
+                             [ART_L(), ART_R(), TITHE_O(), CITY_O()]))) return;
+  var L = artOf("left"), R = artOf("right"), T = S.tithe, C = S.city;
+  // CLAMPED, UNLIKE THE ORDINARY RESIZE. This button is restorative: it exists to put a row that
+  // has been experimented into a mess back into a valid fit. Manual experimentation can leave
+  // gaps like -20 / -10 / 12, whose median is negative, and rebuilding the row at a negative gap
+  // would be a repair that deliberately kept the overlap.
+  //
+  // setArtWidth does NOT do this, and must not: an ordinary resize preserves the composition
+  // somebody is in the middle of making, overlaps and all.
+  var raw = rowGapSuggested();
+  var gap = clamp(raw, HELPERS.gap[0], HELPERS.gap[1]);
+  var available = CANVAS_W - L.x - HELPERS.rowRight - T.width - C.width - 3 * gap;
+  var w = Math.floor(available / 2);
+  if (w < HELPERS.artW[0]){
+    say("the row cannot fit: Tithe, the City and the gaps leave " + Math.max(0, available)
+        + " px for two artworks, under the " + (HELPERS.artW[0] * 2) + " px minimum", true);
+    return;
+  }
+  w = Math.min(w, HELPERS.artW[1]);
+  L.width = w; R.width = w;
+  layoutActionRow(gap);
+  commit();
+  say("action row fitted · artwork " + L.width + " px each, gap " + gap + " px"
+      + (raw !== gap ? " · normalised from " + raw : ""));
+}
 
 // =============================================================================================
 // THE MODULE BOUNDARY. Nothing is clamped: composing something that bleeds off the edge is a
@@ -758,10 +999,98 @@ function render(){
 
   st.appendChild(frag);
   drawGuides();
+  // LAST, AND FROM HERE RATHER THAN FROM EACH CONTROL. Every path that changes geometry ends in
+  // a render, so hanging these off this one place is what makes "always current" true by
+  // construction instead of by remembering to call them: drag, resize, the inspector, an arrow
+  // key, a helper, undo, redo, a reset and an import all arrive here.
+  paintMetrics();
+  syncHelperInputs();
 }
 
 // ONE LINE, and the sow line counts down with what is in hand. {n} is substituted rather than
 // typed so the instruction and the figure in the City's region cannot disagree.
+// =============================================================================================
+// THE DIMENSIONS READOUT. Repainted from render(), which is what makes it live: every drag,
+// resize, inspector edit, slider, reset, import and undo ends in a render, so none of them can
+// leave this stale.
+//
+// IT NEVER SHOWS ONE CARD AS IF IT SPOKE FOR EIGHT. A panel that reported 159 x 150 while three
+// cards were 184 would be worse than no panel, because it would be believed.
+// =============================================================================================
+function dim(w, h){ return Math.round(w) + " × " + Math.round(h); }
+function spreadText(s){
+  return s.uniform ? String(Math.round(s.lo))
+                   : Math.round(s.lo) + "–" + Math.round(s.hi);
+}
+function paintMetrics(){
+  var host = el("metCtl"); if (!host) return;
+  var cg = cardGroup(), L = artOf("left"), R = artOf("right");
+  var gaps = rowGaps(), common = rowGapCommon(), v = cardsToRowGap();
+  var mixedCards = !(cg.w.uniform && cg.h.uniform);
+  var mixedArt = !(L.width === R.width && L.height === R.height);
+
+  function row(label, value, cls){
+    return '<i>' + label + '</i><b' + (cls ? ' class="' + cls + '"' : '') + '>' + value + '</b>';
+  }
+  var h = '<div class=met>'
+        + row("duty cards", spreadText(cg.w) + " × " + spreadText(cg.h)
+              + (mixedCards ? " mixed" : " each"), mixedCards ? "mix" : "")
+        + row("action left", dim(L.width, L.height), mixedArt ? "mix" : "")
+        + row("action right", dim(R.width, R.height), mixedArt ? "mix" : "")
+        + row("take tithe", dim(S.tithe.width, S.tithe.height))
+        + row("city", dim(S.city.width, S.city.height))
+        + row("wheel", dim(S.wheel.width, S.wheel.height))
+        // A NEGATIVE GAP IS NOT A VARIATION, IT IS AN OVERLAP, so it reads as bad news rather
+        // than as merely uneven -- the same treatment the cards-to-row squeeze gets, for the
+        // same reason. Reported and not corrected: an artwork wider than its slot is a
+        // legitimate thing to try, and the row is only re-laid when a helper is used.
+        + row("action gaps", common !== null ? common + " px"
+              : gaps.join(" / ") + " px mixed",
+              Math.min.apply(null, gaps) < 0 ? "bad" : common !== null ? "" : "mix")
+        // THE ONE THAT IS ALLOWED TO BE BAD NEWS. Growing the cards into the action row is a
+        // legitimate thing to try, so it is measured and coloured rather than prevented.
+        + row("cards → row", v < 0 ? "overlap " + (-v) + " px" : v + " px", v < 0 ? "bad" : "")
+        + '</div>';
+  if (!cg.y.uniform) h += '<div class=hint>card tops vary by ' + (cg.y.hi - cg.y.lo)
+                        + ' px · <b>align card tops</b> levels them</div>';
+  host.innerHTML = h;
+}
+
+// =============================================================================================
+// THE HELPER CONTROLS FOLLOW THE GEOMETRY, wherever the change came from.
+//
+// The metrics were already live because they are derived. The SLIDERS were not: drag the wheel's
+// corner handle down to 1100 and the helper still read 1372, so the next touch of that control
+// would haul the wheel back to a number nobody had asked for since. A stale control is worse
+// than no control, because it is armed.
+//
+// IN PLACE, NEVER BY REBUILDING. Calling panels() to refresh a value would destroy and recreate
+// the very input being dragged, which ends the gesture mid-sweep.
+//
+// AND NEVER THE ONE IN YOUR HANDS. An input being typed into is left alone: rewriting it after
+// every keystroke makes "1500" impossible to type, because the 1 is clamped to the minimum
+// before the 5 arrives. Direct use of a control settles it separately -- see pair().
+// =============================================================================================
+function syncHelperInputs(){
+  if (!el("hpWheelN")) return;              // the panel has not been built yet
+  function set(id, v){
+    var e = el(id);
+    if (!e || e === document.activeElement) return;
+    if (String(e.value) !== String(v)) e.value = v;
+  }
+  var cg = cardGroup(), L = artOf("left");
+  set("hpWheelN", S.wheel.width);  set("hpWheelR", S.wheel.width);
+  set("hpCardN", cg.h.lo);         set("hpCardR", cg.h.lo);
+  set("hpArtWN", L.width);         set("hpArtWR", L.width);
+  set("hpArtHN", L.height);        set("hpArtHR", L.height);
+  var gp = helperGap();
+  set("hpGapN", gp);               set("hpGapR", gp);
+}
+// What the gap CONTROL shows, as opposed to what the metrics report. Clamped into the control's
+// own range so the number and the slider agree; the metrics keep telling the truth about the
+// three actual gaps, negative ones included.
+function helperGap(){ return clamp(rowGapSuggested(), HELPERS.gap[0], HELPERS.gap[1]); }
+
 function statusText(){
   var b = (S.status.byView || {})[S.view] || {};
   return String(b.main || "").replace("{n}", S.inHand.count);
@@ -1531,6 +1860,88 @@ function panels(){
     inp.oninput = function(){ S.tithe.resources[+q[0]][q[1]] = inp.value;
                               render(); recordSoon(); save(true); };
   });
+
+  // ---- layout helpers ----------------------------------------------------------------------------------
+  // SHORTCUTS FOR THE FIDDLY PART. Every one of these can be done by hand with the inspector and
+  // the drag handles, and still can be -- see the note on the operations themselves. What the
+  // panel removes is the arithmetic: eight cards to retype, a row to re-space, a wheel to
+  // re-centre after every resize.
+  //
+  // The controls OPEN AT WHAT THE GEOMETRY SAYS and change nothing until moved. Opening a panel
+  // is not an edit, and a layout whose gaps are 15 / 10 / 12 stays that way until somebody
+  // decides otherwise.
+  var cg = cardGroup(), aL = artOf("left"), aR = artOf("right");
+  var hp = ''
+    + '<div class=sub>wheel</div>'
+    + '<div class=row><span>width</span><input type=number id=hpWheelN min=' + HELPERS.wheelW[0]
+    + ' max=' + HELPERS.wheelW[1] + ' value="' + S.wheel.width + '"></div>'
+    + '<input type=range id=hpWheelR min=' + HELPERS.wheelW[0] + ' max=' + HELPERS.wheelW[1]
+    + ' step=1 value="' + S.wheel.width + '">'
+    + '<div class=hint>height follows the ' + ELEVATION + '° ratio and the wheel re-centres; '
+    + 'y is left where you put it</div>'
+    + '<div class=btns>' + btn("centre wheel x", centreWheelX) + '</div>'
+
+    + '<div class=sub>duty cards</div>'
+    + '<div class=row><span>height</span><input type=number id=hpCardN min=' + HELPERS.cardH[0]
+    + ' max=' + HELPERS.cardH[1] + ' value="' + cg.h.lo + '"></div>'
+    + '<input type=range id=hpCardR min=' + HELPERS.cardH[0] + ' max=' + HELPERS.cardH[1]
+    + ' step=1 value="' + cg.h.lo + '">'
+    + '<div class=hint>writes the same height into all eight · x, y and width are left alone, '
+    + 'and nothing below is pushed down</div>'
+    + '<div class=btns>' + btn("align card tops", alignCardTops) + '</div>'
+
+    + '<div class=sub>action art</div>'
+    + '<div class=row><span>both w</span><input type=number id=hpArtWN min=' + HELPERS.artW[0]
+    + ' max=' + HELPERS.artW[1] + ' value="' + aL.width + '"></div>'
+    + '<input type=range id=hpArtWR min=' + HELPERS.artW[0] + ' max=' + HELPERS.artW[1]
+    + ' step=1 value="' + aL.width + '">'
+    + '<div class=row><span>both h</span><input type=number id=hpArtHN min=' + HELPERS.artH[0]
+    + ' max=' + HELPERS.artH[1] + ' value="' + aL.height + '"></div>'
+    + '<input type=range id=hpArtHR min=' + HELPERS.artH[0] + ' max=' + HELPERS.artH[1]
+    + ' step=1 value="' + aL.height + '">'
+    + '<div class=hint>a width change re-lays the row at the gap below · Tithe and the City keep '
+    + 'their own height</div>'
+
+    + '<div class=sub>action row</div>'
+    + '<div class=row><span>gap</span><input type=number id=hpGapN min=' + HELPERS.gap[0]
+    + ' max=' + HELPERS.gap[1] + ' value="' + helperGap() + '"></div>'
+    + '<input type=range id=hpGapR min=' + HELPERS.gap[0] + ' max=' + HELPERS.gap[1]
+    + ' step=1 value="' + helperGap() + '">'
+    + '<div class=hint>one value for all three spaces · the left artwork stays put and the rest '
+    + 'of the row is rebuilt from it</div>'
+    + '<div class=btns>' + btn("align row top", alignRowTop)
+    + btn("fit action row", fitActionRow) + '</div>';
+
+  el("helpCtl").innerHTML = hp;
+  // WIRED IN PAIRS, and neither writes back through panels(): rebuilding the panel on every
+  // input would destroy the slider mid-drag. Each handler keeps its two inputs in step by hand
+  // and lets render() repaint the numbers, exactly as the acolyte height control does.
+  function pair(numId, rangeId, apply, read){
+    var n = el(numId), r = el(rangeId);
+    function go(v){
+      // `true` -> recordSoon: a slider sweep collapses to one undo entry on a short debounce,
+      // which is the existing history rule rather than a new one.
+      apply(v, true);
+      // THEN READ THE GEOMETRY BACK rather than echoing what was typed. The operation may have
+      // clamped the number to the control's range, or refused it outright because something is
+      // locked -- and a control still showing a value the object does not have is armed to jump
+      // it there the next time it is touched.
+      var actual = read();
+      r.value = actual;
+      // The number box is left alone WHILE IT HAS THE CARET, or a typed "1500" never gets past
+      // its first digit. It settles on blur or Enter instead.
+      if (document.activeElement !== n) n.value = actual;
+    }
+    n.oninput = function(){ go(n.value); };
+    n.onchange = function(){ go(n.value); n.value = read(); };
+    r.oninput = function(){ go(r.value); };
+  }
+  pair("hpWheelN", "hpWheelR", setWheelWidth, function(){ return S.wheel.width; });
+  pair("hpCardN", "hpCardR", setCardHeights, function(){ return cardGroup().h.lo; });
+  pair("hpArtWN", "hpArtWR", setArtWidth, function(){ return artOf("left").width; });
+  pair("hpArtHN", "hpArtHR", setArtHeight, function(){ return artOf("left").height; });
+  pair("hpGapN", "hpGapR", setRowGap, helperGap);
+  paintMetrics();
 
   // ---- acolytes ---------------------------------------------------------------------------------------
   var a = '<div class=btns>'
