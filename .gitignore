@@ -51,3 +51,8 @@ noun_wagon_7392556.svg
 /out/
 # The mutation suite in tests/layout_lab/ writes its working copies beside the page.
 tests/layout_lab/_to_delete/
+# Lab sessions exported from the layout lab, for local experimentation. Never committed: one
+# exported WITH images is ~3.3 MB of base64 duplicating art already tracked under
+# ui/board_v2/duty_actions/, and even the geometry-only export is a snapshot of somebody's
+# session rather than a decision about the module. Keep the folder, ignore what lands in it.
+ui/board_v2/layout_lab/sessions/
