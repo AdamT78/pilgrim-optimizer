@@ -1,0 +1,3 @@
+Wide master scenes for the produce duty: <duty>_master_vNN.png
+One continuous environment holding both actions; kept permanently so a later
+UI change can be re-cropped rather than re-generated.

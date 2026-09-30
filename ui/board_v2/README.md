@@ -74,6 +74,32 @@ the box and whichever duty is being shown lends them its pictures.
 marked out -- engraved names, landmarks, emblems -- is a decision kept for later, so the
 wheel carries the acolytes standing on it and nothing else.
 
+## Duty action art workflow
+
+Each duty's two actions are **one drawing, cropped twice**. A single wide master holds the whole
+scene and the two production images are overlapping windows onto it. For Clerical the left window
+is *Gain Piety* and the right is *Gain Coins*.
+
+The overlap is the point. Two separately generated illustrations of "a priest at prayer" and "a
+priest receiving coins" look like two pictures of two places; two windows onto one continuous
+environment look like one place seen twice, and the shared middle ground is what the eye uses to
+tie them together.
+
+    generate → save master → crop → save action A/B → load the pair in the studio
+    → judge at real game size → iterate
+
+The master is archived permanently, and that is not housekeeping. A crop is reversible while the
+master exists; a regeneration is not, because the same prompt does not produce the same picture
+twice. When the slot dimensions change later, the master is re-cropped rather than the art
+re-made. Masters and crops live under `duty_actions/<duty>/`, and the recipe, the naming
+convention and the real crop geometry are in `../../tools/duty_art/README.md`.
+
+**The art belongs to the ACTIONS, not to the left and right display slots.** It is stored as
+`S.duties.clerical.actionA.scenic`, never as `duty.leftImage`. The two large boxes on the stage
+own geometry -- position, size, fit -- and borrow whichever duty is previewed or reached. Moving a
+box does not move an artwork's identity, and pointing both boxes at the same action is a display
+choice rather than a change of ownership.
+
 ## What is here
 
 - `docs/duty_wheel_spec.md` -- the design direction for the module.

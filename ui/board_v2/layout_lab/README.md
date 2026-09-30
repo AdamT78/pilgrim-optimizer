@@ -804,6 +804,54 @@ The one question it exists to answer: do the v2 wheel, the two action artworks, 
 sized acolytes, the eight reference cards, Tithe and the City fit clearly and attractively inside
 one fixed 1400 × 1200 module — in all three of the states the player will actually see?
 
+## The tithe tokens
+
+The Tithe card's three resources are circular token artwork: wheat on top, stone and silver
+below. Each PNG under `../tokens/resources/` is the **complete** token — rim, disc and motif are
+painted into it — so the card draws the image and nothing else. Putting one inside the old brown
+`.res` disc would give it two rims.
+
+With no icon loaded a resource falls back to its letter, `W` / `S` / `Ag`, in that disc. That is
+not a degraded mode: the tool has to stay usable with no assets at all, so a missing token reads
+as a letter rather than as a broken image.
+
+The three stand on the vertices of an **invisible equilateral triangle**, apex up, and sizing is
+two numbers that do not interact. **Token spread** is the triangle's side, measured centre to
+centre; **token size** is how big all three are. Move the spread and the sizes do not change;
+grow the tokens and not one centre moves, so at a large enough size they simply overlap. A spread
+of 0 is a real arrangement — three tokens concentric on one point — and is the bottom of its
+range rather than an error.
+
+It did not start this way. The first version was a flex pyramid with a **token gap** and a
+**per-resource scale**, and both were the wrong measurement. A gap is the space *between* two
+boxes, so it could not be set without also deciding what "bigger" meant: every step of the size
+control shoved the tokens apart, and the two controls fought each other. Scale existed because
+silver read about a ninth smaller than the other two — its PNG carried more transparent margin —
+which is a fault in the artwork, and a slider in the studio would have papered over it while
+leaving production to reproduce it. The three masters were re-exported to the same disc fraction
+instead, and the control went with the problem. The originals are kept beside them in
+`../tokens/masters/`.
+
+A session saved by the flex build is not lost: `tokenGap` is the space between two boxes and
+`tokenSpread` is the distance between two centres, so they differ by exactly one token, and the
+arrangement it was saved at is recovered rather than reset. That conversion happens in
+`migrate()`, on the incoming file, and it has to: after `deepMerge` the defaults have filled the
+hole it looks for, and a version written to run later did nothing at all while leaving no sign
+that it had not worked.
+
+**The Tithe box never follows the tokens.** Grow them past what the card holds and the crowding
+shows, with a note in the panel saying by how much. Resizing the card to hide that would answer
+the question the composition is asking.
+
+The caption sits at the bottom of the card, horizontally centred, set exactly as the action
+artwork's captions are — TAKE TITHE and GAIN COINS are the same kind of thing said about the
+same kind of choice. It is absolutely positioned, so where it falls in the markup decides
+nothing.
+
+The production export carries `tokenSize`, `tokenSpread` and each resource's `iconName`, because
+those are design decisions the real UI cannot recompute. It never carries the image-pool key or
+the bytes.
+
 ## Development history
 
 The V1, V2, V3 and V4.1 briefs are filed in `../docs/`. The V4, V4.2 and V4.2.1 briefs are not:
@@ -849,3 +897,54 @@ value.** With gaps of `-20 / -10 / 12` the readout says so and colours it as a w
 gap control reads `0`, because `0` is the nearest spacing that control could actually apply.
 Displaying it changes nothing — the row keeps its overlap until the control is operated. This is
 intended UI behaviour, not a rounding artefact or a known defect.
+
+**V4.3 — the duty action art workflow.** Sixteen action illustrations, eight duties by two
+actions, and the decision that shapes everything else is that each duty's two are **one drawing
+cropped twice** rather than two drawings. Two separately generated pictures of a priest receiving
+coins and a priest at prayer look like two places; two overlapping windows onto one continuous
+master look like one place seen twice, and the shared middle ground is what the eye uses to tie
+them together. `tools/duty_art/crop_duty_master.py` cuts the pair, `ui/board_v2/duty_actions/`
+holds a committed folder per duty so the tree exists before the art does, and the master is kept
+forever — a crop is reversible while the master exists, a regeneration is not, because the same
+prompt does not produce the same picture twice. The lab gained a DUTY ART PAIR panel that assigns
+the left and right artwork per duty, using the same image pool as everything else: the state
+holds a key, the bytes live outside it.
+
+**V4.4 — tithe resource tokens.** The `W` / `S` / `Ag` placeholders became circular token
+artwork, with the letters kept as the fallback rather than removed — the tool has to stay usable
+with no assets loaded at all, so a missing token reads as a letter and not as a broken image.
+Each PNG is the complete token, rim and disc and motif painted in, so the card draws the image
+and nothing else; putting one back inside the old `.res` disc would give it two rims.
+
+Two bugs came out of this release and both are worth remembering, because neither was visible in
+the code that contained it. A newly loaded token appeared simultaneously in a duty's action slot:
+`IMG_SEQ` restarts at 0 on every page load while the autosave keeps image KEYS and strips only
+BYTES, so the state still claimed `im1` with nothing behind it and the next image loaded was
+handed `im1` and became that asset too. `reserveImageKeys()` now takes every key the state claims
+out of circulation before anything can issue a new one. And the sliders moved exactly one step
+per drag: the setters called `panels()`, which replaces `titheCtl.innerHTML` and throws away the
+very control the mouse is holding. It read as a slider that would not move; it was a slider that
+had been destroyed. The setters end in `commit()`, and `render()` syncs the controls in place.
+
+**V4.5 — the triangle, and a correction made in the artwork.** The tokens were laid out as a flex
+pyramid with a token GAP and a per-resource SCALE, and both measured the wrong thing. A gap is the
+space BETWEEN two boxes, so it could not be set without also deciding what "bigger" meant: every
+step of the size control shoved the tokens apart and the two fought each other. The three now
+stand on the vertices of an invisible equilateral triangle, apex up — spread is its side, measured
+centre to centre, size is how big all three are, and neither touches the other. See *The tithe
+tokens* above for how it behaves.
+
+The scale control went because the problem it existed for was not a layout problem. Silver read
+about a ninth smaller than the other two, and the reason was in the files: measured as a fraction
+of their own square the solid discs came out 0.906 / 0.847 / 0.802 for stone / wheat / silver. A
+slider in the studio would have hidden that and left the production pipeline to reproduce it, so
+the masters were re-exported to match instead. **A correction that belongs in the asset does not
+belong in a control** — the studio's job is to find the fault, not to compensate for it.
+
+The migration is the other thing worth keeping. `tokenGap` becomes `tokenSpread` by adding one
+token, so a session saved by the flex build is recovered rather than reset — but the conversion
+has to run in `migrate()`, on the incoming file. Written after `deepMerge`, as it first was, it
+does nothing whatsoever: the defaults have already filled the absence it looks for, and the file's
+own arrangement has quietly become the default one. It ran, it was wrong, and nothing about the
+state afterwards showed that it had not worked. The acceptance suite caught it; reading the code
+did not.

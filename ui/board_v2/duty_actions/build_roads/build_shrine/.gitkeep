@@ -1,0 +1,3 @@
+Production crops for build_roads -> build_shrine: build_roads_build_shrine_vNN.png
+Cropped from the master by tools/duty_art/crop_duty_master.py.
+Never overwrite an older variant; add the next vNN.

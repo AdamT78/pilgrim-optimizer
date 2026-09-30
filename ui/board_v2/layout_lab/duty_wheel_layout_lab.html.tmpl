@@ -169,15 +169,32 @@ body.clean .art.choice:hover::after{content:"";position:absolute;inset:0;
    no scenic art, a plain field, its three resources as a pyramid. No "OR" anywhere: the card
    being a separate card is the separation. */
 #titheObj{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
-  border-radius:5px;background:#ffffff08;border:1px solid #ffffff1c;padding:10px}
-#titheObj .tl{font:600 14px/1.1 Georgia,serif;letter-spacing:.15em;text-transform:uppercase;
-  color:#ddd2b8}
-#titheObj .pyr{display:flex;flex-direction:column;align-items:center;gap:7px}
-#titheObj .pr{display:flex;gap:9px}
-.res{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;
-  background:radial-gradient(70% 70% at 35% 30%,#3c3527,#241d14);
-  border:1px solid #6b5c3e;color:#e4d6b4;font:700 13px/1 ui-monospace,monospace}
-.res img{width:100%;height:100%;object-fit:contain;display:block;border-radius:50%}
+  border-radius:5px;background:#ffffff08;border:1px solid #ffffff1c;padding:10px;
+  /* room for the caption pinned at the bottom, so the tokens centre in what is left */
+  padding-bottom:36px}
+/* THE SAME TYPOGRAPHY AS THE ACTION ARTWORK'S CAPTION -- Georgia 600 at 17px with .11em of
+   tracking, matching `.art .cap` -- so TAKE TITHE and GAIN COINS read as the same kind of thing
+   said about the same kind of choice. It sits at the BOTTOM of the card and centred, where the
+   captions sit, rather than heading the card from the top.
+   No scrim: the caption over artwork needs one to stay legible, this card is plain dark. */
+#titheObj .tl{position:absolute;left:0;right:0;bottom:10px;text-align:center;
+  font:600 17px/1.2 Georgia,serif;letter-spacing:.11em;text-transform:uppercase;
+  color:#e2d7bc}
+/* THE ARRANGEMENT IS A TRIANGLE, NOT A STACK OF ROWS. Flex rows can only space tokens by the
+   gap BETWEEN their boxes, so every step of the size control also shoved the tokens apart and
+   the two controls fought each other: you could not make them bigger without spreading them,
+   or closer without shrinking them. Here the three CENTRES sit on the vertices of an invisible
+   equilateral triangle, apex up, and each token is centred on its vertex by translate(-50%,-50%).
+   Spread moves the vertices; size grows the tokens where they stand; neither touches the other,
+   and at a large enough size they are free to overlap. */
+#titheObj .pyr{position:relative}
+  .slot{position:absolute;display:grid;place-items:center;transform:translate(-50%,-50%)}
+  .res{border-radius:50%;display:grid;place-items:center;
+    background:radial-gradient(70% 70% at 35% 30%,#3c3527,#241d14);
+    border:1px solid #6b5c3e;color:#e4d6b4;font:700 13px/1 ui-monospace,monospace}
+  /* THE PNG IS THE COMPLETE TOKEN -- rim, disc and motif are painted into it -- so it gets no
+     disc behind it and no border around it. Either would give it a second rim. */
+  .tok{display:block;object-fit:contain;background:none;border:0;border-radius:0}
 body.clean #titheObj.choice:hover{filter:brightness(1.1);cursor:pointer}
 
 /* Band 3c: the City, and the acolytes in hand that borrow its region while sowing. */
@@ -329,8 +346,79 @@ var scale = 1;                           // stage display scale, CSS px per desi
 var IMAGES = {};
 var IMG_SEQ = 0;
 function putImage(url){ var k = "im" + (++IMG_SEQ); IMAGES[k] = url; return k; }
+
+// EVERY KEY THE STATE STILL CLAIMS, whether or not its bytes survived.
+//
+// THE BUG THIS EXISTS TO PREVENT, because it is not obvious and it was live: the pool counter
+// starts at 0 on every page load, while the autosave keeps image KEYS and strips only the BYTES.
+// Reload a lab that had two action artworks and the state still says actionA is "im1" -- with
+// nothing behind it -- but the counter says the next key to hand out is "im1". So the very next
+// image loaded, a tithe token say, was handed "im1" and INSTANTLY BECAME the action artwork as
+// well: one file, two owners, and a wheat token filling the Gain Piety slot.
+//
+// importSession already did this for keys whose bytes were in the file. That was the narrow
+// case. The broad one is any state that outlives its pool -- an autosave, a geometry-only
+// session, a hand-written file -- so the reservation belongs where the state arrives.
+function reserveImageKeys(d){
+  var max = 0;
+  JSON.stringify(d).replace(/"im(\d+)"/g, function(m, n){
+    n = +n; if (n > max) max = n; return m;
+  });
+  if (max > IMG_SEQ) IMG_SEQ = max;
+}
 function imgSrc(key){ return (key && IMAGES[key]) || null; }
 function haveImage(key){ return !!(key && IMAGES[key]); }
+
+// PIXEL DIMENSIONS, cached beside the pool for the same reason the bytes are: they are a fact
+// about the image, not a layout decision, so they have no business in the state, in an undo
+// snapshot or in a saved session. An image restored from a session arrives with no entry here,
+// so the first ask probes it once and repaints.
+// The Tithe card's own furniture: 10px padding top and bottom, the TAKE TITHE line, and the
+// 10px gap between that line and the pyramid. What is left is what the tokens have to live in.
+var TITHE_CHROME = 10 + 36 + 4;
+var TITHE_SIDES = 20;
+
+var IMG_DIMS = {};
+var DIM_PENDING = {};
+function noteDims(key, w, h){ if (key && w && h) IMG_DIMS[key] = {w: w, h: h}; }
+function dimsOf(key){
+  if (!key) return null;
+  if (IMG_DIMS[key]) return IMG_DIMS[key];
+  var url = imgSrc(key);
+  // `Image` is a browser thing. The source-level guards run this file's logic under Node, where
+  // asking for one throws -- and a readout that cannot be filled in is not worth taking the page
+  // down for, so the probe is simply skipped and the panel shows no dimensions.
+  if (!url || DIM_PENDING[key] || typeof Image === "undefined") return null;
+  DIM_PENDING[key] = true;
+  var p = new Image();
+  p.onload = function(){ DIM_PENDING[key] = false;
+                         noteDims(key, p.naturalWidth, p.naturalHeight); panels(); };
+  p.onerror = function(){ DIM_PENDING[key] = false; };
+  p.src = url;
+  return null;
+}
+function ratioText(w, h){ return h ? (w / h).toFixed(3) : "--"; }
+
+// WHICH DISPLAY SLOT IS SHOWING AN ACTION. The slots own geometry and the actions own artwork,
+// so this is a lookup rather than a stored link -- and it answers honestly when both slots have
+// been pointed at the same action.
+function slotForAction(key){
+  var sides = ["left", "right"], i;
+  for (i = 0; i < sides.length; i++){ if (artOf(sides[i]).slot === key) return artOf(sides[i]); }
+  return null;
+}
+
+// HOW MUCH `cover` WILL EAT. Informational only: nothing here resizes a slot or touches a file.
+function coverCrop(imgW, imgH, slotW, slotH){
+  if (!imgW || !imgH || !slotW || !slotH) return null;
+  var ir = imgW / imgH, sr = slotW / slotH;
+  var lost = ir > sr ? 1 - sr / ir : 1 - ir / sr;
+  return {pct: lost * 100, imgRatio: ir, slotRatio: sr,
+          // 2.000 against the slot's 2.038 is 1.9% and must not read as a problem; a 1.50
+          // image in a 2.04 slot loses a quarter of its width and must.
+          word: lost < 0.05 ? "minimal" : lost < 0.15 ? "slight" : "substantial",
+          bad: lost >= 0.15};
+}
 
 function clone(o){ return JSON.parse(JSON.stringify(o)); }
 function clamp(v, lo, hi){ v = +v; if (!isFinite(v)) return lo; return Math.min(hi, Math.max(lo, v)); }
@@ -921,14 +1009,16 @@ function render(){
   if (titheMode !== "no" && S.tithe.visible){
     var T = S.tithe;
     var res = (T.resources || []);
-    var pyr = '<div class=pyr><div class=pr>' + res.slice(0, 1).map(function(r){
-                return '<span class=res>' + esc(r.key) + '</span>'; }).join("")
-            + '</div><div class=pr>' + res.slice(1, 3).map(function(r){
-                return '<span class=res>' + esc(r.key) + '</span>'; }).join("")
-            + '</div></div>';
+    // The vertices are measured from the triangle box's own middle, so the three land exactly
+    // on its corners and apex however big the tokens themselves are.
+    var tb = tokenTriangle(), tp = tokenPoints();
+    var pyr = '<div class=pyr style="width:' + tb.width + 'px;height:' + tb.height + 'px">'
+            + res.slice(0, 3).map(function(r, i){ return tokenHTML(r, tp[i], tb); }).join("")
+            + '</div>';
     var dt = make("tithe", null, rectOf("tithe", null),
                   S.view === "action" ? "choice" : "",
-                  '<span class=nm>tithe</span><div class=tl>' + esc(T.label) + '</div>' + pyr,
+                  '<span class=nm>tithe</span>' + pyr + '<div class=tl>' + esc(T.label)
+                    + '</div>',
                   WHEEL_Z + 15, titheMode === "ghost");
     dt.id = "titheObj";
     if (!T.locked && titheMode === "yes") handles(dt, "tithe");
@@ -1005,6 +1095,7 @@ function render(){
   // key, a helper, undo, redo, a reset and an import all arrive here.
   paintMetrics();
   syncHelperInputs();
+  syncTokenInputs();
 }
 
 // ONE LINE, and the sow line counts down with what is in hand. {n} is substituted rather than
@@ -1101,6 +1192,147 @@ function syncHelperInputs(){
 // clamped -- FIT ACTION ROW and the row-gap operation each decide separately what to do with a
 // negative suggestion, and only the fit normalises it.
 function helperGap(){ return clamp(rowGapSuggested(), HELPERS.gap[0], HELPERS.gap[1]); }
+
+// THE TOKEN READINGS. Derived from the state every time, never stored alongside it.
+function tokenSize(){ return clamp(Math.round(S.tithe.tokenSize), HELPERS.tokenSize[0],
+                                   HELPERS.tokenSize[1]); }
+function tokenSpread(){ return clamp(Math.round(S.tithe.tokenSpread), HELPERS.tokenSpread[0],
+                                     HELPERS.tokenSpread[1]); }
+
+// THE TRIANGLE THE THREE CENTRES SIT ON: equilateral, apex up, side = spread. Offsets are from
+// the arrangement's own centre, so nothing here depends on how big a token is -- which is the
+// entire point. Change the size and the centres do not move; change the spread and the sizes do
+// not change.
+function tokenPoints(){
+  var s = tokenSpread(), h = s * Math.sqrt(3) / 2;
+  return [{x: 0, y: -h / 2}, {x: -s / 2, y: h / 2}, {x: s / 2, y: h / 2}];
+}
+// THE CONTAINER IS THE TRIANGLE ITSELF, and the tokens overhang it by half their own size on
+// every side. The obvious alternative -- size it to the whole arrangement -- would put the token
+// size back into the container's dimensions, and a container that outgrows the Tithe card stops
+// being centred by the flex column and slides against one edge: the tokens would drift sideways
+// as you scaled them, which is the one thing this layout exists to prevent. The two boxes share
+// a centre, so while the arrangement fits there is nothing to choose between them on screen.
+function tokenTriangle(){
+  var s = tokenSpread();
+  return {width: s, height: s * Math.sqrt(3) / 2};
+}
+// The box the arrangement actually needs: the triangle plus half a token beyond each vertex.
+// Reported, not laid out -- see tokenOverflow().
+function tokenBounds(){
+  var s = tokenSpread(), box = tokenSize();
+  return {width: s + box, height: s * Math.sqrt(3) / 2 + box};
+}
+
+// HOW FAR THE PYRAMID OVERRUNS THE CARD, in pixels, or 0 when it fits. Informational only --
+// nothing here shrinks a token or grows the box. The whole point of a fixed Tithe region is that
+// the trade-off stays visible; resizing the card to hide it would answer the question the
+// designer is asking.
+function tokenOverflow(){
+  var b = tokenBounds();
+  var overV = b.height - (S.tithe.height - TITHE_CHROME);
+  var overH = b.width - (S.tithe.width - TITHE_SIDES);
+  var worst = Math.max(overV, overH);
+  return worst > 0 ? Math.ceil(worst) : 0;
+}
+
+// NONE OF THESE REBUILD THE PANEL, and that is the whole point of them being separate from the
+// loaders. `panels()` replaces titheCtl.innerHTML, which throws away the very slider the mouse
+// is holding: the element leaves the document, the browser loses the drag target, and the
+// gesture ends after ONE step. It looked like a broken slider; it was a destroyed one.
+//
+// So they end in commit(), which renders, and render() syncs the controls in place -- the same
+// arrangement the layout helpers use, for the same reason.
+function setTokenSize(v, soon){
+  S.tithe.tokenSize = clamp(Math.round(v), HELPERS.tokenSize[0], HELPERS.tokenSize[1]);
+  commit(soon);
+}
+function setTokenSpread(v, soon){
+  S.tithe.tokenSpread = clamp(Math.round(v), HELPERS.tokenSpread[0], HELPERS.tokenSpread[1]);
+  commit(soon);
+}
+function clearTokenIcon(i){
+  var r = S.tithe.resources[i];
+  if (!r) return;
+  if (!r.icon && !r.iconName){ say("no icon on that resource to clear"); return; }
+  var was = r.iconName || "the icon";
+  r.icon = null;
+  r.iconName = null;
+  commitPanels();
+  say("cleared " + was + " from " + (r.name || r.key) + " · the letter returns");
+}
+
+// A number box and its slider, kept in step, reading the geometry back the way the layout
+// helpers' own pairs do.
+function pairNum(numId, rangeId, apply, read){
+  var n = el(numId), r = el(rangeId);
+  if (!n || !r) return;
+  function go(v){
+    apply(v, true);
+    var actual = read();
+    r.value = actual;
+    if (document.activeElement !== n) n.value = actual;
+  }
+  n.oninput = function(){ go(n.value); };
+  n.onchange = function(){ go(n.value); n.value = read(); };
+  r.oninput = function(){ go(r.value); };
+}
+
+// ONE RESOURCE, either as its artwork or as the letter that stands in for it. The letter is not
+// a degraded mode: the tool has to stay usable with no assets loaded at all, which is why a
+// missing token is a disc with `W` in it rather than a broken image.
+//
+// ALL THREE ARE THE SAME SIZE, and there is no per-resource correction any more. There was one,
+// and it was the wrong place for it: silver read about a ninth smaller than the others because
+// its PNG had more transparent margin, and a slider in the studio would have papered over a
+// fault in the artwork that the production pipeline would then have had to reproduce. The three
+// masters were re-exported to the same disc fraction instead, and the control went away with
+// the problem.
+function tokenHTML(r, pt, tb){
+  var box = tokenSize();
+  var slot = '<span class=slot style="left:' + (tb.width / 2 + pt.x) + 'px;top:'
+           + (tb.height / 2 + pt.y) + 'px;width:' + box + 'px;height:' + box + 'px">';
+  if (haveImage(r.icon)){
+    return slot + '<img class=tok src="' + imgSrc(r.icon) + '" alt="' + esc(r.name || r.key)
+         + '" title="' + esc(r.name || r.key) + '" style="width:' + box + 'px;height:' + box
+         + 'px"></span>';
+  }
+  // The stand-in letter tracks the disc it is in: at the top of the size range a fixed 13px
+  // would be a speck in a 160px circle, which reads as a bug rather than as a placeholder.
+  return slot + '<span class=res title="' + esc(r.name || r.key) + '" style="width:' + box
+       + 'px;height:' + box + 'px;font-size:' + Math.max(10, Math.round(box * 0.34))
+       + 'px">' + esc(r.key) + '</span></span>';
+}
+
+
+// The one phrasing of what the two controls add up to, so the panel and the live re-sync cannot
+// drift apart: what the arrangement needs is a derived box, not a stored one.
+function tokenReadout(){
+  var b = tokenBounds();
+  return 'triangle side <b>' + tokenSpread() + ' px</b> · token <b>' + tokenSize()
+       + ' px</b> · needs ' + Math.ceil(b.width) + ' × ' + Math.ceil(b.height) + ' px';
+}
+
+// The tithe controls, refreshed from render() without rebuilding them -- see setTokenSize.
+function syncTokenInputs(){
+  if (!el("tkSizeN")) return;                  // the panel has not been built yet
+  function set(e, v){
+    if (!e || e === document.activeElement) return;
+    if (String(e.value) !== String(v)) e.value = v;
+  }
+  set(el("tkSizeN"), tokenSize());     set(el("tkSizeR"), tokenSize());
+  set(el("tkSpreadN"), tokenSpread()); set(el("tkSpreadR"), tokenSpread());
+  // The reading under the two sliders is text, not a control, so it is simply rewritten.
+  var read = document.querySelector('#titheCtl [data-tread]');
+  if (read) read.innerHTML = tokenReadout();
+  var warn = document.querySelector('#titheCtl [data-tover]');
+  if (warn){
+    var over = tokenOverflow();
+    warn.innerHTML = over ? 'resource tokens exceed the Tithe content area by ' + over
+                          + ' px · nothing is resized for you' : '';
+    warn.style.display = over ? "" : "none";
+  }
+}
 
 function statusText(){
   var b = (S.status.byView || {})[S.view] || {};
@@ -1650,6 +1882,14 @@ function svgViewBoxRatio(dataUrl){
 function readImage(input, done){
   var f = input.files && input.files[0];
   if (!f) return;
+  readImageFile(f, done);
+  input.value = "";
+}
+// THE SAME READ, from a File rather than from a live input. DUTY ART PAIR holds its chosen files
+// in `pairPick` across panel repaints, by which time the input that produced them has been
+// rebuilt and is empty.
+function readImageFile(f, done){
+  if (!f) return;
   var rd = new FileReader();
   rd.onload = function(){
     // A data URL into the POOL, not into the state. The state gets the key back.
@@ -1657,13 +1897,13 @@ function readImage(input, done){
     var key = putImage(url);
     var probe = new Image();
     probe.onload = function(){
+      noteDims(key, probe.naturalWidth, probe.naturalHeight);
       done(key, f.name, probe.naturalWidth ? probe.naturalHeight / probe.naturalWidth : 0, url);
     };
     probe.onerror = function(){ done(key, f.name, 0, url); };
     probe.src = url;
   };
   rd.readAsDataURL(f);
-  input.value = "";
 }
 
 function resetOne(kind, id){
@@ -1706,6 +1946,71 @@ function resetOne(kind, id){
 // SIDE PANELS
 // =============================================================================================
 var actionPanelDuty = "clerical";
+
+// THE STAGED PAIR. Files chosen for DUTY ART PAIR are held here rather than left sitting in the
+// file inputs, because any panel repaint rebuilds that markup and would silently drop them. The
+// duty is remembered with them: switching duty abandons a staging that was never applied, which
+// is the only reading of "choose Clerical's art, then switch to Produce" that cannot surprise.
+var artPairDuty = "clerical";
+var pairPick = {actionA: null, actionB: null};
+function clearPick(){ pairPick = {actionA: null, actionB: null}; }
+
+function stepArtPairDuty(dir){
+  var i = DUTY_ORDER.indexOf(artPairDuty);
+  if (i < 0) i = 0;
+  artPairDuty = DUTY_ORDER[(i + dir + DUTY_ORDER.length) % DUTY_ORDER.length];
+  // Anything staged belonged to the duty being left, so it goes with it.
+  clearPick();
+  panels();
+  say("duty art pair · " + S.duties[artPairDuty].name);
+}
+
+// ONE ACTION'S ARTWORK, and nothing else: not the other action, not the seal, not the names, and
+// not another duty. Clearing is the ONLY way art is removed -- an empty file input never means
+// "remove", because the commonest thing anyone does with a file dialog is change their mind.
+function clearActionArt(key){
+  var D = S.duties[artPairDuty], act = D && D[key];
+  if (!act) return;
+  if (!act.scenic && !act.scenicName){ say("no artwork on that action to clear"); return; }
+  var was = act.scenicName || "the artwork";
+  act.scenic = null;
+  act.scenicName = null;
+  commitPanels();
+  say("cleared " + was + " from " + D.name + " · " + (act.name || key));
+}
+
+// LOAD PAIR. Both files land as ONE editor operation -- one undo takes both back -- and a file
+// that was not chosen leaves its action exactly as it was.
+function loadDutyArtPair(){
+  var slug = artPairDuty, chosen = [];
+  ACTIONS.forEach(function(a){ if (pairPick[a.key]) chosen.push(a.key); });
+  if (!chosen.length){ say("choose an image for at least one action first", true); return; }
+  var pending = chosen.length, loaded = [];
+  chosen.forEach(function(key){
+    readImageFile(pairPick[key], function(imgKey, name){
+      var act = S.duties[slug][key];
+      act.scenic = imgKey;
+      act.scenicName = name;
+      loaded.push((act.name || key) + " · " + name);
+      pending -= 1;
+      // THE COMMIT WAITS FOR BOTH READS. FileReader is asynchronous, so committing inside the
+      // callback would make a two-file load into two undo entries, and the second one would land
+      // whenever the larger file happened to finish.
+      if (pending === 0) finishDutyArtPair(slug, loaded);
+    });
+  });
+}
+
+function finishDutyArtPair(slug, loaded){
+  clearPick();
+  // AN EDITOR CONVENIENCE, not a rule about the game: show what was just imported instead of
+  // making somebody go and find it. In ACTION SELECTION the duty's two actions ARE the choice on
+  // screen, so the import becomes the selection; before that, it becomes the preview.
+  if (S.view === "action") S.selectedDuty = slug;
+  else S.previewDuty = slug;
+  commitPanels();
+  say("loaded into " + S.duties[slug].name + " · " + loaded.join(" · "));
+}
 
 function panels(){
   var A = S.acolytes;
@@ -1830,6 +2135,71 @@ function panels(){
         + '<div class=hint style="margin-left:74px">' + Math.round(e.width) + ' × '
         + Math.round(e.height) + ' at ' + Math.round(e.x) + ', ' + Math.round(e.y) + '</div>';
   });
+  // ---- DUTY ART PAIR --------------------------------------------------------------------
+  // The production workflow in one place: pick a duty, give its two ACTIONS their artwork.
+  //
+  // Artwork belongs to the action, never to the box it happens to appear in. The duty picker
+  // here is what decides ownership, and the file input decides which action -- deliberately NOT
+  // the filename, because a file named ..._gain_coins_... dropped into the Action A input has to
+  // become Action A's art or the tool would be quietly overruling the person using it.
+  var apD = S.duties[artPairDuty] || S.duties[DUTY_ORDER[0]];
+  var apIdx = DUTY_ORDER.indexOf(artPairDuty);
+  ex += '<div class=sub>duty art pair</div>'
+      + '<div class=hint>one wide master per duty, cropped into two overlapping action images. '
+      + 'See tools/duty_art/README.md.</div>'
+      + '<div class=row><span>duty</span><select id=apDuty>'
+      + DUTY_ORDER.map(function(s){
+          return '<option value="' + s + '"' + (s === artPairDuty ? " selected" : "") + '>'
+               + esc(S.duties[s].name) + '</option>'; }).join("")
+      + '</select></div>'
+      + '<div class=btns>' + btn("← previous duty", function(){ stepArtPairDuty(-1); })
+      + btn("next duty →", function(){ stepArtPairDuty(1); }) + '</div>';
+  ACTIONS.forEach(function(a){
+    var act = apD[a.key], slot = slotForAction(a.key), d = dimsOf(act.scenic);
+    var cc = (d && slot) ? coverCrop(d.w, d.h, slot.width, slot.height) : null;
+    ex += '<div class=hint style="color:#c9b27a;margin-top:8px">' + a.label + ' · '
+        + esc(act.name || a.label) + '</div>';
+    // The thumbnail only exists when the BYTES do. A remembered filename with no bytes is the
+    // state after a session was saved without images, and it says so rather than showing a gap.
+    if (haveImage(act.scenic)){
+      ex += '<div style="margin:4px 0"><img src="' + imgSrc(act.scenic) + '" alt="" '
+          + 'style="width:100px;height:50px;object-fit:cover;border:1px solid var(--line);'
+          + 'border-radius:2px;background:#000"></div>';
+    } else {
+      ex += '<div style="width:100px;height:50px;margin:4px 0;border:1px dashed var(--line);'
+          + 'border-radius:2px;display:flex;align-items:center;justify-content:center;'
+          + 'color:var(--dim);font-size:10px">'
+          + (act.scenicName ? "not loaded" : "no art") + '</div>';
+    }
+    if (act.scenicName){
+      ex += '<div class=hint>' + esc(act.scenicName) + '</div>';
+    }
+    if (d){
+      ex += '<div class=hint>image ' + d.w + ' × ' + d.h + ' · ratio ' + ratioText(d.w, d.h)
+          + '</div>';
+    }
+    if (cc && slot){
+      ex += '<div class=hint' + (cc.bad ? ' style="color:var(--warn)"' : '') + '>slot '
+          + Math.round(slot.width) + ' × ' + Math.round(slot.height) + ' · ratio '
+          + cc.slotRatio.toFixed(3) + ' · cover crop ' + cc.word
+          + (cc.bad ? ' (' + cc.pct.toFixed(0) + '% lost)' : '') + '</div>';
+    } else if (!slot){
+      ex += '<div class=hint style="color:var(--warn)">no display slot is showing this action</div>';
+    }
+    ex += '<div class=row><span>choose</span><span style="text-align:left">'
+        + '<input type=file data-pair="' + a.key + '" '
+        + 'accept="image/png,image/jpeg,image/webp"></span></div>'
+        + (pairPick[a.key]
+            ? '<div class=hint style="color:#c9b27a">staged: ' + esc(pairPick[a.key].name)
+              + '</div>' : '')
+        + (act.scenic || act.scenicName
+            ? '<div class=btns>' + btn("clear " + a.label, function(){ clearActionArt(a.key); })
+              + '</div>' : '');
+  });
+  ex += '<div class=btns>' + btn("load pair", loadDutyArtPair) + '</div>'
+      + '<div class=hint>a field left empty is left alone — clearing is the button above, never '
+      + 'an empty file input</div>';
+
   ex += '<div class=hint>reached-duty highlight on the wheel</div>'
       + '<div class=btns>'
       + btn(S.display.highlight.visible ? "highlight on" : "highlight off",
@@ -1848,6 +2218,15 @@ function panels(){
   [].forEach.call(el("artCtl").querySelectorAll("[data-artslot]"), function(s){
     s.onchange = function(){ artOf(s.dataset.artslot).slot = s.value; commitPanels(); };
   });
+  el("apDuty").onchange = function(){ artPairDuty = this.value; clearPick(); panels(); };
+  // The chosen File is kept in `pairPick`, not read here: nothing is written to the layout until
+  // LOAD PAIR, so choosing a file and changing your mind costs nothing and makes no undo entry.
+  [].forEach.call(el("artCtl").querySelectorAll("[data-pair]"), function(inp){
+    inp.onchange = function(){
+      pairPick[inp.dataset.pair] = (inp.files && inp.files[0]) || null;
+      panels();
+    };
+  });
   el("hlW").oninput = function(){ S.display.highlight.width = clamp(Math.round(this.value), 20, 800);
                                   render(); recordSoon(); save(true); };
   el("hlH").oninput = function(){ S.display.highlight.height = clamp(Math.round(this.value), 10, 500);
@@ -1857,20 +2236,74 @@ function panels(){
 
   // ---- tithe ---------------------------------------------------------------------------------------
   var th = '<div class=hint>the alternative to taking a duty action, and only on screen in '
-         + 'ACTION SELECTION — never in a preview. The three resources sit one over two.</div>';
+         + 'ACTION SELECTION — never in a preview. The three resources stand on the vertices of '
+         + 'an invisible equilateral triangle, apex up.</div>'
+    + '<div class=sub>token size</div>'
+    + '<div class=row><span>size</span><input type=number id=tkSizeN min=' + HELPERS.tokenSize[0]
+    + ' max=' + HELPERS.tokenSize[1] + ' value="' + tokenSize() + '"></div>'
+    + '<input type=range id=tkSizeR min=' + HELPERS.tokenSize[0] + ' max=' + HELPERS.tokenSize[1]
+    + ' step=1 value="' + tokenSize() + '">'
+    + '<div class=hint>all three at once · they are meant to be the same size, so there is one '
+    + 'control and no per-resource correction — a token that reads small is fixed in its '
+    + 'artwork, not here. The Tithe box does not follow, so crowding stays visible.</div>'
+    + '<div class=sub>token spread</div>'
+    + '<div class=row><span>side</span><input type=number id=tkSpreadN min='
+    + HELPERS.tokenSpread[0] + ' max=' + HELPERS.tokenSpread[1] + ' value="' + tokenSpread()
+    + '"></div>'
+    + '<input type=range id=tkSpreadR min=' + HELPERS.tokenSpread[0] + ' max='
+    + HELPERS.tokenSpread[1] + ' step=1 value="' + tokenSpread() + '">'
+    + '<div class=hint>the side of the triangle, measured centre to centre · it does not depend '
+    + 'on size, so growing the tokens crowds them together instead of pushing them apart</div>'
+    + '<div class=hint data-tread>' + tokenReadout() + '</div>';
+
   (S.tithe.resources || []).forEach(function(r, i){
-    th += '<div class="row two"><span>' + (i === 0 ? "top" : "bottom") + '</span>'
+    th += '<div class=sub>' + esc(r.name || r.key) + '</div>'
+        + '<div class="row two"><span>key / name</span>'
         + '<input type=text data-res="' + i + ':key" value="' + esc(r.key) + '" maxlength=3>'
         + '<input type=text data-res="' + i + ':name" value="' + esc(r.name) + '"></div>';
+    // THE THUMBNAIL IS THE STUDIO'S, not the stage's: a fixed 48px, so the panel stays readable
+    // whatever the stage is set to and the three can be compared against each other.
+    if (haveImage(r.icon)){
+      th += '<div style="margin:4px 0"><img src="' + imgSrc(r.icon) + '" alt="'
+          + esc(r.name || r.key) + '" style="width:48px;height:48px;object-fit:contain;'
+          + 'display:block"></div>';
+    } else if (r.iconName){
+      th += '<div class=hint style="color:var(--warn)">' + esc(r.iconName)
+          + ' · not loaded — choose it again to restore the picture</div>';
+    }
+    if (haveImage(r.icon) && r.iconName){
+      th += '<div class=hint>' + esc(r.iconName) + '</div>';
+    }
+    th += '<div class=row><span>icon</span><span style="text-align:left">'
+        + '<input type=file data-tok="' + i + '" '
+        + 'accept="image/png,image/webp,image/svg+xml"></span></div>'
+        + (r.icon || r.iconName
+            ? '<div class=btns>' + btn("clear " + (r.name || r.key), (function(n){
+                return function(){ clearTokenIcon(n); }; })(i)) + '</div>' : '');
   });
+  var over = tokenOverflow();
   th += '<div class=hint>the letters are placeholders for icons · the full words are '
-      + 'deliberately not spelled out on the card</div>';
+      + 'deliberately not spelled out on the card</div>'
+      + '<div class=hint data-tover style="color:var(--warn)'
+      + (over ? '' : ';display:none') + '">'
+      + (over ? 'resource tokens exceed the Tithe content area by ' + over
+              + ' px · nothing is resized for you' : '') + '</div>';
   el("titheCtl").innerHTML = th;
   [].forEach.call(el("titheCtl").querySelectorAll("[data-res]"), function(inp){
     var q = inp.dataset.res.split(":");
     inp.oninput = function(){ S.tithe.resources[+q[0]][q[1]] = inp.value;
                               render(); recordSoon(); save(true); };
   });
+  // The loaders go through the existing pool: a key into the state, the bytes into IMAGES.
+  [].forEach.call(el("titheCtl").querySelectorAll("[data-tok]"), function(inp){
+    var i = +inp.dataset.tok;
+    inp.onchange = function(){ readImage(inp, function(key, name){
+      var r = S.tithe.resources[i];
+      r.icon = key; r.iconName = name;
+      commitPanels(); say("loaded " + name + " as " + (r.name || r.key)); }); };
+  });
+  pairNum("tkSizeN", "tkSizeR", setTokenSize, tokenSize);
+  pairNum("tkSpreadN", "tkSpreadR", setTokenSpread, tokenSpread);
 
   // ---- layout helpers ----------------------------------------------------------------------------------
   // SHORTCUTS FOR THE FIDDLY PART. Every one of these can be done by hand with the inspector and
@@ -2145,6 +2578,9 @@ function labSession(withImages){
   if (withImages){
     function mark(k){ if (k && IMAGES[k]) used[k] = IMAGES[k]; }
     mark(S.wheel.image); mark(S.tithe.image);
+    // The three resource tokens, or a session exported "with images" would reopen showing the
+    // letters again and look like the art had been lost.
+    (S.tithe.resources || []).forEach(function(r){ mark(r.icon); });
     DUTY_ORDER.forEach(function(s){
       ACTIONS.forEach(function(a){
         var act = S.duties[s][a.key]; mark(act.seal); mark(act.scenic);
@@ -2199,10 +2635,14 @@ function gameLayout(){
     // WHEN Tithe and the City are on screen is a phase the game already knows; WHAT they look
     // like and WHERE they go is this file's business, so the labels and the resources come too
     // and nothing about the phase does.
+    // THE TOKEN SIZING IS A DESIGN DECISION AND TRAVELS; the image POOL KEY is session state
+    // and does not. `iconName` is what the production asset pipeline resolves against, the same
+    // way the action artwork is identified by filename rather than by bytes.
     tithe: {x: S.tithe.x, y: S.tithe.y, width: S.tithe.width, height: S.tithe.height,
             visible: !!S.tithe.visible, label: S.tithe.label,
+            tokenSize: tokenSize(), tokenSpread: tokenSpread(),
             resources: (S.tithe.resources || []).map(function(r){
-              return {key: r.key, name: r.name}; })},
+              return {key: r.key, name: r.name, iconName: r.iconName || null}; })},
     city: {x: S.city.x, y: S.city.y, width: S.city.width, height: S.city.height,
            visible: !!S.city.visible, label: S.city.label},
     acolytes: {height: S.acolytes.height, ratios: clone(S.acolytes.ratios)},
@@ -2392,6 +2832,34 @@ function migrate(d){
     delete d.summaryDim; delete d.connectors; delete d.titheInSummary;
     delete d.inHandOverride;
   }
+
+  // ---- the flex pyramid becomes a triangle, inside V4 --------------------------------------------
+  // NOT GATED ON `fromOlder`. Both fields belong to V4 -- the token controls arrived in 4.4 and
+  // were replaced in 4.5 -- so `d.version` says nothing at all about which of them a file carries,
+  // and the only honest test is whether the field is there.
+  //
+  // AND IT HAS TO HAPPEN HERE, on the incoming data, rather than in applyState after the merge.
+  // deepMerge fills `tokenSpread` in from the defaults, so by the time applyState sees the state
+  // there is no absence left to detect -- and the file's own arrangement has silently become the
+  // default one. The first version of this was written after the merge and did exactly that: it
+  // ran, it was wrong, and nothing about the state afterwards showed it had not worked.
+  //
+  // `tokenGap` was the space BETWEEN two token boxes; `tokenSpread` is the distance between two
+  // token CENTRES. They differ by exactly one token, which is why the size is read here too.
+  if (d.tithe){
+    if (d.tithe.tokenSpread === undefined && d.tithe.tokenGap !== undefined
+        && d.tithe.tokenGap !== null && !isNaN(+d.tithe.tokenGap)){
+      var tsz = Math.round(+d.tithe.tokenSize);
+      if (isNaN(tsz)) tsz = DEFAULT_STATE.tithe.tokenSize;
+      d.tithe.tokenSpread = tsz + Math.round(+d.tithe.tokenGap);
+    }
+    delete d.tithe.tokenGap;
+    // The per-resource optical correction, dropped with the control: the three masters were
+    // re-exported to the same disc fraction instead.
+    if (Array.isArray(d.tithe.resources)){
+      d.tithe.resources.forEach(function(r){ if (r) delete r.scale; });
+    }
+  }
   d.version = STATE_VERSION;
   return d;
 }
@@ -2415,12 +2883,44 @@ function applyState(d){
   d = migrate(d);
   validate(d);
   S = deepMerge(clone(DEFAULT_STATE), d);
+  // Before anything can hand out a new key, take every one this state already uses out of
+  // circulation -- see reserveImageKeys.
+  reserveImageKeys(S);
 
   // THE 32 DEGREE RATIO IS A DESIGN INVARIANT, so it is imposed rather than trusted. An older
   // V4 session may carry a ratio taken from whatever asset was loaded at the time, and a file
   // written by hand may carry anything at all; either way the height follows the width at the
   // layout's own ratio. This is a normalisation, not a migration -- the schema is unchanged and
   // an existing V4 session still opens.
+  // THE TITHE TOKENS, NORMALISED RATHER THAN MIGRATED. `resources` is an ARRAY, and deepMerge
+  // replaces arrays wholesale, so a V4 session written before tokens existed brings back three
+  // objects shaped {key, name} with no icon or iconName -- the defaults do not survive the merge
+  // the way an object's keys would. Filling them in here is what lets an older session open
+  // without a schema bump. Imported numbers are clamped: a hand-edited file is not to be trusted
+  // with a spread of 4000.
+  if (!Array.isArray(S.tithe.resources) || !S.tithe.resources.length){
+    S.tithe.resources = clone(DEFAULT_STATE.tithe.resources);
+  }
+  S.tithe.resources.forEach(function(r){
+    if (r.icon === undefined) r.icon = null;
+    if (r.iconName === undefined) r.iconName = null;
+    // The per-resource optical correction is stripped in migrate(), with the rest of the
+    // conversion from the flex build. Not here as well: a second delete would mean neither
+    // could be shown to matter.
+  });
+  S.tithe.tokenSize = clamp(Math.round(+S.tithe.tokenSize || DEFAULT_STATE.tithe.tokenSize),
+                            HELPERS.tokenSize[0], HELPERS.tokenSize[1]);
+  // A session saved before the triangle carried `tokenGap` instead; migrate() has already turned
+  // it into the equivalent spread, because after deepMerge there is nothing left to detect.
+  //
+  // NOT `|| default`: a spread of 0 is a legitimate choice -- three tokens concentric on one
+  // point -- and must survive the round trip, which `0 || 47` would quietly turn into 47.
+  S.tithe.tokenSpread = clamp(Math.round(
+      S.tithe.tokenSpread === undefined || S.tithe.tokenSpread === null
+        || isNaN(+S.tithe.tokenSpread)
+          ? DEFAULT_STATE.tithe.tokenSpread : +S.tithe.tokenSpread),
+      HELPERS.tokenSpread[0], HELPERS.tokenSpread[1]);
+
   S.wheel.width = clamp(S.wheel.width, MIN_SIZE, 4000);
   S.wheel.naturalRatio = WHEEL_RATIO;
   S.wheel.ratioSource = "builtin";

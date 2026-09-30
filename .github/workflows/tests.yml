@@ -48,7 +48,19 @@ jobs:
           # page and nothing else; pilgrim/ imports nothing from ui/ at all, so no change in
           # there can reach the engine. It is listed in the UI condition below as well, because
           # a path that stops triggering the engine lanes must start triggering something.
-          if echo "$changed" | grep -qvE '^(ui/|docs/|tests/layout_lab/)'; then
+          #
+          # tools/duty_art/ is the same case one directory over: a crop script for the duty
+          # action illustrations, importing pillow and nothing from pilgrim/, and already tested
+          # by tests/layout_lab/test_duty_art_crop.py. It triggers the lab lane below.
+          #
+          # .gitignore is the one path here that triggers NOTHING, and deliberately. It cannot
+          # change what any test does -- CI checks out a clean tree, where an ignore rule has
+          # nothing to ignore -- so there is no lane for it to start triggering. Everything else
+          # that stops waking the engine has to wake something.
+          #
+          # .github/ is NOT on this list, on purpose. Changing the router is exactly the moment
+          # to make the full suite prove it still works, even when the edit is a comment.
+          if echo "$changed" | grep -qvE '^(ui/|docs/|tests/layout_lab/|tools/duty_art/|\.gitignore$)'; then
             echo "engine=true" >>"$GITHUB_OUTPUT"
           else
             echo "engine=false" >>"$GITHUB_OUTPUT"
@@ -64,9 +76,13 @@ jobs:
           else
             echo "ui=false" >>"$GITHUB_OUTPUT"
           fi
-          # The layout lab: its generator and template, and the suites that test them. Nothing
-          # here imports playwright, so this lane installs no browser and takes seconds.
-          if echo "$changed" | grep -qE '^(ui/board_v2/|tests/layout_lab/)'; then
+          # The layout lab: its generator and template, the suites that test them, the duty
+          # action art under ui/board_v2/duty_actions/, which is where the generated masters and
+          # crops live, and the crop script itself under tools/duty_art/. Nothing here imports
+          # playwright, so this lane installs no browser and takes seconds -- which matters most
+          # for the art, since adding a duty's pair is a frequent commit that has nothing to say
+          # to the engine.
+          if echo "$changed" | grep -qE '^(ui/board_v2/|tests/layout_lab/|tools/duty_art/)'; then
             echo "lab=true" >>"$GITHUB_OUTPUT"
           else
             echo "lab=false" >>"$GITHUB_OUTPUT"
@@ -150,13 +166,20 @@ jobs:
           python-version: "3.13"
           cache: pip
           cache-dependency-path: pyproject.toml
-      # NOT the dev extras. These guards read the generator and the template as text; between
-      # them and the generator the only third-party import is pytest, and pilgrim itself is pure
-      # stdlib. numpy, scipy, pillow and playwright are four large wheels this lane would fetch
-      # and never import. The editable install is still needed because tests/conftest.py imports
-      # pilgrim at collection time.
+      # NOT the dev extras. Most of these guards read the generator and the template as text,
+      # and pilgrim itself is pure stdlib, so numpy, scipy and playwright are three large wheels
+      # this lane would fetch and never import.
+      #
+      # PILLOW IS THE EXCEPTION, and it was missed when the duty-art guards arrived:
+      # test_duty_art_crop.py runs the crop script, which opens images. It is installed rather
+      # than skipped around. Three of those guards used importorskip and had therefore been
+      # quietly skipping in CI ever since -- so this lane could be cited as the thing that covers
+      # tools/duty_art/ while in fact running almost none of it, and a skip is green.
+      #
+      # The editable install is still needed because tests/conftest.py imports pilgrim at
+      # collection time.
       - if: needs.changes.outputs.lab == 'true'
-        run: pip install -e . "pytest>=8.0.0"
+        run: pip install -e . "pytest>=8.0.0" pillow
       - name: The layout lab still holds its own invariants
         if: needs.changes.outputs.lab == 'true'
         run: pytest tests/layout_lab/ -q

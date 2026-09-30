@@ -164,7 +164,7 @@ def viewbox_of(text: str) -> tuple:
 # wheel-centre medallions retire, the status line loses its context field -- so the version moves
 # with it and older files are migrated rather than reinterpreted.
 STATE_VERSION = 4
-BUILD_VERSION = "4.2.1"
+BUILD_VERSION = "4.5"
 
 # ---- the design envelope -------------------------------------------------------------------
 CANVAS_W, CANVAS_H = 1400, 1200
@@ -307,6 +307,29 @@ CITY = {"x": TITHE["x"] + TITHE["width"] + 12, "y": BAND["y"],
 # designing around the icons not existing yet.
 TITHE_RESOURCES = (("W", "Wheat"), ("S", "Stone"), ("Ag", "Silver"))
 
+# THE TOKEN DEFAULTS ARE THE CURRENT RENDERING, NOT ROUND NUMBERS. The placeholder disc is 38px
+# and the two rows sit 7px apart with 9px between the lower pair, so opening this build with no
+# icons loaded has to reproduce exactly that rather than quietly enlarging the card. The brief
+# suggested 50 and 8-10; those would have grown the pyramid on first open, which its own section
+# 6 rules out ("preserve the current overall Tithe composition rather than enlarge the card").
+#
+# ONE GAP, and it cannot match both axes. 9 is the horizontal value and the more visible one, so
+# the vertical spacing moves 7 -> 9: two pixels inside a fixed card, nothing outside it moves.
+TOKEN_SIZE_DEFAULT = 38
+# THE SIDE OF AN EQUILATERAL TRIANGLE whose VERTICES the three token centres sit on: apex above,
+# two below. Centres, not edges -- which is the whole reason for it. Edge-to-edge spacing couples
+# the two decisions, because growing a token then pushes its neighbours apart as well; pinning
+# the centres to a triangle makes size and spacing genuinely independent, so one slider changes
+# how big the tokens are and the other changes how far apart they sit, and neither disturbs the
+# other. 47 reproduces the old 38px discs at a 9px gap.
+TOKEN_SPREAD_DEFAULT = 47
+# NO PER-TOKEN SCALE. The three tokens are one size, full stop. The reason that is safe is that
+# the ARTWORK was corrected instead: the source motifs filled their squares unequally -- the
+# solid disc was 90.6% of the square for stone, 84.7% for wheat and 80.2% for silver, so silver
+# read about a ninth small -- and the production PNGs are re-exported so all three now measure
+# 0.906. The untouched originals are kept beside them in tokens/masters/. Correcting the picture
+# is better than carrying a correction factor in the layout forever.
+
 SAFE_MARGIN = 50
 
 # ---- the layout helpers' control ranges --------------------------------------------------------
@@ -324,6 +347,13 @@ HELPER_RANGES = {
     "cardH": [80, 300],
     "artW": [150, 600],
     "artH": [80, 400],
+    # THE TOP OF THESE RANGES IS PAST WHAT THE CARD HOLDS, deliberately. The Tithe box is
+    # 178 x 184 and never follows the tokens, so a size of 160 crowds and then clips -- which is
+    # the trade-off the fixed region exists to show. A slider that stopped at the comfortable
+    # size would be deciding the composition instead of reporting it.
+    "tokenSize": [28, 160],
+    "tokenSpread": [0, 200],
+
     "gap": [0, 80],
     # What FIT ACTION ROW leaves at the right-hand end: the band's own right margin, so a fitted
     # row ends where the ribbon above it does.
@@ -484,7 +514,9 @@ def default_state() -> dict:
         },
         "tithe": dict(TITHE, label="TAKE TITHE", visible=True, locked=False,
                       image=None, imageName=None,
-                      resources=[{"key": k, "name": n} for k, n in TITHE_RESOURCES]),
+                      tokenSize=TOKEN_SIZE_DEFAULT, tokenSpread=TOKEN_SPREAD_DEFAULT,
+                      resources=[{"key": k, "name": n, "icon": None, "iconName": None}
+                                 for k, n in TITHE_RESOURCES]),
         "acolytes": {
             "height": ACOLYTE_DEFAULT,
             "style": "colored",
