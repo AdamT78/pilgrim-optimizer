@@ -26,5 +26,11 @@ centres stand on. There is no per-resource scale. There was one, and it was a sl
 studio correct silver by hand -- which would have papered over the fault above while leaving the
 production pipeline to reproduce it.
 
+**Provenance default.** Unless a file's entry in `../attribution.json` says otherwise, an image in
+`ui/board_v2/` was generated with ChatGPT (OpenAI) and carries the `openai-generated` licence.
+Anything with a different origin has to say so in its own entry. A new image with no entry at all
+is a gap rather than an implicit default, and `tests/layout_lab/test_board_v2_attribution.py`
+fails on one.
+
 `ui/assets/icons/resources/` is a different thing: flat single-colour glyphs, some of them
 third-party with attribution obligations. These are painted tokens with no third-party rights.

@@ -22,6 +22,12 @@ For Clerical the left window is **Gain Piety** and the right is **Gain Coins**.
 6. Judge them at real game size, in the composition, not in an image viewer.
 7. If the slot dimensions later change, **re-crop the master** — do not re-generate the art.
 
+**Provenance default.** Unless a file's entry in `ui/board_v2/attribution.json` says otherwise, an image in
+`ui/board_v2/` was generated with ChatGPT (OpenAI) and carries the `openai-generated` licence.
+Anything with a different origin has to say so in its own entry. A new image with no entry at all
+is a gap rather than an implicit default, and `tests/layout_lab/test_board_v2_attribution.py`
+fails on one.
+
 Step 7 is why step 2 says forever. A crop is reversible as long as the master exists; a
 regeneration is not, because the same prompt does not produce the same picture twice. The master
 is the negative and the crops are prints.
