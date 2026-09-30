@@ -56,3 +56,14 @@ tests/layout_lab/_to_delete/
 # ui/board_v2/duty_actions/, and even the geometry-only export is a snapshot of somebody's
 # session rather than a decision about the module. Keep the folder, ignore what lands in it.
 ui/board_v2/layout_lab/sessions/
+
+# Build artefacts the test suites write, beside the suite that writes them. accept*.mjs reads
+# tests/layout_lab/lab.html when no page is given on the command line; mut44 writes its mutated
+# copy next to it; mut45 and mut45b keep an on-disk stash of the generator and template they are
+# mutating, so a run killed mid-mutation can put them back rather than leaving a broken tree and
+# a suite that blames the code. None is a source file and all are regenerable, but until now
+# running the suites left `git status` dirty -- which trains you to skim past it, and skimming
+# past it is exactly how three pieces of art sat unrecorded for a day.
+tests/layout_lab/lab.html
+tests/layout_lab/lab_mut*.html
+tests/layout_lab/.mut*_stash/
