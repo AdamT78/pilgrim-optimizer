@@ -210,3 +210,62 @@ def test_a_session_saved_before_the_switch_keeps_shouting(lab):
     block = src[i:i + 400]
     assert "DEFAULT_STATE.display.effectUpper" in block, (
         "an absent switch must fall back to the default, not to false")
+
+
+def test_the_state_is_stamped_with_the_wording_it_was_built_from(lab):
+    """The fingerprint that lets a stale autosave be told from somebody's typing.
+
+    Without it the lab looks broken in a specific and confusing way: the generator has been run,
+    the file has been edited, and the page still shows the old words -- because localStorage kept
+    a whole state and deepMerge lets the saved copy win over the defaults.
+    """
+    d = lab.default_state()
+    v = d.get("textVersion")
+    assert isinstance(v, str) and len(v) == 12 and all(c in "0123456789abcdef" for c in v), v
+    assert d["version"] == lab.STATE_VERSION, "the schema version is a different thing"
+    assert v != str(lab.STATE_VERSION), "the wording fingerprint is not the schema version"
+
+
+def test_the_fingerprint_follows_the_words_and_nothing_else(lab):
+    """It must move when a card would read differently, and stay put otherwise -- a fingerprint
+    that changed on every save would throw away real work, and one that never changed would
+    never refresh anything."""
+    said = lab.duty_text()
+    base = lab.duty_text_version(said)
+
+    import copy
+    changed = copy.deepcopy(said)
+    changed["clerical"]["actionA"]["shortLabel"] = "Gain Y piety"
+    assert lab.duty_text_version(changed) != base, "a changed caption did not move the version"
+
+    renamed = copy.deepcopy(said)
+    renamed["clerical"]["actionA"]["name"] = "Prayer"
+    assert lab.duty_text_version(renamed) != base, "a changed action name did not move it"
+
+    # Only what reaches a card counts. Editing the explanatory prose at the top of the file --
+    # `note`, `casing`, `theX` -- must not invalidate everybody's saved session.
+    import json
+    raw = json.loads(lab.DUTY_TEXT_ASSET.read_text(encoding="utf-8"))
+    raw["note"] = "reworded entirely"
+    raw["duties"]["clerical"]["actionA"]["unresolved"] = "a new note to self"
+    from_raw = {s: {k: (None if v is None else {"name": v["name"],
+                                                "shortLabel": v["shortLabel"]})
+                    for k, v in e.items()} for s, e in raw["duties"].items()}
+    assert lab.duty_text_version(from_raw) == base, (
+        "editing the notes in duty_text.json invalidated every saved session")
+
+
+def test_a_stale_session_is_refreshed_and_a_typed_one_is_not(lab):
+    """The two halves of the rule, read off the template because the behaviour is the page's.
+
+    Exercised for real in test_board_v2_layout_lab.py, which can run the page; this is the
+    cheap check that the condition is still the fingerprint rather than something that would
+    fire on every load and discard somebody's wording every time.
+    """
+    src = (lab.HERE / "duty_wheel_layout_lab.html.tmpl").read_text(encoding="utf-8")
+    i = src.index("if (d.duties && d.textVersion !== TEXT_VERSION){")
+    block = src[i:i + 600]
+    assert "delete D[a.key].name" in block and "delete D[a.key].shortLabel" in block
+    assert "delete D.actions" in block, (
+        "a stale action count would leave a box drawn for an action that no longer exists")
+    assert "d.textVersion = TEXT_VERSION;" in src

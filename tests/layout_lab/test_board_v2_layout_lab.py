@@ -2553,6 +2553,57 @@ process.stdout.write(JSON.stringify(out));
 
 
 @needs_node
+@needs_node
+def test_a_session_saved_before_the_wording_changed_takes_the_new_wording(lab):
+    """The symptom this exists to prevent: the generator is re-run, duty_text.json has been
+    edited, and the lab still shows the old words.
+
+    The lab keeps the whole state in localStorage and merges it over the defaults, so the saved
+    copy wins -- for ever, silently, and looking exactly like the build not having happened. The
+    stamped wording fingerprint is what makes the two cases separable: a session saved against
+    different words gives them up, one saved against these keeps whatever was typed into the
+    ACTION panel.
+
+    Falsified by dropping the fingerprint check, which would discard typed wording on every
+    load, or by removing the refresh, which brings the original bug back.
+    """
+    body = """
+const out = {};
+// A session from an earlier build: old wording, no fingerprint, and some real work of its own.
+const old = JSON.parse(JSON.stringify(DEFAULT_STATE));
+old.duties.clerical.actionA.name = "Gain Piety";
+old.duties.clerical.actionA.shortLabel = "Gain Piety";
+old.duties.taxation.actionA.shortLabel = "Action A";
+delete old.duties.taxation.actions;
+delete old.textVersion;
+old.wheel.width = 1000;
+applyState(old);
+out.stale = [S.duties.clerical.actionA.name, S.duties.clerical.actionA.shortLabel,
+             S.duties.taxation.actionA.shortLabel, S.duties.taxation.actions];
+out.staleKeptWork = S.wheel.width;
+
+// A session saved against THIS wording, carrying something somebody typed.
+const mine = JSON.parse(JSON.stringify(DEFAULT_STATE));
+mine.textVersion = TEXT_VERSION;
+mine.duties.clerical.actionA.shortLabel = "My own wording";
+applyState(mine);
+out.typed = S.duties.clerical.actionA.shortLabel;
+process.stdout.write(JSON.stringify(out));
+"""
+    got = _in_node(body)
+    d = lab.default_state()
+    want = [d["duties"]["clerical"]["actionA"]["name"],
+            d["duties"]["clerical"]["actionA"]["shortLabel"],
+            d["duties"]["taxation"]["actionA"]["shortLabel"],
+            d["duties"]["taxation"]["actions"]]
+    assert got["stale"] == want, (
+        "a session saved before the wording changed kept the old words: %s" % (got["stale"],))
+    assert got["staleKeptWork"] == 1000, (
+        "refreshing the wording threw away the rest of the session")
+    assert got["typed"] == "My own wording", (
+        "wording typed into the panel was discarded; the fingerprint matched, so it is work")
+
+
 def test_an_older_layout_keeps_its_work_and_loses_only_its_coordinates():
     """What V4 carries across the boundary, and the one thing it deliberately does not.
 

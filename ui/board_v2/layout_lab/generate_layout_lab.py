@@ -202,6 +202,29 @@ DUTIES = (
 DUTY_TEXT_ASSET = HERE.parent / "duty_text.json"
 
 
+def duty_text_version(said: dict) -> str:
+    """A short fingerprint of the wording this build was made with.
+
+    THE AUTOSAVE IS WHY THIS EXISTS. The lab keeps the whole state in localStorage and merges it
+    over the defaults on load, so a session saved before duty_text.json was edited goes on
+    showing the old wording for ever -- the file is the owner, and the saved copy silently wins.
+    It looks exactly like the generator not having been run.
+
+    Stamping the version into the state lets migrate() tell "this session predates the current
+    wording" from "somebody typed this in the panel", which is the whole difference between
+    refreshing it and throwing away their work. Only what actually reaches a card is hashed, so
+    editing the notes at the top of that file changes nothing.
+    """
+    import hashlib
+    parts = []
+    for slug in sorted(said):
+        for key in sorted(said[slug]):
+            slot = said[slug][key]
+            parts.append("%s.%s=%s|%s" % (slug, key, "" if slot is None else (slot["name"] or ""),
+                                          "" if slot is None else slot["shortLabel"]))
+    return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()[:12]
+
+
 def duty_text() -> dict:
     """What each action box says, read rather than retyped.
 
@@ -501,6 +524,7 @@ def default_state() -> dict:
     """
     slots = card_slots()
     TEXT = duty_text()
+    text_version = duty_text_version(TEXT)
     duties = {}
     for slug, name, deg in DUTIES:
         fx, fy = _on_ellipse(deg, FIG_RX, FIG_RY)
@@ -533,6 +557,10 @@ def default_state() -> dict:
 
     return {
         "version": STATE_VERSION,
+        # WHICH WORDING THIS STATE WAS BUILT WITH -- not the schema version, which is `version`
+        # above and has not moved. See duty_text_version(): it is how migrate() tells a session
+        # that predates an edit to duty_text.json from one somebody typed wording into.
+        "textVersion": text_version,
         "canvas": {"width": CANVAS_W, "height": CANVAS_H},
         "background": BACKGROUNDS[0][0],
         "attachToWheel": True,
@@ -627,7 +655,7 @@ def default_state() -> dict:
 _TOKENS = ("__BUILD_VERSION__", "__DEFAULT_STATE__", "__CANVAS_W__", "__CANVAS_H__",
            "__DUTY_ORDER__", "__DUTY_ACTIONS__", "__FULL_BOARDS__", "__SAFE_MARGIN__",
            "__WHEEL_RATIO__", "__WHEEL_VIEWBOX__", "__ELEVATION__", "__HELPER_RANGES__",
-           "__STATE_VERSION__", "__ACOLYTE_RANGE__", "__ACOLYTE_ASPECT__",
+           "__STATE_VERSION__", "__TEXT_VERSION__", "__ACOLYTE_RANGE__", "__ACOLYTE_ASPECT__",
            "__BACKGROUNDS__", "__ZOOM_STEPS__", "__PLAYER_IDS__", "__VIEW_STATES__",
            "__SEAL_SIZE__", "__WHEEL_SVG__")
 
@@ -653,6 +681,7 @@ def build() -> str:
         # double quotes, and a JavaScript string literal tolerates neither.
         "__WHEEL_SVG__": json.dumps(wheel_svg()),
         "__STATE_VERSION__": json.dumps(STATE_VERSION),
+        "__TEXT_VERSION__": json.dumps(duty_text_version(duty_text())),
         "__BUILD_VERSION__": json.dumps(BUILD_VERSION),
         "__ACOLYTE_RANGE__": json.dumps([ACOLYTE_MIN, ACOLYTE_MAX]),
         "__ACOLYTE_ASPECT__": json.dumps(ACOLYTE_ASPECT),

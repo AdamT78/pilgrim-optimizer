@@ -336,6 +336,9 @@ var WHEEL_VIEWBOX = __WHEEL_VIEWBOX__;
 var ELEVATION    = __ELEVATION__;
 var HELPERS      = __HELPER_RANGES__;          // studio-only control ranges, never game state
 var STATE_VERSION = __STATE_VERSION__;
+// The fingerprint of the wording this page was BUILT with. Not the schema version: the schema
+// has not changed, the words on the cards have.
+var TEXT_VERSION = __TEXT_VERSION__;
 var BUILD_VERSION = __BUILD_VERSION__;
 var ACO_RANGE    = __ACOLYTE_RANGE__;
 var ACO_ASPECT   = __ACOLYTE_ASPECT__;
@@ -2970,6 +2973,31 @@ function migrate(d){
       d.tithe.resources.forEach(function(r){ if (r) delete r.scale; });
     }
   }
+  // ---- the wording, when duty_text.json has moved under a saved session --------------------
+  // THE AUTOSAVE PROBLEM, and the reason this is not just a normalisation. The lab keeps the
+  // whole state in localStorage and merges it over the defaults on load, so a session saved
+  // before duty_text.json was edited goes on showing the OLD wording for ever: the file is the
+  // owner, the saved copy wins, and it looks exactly like the generator not having been run.
+  //
+  // The fingerprint is what makes this decidable. If the session was saved against a different
+  // wording, its action text is dropped so the defaults fill it; if it matches, anything in
+  // there was typed in the ACTION panel and is somebody's work, so it stays. The file wins when
+  // the file moves, and only then.
+  //
+  // `actions` goes with it, because how many actions a duty has is derived from the same file
+  // and a stale count would leave a box drawn for an action that no longer exists.
+  if (d.duties && d.textVersion !== TEXT_VERSION){
+    DUTY_ORDER.forEach(function(s){
+      var D = d.duties[s];
+      if (!D) return;
+      delete D.actions;
+      ACTIONS.forEach(function(a){
+        if (D[a.key]){ delete D[a.key].name; delete D[a.key].shortLabel; }
+      });
+    });
+  }
+  d.textVersion = TEXT_VERSION;
+
   d.version = STATE_VERSION;
   return d;
 }
