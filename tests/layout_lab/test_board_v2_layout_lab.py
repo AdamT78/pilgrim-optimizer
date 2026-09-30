@@ -2009,8 +2009,11 @@ process.stdout.write(JSON.stringify({layout: g, text: JSON.stringify(g)}));
     # session's image pool happens to hold the bytes is not a fact about the layout at all.
     # `iconName` is the handle production resolves against, exactly as the action artwork is
     # identified by filename rather than by bytes.
-    assert set(g["tithe"]) == {"x", "y", "width", "height", "visible", "label", "resources",
-                               "tokenSize", "tokenSpread"}, sorted(g["tithe"])
+    assert set(g["tithe"]) == {"x", "y", "width", "height", "visible", "label", "labelSize",
+                               "resources", "tokenSize", "tokenSpread"}, sorted(g["tithe"])
+    # HOW BIG A LINE OF TYPE IS TRAVELS, on the same footing as status.size: it was decided here
+    # and the real UI cannot recover it from anything else in the file.
+    assert isinstance(g["tithe"]["labelSize"], int) and g["tithe"]["labelSize"] > 0
     assert isinstance(g["tithe"]["tokenSize"], int) and g["tithe"]["tokenSize"] > 0
     assert isinstance(g["tithe"]["tokenSpread"], int) and g["tithe"]["tokenSpread"] >= 0
     assert "tokenGap" not in g["tithe"], (
@@ -2022,7 +2025,9 @@ process.stdout.write(JSON.stringify({layout: g, text: JSON.stringify(g)}));
         "the default state names an icon it has not got")
     assert '"icon"' not in text.replace('"iconName"', ""), (
         "the production export carries an image-pool key for a tithe token")
-    assert set(g["city"]) == {"x", "y", "width", "height", "visible", "label"}, sorted(g["city"])
+    assert set(g["city"]) == {"x", "y", "width", "height", "visible", "label",
+                              "labelSize"}, sorted(g["city"])
+    assert isinstance(g["city"]["labelSize"], int) and g["city"]["labelSize"] > 0
     assert "counts" not in g["city"] and "shown" not in g["city"], (
         "the City exports this session's occupancy as production layout")
 
@@ -2915,6 +2920,58 @@ process.stdout.write(JSON.stringify(out));
 
 
 
+def _strip_js_comments(src):
+    """Drop // and /* */ comments, leaving string literals alone.
+
+    Deliberately small and deliberately not a JavaScript parser. It tracks quotes so that a `//`
+    inside a string -- a URL, say -- is not mistaken for the start of a comment, and it tracks
+    nothing else, because the only thing asking is a name search.
+    """
+    out = []
+    i, n = 0, len(src)
+    quote = None
+    while i < n:
+        c = src[i]
+        if quote:
+            out.append(c)
+            if c == "\\" and i + 1 < n:
+                out.append(src[i + 1])
+                i += 2
+                continue
+            if c == quote:
+                quote = None
+            i += 1
+            continue
+        if c in "\"'`":
+            quote = c
+            out.append(c)
+            i += 1
+            continue
+        if c == "/" and i + 1 < n and src[i + 1] == "/":
+            j = src.find("\n", i)
+            i = n if j < 0 else j
+            continue
+        if c == "/" and i + 1 < n and src[i + 1] == "*":
+            j = src.find("*/", i + 2)
+            i = n if j < 0 else j + 2
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
+def test_the_comment_stripper_leaves_code_and_strings_alone():
+    """Because the guard above is only as good as this, and it is easy to get subtly wrong."""
+    assert _strip_js_comments("var a = 1; // titheLabel\nvar b = 2;") == "var a = 1; \nvar b = 2;"
+    assert _strip_js_comments("/* titheLabel */ var a = 1;") == " var a = 1;"
+    # A RETIRED NAME INSIDE A STRING IS STILL A READ as far as this guard is concerned -- it is
+    # how bracket access is written -- so the stripper must not swallow string literals.
+    assert "titheLabel" in _strip_js_comments('var a = d["titheLabel"];')
+    # A // inside a string is not a comment.
+    assert _strip_js_comments('var u = "http://x/y"; var b = 2;') == 'var u = "http://x/y"; var b = 2;'
+    assert _strip_js_comments("var s = 'a // b'; // gone") == "var s = 'a // b'; "
+
+
 def test_no_live_code_reaches_for_the_retired_status_fields(lab):
     """The fields V4 retired, checked for by name, because a stale read is silent.
 
@@ -2928,12 +2985,18 @@ def test_no_live_code_reaches_for_the_retired_status_fields(lab):
     Excluding it by slicing the file at migrate() would also excuse anything defined after it, so
     the exemption is per-function instead.
 
+    COMMENTS ARE NOT CODE, and this used to scan them. It went red on a comment that merely
+    NAMED a retired field while explaining why a new helper was called something else -- a false
+    positive that pushes the next person towards a worse name or towards deleting the guard. A
+    check for stale READS has no business reading prose, so the comments come out first. This
+    does not weaken it: the falsification below puts a real read back and it still fails.
+
     Falsified by leaving a live read of any retired name outside the migration.
     """
     tmpl = TMPL.read_text(encoding="utf-8")
     start = tmpl.index("function migrate(")
     end = tmpl.index("function deepMerge(")
-    live = tmpl[:start] + tmpl[end:]
+    live = _strip_js_comments(tmpl[:start] + tmpl[end:])
 
     retired = ["status.context", "status.preset", "contextVisible", "contextSize",
                "autoContext", "accentColour", "summaryDim", "titheInSummary", "inHandOverride",
@@ -3075,3 +3138,165 @@ def test_the_status_panel_offers_one_field_per_state_and_writes_only_that_one(la
     assert sorted(d["status"]["byView"]) == sorted(v[0] for v in lab.VIEW_STATES)
 
 
+
+
+# =================================================================================================
+# THE TWO CAPTIONS THAT ARE NOT ON ARTWORK.
+#
+# TAKE TITHE and THE CITY were the last text on the board whose size was fixed in the stylesheet.
+# Making them adjustable is easy; making them adjustable WITHOUT MOVING ANYTHING is the part
+# worth guarding, and that is what most of these are about.
+# =================================================================================================
+
+def test_the_caption_controls_open_at_the_size_the_stylesheet_already_drew(lab):
+    """A new control must start where the design is, or shipping it silently restyles the board.
+
+    The two numbers exist in two places -- the generator's default and the stylesheet's fallback
+    -- and they have to agree. The fallback is not decoration: it is what a browser draws if the
+    custom property is ever missing, so a fallback that disagreed with the default would make a
+    failure mode look like a design.
+
+    Falsified by changing either number on its own.
+    """
+    S = lab.default_state()
+    assert S["tithe"]["labelSize"] == lab.TITHE_LABEL_SIZE == 17
+    assert S["city"]["labelSize"] == lab.CITY_LABEL_SIZE == 13
+
+    tmpl = TMPL.read_text(encoding="utf-8")
+    tl = re.search(r"#titheObj \.tl\{[^}]*?font:600 var\(--cap,(\d+)px\)", tmpl, re.S)
+    cl = re.search(r"#cityObj \.cl\{font:600 var\(--cap,(\d+)px\)", tmpl)
+    assert tl and int(tl.group(1)) == S["tithe"]["labelSize"], (
+        "the Tithe caption's CSS fallback is not the default size, so a page whose property "
+        "never arrived would draw a different board rather than the same one")
+    assert cl and int(cl.group(1)) == S["city"]["labelSize"], (
+        "the City caption's CSS fallback is not the default size")
+
+
+def test_the_two_captions_are_not_one_number(lab):
+    """They label different kinds of thing and are deliberately different sizes.
+
+    TAKE TITHE is a choice offered alongside the two actions and matches their caption; THE CITY
+    heads a reserve nobody picks. A single shared constant would assert those are the same job.
+
+    Falsified by collapsing them to one constant.
+    """
+    assert lab.TITHE_LABEL_SIZE != lab.CITY_LABEL_SIZE
+
+
+def test_the_tithe_card_reserves_what_the_caption_measured_not_what_it_guessed(lab):
+    """The reserve is derived, and derived from the RENDER rather than from the font size.
+
+    A reserve computed as one line-height is wrong as soon as the caption wraps, which TAKE
+    TITHE does at 34px in a 178px card -- the second line then sits on the tokens. So the height
+    is read back off the drawn element. Three things have to stay true:
+
+      * it is read AFTER the stage has the node, because everything is built into a fragment and
+        a detached node measures 0 -- which is exactly the bug this went through;
+      * it is read BEFORE paintMetrics(), because the overflow figure painted there is measured
+        against the reserve;
+      * the cached measurement is cleared when the card is not drawn, so a stale height from an
+        earlier state cannot be quoted at you.
+
+    Falsified by moving the call above the insertion, below paintMetrics(), or by dropping the
+    reset.
+    """
+    tmpl = _strip_js_comments(TMPL.read_text(encoding="utf-8"))
+    insert = tmpl.index("st.appendChild(frag);")
+    fit = tmpl.index("fitTitheCaption();", insert)
+    metrics = tmpl.index("paintMetrics();", insert)
+    assert insert < fit < metrics, (
+        "fitTitheCaption() must run after the stage has the node and before the metrics that "
+        "are measured against what it sets")
+    assert "offsetHeight" in tmpl[tmpl.index("function fitTitheCaption("):][:400], (
+        "fitTitheCaption() no longer measures anything")
+    assert re.search(r"TITHE_CAP_H = null;\s*\n\s*if \(titheMode", tmpl), (
+        "the measurement is no longer forgotten when the Tithe card is not drawn, so the "
+        "overflow reading can quote a caption height from some earlier state")
+
+
+def test_nothing_still_reserves_a_fixed_thirty_six(lab):
+    """The old constant is gone, and the derived one agrees with it at the default.
+
+    36px of bottom padding was right for exactly one caption size. The number surviving anywhere
+    -- in the stylesheet, or as the old TITHE_CHROME -- would mean something is still sizing
+    itself for a 17px caption while the control says otherwise.
+
+    Falsified by leaving TITHE_CHROME in place, or by putting padding-bottom:36px back.
+    """
+    tmpl = _strip_js_comments(TMPL.read_text(encoding="utf-8"))
+    assert "TITHE_CHROME" not in tmpl, (
+        "TITHE_CHROME is back, and it cannot know how tall the caption turned out to be")
+    assert "titheChrome()" in tmpl
+    # The derived figure at the default must be the number that was there before: 10px off the
+    # bottom, a 17px caption at 1.2 line-heights, and 6px of air.
+    derived = 10 + round(1.2 * lab.TITHE_LABEL_SIZE) + 6
+    assert derived == 36, derived
+    # THE STYLESHEET KEEPS ITS 36, and that is not a leftover -- it is the same bargain as the
+    # `var(--cap,17px)` fallback beside it. render() overwrites it on every pass, so the CSS
+    # value is only ever seen if the property never arrived, and it should then show the design
+    # rather than some other number. What it must not do is disagree with the derived default.
+    css = re.search(r"#titheObj\{[^}]*?padding-bottom:(\d+)px\}", tmpl, re.S)
+    assert css, "the Tithe card no longer carries a bottom reserve in the stylesheet at all"
+    assert int(css.group(1)) == derived, (
+        "the stylesheet's fallback reserve is %s but the derived default is %d, so a page that "
+        "never got the inline value would draw a card nobody designed"
+        % (css.group(1), derived))
+
+
+def test_one_size_covers_the_city_in_both_of_its_phases(lab):
+    """The same line of the same box, saying what is in it -- so one control, not two.
+
+    The region is THE CITY until sowing and ACOLYTES IN HAND during it. Both are drawn into the
+    same `.cl` element and both read cityCapSize(). Two controls would let the box change its
+    type size halfway through a turn for no reason a player could see.
+
+    Falsified by giving either branch its own size.
+    """
+    tmpl = _strip_js_comments(TMPL.read_text(encoding="utf-8"))
+    branches = re.findall(r"body = '<div class=cl style=\"--cap:' \+ (\w+)\(\)", tmpl)
+    assert len(branches) == 2, ("expected the City's two phases to be drawn by two branches, "
+                                "found %d" % len(branches))
+    assert branches[0] == branches[1] == "cityCapSize", branches
+
+
+def test_every_caption_on_the_board_is_bounded_by_the_same_two_numbers(lab):
+    """8 and 60, written once.
+
+    There were four copies before the Tithe and the City wanted them too. Six copies that agree
+    only by coincidence is how a bound drifts: somebody widens one and the inspector starts
+    accepting a size that normalisation then silently takes back on the next load.
+
+    Falsified by writing the bound out again anywhere.
+    """
+    tmpl = _strip_js_comments(TMPL.read_text(encoding="utf-8"))
+    assert tmpl.count("CAP_MIN = 8, CAP_MAX = 60") == 1
+    assert "8, 60" not in tmpl, (
+        "the caption bound is written out longhand somewhere as well as being named")
+    # Every caption size goes through it -- the artwork's two and the two new ones.
+    for fn in ("clampCap(v)", "clampCap(e.labelSize)", "clampCap(e.nameSize)",
+               "clampCap(S.tithe.labelSize)", "clampCap(S.city.labelSize)"):
+        assert fn in tmpl, "%s no longer shares the common bound" % fn
+
+
+def test_a_caption_size_that_is_missing_and_one_that_is_absurd_are_different_problems(lab):
+    """Absent goes to the default; out of range is pulled into range and kept.
+
+    A session saved before these controls existed has no value and must open at the design. A
+    session carrying 900 was composed by somebody who meant "as big as it goes", and opening it
+    at 17 would throw away a decision rather than bound it.
+
+    Falsified by writing either case as `+v || default`, which conflates them.
+    """
+    tmpl = _strip_js_comments(TMPL.read_text(encoding="utf-8"))
+    body = tmpl[tmpl.index("function capFor("):][:400]
+    assert "undefined" in body and "null" in body and "isNaN" in body, (
+        "capFor no longer distinguishes a missing value from an unreadable one")
+    # The `||`s above are the guard, and are fine. What is banned is falling back THROUGH one --
+    # `+v || dflt` quietly turns a legitimate 0 into the default, and 0 is how a hand-edited
+    # file says "smallest". The bound takes it to 8; `||` would take it to 17.
+    assert not re.search(r"\+?v\s*\|\|\s*\w*[Dd]flt", body), (
+        "capFor falls back with `||`, which cannot tell a missing size from a zero one")
+    assert body.index("isNaN") < body.index("?"), (
+        "the unreadable case is no longer decided before the value is used")
+    for key in ("S.tithe.labelSize = capFor(", "S.city.labelSize = capFor("):
+        assert key in tmpl, "%s is not normalised on load" % key

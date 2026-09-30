@@ -164,7 +164,7 @@ def viewbox_of(text: str) -> tuple:
 # wheel-centre medallions retire, the status line loses its context field -- so the version moves
 # with it and older files are migrated rather than reinterpreted.
 STATE_VERSION = 4
-BUILD_VERSION = "4.5"
+BUILD_VERSION = "4.6"
 
 # ---- the design envelope -------------------------------------------------------------------
 CANVAS_W, CANVAS_H = 1400, 1200
@@ -458,6 +458,18 @@ ACOLYTE_ASPECT = 0.42
 # a good deal smaller than a duty's acolytes, not merely a little.
 ACOLYTE_RATIOS = {"duty": 100, "city": 85, "inHand": 95}
 
+# THE TWO CAPTIONS THAT ARE NOT ON ARTWORK. Both were hard-coded in the stylesheet until the
+# artwork captions became adjustable and these two were the only text on the board that still
+# could not be. The numbers are what the stylesheet already said, so a build before this change
+# and a build after it draw the same picture -- the control starts where the design was.
+#
+# They are NOT one number. TAKE TITHE is a choice being offered and is set at the action
+# artwork's 17px so the row reads as one row of choices; THE CITY heads a reserve nobody picks
+# and sits back at 13px. Collapsing them to a single constant would assert those are the same
+# job, which is the one thing the two sizes exist to deny.
+TITHE_LABEL_SIZE = 17
+CITY_LABEL_SIZE = 13
+
 PLAYERS = (
     {"id": "p1", "label": "Player 1", "colour": "#8fae6a"},
     {"id": "p2", "label": "Player 2", "colour": "#7fa7c8"},
@@ -621,7 +633,8 @@ def default_state() -> dict:
                           # it rather than taking the colour on trust.
                           "visible": True, "opacity": 0.5, "colour": "#e8c877"},
         },
-        "tithe": dict(TITHE, label="TAKE TITHE", visible=True, locked=False,
+        "tithe": dict(TITHE, label="TAKE TITHE", labelSize=TITHE_LABEL_SIZE,
+                      visible=True, locked=False,
                       image=None, imageName=None,
                       tokenSize=TOKEN_SIZE_DEFAULT, tokenSpread=TOKEN_SPREAD_DEFAULT,
                       resources=[{"key": k, "name": n, "icon": None, "iconName": None}
@@ -637,7 +650,7 @@ def default_state() -> dict:
         },
         "players": [dict(p) for p in PLAYERS],
         "city": dict(CITY, locked=False, visible=True,
-                     label="THE CITY",
+                     label="THE CITY", labelSize=CITY_LABEL_SIZE,
                      counts=dict(START_CITY_COUNTS),
                      shown={p["id"]: True for p in PLAYERS}),
         # NOT A BOX ANY MORE. The acolytes in hand are drawn in the City's region while sowing,

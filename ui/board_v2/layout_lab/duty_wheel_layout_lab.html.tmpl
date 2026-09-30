@@ -196,7 +196,7 @@ body.clean .art.choice:hover::after{content:"";position:absolute;inset:0;
    captions sit, rather than heading the card from the top.
    No scrim: the caption over artwork needs one to stay legible, this card is plain dark. */
 #titheObj .tl{position:absolute;left:0;right:0;bottom:10px;text-align:center;
-  font:600 17px/1.2 Georgia,serif;letter-spacing:.11em;text-transform:uppercase;
+  font:600 var(--cap,17px)/1.2 Georgia,serif;letter-spacing:.11em;text-transform:uppercase;
   color:#e2d7bc}
 /* THE ARRANGEMENT IS A TRIANGLE, NOT A STACK OF ROWS. Flex rows can only space tokens by the
    gap BETWEEN their boxes, so every step of the size control also shoved the tokens apart and
@@ -219,8 +219,8 @@ body.clean #titheObj.choice:hover{filter:brightness(1.1);cursor:pointer}
 #cityObj{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
   border-radius:5px;background:#ffffff05;border:1px solid #ffffff10;padding:9px}
 body.clean #cityObj{background:#ffffff04}
-#cityObj .cl{font:600 13px/1.1 Georgia,serif;letter-spacing:.16em;text-transform:uppercase;
-  color:#b9ae96}
+#cityObj .cl{font:600 var(--cap,13px)/1.1 Georgia,serif;letter-spacing:.16em;
+  text-transform:uppercase;color:#b9ae96}
 #cityObj .row{display:flex;align-items:flex-end;justify-content:center;gap:14px;flex:1;
   min-height:0}
 #cityObj .row .fig{position:static;transform:none}
@@ -396,7 +396,50 @@ function haveImage(key){ return !!(key && IMAGES[key]); }
 // so the first ask probes it once and repaints.
 // The Tithe card's own furniture: 10px padding top and bottom, the TAKE TITHE line, and the
 // 10px gap between that line and the pyramid. What is left is what the tokens have to live in.
-var TITHE_CHROME = 10 + 36 + 4;
+//
+// THE BOTTOM RESERVE IS MEASURED, NOT REMEMBERED. It used to be a flat 36 in the stylesheet,
+// which was right for exactly one caption size; now that the size is a control, a fixed reserve
+// would let a big caption climb into the pyramid and leave a small one sitting in dead space.
+// The caption is pinned 10px off the bottom and is 1.2 line-heights tall, so that much has to
+// be kept clear, plus a little air between it and the lowest token. At the default 17px this
+// comes to exactly the 36 that was there before, which is the point: nobody's card moves.
+//
+// It does NOT stop growing. A 60px caption reserves 88px of a 184px card and the tokens have
+// what is left -- reported by tokenOverflow() rather than hidden by shrinking something, the
+// same bargain the rest of this card strikes.
+// The caption is pinned this far off the bottom (the stylesheet's `bottom:10px`), and this
+// much air is left between it and the lowest token.
+var TITHE_CAP_BOTTOM = 10, TITHE_CAP_AIR = 6;
+
+// WHAT THE CAPTION ACTUALLY TOOK, measured after it was drawn. Cached beside IMG_DIMS and for
+// the same reason: it is a fact about what the browser did, not a layout decision, so it has no
+// business in the state, in an undo snapshot or in a saved session.
+//
+// Estimating it was wrong, and visibly so. `TAKE TITHE` at 34px is TWO lines in a 178px card --
+// the caption spans the card's full width and wraps like any other text -- so a reserve worked
+// out as one line-height let the second line sit on top of the tokens. How tall a run of text
+// turns out to be is a question for the browser, and the answer is a measurement.
+//
+// null means the card was not drawn this pass, and then the one-line figure is the best
+// available guess rather than a stale number from whenever it last was drawn.
+var TITHE_CAP_H = null;
+function titheCapHeight(){
+  return TITHE_CAP_H === null ? Math.round(1.2 * titheCapSize()) : TITHE_CAP_H;
+}
+function titheReserve(){
+  return TITHE_CAP_BOTTOM + Math.round(titheCapHeight()) + TITHE_CAP_AIR;
+}
+function titheChrome(){ return 10 + titheReserve() + 4; }
+// READ THE HEIGHT BACK, THEN MAKE THE ROOM. One pass is enough and it cannot loop: the caption
+// is positioned against the card's padding BOX, and padding-bottom does not change that box's
+// WIDTH -- so the text cannot re-wrap in response to the room being made for it. A second pass
+// would measure the same number.
+function fitTitheCaption(){
+  var card = el("titheObj");
+  var cap = card && card.querySelector(".tl");
+  TITHE_CAP_H = cap ? cap.offsetHeight : null;
+  if (card) card.style.paddingBottom = titheReserve() + "px";
+}
 var TITHE_SIDES = 20;
 
 var IMG_DIMS = {};
@@ -1086,6 +1129,9 @@ function render(){
   // alternative to taking what a duty offers, so it has no business on screen while you are
   // still reading.
   var titheMode = shows("tithe");
+  // FORGET THE MEASUREMENT WHEN THE CARD IS NOT DRAWN. Keeping it would mean the overflow
+  // reading quoted a caption height from some earlier state of the card.
+  TITHE_CAP_H = null;
   if (titheMode !== "no" && S.tithe.visible){
     var T = S.tithe;
     var res = (T.resources || []);
@@ -1097,10 +1143,14 @@ function render(){
             + '</div>';
     var dt = make("tithe", null, rectOf("tithe", null),
                   S.view === "action" ? "choice" : "",
-                  '<span class=nm>tithe</span>' + pyr + '<div class=tl>' + esc(T.label)
+                  '<span class=nm>tithe</span>' + pyr
+                    + '<div class=tl style="--cap:' + titheCapSize() + 'px">' + esc(T.label)
                     + '</div>',
                   WHEEL_Z + 15, titheMode === "ghost");
     dt.id = "titheObj";
+    // The bottom reserve is NOT set here. Everything on this stage is built into a fragment and
+    // inserted in one go at the end of render(), and a node that is not in the document has no
+    // height to read -- see fitTitheCaption(), which runs once the stage has it.
     if (!T.locked && titheMode === "yes") handles(dt, "tithe");
   }
 
@@ -1112,11 +1162,13 @@ function render(){
     var body;
     if (hand){
       var ih = S.inHand;
-      body = '<div class=cl>' + esc(ih.label) + '</div><div class=row>'
+      body = '<div class=cl style="--cap:' + cityCapSize() + 'px">' + esc(ih.label)
+           + '</div><div class=row>'
            + acolyteHtml(ih.seat, acolyteHeight("inHand"), ih.count) + '</div>';
     } else {
       var ch = acolyteHeight("city");
-      body = '<div class=cl>' + esc(c.label) + '</div><div class=row>'
+      body = '<div class=cl style="--cap:' + cityCapSize() + 'px">' + esc(c.label)
+           + '</div><div class=row>'
            + PLAYER_IDS.filter(function(p){ return c.shown[p]; }).map(function(p){
                return acolyteHtml(p, ch, c.counts[p] || 0); }).join("")
            + '</div>';
@@ -1170,6 +1222,9 @@ function render(){
   }
 
   st.appendChild(frag);
+  // NOW the caption has a height, so now the card can reserve the room it needs. Before
+  // paintMetrics(), because the overflow reading it paints is measured against that reserve.
+  fitTitheCaption();
   drawGuides();
   // LAST, AND FROM HERE RATHER THAN FROM EACH CONTROL. Every path that changes geometry ends in
   // a render, so hanging these off this one place is what makes "always current" true by
@@ -1276,6 +1331,28 @@ function syncHelperInputs(){
 function helperGap(){ return clamp(rowGapSuggested(), HELPERS.gap[0], HELPERS.gap[1]); }
 
 // THE TOKEN READINGS. Derived from the state every time, never stored alongside it.
+// EVERY CAPTION ON THE BOARD IS BOUNDED THE SAME WAY, and 8 and 60 are written once. Below
+// 8 the tracking these faces carry turns a word into a smear; above 60 a caption is taller than
+// the row it labels. Neither is a layout decision worth having four copies of.
+var CAP_MIN = 8, CAP_MAX = 60;
+function clampCap(v){ return clamp(Math.round(+v), CAP_MIN, CAP_MAX); }
+// MISSING IS NOT THE SAME AS OUT OF RANGE. A session from before this control existed has no
+// value at all and must open at the default; a session carrying 900 was composed by somebody
+// who meant "as big as it goes" and opens at 60.
+function capFor(v, dflt){
+  return (v === undefined || v === null || isNaN(+v)) ? clampCap(dflt) : clampCap(v);
+}
+// The two captions that are not on artwork, read the way tokenSize() is read: bounded at the
+// point of use, so a state that arrived out of range draws correctly rather than drawing wrong
+// and waiting to be normalised.
+// NAMED FOR THE CAPTION, NOT FOR THE FIELD. `titheLabelSize` would have been the obvious name
+// and is the wrong one: V4 retired a duty field called `titheLabel`, and the guard that checks
+// no live code still reads it is a substring test, so the obvious name sets it off. The names
+// here follow .tl's own neighbourhood -- TITHE_CAP_BOTTOM, titheCapHeight, fitTitheCaption --
+// which is where it belonged anyway.
+function titheCapSize(){ return clampCap(S.tithe.labelSize); }
+function cityCapSize(){ return clampCap(S.city.labelSize); }
+
 function tokenSize(){ return clamp(Math.round(S.tithe.tokenSize), HELPERS.tokenSize[0],
                                    HELPERS.tokenSize[1]); }
 function tokenSpread(){ return clamp(Math.round(S.tithe.tokenSpread), HELPERS.tokenSpread[0],
@@ -1312,7 +1389,7 @@ function tokenBounds(){
 // designer is asking.
 function tokenOverflow(){
   var b = tokenBounds();
-  var overV = b.height - (S.tithe.height - TITHE_CHROME);
+  var overV = b.height - (S.tithe.height - titheChrome());
   var overH = b.width - (S.tithe.width - TITHE_SIDES);
   var worst = Math.max(overV, overH);
   return worst > 0 ? Math.ceil(worst) : 0;
@@ -1816,11 +1893,11 @@ function inspector(){
              function(){ o.labelVisible = !o.labelVisible; commit(); }, !!o.labelVisible)
        + '</div>';
     h += '<div class="row two"><span>name size</span>'
-       + field(nameSizeOf(o), function(v){ o.nameSize = clamp(Math.round(v), 8, 60);
+       + field(nameSizeOf(o), function(v){ o.nameSize = clampCap(v);
                                            commit(true); })
        + '<span class=hint style="text-align:left">top left</span></div>';
     h += '<div class="row two"><span>effect size</span>'
-       + field(o.labelSize, function(v){ o.labelSize = clamp(Math.round(v), 8, 60);
+       + field(o.labelSize, function(v){ o.labelSize = clampCap(v);
                                          commit(true); })
        + '<span class=hint style="text-align:left">bottom left</span></div>';
     h += '<div class=hint>the picture comes from whichever duty is on screen ('
@@ -1837,14 +1914,21 @@ function inspector(){
   }
   if (kind === "tithe"){
     h += '<div class=row><span>label</span>'
-       + '<input type=text id=tiLabel value="' + esc(o.label) + '"></div>'
-       + '<div class=hint>the three resources are edited in <b>tithe</b></div>';
+       + '<input type=text id=tiLabel value="' + esc(o.label) + '"></div>';
+    h += '<div class="row two"><span>label size</span>'
+       + field(titheCapSize(), function(v){ o.labelSize = clampCap(v); commit(true); })
+       + '<span class=hint style="text-align:left">the card keeps room for it</span></div>';
+    h += '<div class=hint>the three resources are edited in <b>tithe</b></div>';
   }
   if (kind === "city"){
     h += '<div class=row><span>label</span>'
-       + '<input type=text id=ciLabel value="' + esc(o.label) + '"></div>'
-       + '<div class=hint>this region becomes <b>acolytes in hand</b> while sowing · counts and '
-       + 'seats are in <b>city &amp; in hand</b></div>';
+       + '<input type=text id=ciLabel value="' + esc(o.label) + '"></div>';
+    h += '<div class="row two"><span>label size</span>'
+       + field(cityCapSize(), function(v){ o.labelSize = clampCap(v); commit(true); })
+       + '<span class=hint style="text-align:left">both phases</span></div>';
+    h += '<div class=hint>this region becomes <b>acolytes in hand</b> while sowing · counts and '
+       + 'seats are in <b>city &amp; in hand</b> · ONE size covers both, because it is the same '
+       + 'line of the same box saying what is in it</div>';
   }
   if (kind === "wheel"){
     h += '<div class=hint>uniform scale only · layout ratio ' + WHEEL_RATIO.toFixed(4)
@@ -2749,11 +2833,12 @@ function gameLayout(){
     // way the action artwork is identified by filename rather than by bytes.
     tithe: {x: S.tithe.x, y: S.tithe.y, width: S.tithe.width, height: S.tithe.height,
             visible: !!S.tithe.visible, label: S.tithe.label,
+            labelSize: titheCapSize(),
             tokenSize: tokenSize(), tokenSpread: tokenSpread(),
             resources: (S.tithe.resources || []).map(function(r){
               return {key: r.key, name: r.name, iconName: r.iconName || null}; })},
     city: {x: S.city.x, y: S.city.y, width: S.city.width, height: S.city.height,
-           visible: !!S.city.visible, label: S.city.label},
+           visible: !!S.city.visible, label: S.city.label, labelSize: cityCapSize()},
     acolytes: {height: S.acolytes.height, ratios: clone(S.acolytes.ratios)},
   };
   DUTY_ORDER.forEach(function(slug){
@@ -3046,6 +3131,12 @@ function applyState(d){
     // conversion from the flex build. Not here as well: a second delete would mean neither
     // could be shown to matter.
   });
+  // NOT `|| default`: see tokenSpread below. A caption size is never legitimately 0, but the
+  // fall-back is written the same way so that the reason is the same reason everywhere -- what
+  // is missing or unreadable goes back to the default, what is merely out of range is pulled
+  // into range and kept.
+  S.tithe.labelSize = capFor(S.tithe.labelSize, DEFAULT_STATE.tithe.labelSize);
+  S.city.labelSize = capFor(S.city.labelSize, DEFAULT_STATE.city.labelSize);
   S.tithe.tokenSize = clamp(Math.round(+S.tithe.tokenSize || DEFAULT_STATE.tithe.tokenSize),
                             HELPERS.tokenSize[0], HELPERS.tokenSize[1]);
   // A session saved before the triangle carried `tokenGap` instead; migrate() has already turned
@@ -3098,12 +3189,12 @@ function applyState(d){
     e.fit = (e.fit === "contain") ? "contain" : "cover";
     if (ACTIONS.map(function(a){ return a.key; }).indexOf(e.slot) < 0)
       e.slot = side === "left" ? "actionA" : "actionB";
-    e.labelSize = clamp(Math.round(e.labelSize), 8, 60);
+    e.labelSize = clampCap(e.labelSize);
     // NOT `|| labelSize` inside the clamp: a session saved before the split has no nameSize at
     // all, and the head must open at the size that session was composed at rather than at this
     // build's default. nameSizeOf() does the falling back; this only bounds what is there.
     e.nameSize = (e.nameSize === undefined || e.nameSize === null || isNaN(+e.nameSize))
-               ? null : clamp(Math.round(+e.nameSize), 8, 60);
+               ? null : clampCap(e.nameSize);
   });
   S.players = (Array.isArray(S.players) ? S.players : []).slice(0, 4).map(function(p, i){
     var d0 = DEFAULT_STATE.players[i];

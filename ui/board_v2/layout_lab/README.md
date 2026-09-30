@@ -241,8 +241,15 @@ slots were tall columns in the side margins overlapping the wheel's rim; V4's st
 wheel entirely. An image over the rim would cover the acolytes standing on the top of the wheel,
 which is the part of the board a player reads while they choose.
 
-Each slot has a caption showing its action's name, with its own size and visibility. Where no
-scenic image is loaded, the slot shows a placeholder naming the action.
+Each slot has two captions — the action's name at the top left and what it does at the bottom
+left — each with its own size, and one switch for both. Where no scenic image is loaded, the slot
+shows a placeholder naming the action.
+
+**Every caption on the board is bounded by the same two numbers**, 8 and 60, written once. Below 8
+the tracking these faces carry turns a word into a smear; above 60 a caption is taller than the row
+it labels. The four artwork sizes and the Tithe and City labels all go through one clamp, so the
+bound cannot drift in one place and be enforced in another — which is how an inspector comes to
+accept a size that the next load silently takes back.
 
 **No scenic artwork goes above the ribbon or below the wheel.** The band above is turn information
 and the wheel runs to the bottom of the module. This is a design constraint rather than an accident
@@ -486,8 +493,8 @@ everything else out* — it is **design decisions in, session state out**.
 So it carries the instruction's box *and* its type size, alignment, opacity and all three
 messages; the wheel's box *and* its 0.5299 ratio, ground flag and opacity; each duty's card box and
 visibility, its two actions' wording, and its acolyte anchor; the two artwork slots with their fit,
-opacity and caption settings; the reached-duty highlight in full; Tithe's label and its three
-resources; the City's label; and the acolyte height and ratios. A box alone was too little — the
+opacity and caption settings; the reached-duty highlight in full; Tithe's label, its size and its
+three resources; the City's label and its size; and the acolyte height and ratios. A box alone was too little — the
 real UI could place the instruction and then not know what it says or whether it is centred, and
 place the artwork slots without knowing whether they cover or contain.
 
@@ -640,6 +647,16 @@ becomes **ACOLYTES IN HAND**, one figure carrying the number still to place.
 The two never share a phase, so reusing the region means there is one place to look for "what is
 not yet on the board". It is independently movable, resizable, lockable and hideable, and its
 geometry is identical in all three states.
+
+**The heading's size is one control covering both phases.** THE CITY and ACOLYTES IN HAND are the
+same line of the same box saying what is in it; two sizes would let the box change its type size
+halfway through a turn for no reason a player could see. It starts at 13px, which is where the
+stylesheet had it — deliberately smaller than TAKE TITHE's 17, because that one is a choice being
+offered alongside the two actions and this one heads a reserve nobody picks. Collapsing them to one
+number would assert those are the same job, which is the one thing the two sizes exist to deny.
+
+Unlike Tithe, nothing here needs room reserved for it: the heading is an ordinary flex child and
+the figures below take what is left.
 
 V3 had the City below the wheel and the in-hand counter in the wheel's centre. V4 brings both into
 the band: the wheel now runs to the bottom of the module, and the count reads better beside the
@@ -848,9 +865,25 @@ artwork's captions are — TAKE TITHE and GAIN COINS are the same kind of thing 
 same kind of choice. It is absolutely positioned, so where it falls in the markup decides
 nothing.
 
-The production export carries `tokenSize`, `tokenSpread` and each resource's `iconName`, because
-those are design decisions the real UI cannot recompute. It never carries the image-pool key or
-the bytes.
+Its size is a control, in the object inspector beside the label itself, and **the card keeps room
+for whatever it turns out to be.** The reserve used to be a flat 36px in the stylesheet, which was
+right for exactly one caption size; it is now read back off the drawn caption after the stage has
+it. Estimating it from the font size was tried and was wrong in a way worth recording: the caption
+spans the card's full width and wraps like any other text, so TAKE TITHE at 34px is two lines in a
+178px card, and a reserve worked out as one line-height let the second line sit on the tokens. How
+tall a run of text turns out to be is a question for the browser.
+
+At the default 17px the derived reserve is exactly the 36 that was hard-coded before, which is the
+point of the exercise: adding the control moved nothing. The stage is pixel-identical in all three
+view states across the change.
+
+The reserve does not stop growing. A 60px caption takes 88px of a 184px card and the tokens get
+what is left — reported by the crowding note rather than hidden by shrinking something, the same
+bargain the rest of this card strikes.
+
+The production export carries `labelSize`, `tokenSize`, `tokenSpread` and each resource's
+`iconName`, because those are design decisions the real UI cannot recompute. It never carries the
+image-pool key or the bytes.
 
 ## Development history
 
