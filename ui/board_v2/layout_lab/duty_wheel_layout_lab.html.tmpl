@@ -156,9 +156,27 @@ body.clean .card.previewing{border-color:#8fae6a44;border-radius:4px;padding:7px
 .art .cap{position:absolute;left:0;right:0;bottom:0;padding:6px 10px;
   font:600 var(--cap)/1.2 Georgia,serif;letter-spacing:.11em;text-transform:uppercase;
   color:#e2d7bc;background:linear-gradient(transparent,#000000cc 62%)}
+/* THE EFFECT LINE AS STORED. The caption shouts by default and this turns that off for it
+   alone: the action NAME keeps its uppercase, because a name is a label and a label is set the
+   way the card sets labels. What this reveals is the sentence duty_text.json actually holds --
+   "Gain X piety", with its proper nouns intact -- which is the form that can be reused in a
+   tooltip or a rules sheet, and the form worth judging the wording in. */
+.art .cap.asis{text-transform:none}
+/* THE NAME IS THE CAPTION MIRRORED, deliberately: same face, same size, same tracking, same
+   scrim, flipped top to bottom. They are a pair on one picture, and two different treatments
+   would read as two different kinds of thing. Both take --cap from the one label-size control,
+   so there is still a single number for how loud this artwork speaks. */
+.art .anm{position:absolute;left:0;right:0;top:0;padding:6px 10px;
+  font:600 var(--cap)/1.2 Georgia,serif;letter-spacing:.11em;text-transform:uppercase;
+  color:#e2d7bc;background:linear-gradient(#000000cc 38%,transparent)}
 /* PREVIEW is informational. It says so, and it does not respond to the pointer the way a choice
    does -- the brief's point is that reading about a duty must not look like taking it. */
-.art .pv{position:absolute;left:8px;top:8px;font:600 10px/1 ui-monospace,monospace;
+/* THE BADGE MOVED TO THE RIGHT when the action name arrived at the top left, because they were
+   sitting on top of each other: on Give Alms the badge covered the word ALMS completely and ate
+   the first half of DONATE BUILDING. The name is content and keeps the corner; the badge is
+   chrome and gives way. It is still the first thing read on a preview -- nothing else is up
+   there on the right. */
+.art .pv{position:absolute;right:8px;top:8px;font:600 10px/1 ui-monospace,monospace;
   letter-spacing:.18em;color:#9fc49a;background:#0d140c;border:1px solid #8fae6a44;
   border-radius:2px;padding:3px 6px}
 body.clean .art.choice:hover{filter:brightness(1.08);cursor:pointer}
@@ -177,8 +195,12 @@ body.clean .art.choice:hover::after{content:"";position:absolute;inset:0;
    said about the same kind of choice. It sits at the BOTTOM of the card and centred, where the
    captions sit, rather than heading the card from the top.
    No scrim: the caption over artwork needs one to stay legible, this card is plain dark. */
-#titheObj .tl{position:absolute;left:0;right:0;bottom:10px;text-align:center;
-  font:600 17px/1.2 Georgia,serif;letter-spacing:.11em;text-transform:uppercase;
+/* `bottom` and #cityObj's padding-top are both OVERWRITTEN on every render with the figure
+   that puts this baseline on the artwork's. The values here are the fallback -- what a browser
+   draws if the inline value never arrives -- and are the figures the derivation gives at the
+   default sizes, so the fallback shows the design rather than some other number. */
+#titheObj .tl{position:absolute;left:0;right:0;bottom:5px;text-align:center;
+  font:600 var(--cap,17px)/1.2 Georgia,serif;letter-spacing:.11em;text-transform:uppercase;
   color:#e2d7bc}
 /* THE ARRANGEMENT IS A TRIANGLE, NOT A STACK OF ROWS. Flex rows can only space tokens by the
    gap BETWEEN their boxes, so every step of the size control also shoved the tokens apart and
@@ -199,10 +221,11 @@ body.clean #titheObj.choice:hover{filter:brightness(1.1);cursor:pointer}
 
 /* Band 3c: the City, and the acolytes in hand that borrow its region while sowing. */
 #cityObj{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
-  border-radius:5px;background:#ffffff05;border:1px solid #ffffff10;padding:9px}
+  border-radius:5px;background:#ffffff05;border:1px solid #ffffff10;padding:9px;
+  padding-top:8.53px}
 body.clean #cityObj{background:#ffffff04}
-#cityObj .cl{font:600 13px/1.1 Georgia,serif;letter-spacing:.16em;text-transform:uppercase;
-  color:#b9ae96}
+#cityObj .cl{font:600 var(--cap,13px)/1.2 Georgia,serif;letter-spacing:.16em;
+  text-transform:uppercase;color:#b9ae96}
 #cityObj .row{display:flex;align-items:flex-end;justify-content:center;gap:14px;flex:1;
   min-height:0}
 #cityObj .row .fig{position:static;transform:none}
@@ -215,6 +238,14 @@ body.clean #cityObj{background:#ffffff04}
 .hl.ring{border-radius:50%;border:2px solid var(--hl);box-shadow:0 0 18px var(--hl)}
 
 /* Inspector */
+/* THE SIZE HERE IS ONLY A STARTING VALUE -- capBase() sets it to each size it is asked about
+   and reads the answer, because a baseline is rounded to a whole pixel and so does not scale.
+   Everything else must match the captions exactly: same face, same weight, same line-height.
+   Off screen rather than display:none, which would give it no layout and nothing to measure. */
+#capProbe{position:absolute;left:-9999px;top:0;visibility:hidden;pointer-events:none;
+  font:600 17px/1.2 Georgia,serif;letter-spacing:.11em}
+#capProbe .bl{display:inline-block;width:0;height:0;vertical-align:baseline}
+
 #side h3{margin:12px 0 5px;font-size:10px;letter-spacing:.1em;text-transform:uppercase;
   color:var(--dim);border-bottom:1px solid var(--line);padding-bottom:3px;cursor:pointer;
   display:flex;justify-content:space-between}
@@ -272,6 +303,12 @@ body.clean #cityObj{background:#ffffff04}
     <input id=fImport type=file accept=".json,application/json" hidden>
   </div>
 
+  <!-- THE BASELINE PROBE. Off screen, never drawn, and the only thing on the page whose job
+       is to be measured. Set exactly as the artwork captions are, at a deliberately large size
+       so the fraction it yields is precise, with a zero-height inline-block inside it: such a
+       box sits ON the baseline, so its bottom edge IS the baseline. -->
+  <div id=capProbe>H<span class=bl></span></div>
+
   <div id=wrap>
     <div id=fit>
       <div id=stage>
@@ -318,6 +355,9 @@ var WHEEL_VIEWBOX = __WHEEL_VIEWBOX__;
 var ELEVATION    = __ELEVATION__;
 var HELPERS      = __HELPER_RANGES__;          // studio-only control ranges, never game state
 var STATE_VERSION = __STATE_VERSION__;
+// The fingerprint of the wording this page was BUILT with. Not the schema version: the schema
+// has not changed, the words on the cards have.
+var TEXT_VERSION = __TEXT_VERSION__;
 var BUILD_VERSION = __BUILD_VERSION__;
 var ACO_RANGE    = __ACOLYTE_RANGE__;
 var ACO_ASPECT   = __ACOLYTE_ASPECT__;
@@ -375,7 +415,152 @@ function haveImage(key){ return !!(key && IMAGES[key]); }
 // so the first ask probes it once and repaints.
 // The Tithe card's own furniture: 10px padding top and bottom, the TAKE TITHE line, and the
 // 10px gap between that line and the pyramid. What is left is what the tokens have to live in.
-var TITHE_CHROME = 10 + 36 + 4;
+//
+// THE BOTTOM RESERVE IS MEASURED, NOT REMEMBERED. It used to be a flat 36 in the stylesheet,
+// which was right for exactly one caption size; now that the size is a control, a fixed reserve
+// would let a big caption climb into the pyramid and leave a small one sitting in dead space.
+// The caption is pinned 10px off the bottom and is 1.2 line-heights tall, so that much has to
+// be kept clear, plus a little air between it and the lowest token. At the default 17px this
+// comes to exactly the 36 that was there before, which is the point: nobody's card moves.
+//
+// It does NOT stop growing. A 60px caption reserves 88px of a 184px card and the tokens have
+// what is left -- reported by tokenOverflow() rather than hidden by shrinking something, the
+// same bargain the rest of this card strikes.
+// =============================================================================================
+// ONE HORIZONTAL LINE ACROSS THE BAND.
+//
+// The action band prints four captions on two lines. THE CITY reads with the artwork's action
+// NAMES along the top; TAKE TITHE reads with the artwork's EFFECT lines along the bottom. Not
+// near them -- ON them, on one baseline each, at whatever the four size controls are set to.
+// Four captions at four heights stops the band reading as a row.
+//
+// They lined up before this by accident, and the accident is worth stating: 9px of City padding
+// put 13px of type exactly where 6px of artwork padding put 17px. Nothing held it there. The
+// first turn of either size control broke it, which is what prompted this.
+//
+// THE LINE BELONGS TO THE BAND, NOT TO THE ARTWORK. Lining the other two up on the artwork was
+// tried first and cannot work: a 26px City heading carries its baseline 24px below its own box
+// top and a 17px artwork name carries its 15.8px below the same top, so there is no padding
+// that puts the first where the second is without pushing it out of the card. Instead the
+// TALLEST caption on each edge sets where that edge's baseline falls and everything else is
+// dropped onto it. At the default sizes the tallest is the artwork, so the artwork does not
+// move and the board is the board.
+//
+// WHY IT IS MEASURED PER SIZE. A baseline sits a fixed fraction of the font size below its line
+// box in theory, and does not in practice: the browser ROUNDS it to a whole pixel, so the
+// fraction read off one face at one line-height comes out 0.875 at 8px, 0.882 at 17 and 0.930
+// at 100.
+//
+// Be precise about what that costs, because the obvious objection is that a self-consistent
+// error cancels. It mostly does -- every caption on an edge is placed by the same function, so
+// a wrong figure moves the whole line rather than breaking it. What does NOT cancel is the
+// difference between two SIZES. Assume the theoretical 0.93 and a 17px caption is thought to
+// carry its baseline 15.81px down when it really carries it 15.0, while a 13px one is thought
+// to carry its 12.09 down when it really carries it 12.0: the two errors differ, and the City
+// heading lands 0.72px off the artwork's at the DEFAULT sizes. Small, and on the one thing this
+// code exists to line up. So the probe is set to each size in use and read.
+var CAP_PAD = 6;            // .art .cap and .art .anm, padding top and bottom
+var CAP_LH = 1.2;           // their line-height, now shared by all four captions
+var BAND_BORDER = 1;        // the Tithe and City cards have a 1px border; the artwork has none
+
+// HOW FAR THE FIRST BASELINE SITS BELOW A LINE BOX'S TOP, in px, at one font size. Cached
+// because it cannot change for a given size, and dropped once if fonts arrive late -- a figure
+// measured against a fallback face would otherwise stand for the rest of the session.
+var CAP_BASE = {};
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(function(){
+  CAP_BASE = {};
+  if (typeof render === "function") render();
+});
+function capBase(size){
+  var F = Math.round(size);
+  if (CAP_BASE[F] !== undefined) return CAP_BASE[F];
+  var probe = el("capProbe"), bl = probe && probe.querySelector(".bl");
+  if (!bl) return F * 0.93;                       // no probe: the theoretical figure, near enough
+  probe.style.fontSize = F + "px";
+  var v = bl.getBoundingClientRect().bottom - probe.getBoundingClientRect().top;
+  if (!(v > 0 && v < F * CAP_LH)) v = F * 0.93;   // a figure that cannot be a baseline is not used
+  CAP_BASE[F] = v;
+  return v;
+}
+// And how far it sits ABOVE the line box's bottom, which is what a caption pinned to the bottom
+// of its card needs. For a caption of more than one line this is still the LAST line's baseline,
+// which is the one that has to agree with its neighbours.
+function capDrop(size){ return Math.round(size) * CAP_LH - capBase(size); }
+
+// THE FOUR CAPTIONS ON THE BAND, by edge. Both artwork slots are here and the right one is not
+// skipped when it is hidden: a duty with one action would otherwise move the whole line, and the
+// band would jump as the wheel is stepped through the duties.
+function topCapSizes(){
+  return [nameSizeOf(artOf("left")), nameSizeOf(artOf("right")), cityCapSize()];
+}
+function bottomCapSizes(){
+  return [artOf("left").labelSize, artOf("right").labelSize, titheCapSize()];
+}
+function maxOf(list, f){
+  return list.reduce(function(m, v){ var x = f(v); return x > m ? x : m; }, 0);
+}
+// Where the two lines fall, as a distance in from the band's top and bottom edges. The tallest
+// caption on the edge gets the artwork's own 6px and sets the line; nothing gets less room.
+function bandTopInset(){ return CAP_PAD + maxOf(topCapSizes(), capBase); }
+function bandBottomInset(){ return CAP_PAD + maxOf(bottomCapSizes(), capDrop); }
+
+// WHAT EACH CAPTION NEEDS SO ITS BASELINE LANDS ON THE LINE. Padding, not position, so a caption
+// that wraps still grows the way it always did -- downwards from the top line, upwards from the
+// bottom one.
+function capPadTop(size, border){ return bandTopInset() - capBase(size) - (border || 0); }
+function capPadBottom(size, border){ return bandBottomInset() - capDrop(size) - (border || 0); }
+
+// The air left between the Tithe caption and the lowest token.
+var TITHE_CAP_AIR = 6;
+
+// WHAT THE CAPTION ACTUALLY TOOK, measured after it was drawn. Cached beside IMG_DIMS and for
+// the same reason: it is a fact about what the browser did, not a layout decision, so it has no
+// business in the state, in an undo snapshot or in a saved session.
+//
+// Estimating it was wrong, and visibly so. `TAKE TITHE` at 34px is TWO lines in a 178px card --
+// the caption spans the card's full width and wraps like any other text -- so a reserve worked
+// out as one line-height let the second line sit on top of the tokens. How tall a run of text
+// turns out to be is a question for the browser, and the answer is a measurement.
+//
+// null means the card was not drawn this pass, and then the one-line figure is the best
+// available guess rather than a stale number from whenever it last was drawn.
+var TITHE_CAP_H = null;
+function titheCapHeight(){
+  return TITHE_CAP_H === null ? Math.round(1.2 * titheCapSize()) : TITHE_CAP_H;
+}
+function titheReserve(){
+  return Math.round(capPadBottom(titheCapSize(), BAND_BORDER))
+       + Math.round(titheCapHeight()) + TITHE_CAP_AIR;
+}
+function titheChrome(){ return 10 + titheReserve() + 4; }
+// READ THE HEIGHT BACK, THEN MAKE THE ROOM. One pass is enough and it cannot loop: the caption
+// is positioned against the card's padding BOX, and padding-bottom does not change that box's
+// WIDTH -- so the text cannot re-wrap in response to the room being made for it. A second pass
+// would measure the same number.
+// DROP EVERY CAPTION ON THE BAND ONTO ITS LINE. One pass, after the stage has the nodes,
+// because a node still in the fragment has no height to read and the Tithe card's reserve
+// depends on how tall its caption turned out.
+function fitBandCaptions(){
+  ["left", "right"].forEach(function(side){
+    var o = el("stage").querySelector('.obj[data-kind="art"][data-id="' + side + '"]');
+    if (!o) return;
+    var e = artOf(side);
+    var anm = o.querySelector(".anm"), cap = o.querySelector(".cap");
+    if (anm) anm.style.paddingTop = capPadTop(nameSizeOf(e)) + "px";
+    if (cap) cap.style.paddingBottom = capPadBottom(e.labelSize) + "px";
+  });
+
+  var city = el("cityObj");
+  // The City heading is an ordinary flex child, so where it starts is the card's own padding.
+  if (city) city.style.paddingTop = capPadTop(cityCapSize(), BAND_BORDER) + "px";
+
+  var card = el("titheObj");
+  var tl = card && card.querySelector(".tl");
+  if (tl) tl.style.bottom = capPadBottom(titheCapSize(), BAND_BORDER) + "px";
+  // AFTER the offset is set, because the reserve is measured against where the caption ended up.
+  TITHE_CAP_H = tl ? tl.offsetHeight : null;
+  if (card) card.style.paddingBottom = titheReserve() + "px";
+}
 var TITHE_SIDES = 20;
 
 var IMG_DIMS = {};
@@ -501,11 +686,55 @@ function shownDuty(){
   return (S.previewDuty && S.duties[S.previewDuty]) ? S.previewDuty : null;
 }
 function previewing(){ return S.view !== "action" && !!shownDuty(); }
+// WHAT THE ACTION DOES -- Gain Piety -- at the foot of the artwork.
+//
+// It used to read `a.name || a.shortLabel`, which worked only because every duty had the same
+// string in both: the generator wrote one label into both fields. They are two different things
+// now, and the order matters -- a box whose name is still undecided must fall back to what it
+// does, not to nothing.
 function artLabel(side){
   var d = shownDuty();
   if (!d) return "";
   var a = actionOf(d, artOf(side).slot);
-  return (a && (a.name || a.shortLabel)) || artOf(side).slot;
+  return (a && (a.shortLabel || a.name)) || artOf(side).slot;
+}
+// THE ACTION'S OWN NAME -- Devotion, Silversmith -- at the head of it. Null until a duty's
+// wording is settled, and a box without one draws no line at all rather than an empty strip,
+// which would read as a missing asset.
+// What an EMPTY box calls itself. Blank when the name is already on screen above it, so the
+// placeholder adds a fact rather than an echo.
+function phLabel(side, a, e){
+  if (e.labelVisible && artName(side)) return "";
+  return (a && (a.name || a.shortLabel)) || e.slot;
+}
+// HOW MANY ACTIONS THE SHOWN DUTY HAS. Taxation and Allocation have one; the rest have two.
+// Read off the state rather than off a list here, because duty_text.json is where it is decided
+// and a second list would be a second thing to keep in step.
+// THE NAME'S SIZE, falling back to the caption's. A session saved before the two sizes were
+// separate carries only `labelSize`, and the head should open at the size that session was saved
+// at rather than at a default that would quietly resize somebody's composition on load.
+function nameSizeOf(e){
+  var n = +e.nameSize;
+  return (isNaN(n) || n <= 0) ? e.labelSize : n;
+}
+function dutyActions(slug){
+  var D = slug && S.duties[slug];
+  return (D && D.actions) || 2;
+}
+// Whether THIS side's box is drawn for the duty on screen. The right box is simply absent on a
+// one-action duty: the left box keeps its size and its place, and nothing slides over to fill
+// the gap, which is the same rule the rest of this layout follows -- Tithe and the City never
+// move because something else changed either.
+function artUsed(side){
+  if (side !== "right") return true;
+  var d = shownDuty();
+  return !d || dutyActions(d) > 1;
+}
+function artName(side){
+  var d = shownDuty();
+  if (!d) return "";
+  var a = actionOf(d, artOf(side).slot);
+  return (a && a.name) || "";
 }
 
 function objOf(kind, id){
@@ -970,16 +1199,20 @@ function render(){
     ["left", "right"].forEach(function(side){
       var e = artOf(side);
       if (!e.visible) return;
+      if (!artUsed(side)) return;       // Taxation and Allocation have one action
       var a = shown ? (actionOf(shown, e.slot) || {}) : {};
       var cls = "art " + e.fit + (isPreview ? "" : " choice");
       var inner;
       if (haveImage(a.scenic)) inner = '<img src="' + imgSrc(a.scenic) + '" alt="">';
       else if (a.scenic && a.scenicName){
         cls += " missing";
-        inner = '<div class=ph><b>' + esc(a.name || e.slot) + '</b>Reload: '
+        // THE PLACEHOLDER NAMES THE BOX ONLY WHEN NOTHING ELSE DOES. With the action name now
+        // drawn at the head of the artwork, repeating it in the middle was the same word three
+        // times on one empty box; it falls back to the slot when a duty has no name yet.
+        inner = '<div class=ph><b>' + esc(phLabel(side, a, e)) + '</b>Reload: '
               + esc(a.scenicName) + '</div>';
       } else {
-        inner = '<div class=ph><b>' + esc(a.name || e.slot) + '</b>scenic artwork</div>';
+        inner = '<div class=ph><b>' + esc(phLabel(side, a, e)) + '</b>scenic artwork</div>';
       }
       var d = make("art", side, rectOf("art", side), cls,
                    '<span class=nm>artwork ' + side + ' · ' + esc(e.slot) + '</span>' + inner,
@@ -987,9 +1220,20 @@ function render(){
       d.style.opacity = e.opacity;
       if (e.labelVisible && artLabel(side)){
         var cap = document.createElement("div");
-        cap.className = "cap"; cap.style.setProperty("--cap", e.labelSize + "px");
+        // A CLASS RATHER THAN AN INLINE STYLE, so the state of the switch can be read off
+        // the DOM by anything looking at it -- a test, or somebody with the inspector open.
+        cap.className = "cap" + (S.display.effectUpper ? "" : " asis");
+        cap.style.setProperty("--cap", e.labelSize + "px");
         cap.textContent = artLabel(side);
         d.appendChild(cap);
+      }
+      // Same switch as the caption, because they are one decision: either the box is labelled or
+      // it is a bare picture, and a name without its effect would be the wrong half to keep.
+      if (e.labelVisible && artName(side)){
+        var anm = document.createElement("div");
+        anm.className = "anm"; anm.style.setProperty("--cap", nameSizeOf(e) + "px");
+        anm.textContent = artName(side);
+        d.appendChild(anm);
       }
       // THE BADGE IS THE POINT OF THE PREVIEW. Reading about a duty must not look like taking it.
       if (isPreview){
@@ -1006,6 +1250,9 @@ function render(){
   // alternative to taking what a duty offers, so it has no business on screen while you are
   // still reading.
   var titheMode = shows("tithe");
+  // FORGET THE MEASUREMENT WHEN THE CARD IS NOT DRAWN. Keeping it would mean the overflow
+  // reading quoted a caption height from some earlier state of the card.
+  TITHE_CAP_H = null;
   if (titheMode !== "no" && S.tithe.visible){
     var T = S.tithe;
     var res = (T.resources || []);
@@ -1017,10 +1264,14 @@ function render(){
             + '</div>';
     var dt = make("tithe", null, rectOf("tithe", null),
                   S.view === "action" ? "choice" : "",
-                  '<span class=nm>tithe</span>' + pyr + '<div class=tl>' + esc(T.label)
+                  '<span class=nm>tithe</span>' + pyr
+                    + '<div class=tl style="--cap:' + titheCapSize() + 'px">' + esc(T.label)
                     + '</div>',
                   WHEEL_Z + 15, titheMode === "ghost");
     dt.id = "titheObj";
+    // The bottom reserve is NOT set here. Everything on this stage is built into a fragment and
+    // inserted in one go at the end of render(), and a node that is not in the document has no
+    // height to read -- see fitBandCaptions(), which runs once the stage has them.
     if (!T.locked && titheMode === "yes") handles(dt, "tithe");
   }
 
@@ -1032,11 +1283,13 @@ function render(){
     var body;
     if (hand){
       var ih = S.inHand;
-      body = '<div class=cl>' + esc(ih.label) + '</div><div class=row>'
+      body = '<div class=cl style="--cap:' + cityCapSize() + 'px">' + esc(ih.label)
+           + '</div><div class=row>'
            + acolyteHtml(ih.seat, acolyteHeight("inHand"), ih.count) + '</div>';
     } else {
       var ch = acolyteHeight("city");
-      body = '<div class=cl>' + esc(c.label) + '</div><div class=row>'
+      body = '<div class=cl style="--cap:' + cityCapSize() + 'px">' + esc(c.label)
+           + '</div><div class=row>'
            + PLAYER_IDS.filter(function(p){ return c.shown[p]; }).map(function(p){
                return acolyteHtml(p, ch, c.counts[p] || 0); }).join("")
            + '</div>';
@@ -1054,7 +1307,9 @@ function render(){
   DUTY_ORDER.forEach(function(slug){
     var D = S.duties[slug], cd = D.card;
     if (!cd.visible) return;
-    var acts = ACTIONS.map(function(a, i){
+    // ONE ROW FOR A ONE-ACTION DUTY. The card summarises what the duty offers, so a
+    // second empty row would be summarising something that is not there.
+    var acts = ACTIONS.slice(0, dutyActions(slug)).map(function(a, i){
       var act = D[a.key] || {};
       return '<div class=act>' + sealHtml(act.seal, i === 0 ? "A" : "B")
            + '<span>' + esc(act.shortLabel || act.name || a.label) + '</span></div>';
@@ -1088,6 +1343,9 @@ function render(){
   }
 
   st.appendChild(frag);
+  // NOW the caption has a height, so now the card can reserve the room it needs. Before
+  // paintMetrics(), because the overflow reading it paints is measured against that reserve.
+  fitBandCaptions();
   drawGuides();
   // LAST, AND FROM HERE RATHER THAN FROM EACH CONTROL. Every path that changes geometry ends in
   // a render, so hanging these off this one place is what makes "always current" true by
@@ -1194,6 +1452,28 @@ function syncHelperInputs(){
 function helperGap(){ return clamp(rowGapSuggested(), HELPERS.gap[0], HELPERS.gap[1]); }
 
 // THE TOKEN READINGS. Derived from the state every time, never stored alongside it.
+// EVERY CAPTION ON THE BOARD IS BOUNDED THE SAME WAY, and 8 and 60 are written once. Below
+// 8 the tracking these faces carry turns a word into a smear; above 60 a caption is taller than
+// the row it labels. Neither is a layout decision worth having four copies of.
+var CAP_MIN = 8, CAP_MAX = 60;
+function clampCap(v){ return clamp(Math.round(+v), CAP_MIN, CAP_MAX); }
+// MISSING IS NOT THE SAME AS OUT OF RANGE. A session from before this control existed has no
+// value at all and must open at the default; a session carrying 900 was composed by somebody
+// who meant "as big as it goes" and opens at 60.
+function capFor(v, dflt){
+  return (v === undefined || v === null || isNaN(+v)) ? clampCap(dflt) : clampCap(v);
+}
+// The two captions that are not on artwork, read the way tokenSize() is read: bounded at the
+// point of use, so a state that arrived out of range draws correctly rather than drawing wrong
+// and waiting to be normalised.
+// NAMED FOR THE CAPTION, NOT FOR THE FIELD. `titheLabelSize` would have been the obvious name
+// and is the wrong one: V4 retired a duty field called `titheLabel`, and the guard that checks
+// no live code still reads it is a substring test, so the obvious name sets it off. The names
+// here follow .tl's own neighbourhood -- titheCapHeight, fitBandCaptions --
+// which is where it belonged anyway.
+function titheCapSize(){ return clampCap(S.tithe.labelSize); }
+function cityCapSize(){ return clampCap(S.city.labelSize); }
+
 function tokenSize(){ return clamp(Math.round(S.tithe.tokenSize), HELPERS.tokenSize[0],
                                    HELPERS.tokenSize[1]); }
 function tokenSpread(){ return clamp(Math.round(S.tithe.tokenSpread), HELPERS.tokenSpread[0],
@@ -1230,7 +1510,7 @@ function tokenBounds(){
 // designer is asking.
 function tokenOverflow(){
   var b = tokenBounds();
-  var overV = b.height - (S.tithe.height - TITHE_CHROME);
+  var overV = b.height - (S.tithe.height - titheChrome());
   var overH = b.width - (S.tithe.width - TITHE_SIDES);
   var worst = Math.max(overV, overH);
   return worst > 0 ? Math.ceil(worst) : 0;
@@ -1725,11 +2005,22 @@ function inspector(){
        + '<option value=cover' + (o.fit === "cover" ? " selected" : "") + '>cover</option>'
        + '<option value=contain' + (o.fit === "contain" ? " selected" : "") + '>contain</option>'
        + '</select></div>';
-    h += '<div class="row two"><span>caption</span>'
+    // ONE SWITCH, TWO SIZES. The switch is still one thing -- the box is either labelled or
+    // it is a bare picture -- but the head and the foot carry different amounts of text and are
+    // sized apart: every action NAME fits one line at 17px while half the effect lines wrap to
+    // two, so they were never going to want the same number for long.
+    h += '<div class="row two"><span>captions</span>'
        + btn(o.labelVisible ? "on" : "off",
              function(){ o.labelVisible = !o.labelVisible; commit(); }, !!o.labelVisible)
-       + field(o.labelSize, function(v){ o.labelSize = clamp(Math.round(v), 8, 60); commit(true); })
        + '</div>';
+    h += '<div class="row two"><span>name size</span>'
+       + field(nameSizeOf(o), function(v){ o.nameSize = clampCap(v);
+                                           commit(true); })
+       + '<span class=hint style="text-align:left">top left</span></div>';
+    h += '<div class="row two"><span>effect size</span>'
+       + field(o.labelSize, function(v){ o.labelSize = clampCap(v);
+                                         commit(true); })
+       + '<span class=hint style="text-align:left">bottom left</span></div>';
     h += '<div class=hint>the picture comes from whichever duty is on screen ('
        + esc(shownDuty() ? S.duties[shownDuty()].name : "none") + ') — load it in '
        + '<b>duty actions</b></div>';
@@ -1744,14 +2035,21 @@ function inspector(){
   }
   if (kind === "tithe"){
     h += '<div class=row><span>label</span>'
-       + '<input type=text id=tiLabel value="' + esc(o.label) + '"></div>'
-       + '<div class=hint>the three resources are edited in <b>tithe</b></div>';
+       + '<input type=text id=tiLabel value="' + esc(o.label) + '"></div>';
+    h += '<div class="row two"><span>label size</span>'
+       + field(titheCapSize(), function(v){ o.labelSize = clampCap(v); commit(true); })
+       + '<span class=hint style="text-align:left">the card keeps room for it</span></div>';
+    h += '<div class=hint>the three resources are edited in <b>tithe</b></div>';
   }
   if (kind === "city"){
     h += '<div class=row><span>label</span>'
-       + '<input type=text id=ciLabel value="' + esc(o.label) + '"></div>'
-       + '<div class=hint>this region becomes <b>acolytes in hand</b> while sowing · counts and '
-       + 'seats are in <b>city &amp; in hand</b></div>';
+       + '<input type=text id=ciLabel value="' + esc(o.label) + '"></div>';
+    h += '<div class="row two"><span>label size</span>'
+       + field(cityCapSize(), function(v){ o.labelSize = clampCap(v); commit(true); })
+       + '<span class=hint style="text-align:left">both phases</span></div>';
+    h += '<div class=hint>this region becomes <b>acolytes in hand</b> while sowing · counts and '
+       + 'seats are in <b>city &amp; in hand</b> · ONE size covers both, because it is the same '
+       + 'line of the same box saying what is in it</div>';
   }
   if (kind === "wheel"){
     h += '<div class=hint>uniform scale only · layout ratio ' + WHEEL_RATIO.toFixed(4)
@@ -2125,7 +2423,15 @@ function panels(){
 
   // ---- action artwork ------------------------------------------------------------------------------
   var ex = '<div class=hint>two boxes, not sixteen. Whichever duty is previewed or reached lends '
-         + 'them its two scenic images.</div>';
+         + 'them its two scenic images.</div>'
+       // ONE SWITCH FOR BOTH BOXES, so it sits above the per-side controls rather than inside
+       // the loop that would otherwise draw it twice saying the same thing.
+       + '<div class=row><span style="text-align:left" colspan=2>'
+       + '<label style="cursor:pointer"><input type=checkbox id=effUp'
+       + (S.display.effectUpper ? ' checked' : '') + '> effect text in upper case</label>'
+       + '</span></div>'
+       + '<div class=hint>the action NAME always shouts; this is the line at the foot. Off shows '
+       + 'it as duty_text.json stores it.</div>';
   ["left", "right"].forEach(function(side){
     var e = artOf(side);
     ex += '<div class=row><span>' + side + '</span><span style="text-align:left">'
@@ -2215,6 +2521,11 @@ function panels(){
       + '<div class=row><span>offset y</span>'
       + '<input type=number id=hlDy min=-300 max=300 value="' + S.display.highlight.dy + '"></div>';
   el("artCtl").innerHTML = ex;
+  var effUp = el("effUp");
+  if (effUp) effUp.onchange = function(){
+    S.display.effectUpper = !!effUp.checked;
+    commit();                      // NOT commitPanels(): rebuilding would drop the focus ring
+  };
   [].forEach.call(el("artCtl").querySelectorAll("[data-artslot]"), function(s){
     s.onchange = function(){ artOf(s.dataset.artslot).slot = s.value; commitPanels(); };
   });
@@ -2630,6 +2941,9 @@ function gameLayout(){
     artwork: {},
     // The mark on the reached duty, which was sized and coloured here and cannot be recreated
     // from anything else in this file.
+    // WHETHER THE EFFECT LINE SHOUTS travels: it is a decision taken here about how the card
+    // reads, and the real UI has the stored sentence but no way to know which form was chosen.
+    effectUpper: !!S.display.effectUpper,
     highlight: {width: H.width, height: H.height, dy: H.dy, style: H.style,
                 visible: !!H.visible, opacity: H.opacity, colour: H.colour},
     // WHEN Tithe and the City are on screen is a phase the game already knows; WHAT they look
@@ -2640,16 +2954,20 @@ function gameLayout(){
     // way the action artwork is identified by filename rather than by bytes.
     tithe: {x: S.tithe.x, y: S.tithe.y, width: S.tithe.width, height: S.tithe.height,
             visible: !!S.tithe.visible, label: S.tithe.label,
+            labelSize: titheCapSize(),
             tokenSize: tokenSize(), tokenSpread: tokenSpread(),
             resources: (S.tithe.resources || []).map(function(r){
               return {key: r.key, name: r.name, iconName: r.iconName || null}; })},
     city: {x: S.city.x, y: S.city.y, width: S.city.width, height: S.city.height,
-           visible: !!S.city.visible, label: S.city.label},
+           visible: !!S.city.visible, label: S.city.label, labelSize: cityCapSize()},
     acolytes: {height: S.acolytes.height, ratios: clone(S.acolytes.ratios)},
   };
   DUTY_ORDER.forEach(function(slug){
     var D = S.duties[slug], F = D.figures, cd = D.card;
-    var d = {name: D.name,
+    // HOW MANY ACTIONS THE DUTY OFFERS travels with it. The real UI cannot work it out from
+    // the two wording slots, because a one-action duty still carries both -- the second simply
+    // says nothing -- and "shortLabel is empty" is a weaker thing to reason from than a count.
+    var d = {name: D.name, actions: D.actions,
              card: {x: cd.x, y: cd.y, width: cd.width, height: cd.height,
                     visible: !!cd.visible}};
     ACTIONS.forEach(function(a){
@@ -2668,7 +2986,8 @@ function gameLayout(){
     var e = artOf(side);
     out.artwork[side] = {x: e.x, y: e.y, width: e.width, height: e.height, slot: e.slot,
                          fit: e.fit, opacity: e.opacity, visible: !!e.visible,
-                         labelVisible: !!e.labelVisible, labelSize: e.labelSize};
+                         labelVisible: !!e.labelVisible, labelSize: e.labelSize,
+                         nameSize: nameSizeOf(e)};
   });
   return out;
 }
@@ -2860,6 +3179,31 @@ function migrate(d){
       d.tithe.resources.forEach(function(r){ if (r) delete r.scale; });
     }
   }
+  // ---- the wording, when duty_text.json has moved under a saved session --------------------
+  // THE AUTOSAVE PROBLEM, and the reason this is not just a normalisation. The lab keeps the
+  // whole state in localStorage and merges it over the defaults on load, so a session saved
+  // before duty_text.json was edited goes on showing the OLD wording for ever: the file is the
+  // owner, the saved copy wins, and it looks exactly like the generator not having been run.
+  //
+  // The fingerprint is what makes this decidable. If the session was saved against a different
+  // wording, its action text is dropped so the defaults fill it; if it matches, anything in
+  // there was typed in the ACTION panel and is somebody's work, so it stays. The file wins when
+  // the file moves, and only then.
+  //
+  // `actions` goes with it, because how many actions a duty has is derived from the same file
+  // and a stale count would leave a box drawn for an action that no longer exists.
+  if (d.duties && d.textVersion !== TEXT_VERSION){
+    DUTY_ORDER.forEach(function(s){
+      var D = d.duties[s];
+      if (!D) return;
+      delete D.actions;
+      ACTIONS.forEach(function(a){
+        if (D[a.key]){ delete D[a.key].name; delete D[a.key].shortLabel; }
+      });
+    });
+  }
+  d.textVersion = TEXT_VERSION;
+
   d.version = STATE_VERSION;
   return d;
 }
@@ -2908,6 +3252,12 @@ function applyState(d){
     // conversion from the flex build. Not here as well: a second delete would mean neither
     // could be shown to matter.
   });
+  // NOT `|| default`: see tokenSpread below. A caption size is never legitimately 0, but the
+  // fall-back is written the same way so that the reason is the same reason everywhere -- what
+  // is missing or unreadable goes back to the default, what is merely out of range is pulled
+  // into range and kept.
+  S.tithe.labelSize = capFor(S.tithe.labelSize, DEFAULT_STATE.tithe.labelSize);
+  S.city.labelSize = capFor(S.city.labelSize, DEFAULT_STATE.city.labelSize);
   S.tithe.tokenSize = clamp(Math.round(+S.tithe.tokenSize || DEFAULT_STATE.tithe.tokenSize),
                             HELPERS.tokenSize[0], HELPERS.tokenSize[1]);
   // A session saved before the triangle carried `tokenGap` instead; migrate() has already turned
@@ -2920,6 +3270,14 @@ function applyState(d){
         || isNaN(+S.tithe.tokenSpread)
           ? DEFAULT_STATE.tithe.tokenSpread : +S.tithe.tokenSpread),
       HELPERS.tokenSpread[0], HELPERS.tokenSpread[1]);
+
+  // NOT `!!S.display.effectUpper`. A session saved before this switch existed has no such
+  // key, and coercing an absent value would turn it OFF on load -- silently restyling every
+  // caption in somebody's saved composition. Absent means "saved before this existed", which is
+  // the default, and only an explicit false turns it off.
+  S.display.effectUpper = (S.display.effectUpper === undefined
+                           || S.display.effectUpper === null)
+                        ? DEFAULT_STATE.display.effectUpper : !!S.display.effectUpper;
 
   S.wheel.width = clamp(S.wheel.width, MIN_SIZE, 4000);
   S.wheel.naturalRatio = WHEEL_RATIO;
@@ -2952,7 +3310,12 @@ function applyState(d){
     e.fit = (e.fit === "contain") ? "contain" : "cover";
     if (ACTIONS.map(function(a){ return a.key; }).indexOf(e.slot) < 0)
       e.slot = side === "left" ? "actionA" : "actionB";
-    e.labelSize = clamp(Math.round(e.labelSize), 8, 60);
+    e.labelSize = clampCap(e.labelSize);
+    // NOT `|| labelSize` inside the clamp: a session saved before the split has no nameSize at
+    // all, and the head must open at the size that session was composed at rather than at this
+    // build's default. nameSizeOf() does the falling back; this only bounds what is there.
+    e.nameSize = (e.nameSize === undefined || e.nameSize === null || isNaN(+e.nameSize))
+               ? null : clampCap(e.nameSize);
   });
   S.players = (Array.isArray(S.players) ? S.players : []).slice(0, 4).map(function(p, i){
     var d0 = DEFAULT_STATE.players[i];

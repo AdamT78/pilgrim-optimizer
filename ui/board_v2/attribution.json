@@ -40,6 +40,16 @@
       "role": "the single wide scene both Clerical action images are cut from, 2172 x 724. Kept forever: if the artwork slots change shape the master is re-cropped, never re-generated, because the same prompt does not produce the same picture twice.",
       "notes": "master, not shipped. The two crops below are what the board draws."
     },
+    "duty_actions/clerical/masters/clerical_master_v02.png": {
+      "state": "present",
+      "title": "Clerical duty action master, second generation",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action art",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "the second wide Clerical scene, 2046 x 768. A SEPARATE GENERATION, not a re-render of v01 and not the same drawing at another size -- v01 is 2172 x 724. Kept forever for the same reason v01 is: the same prompt does not produce the same picture twice, so if the artwork slots change shape this is re-cropped and never re-generated.",
+      "notes": "master, not shipped. Neither generation is retired: v01 and v02 are both on disk and which one the board draws is a composition decision, not a provenance one."
+    },
     "duty_actions/clerical/gain_piety/clerical_gain_piety_v01.png": {
       "state": "present",
       "title": "Clerical gain piety",
@@ -52,6 +62,17 @@
       "reproducibleBy": "tools/duty_art/crop_duty_master.py",
       "notes": "tests/layout_lab/test_duty_art_crop.py re-cuts the master and asserts this file matches pixel for pixel, so the pair cannot drift from its recipe."
     },
+    "duty_actions/clerical/gain_piety/clerical_gain_piety_v02.png": {
+      "state": "present",
+      "title": "Clerical gain piety, second generation",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action art",
+      "source": "cut from duty_actions/clerical/masters/clerical_master_v02.png; the picture itself is model output, the cut is deterministic",
+      "licence": "openai-generated",
+      "role": "the left action image, 1120 x 560, the LEFT window onto the v02 master",
+      "modifications": "cut from the master at x 3 to 1123, y 104 to 664. VERIFIED BY RE-CUTTING, not quoted from a command line: the committed file is byte-identical to that rectangle of the master. The two windows overlap by 200 px and share that strip exactly.",
+      "notes": "NOT PRODUCED BY tools/duty_art/crop_duty_master.py, and the entry deliberately carries no reproducibleBy for that reason. The script anchors both crops flush to the master's edges; this pair is inset 3 px at each side, symmetrically, and is RGB where the script writes RGBA. The geometry above is exact and was checked, so the pair is reproducible in principle -- but not by the tool as it stands, and saying otherwise would give a false recipe. OPEN QUESTION: whether the 3 px inset is deliberate, such as trimming a dirty generated edge, or incidental. If deliberate the script wants an inset option and this pair should go under the same pixel-for-pixel guard as v01; if not, the pair should be re-cut flush."
+    },
     "duty_actions/clerical/gain_coins/clerical_gain_coins_v01.png": {
       "state": "present",
       "title": "Clerical gain coins",
@@ -63,6 +84,17 @@
       "modifications": "cropped from the master by tools/duty_art/crop_duty_master.py: vertical centre y 82 to 642, horizontal x 1052 to 2172. The two windows overlap by 68 px and share that strip exactly, which is the point of cutting one drawing twice rather than generating two.",
       "reproducibleBy": "tools/duty_art/crop_duty_master.py",
       "notes": "tests/layout_lab/test_duty_art_crop.py re-cuts the master and asserts this file matches pixel for pixel, so the pair cannot drift from its recipe."
+    },
+    "duty_actions/clerical/gain_coins/clerical_gain_coins_v02.png": {
+      "state": "present",
+      "title": "Clerical gain coins, second generation",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action art",
+      "source": "cut from duty_actions/clerical/masters/clerical_master_v02.png; the picture itself is model output, the cut is deterministic",
+      "licence": "openai-generated",
+      "role": "the right action image, 1120 x 560, the RIGHT window onto the v02 master",
+      "modifications": "cut from the master at x 923 to 2043, y 104 to 664. VERIFIED BY RE-CUTTING, not quoted from a command line: the committed file is byte-identical to that rectangle of the master. The two windows overlap by 200 px and share that strip exactly.",
+      "notes": "NOT PRODUCED BY tools/duty_art/crop_duty_master.py -- see the note on its left counterpart, which carries the full reasoning and the open question about the 3 px inset."
     },
     "tokens/masters/token_wheat_v01.png": {
       "state": "present",

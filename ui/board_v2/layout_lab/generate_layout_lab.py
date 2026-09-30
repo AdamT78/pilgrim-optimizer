@@ -164,7 +164,7 @@ def viewbox_of(text: str) -> tuple:
 # wheel-centre medallions retire, the status line loses its context field -- so the version moves
 # with it and older files are migrated rather than reinterpreted.
 STATE_VERSION = 4
-BUILD_VERSION = "4.5"
+BUILD_VERSION = "4.6"
 
 # ---- the design envelope -------------------------------------------------------------------
 CANVAS_W, CANVAS_H = 1400, 1200
@@ -183,18 +183,93 @@ FULL_BOARD_CANVASES = (2039, 2283)
 # the player gets now that nothing on the wheel is labelled.
 #
 # THE ACTION NAMES ARE STARTING TEXT and every one stays editable. Taxation's two are left as
-# "Action A" and "Action B" on purpose: the real wording is not decided, and a plausible
-# placeholder is the kind that survives into production unnoticed.
+# THE ACTION WORDING IS NOT HERE ANY MORE. It moved to ../duty_text.json, which the UI edits
+# constantly and which also records the engine action each box answers to; leaving a copy in this
+# tuple would have meant two files disagreeing about what a card says the first time one of them
+# was edited alone. What stays is what this file is actually for: the slug, the duty's own name,
+# and the angle its space sits at on the wheel.
 DUTIES = (
-    ("clerical",    "Clerical",    0,   "Gain Piety",         "Gain Coins"),
-    ("taxation",    "Taxation",    45,  "Action A",           "Action B"),
-    ("produce",     "Produce",     90,  "Gain Wheat",         "Gain Stone"),
-    ("build_roads", "Build Roads", 135, "Build Road",         "Build Shrine"),
-    ("construct",   "Construct",   180, "Construct Building", "Construct Road"),
-    ("give_alms",   "Give Alms",   225, "Give Alms",          "Donate Building"),
-    ("ordination",  "Ordination",  270, "Ordain",             "Send on Mission"),
-    ("allocation",  "Allocation",  315, "Relocate Acolytes",  "Special Activity"),
+    ("clerical",    "Clerical",    0),
+    ("taxation",    "Taxation",    45),
+    ("produce",     "Produce",     90),
+    ("build_roads", "Build Roads", 135),
+    ("construct",   "Construct",   180),
+    ("give_alms",   "Give Alms",   225),
+    ("ordination",  "Ordination",  270),
+    ("allocation",  "Allocation",  315),
 )
+
+DUTY_TEXT_ASSET = HERE.parent / "duty_text.json"
+
+
+def duty_text_version(said: dict) -> str:
+    """A short fingerprint of the wording this build was made with.
+
+    THE AUTOSAVE IS WHY THIS EXISTS. The lab keeps the whole state in localStorage and merges it
+    over the defaults on load, so a session saved before duty_text.json was edited goes on
+    showing the old wording for ever -- the file is the owner, and the saved copy silently wins.
+    It looks exactly like the generator not having been run.
+
+    Stamping the version into the state lets migrate() tell "this session predates the current
+    wording" from "somebody typed this in the panel", which is the whole difference between
+    refreshing it and throwing away their work. Only what actually reaches a card is hashed, so
+    editing the notes at the top of that file changes nothing.
+    """
+    import hashlib
+    parts = []
+    for slug in sorted(said):
+        for key in sorted(said[slug]):
+            slot = said[slug][key]
+            parts.append("%s.%s=%s|%s" % (slug, key, "" if slot is None else (slot["name"] or ""),
+                                          "" if slot is None else slot["shortLabel"]))
+    return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()[:12]
+
+
+def duty_text() -> dict:
+    """What each action box says, read rather than retyped.
+
+    LOUD ON ANYTHING MISSING. A duty with no entry, or a slot with no `shortLabel`, is a card that
+    would draw with a blank caption and look finished -- so the build stops instead. `name` may be
+    null, because the duty action names are still being decided and a box without one simply does
+    not draw its top line; `shortLabel` may not, because that is the caption the card has always
+    had.
+    """
+    import json
+    if not DUTY_TEXT_ASSET.is_file():
+        raise SystemExit("ui/board_v2/duty_text.json is missing; it owns what the action boxes "
+                         "say and nothing here has a copy")
+    data = json.loads(DUTY_TEXT_ASSET.read_text(encoding="utf-8")).get("duties", {})
+    out = {}
+    for slug, _name, _angle in DUTIES:
+        entry = data.get(slug)
+        if not entry:
+            raise SystemExit("duty_text.json has no entry for %r" % slug)
+        slots = {}
+        for key, _ in ACTIONS:
+            slot = entry.get(key, "missing")
+            # A NULL actionB IS A DUTY WITH ONE ACTION, not an oversight -- Taxation and
+            # Allocation have one each. It is spelled null rather than left out so that a typo in
+            # the key still fails loudly; `entry.get(key)` alone could not tell the two apart.
+            if slot is None:
+                if key == ACTIONS[0][0]:
+                    raise SystemExit("duty_text.json: %s has no first action, which no duty "
+                                     "can be missing" % slug)
+                slots[key] = None
+                continue
+            if not isinstance(slot, dict):
+                raise SystemExit("duty_text.json: %s has no %s" % (slug, key))
+            label = slot.get("shortLabel")
+            if not isinstance(label, str) or not label.strip():
+                raise SystemExit("duty_text.json: %s/%s has no shortLabel, so its card would "
+                                 "draw an empty caption" % (slug, key))
+            name = slot.get("name")
+            if name is not None and (not isinstance(name, str) or not name.strip()):
+                raise SystemExit("duty_text.json: %s/%s has a blank name. Use null for 'not "
+                                 "decided'; a blank string is indistinguishable from a mistake"
+                                 % (slug, key))
+            slots[key] = {"name": name, "shortLabel": label}
+        out[slug] = slots
+    return out
 
 ACTIONS = (("actionA", "Action A"), ("actionB", "Action B"))
 
@@ -383,6 +458,18 @@ ACOLYTE_ASPECT = 0.42
 # a good deal smaller than a duty's acolytes, not merely a little.
 ACOLYTE_RATIOS = {"duty": 100, "city": 85, "inHand": 95}
 
+# THE TWO CAPTIONS THAT ARE NOT ON ARTWORK. Both were hard-coded in the stylesheet until the
+# artwork captions became adjustable and these two were the only text on the board that still
+# could not be. The numbers are what the stylesheet already said, so a build before this change
+# and a build after it draw the same picture -- the control starts where the design was.
+#
+# They are NOT one number. TAKE TITHE is a choice being offered and is set at the action
+# artwork's 17px so the row reads as one row of choices; THE CITY heads a reserve nobody picks
+# and sits back at 13px. Collapsing them to a single constant would assert those are the same
+# job, which is the one thing the two sizes exist to deny.
+TITHE_LABEL_SIZE = 17
+CITY_LABEL_SIZE = 13
+
 PLAYERS = (
     {"id": "p1", "label": "Player 1", "colour": "#8fae6a"},
     {"id": "p2", "label": "Player 2", "colour": "#7fa7c8"},
@@ -434,7 +521,7 @@ def card_slots() -> dict:
     """
     return {slug: {"x": CARD_X0 + i * (CARD_W + CARD_GAP), "y": RIBBON["y"],
                    "width": CARD_W, "height": RIBBON["height"]}
-            for i, (slug, _n, _d, _a, _b) in enumerate(DUTIES)}
+            for i, (slug, _n, _d) in enumerate(DUTIES)}
 
 
 def default_state() -> dict:
@@ -448,14 +535,27 @@ def default_state() -> dict:
     a lost asset say which file to reload.
     """
     slots = card_slots()
+    TEXT = duty_text()
+    text_version = duty_text_version(TEXT)
     duties = {}
-    for slug, name, deg, a_name, b_name in DUTIES:
+    for slug, name, deg in DUTIES:
         fx, fy = _on_ellipse(deg, FIG_RX, FIG_RY)
         fu, fv = _norm(fx, fy)
         d = {"name": name, "clock": deg}
-        for slot, text in (("actionA", a_name), ("actionB", b_name)):
+        # DERIVED FROM THE TEXT FILE, not a second switch to keep in step. A duty either has
+        # a second action or it does not, and duty_text.json is where that is said.
+        d["actions"] = 1 if TEXT[slug][ACTIONS[1][0]] is None else 2
+        for slot, _ in ACTIONS:
             # ASSETS ONLY -- no geometry. The two shared slots in `display` own the box.
-            d[slot] = {"name": text, "shortLabel": text,
+            # `name` and `shortLabel` are two different things now and no longer shadow each
+            # other: the name is the duty action's own (DEVOTION), the shortLabel is what it does
+            # (GAIN PIETY). They were the same string in every duty until the wording moved into
+            # duty_text.json, which is why one caption could stand in for both.
+            # The second slot still EXISTS on a one-action duty: the schema is fixed, an
+            # older session merges against it, and the export keeps one shape for all eight. It
+            # simply carries nothing and is never drawn.
+            said = TEXT[slug][slot] or {"name": None, "shortLabel": ""}
+            d[slot] = {"name": said["name"], "shortLabel": said["shortLabel"],
                        "seal": None, "sealName": None,
                        "scenic": None, "scenicName": None}
         seats = START_SEATS.get(slug) or [PLAYERS[0]["id"]] * 4
@@ -469,6 +569,10 @@ def default_state() -> dict:
 
     return {
         "version": STATE_VERSION,
+        # WHICH WORDING THIS STATE WAS BUILT WITH -- not the schema version, which is `version`
+        # above and has not moved. See duty_text_version(): it is how migrate() tells a session
+        # that predates an edit to duty_text.json from one somebody typed wording into.
+        "textVersion": text_version,
         "canvas": {"width": CANVAS_W, "height": CANVAS_H},
         "background": BACKGROUNDS[0][0],
         "attachToWheel": True,
@@ -496,10 +600,27 @@ def default_state() -> dict:
                   "opacity": 1.0, "locked": False, "image": None, "imageName": None},
         "duties": duties,
         "display": {
+            # ONE SWITCH FOR BOTH BOXES, and it sits on `display` rather than beside the
+            # sizes, because it is not the same kind of decision. How big a caption is belongs
+            # to the box it is in; whether the effect line shouts is a convention for the whole
+            # composition, and having it twice would only raise the question of what a board
+            # with one box shouting and one not is supposed to mean.
+            #
+            # TRUE is the default because that is how the card has always drawn. Turning it off
+            # shows what duty_text.json actually stores -- "Gain X piety" rather than
+            # "GAIN X PIETY" -- which is the form the wording is written and reused in.
+            "effectUpper": True,
+            # TWO SIZES PER BOX. `labelSize` is the effect line at the foot and keeps its
+            # name, so an older session opens at the size it was saved with; `nameSize` is the
+            # action name at the head and is new. They start equal and are set separately,
+            # because the two lines are different lengths -- seven of the fourteen effect lines
+            # wrap to two at 17px while every name fits one.
             "artLeft": dict(ART_LEFT, slot="actionA", fit="cover", opacity=1.0,
-                            locked=False, visible=True, labelVisible=True, labelSize=17),
+                            locked=False, visible=True, labelVisible=True,
+                            labelSize=17, nameSize=17),
             "artRight": dict(ART_RIGHT, slot="actionB", fit="cover", opacity=1.0,
-                             locked=False, visible=True, labelVisible=True, labelSize=17),
+                             locked=False, visible=True, labelVisible=True,
+                             labelSize=17, nameSize=17),
             # A lightweight overlay at the reached duty's own anchor. Never a change to the
             # imported wheel asset: the SVG may not expose its segments, and recolouring
             # somebody's artwork from a layout tool is not this page's business.
@@ -512,7 +633,8 @@ def default_state() -> dict:
                           # it rather than taking the colour on trust.
                           "visible": True, "opacity": 0.5, "colour": "#e8c877"},
         },
-        "tithe": dict(TITHE, label="TAKE TITHE", visible=True, locked=False,
+        "tithe": dict(TITHE, label="TAKE TITHE", labelSize=TITHE_LABEL_SIZE,
+                      visible=True, locked=False,
                       image=None, imageName=None,
                       tokenSize=TOKEN_SIZE_DEFAULT, tokenSpread=TOKEN_SPREAD_DEFAULT,
                       resources=[{"key": k, "name": n, "icon": None, "iconName": None}
@@ -528,7 +650,7 @@ def default_state() -> dict:
         },
         "players": [dict(p) for p in PLAYERS],
         "city": dict(CITY, locked=False, visible=True,
-                     label="THE CITY",
+                     label="THE CITY", labelSize=CITY_LABEL_SIZE,
                      counts=dict(START_CITY_COUNTS),
                      shown={p["id"]: True for p in PLAYERS}),
         # NOT A BOX ANY MORE. The acolytes in hand are drawn in the City's region while sowing,
@@ -546,7 +668,7 @@ def default_state() -> dict:
 _TOKENS = ("__BUILD_VERSION__", "__DEFAULT_STATE__", "__CANVAS_W__", "__CANVAS_H__",
            "__DUTY_ORDER__", "__DUTY_ACTIONS__", "__FULL_BOARDS__", "__SAFE_MARGIN__",
            "__WHEEL_RATIO__", "__WHEEL_VIEWBOX__", "__ELEVATION__", "__HELPER_RANGES__",
-           "__STATE_VERSION__", "__ACOLYTE_RANGE__", "__ACOLYTE_ASPECT__",
+           "__STATE_VERSION__", "__TEXT_VERSION__", "__ACOLYTE_RANGE__", "__ACOLYTE_ASPECT__",
            "__BACKGROUNDS__", "__ZOOM_STEPS__", "__PLAYER_IDS__", "__VIEW_STATES__",
            "__SEAL_SIZE__", "__WHEEL_SVG__")
 
@@ -572,6 +694,7 @@ def build() -> str:
         # double quotes, and a JavaScript string literal tolerates neither.
         "__WHEEL_SVG__": json.dumps(wheel_svg()),
         "__STATE_VERSION__": json.dumps(STATE_VERSION),
+        "__TEXT_VERSION__": json.dumps(duty_text_version(duty_text())),
         "__BUILD_VERSION__": json.dumps(BUILD_VERSION),
         "__ACOLYTE_RANGE__": json.dumps([ACOLYTE_MIN, ACOLYTE_MAX]),
         "__ACOLYTE_ASPECT__": json.dumps(ACOLYTE_ASPECT),

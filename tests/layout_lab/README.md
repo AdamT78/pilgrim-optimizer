@@ -12,8 +12,8 @@ Nothing here is needed to build or run the lab. It is needed to trust it.
 ```
 npm install playwright                       # once; the suites import it directly
 python3 ui/board_v2/layout_lab/generate_layout_lab.py --out out/lab.html
-node  tests/layout_lab/accept44.mjs          # or accept4 / accept41 / accept42 / accept421 / accept43
-python3 tests/layout_lab/mut44.py            # or mut4 / mut41 / mut42 / mut421 / mut43 / mut4py
+node  tests/layout_lab/accept45.mjs          # or accept4 / accept41 / accept42 / accept421 / accept43 / accept44
+python3 tests/layout_lab/mut45b.py           # or mut4 / mut41 / mut42 / mut421 / mut43 / mut44 / mut45 / mut4py
 pytest tests/layout_lab/                     # the primitive's own tests
 ```
 
@@ -36,7 +36,7 @@ per mutation, and there are 248 of them.
 ## What each file is
 
 **`accept4.mjs` · `accept41.mjs` · `accept42.mjs` · `accept421.mjs` · `accept43.mjs` ·
-`accept44.mjs`** — the acceptance suites, one per release, each covering what that release
+`accept44.mjs` · `accept45.mjs`** — the acceptance suites, one per release, each covering what that release
 introduced. They are kept separate rather than merged because each one is the record of a specific
 set of claims, and a merged suite would lose which release a failure belongs to.
 152 + 71 + 66 + 129 + 48 + 94 checks.
@@ -112,3 +112,40 @@ and it was found only because the next run reported that target as stale.
 It now restores from an `atexit` hook, turns `SIGTERM`/`SIGINT`/`SIGHUP` into ordinary exits so
 that hook runs, and asserts at the end that both files came back to their original bytes. If you
 ever `kill -9` it, check `git status` before doing anything else.
+
+
+## V4.5, and two mutation suites of a different shape
+
+`accept45.mjs` covers the Tithe and City caption sizes and the one thing they immediately broke:
+the four captions on the action band print on two baselines, and they did so before only because
+9px of City padding happened to put 13px of type exactly where 6px of artwork padding put 17px.
+Whether they still do is a question about rendered glyphs. The suite probes them with a zero-size
+inline-block — such a box sits *on* the baseline, so its bottom edge is the baseline — across a
+matrix of size combinations, and reports the worst spread on either line.
+
+Two details in there are load-bearing and easy to undo by tidying:
+
+A **top-anchored caption is probed on its first line's baseline and a bottom-anchored one on its
+last**, because those are the lines that sit next to each other. Probing the wrong end made a
+working version of the alignment look badly broken and sent an afternoon after a bug that was in
+the measurement.
+
+The **tolerance is 0.3px, not 1px.** Correct code scores 0.02, so the headroom is enormous; the
+point of the number is the other end. At 0.75 this suite passed with the per-size baseline
+measurement replaced by a constant, which misplaces the City heading by 0.72px at the default
+sizes. The slack was hiding a real defect.
+
+`mut45.py` and `mut45b.py` are shaped differently from the mutation suites above them. Those
+mutate the **built page** through `mutation_tools`; these two mutate the **generator and the
+template** and rebuild, then run `accept45.mjs` *and* the pytest guards for each mutation.
+
+That is deliberate, and it came out of a survivor. Run against the browser suite alone, five
+mutations survived — and three of them turned out to be mistakes in the suite rather than in the
+code, while the other two were invisible to a browser by their nature: reordering two statements
+with no visual consequence cannot be seen in pixels, and a misplaced baseline cannot be seen in a
+source file. Reporting "nothing noticed this" after running one of them is a claim about the
+other. So both run, and a mutation is only a survivor if neither notices.
+
+They restore from an on-disk stash rather than only in a `finally` block, because an earlier run
+was killed by a timeout mid-mutation and left a mutated template on disk — after which the next
+run reported the suite red and blamed the code. Any run finding a stash puts it back first.

@@ -1,0 +1,173 @@
+{
+  "note": "What the layout lab prints on a duty's two action boxes, and the only place it is written down. `name` is the duty action's NAME and goes top-left on the artwork; `shortLabel` is WHAT IT DOES and goes bottom-left. generate_layout_lab.py reads this at build time; DUTIES carries no copy.",
+  "casing": "Stored as written and uppercased by CSS, so it stays usable somewhere quieter. A `name` is a label and takes Title Case; a `shortLabel` is a sentence and takes sentence case, with proper nouns -- Abbey, Special Activities, the Alms table -- kept. Never store it already shouting.",
+  "theX": "The literal X is a stand-in for a number that depends on majority, and it is what the card shows while the layout is being composed. `byStrength` holds the real wording per duty strength; Duties.md gives majority value 2, parity 1, minority 1. Only Devotion is filled in -- an effect need not scale with the duty value, and a guessed number on a card is worse than an honest X.",
+  "singleAction": "Taxation and Allocation have ONE action, so `actionB` is null. The lab draws no right artwork box for them and the ribbon card lists one row; nothing else moves, because nothing in this layout cascades.",
+  "joinsOn": "`engineAction` is an id from docs/rules/DutyTiles.md under Canonical Action Names, and is the only thread to the engine. tests/layout_lab/test_duty_text.py fails if an id here is not in that table.",
+  "filling": "A null `name` is an open question; a null `actionB` means the duty has one action. `unresolved` records a question about the DUTY rather than its wording.",
+  "duties": {
+    "clerical": {
+      "actionA": {
+        "engineAction": "clerical_devotion",
+        "name": "Devotion",
+        "shortLabel": "Gain X piety",
+        "byStrength": {
+          "minority": "Gain 1 piety",
+          "parity": "Gain 1 piety",
+          "majority": "Gain 2 piety"
+        }
+      },
+      "actionB": {
+        "engineAction": "clerical_silversmith",
+        "name": "Silversmith",
+        "shortLabel": "Gain X silver",
+        "byStrength": {
+          "minority": null,
+          "parity": null,
+          "majority": null
+        }
+      }
+    },
+    "taxation": {
+      "actionA": {
+        "engineAction": "taxation",
+        "name": "Taxation",
+        "shortLabel": "Gain X resources",
+        "byStrength": {
+          "minority": null,
+          "parity": null,
+          "majority": null
+        }
+      },
+      "actionB": null
+    },
+    "produce": {
+      "actionA": {
+        "engineAction": "produce_wheat",
+        "name": "Produce Wheat",
+        "shortLabel": "Gain X wheat",
+        "byStrength": {
+          "minority": null,
+          "parity": null,
+          "majority": null
+        }
+      },
+      "actionB": {
+        "engineAction": "produce_stone",
+        "name": "Produce Stone",
+        "shortLabel": "Gain X stone",
+        "byStrength": {
+          "minority": null,
+          "parity": null,
+          "majority": null
+        }
+      }
+    },
+    "build_roads": {
+      "actionA": {
+        "engineAction": null,
+        "name": "Build Roads",
+        "shortLabel": "Build / upgrade / demolish X roads",
+        "byStrength": {
+          "minority": null,
+          "parity": null,
+          "majority": null
+        },
+        "unresolved": "The engine has only build_roads_deferred, a scaffold with no spatial placement, so neither box has an id to point at until that lands."
+      },
+      "actionB": {
+        "engineAction": null,
+        "name": "Build Shrine",
+        "shortLabel": "Build shrine",
+        "byStrength": {
+          "minority": null,
+          "parity": null,
+          "majority": null
+        }
+      }
+    },
+    "construct": {
+      "actionA": {
+        "engineAction": "construct_building",
+        "name": "Construct",
+        "shortLabel": "Construct building",
+        "byStrength": {
+          "minority": null,
+          "parity": null,
+          "majority": null
+        }
+      },
+      "actionB": {
+        "engineAction": "construct_road_deferred",
+        "name": "Construct",
+        "shortLabel": "Build / upgrade / demolish 1 road",
+        "byStrength": {
+          "minority": null,
+          "parity": null,
+          "majority": null
+        },
+        "unresolved": "DutyTiles.md gives Construct THREE engine actions for two boxes: construct_building, construct_road_deferred and construct_building_and_road_deferred. The third has no box."
+      }
+    },
+    "give_alms": {
+      "actionA": {
+        "engineAction": "give_alms_paid",
+        "name": "Alms",
+        "shortLabel": "Pay up to X silver / wheat to progress X on the Alms table",
+        "byStrength": {
+          "minority": null,
+          "parity": null,
+          "majority": null
+        }
+      },
+      "actionB": {
+        "engineAction": "give_alms_donate_building",
+        "name": "Donate Building",
+        "shortLabel": "Donate 1 building for end game points",
+        "byStrength": {
+          "minority": null,
+          "parity": null,
+          "majority": null
+        }
+      }
+    },
+    "ordination": {
+      "actionA": {
+        "engineAction": "ordination",
+        "name": "Ordain",
+        "shortLabel": "Pay up to X wheat to promote X serfs to acolytes",
+        "byStrength": {
+          "minority": null,
+          "parity": null,
+          "majority": null
+        },
+        "engineStep": "ordain"
+      },
+      "actionB": {
+        "engineAction": "ordination",
+        "name": "Mission",
+        "shortLabel": "Pay up to X wheat to promote X serfs to acolytes",
+        "byStrength": {
+          "minority": null,
+          "parity": null,
+          "majority": null
+        },
+        "engineStep": "mission",
+        "unresolved": "Ordination is ONE engine action with two ORDERED steps, ordain then mission, so these boxes are steps rather than alternatives. Their effect lines are also identical as written, which is worth a second look: DutyTiles.md describes ordain as `pay 1 wheat, move 1 worker village -> abbey`, and says nothing that would make mission do the same thing."
+      }
+    },
+    "allocation": {
+      "actionA": {
+        "engineAction": "allocation",
+        "name": "Allocation",
+        "shortLabel": "Relocate X acolytes between Abbey and Special Activities",
+        "byStrength": {
+          "minority": null,
+          "parity": null,
+          "majority": null
+        }
+      },
+      "actionB": null
+    }
+  }
+}

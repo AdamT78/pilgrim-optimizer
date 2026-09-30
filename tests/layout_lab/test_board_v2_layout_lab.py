@@ -880,9 +880,14 @@ def test_nothing_on_the_wheel_identifies_which_duty_a_space_is(lab):
     """
     d = lab.default_state()
     for slug, D in d["duties"].items():
-        assert set(D) == {"name", "clock", "actionA", "actionB", "card", "figures"}, (
-            "%s carries %s -- V4 duties hold wording, a ribbon card and an acolyte anchor, and "
-            "nothing that would mark out a space on the wheel" % (slug, sorted(D)))
+        # `actions` is 1 or 2 -- Taxation and Allocation have one. Derived from
+        # duty_text.json at build time rather than being a second switch to keep in step, and it
+        # says nothing about WHERE a duty is, which is all this guard is about.
+        assert set(D) == {"name", "clock", "actionA", "actionB", "actions", "card",
+                          "figures"}, (
+            "%s carries %s -- V4 duties hold wording, how many actions the duty has, a ribbon "
+            "card and an acolyte anchor, and nothing that would mark out a space on the wheel"
+            % (slug, sorted(D)))
         assert "label" not in D and "summary" not in D and "titheLabel" not in D
 
     # The template must not draw one either. A blocklist of names to look for is the weak way to
@@ -1402,7 +1407,7 @@ def test_an_action_owns_its_assets_and_the_two_shared_slots_own_the_geometry(lab
             for banned in ("x", "y", "width", "height", "u", "v"):
                 assert banned not in a
 
-    assert sorted(d["display"]) == ["artLeft", "artRight", "highlight"], sorted(d["display"])
+    assert sorted(d["display"]) == ["artLeft", "artRight", "effectUpper", "highlight"], sorted(d["display"])
     for side in ("artLeft", "artRight"):
         e = d["display"][side]
         assert {"x", "y", "width", "height", "slot"} <= set(e), sorted(e)
@@ -1496,37 +1501,41 @@ def test_the_eight_reference_cards_open_as_one_row_in_wheel_order(lab):
 
 
 
-def test_the_action_names_are_the_known_ones_and_taxation_is_left_obviously_blank(lab):
-    """Starting wording, and one deliberate gap.
+def test_every_duty_opens_with_the_wording_its_file_gives_it(lab):
+    """Starting wording, and how many actions each duty offers.
 
-    The brief supplies the action names that are already decided and says Taxation's are not --
-    to use temporary labels and not to invent final wording. An obvious placeholder is the point:
-    a plausible invented name is exactly the kind that survives into production unnoticed.
+    This used to assert a list of labels typed here and that Taxation was still an obvious
+    placeholder. Both premises are gone: the wording moved into ui/board_v2/duty_text.json, and
+    Taxation was given real wording along with the news that it has only ONE action. A list
+    retyped here would now be a third copy of something that already has an owner, so this checks
+    the relationship instead -- every duty opens at whatever that file says.
 
-    Falsified by giving Taxation something that reads like a real action.
+    Falsified by the generator inventing wording, or by a duty's action count disagreeing with
+    the file.
     """
     d = lab.default_state()
-    known = {
-        "clerical": ("Gain Piety", "Gain Coins"),
-        "allocation": ("Relocate Acolytes", "Special Activity"),
-        "build_roads": ("Build Road", "Build Shrine"),
-        "ordination": ("Ordain", "Send on Mission"),
-        "give_alms": ("Give Alms", "Donate Building"),
-        "produce": ("Gain Wheat", "Gain Stone"),
-        "construct": ("Construct Building", "Construct Road"),
-    }
-    for slug, (a, b) in known.items():
-        got = (d["duties"][slug]["actionA"]["name"], d["duties"][slug]["actionB"]["name"])
-        assert got == (a, b), "%s opens as %s, not %s" % (slug, got, (a, b))
+    said = lab.duty_text()
 
-    tax = (d["duties"]["taxation"]["actionA"]["name"], d["duties"]["taxation"]["actionB"]["name"])
-    assert tax == ("Action A", "Action B"), (
-        "Taxation has been given wording (%s). The brief says not to invent it -- an obvious "
-        "placeholder is the point, because a plausible one survives into production" % (tax,))
+    for slug, slots in said.items():
+        first = slots[lab.ACTIONS[0][0]]
+        assert d["duties"][slug]["actionA"]["shortLabel"] == first["shortLabel"], slug
+        assert d["duties"][slug]["actionA"]["name"] == first["name"], slug
 
-    # The short planning label is what the compact summary shows, so it must not be empty.
+    # ONE ACTION OR TWO, and the state must agree with the file rather than carry its own idea.
+    single = [s for s, v in said.items() if v[lab.ACTIONS[1][0]] is None]
+    assert sorted(single) == ["allocation", "taxation"], (
+        "the one-action duties are %s; Taxation and Allocation are the two that have one action "
+        "each, so a change here is a change to the game" % sorted(single))
     for slug, D in d["duties"].items():
-        for slot, _ in lab.ACTIONS:
+        want = 1 if said[slug][lab.ACTIONS[1][0]] is None else 2
+        assert D["actions"] == want, (
+            "%s says it has %d actions and its file says %d" % (slug, D["actions"], want))
+
+    # The summary row needs something to print for every action a duty actually has.
+    for slug, D in d["duties"].items():
+        for i, (slot, _) in enumerate(lab.ACTIONS):
+            if i >= D["actions"]:
+                continue
             assert D[slot]["shortLabel"], "%s/%s has no short label for its summary" % (slug, slot)
 
 
@@ -1666,7 +1675,7 @@ applyState(v1);
 const C = S.duties.clerical;
 out.actionA = {keys: Object.keys(C.actionA).sort(),
                scenic: C.actionA.scenic, scenicName: C.actionA.scenicName,
-               name: C.actionA.name};
+               name: C.actionA.name, shortLabel: C.actionA.shortLabel};
 out.actionB = {scenic: C.actionB.scenic, name: C.actionB.name};
 out.stillHasArt = ("art" in C) || ("art" in C.actionA);
 out.figures = {x: C.figures.x, y: C.figures.y, arrangement: C.figures.arrangement,
@@ -1688,8 +1697,13 @@ process.stdout.write(JSON.stringify(out));
     assert a["keys"] == ["name", "scenic", "scenicName", "seal", "sealName", "shortLabel"], (
         "the migrated Action A is not a V3 asset object: %s" % a["keys"])
     assert not got["stillHasArt"], "an `art` object survived the migration"
-    assert a["name"] == "Gain Piety", (
-        "Action A did not take this build's default wording: %r" % a["name"])
+    # A V1 file has no action objects at all -- it carried a single `art` -- so the migration
+    # has to synthesise them, and what it synthesises is this build's default wording. Both
+    # fields, because they stopped being the same string in V4.5.
+    assert a["shortLabel"] == "Gain X piety", (
+        "Action A did not take this build's default wording: %r" % a["shortLabel"])
+    assert a["name"] == "Devotion", (
+        "Action A did not take this build's default action name: %r" % a["name"])
 
     b = got["actionB"]
     assert b["scenic"] is None, "Action B came up holding an image nothing loaded"
@@ -1961,7 +1975,10 @@ process.stdout.write(JSON.stringify({layout: g, text: JSON.stringify(g)}));
 
     assert len(g["duties"]) == 8
     for slug, d in g["duties"].items():
-        assert set(d) == {"name", "card", "actionA", "actionB", "figures"}, sorted(d)
+        # `actions` travels because the real UI cannot infer it: a one-action duty still
+        # carries both wording slots, the second simply saying nothing.
+        assert set(d) == {"name", "actions", "card", "actionA", "actionB",
+                          "figures"}, sorted(d)
         assert set(d["card"]) == {"x", "y", "width", "height", "visible"}, sorted(d["card"])
         for slot in ("actionA", "actionB"):
             assert set(d[slot]) == {"name", "shortLabel"}, (
@@ -1972,12 +1989,16 @@ process.stdout.write(JSON.stringify({layout: g, text: JSON.stringify(g)}));
             sorted(d["figures"])
         assert "label" not in d, "%s exports a duty label, which V4 removed" % slug
         assert "summary" not in d, "%s exports a V3 summary box" % slug
-    assert g["duties"]["clerical"]["actionA"]["name"] == "Gain Piety"
+    # BOTH fields travel, and they are two different things: the action's name and what it
+    # does. They were the same string until V4.5, so an export carrying only one of them would
+    # have looked complete.
+    assert g["duties"]["clerical"]["actionA"]["shortLabel"] == "Gain X piety"
+    assert g["duties"]["clerical"]["actionA"]["name"] == "Devotion"
 
     for side in ("left", "right"):
         e = g["artwork"][side]
         assert set(e) == {"x", "y", "width", "height", "slot", "fit", "opacity", "visible",
-                          "labelVisible", "labelSize"}, sorted(e)
+                          "labelVisible", "labelSize", "nameSize"}, sorted(e)
         assert e["slot"] in ("actionA", "actionB")
     assert g["artwork"]["left"]["slot"] != g["artwork"]["right"]["slot"]
 
@@ -1988,8 +2009,11 @@ process.stdout.write(JSON.stringify({layout: g, text: JSON.stringify(g)}));
     # session's image pool happens to hold the bytes is not a fact about the layout at all.
     # `iconName` is the handle production resolves against, exactly as the action artwork is
     # identified by filename rather than by bytes.
-    assert set(g["tithe"]) == {"x", "y", "width", "height", "visible", "label", "resources",
-                               "tokenSize", "tokenSpread"}, sorted(g["tithe"])
+    assert set(g["tithe"]) == {"x", "y", "width", "height", "visible", "label", "labelSize",
+                               "resources", "tokenSize", "tokenSpread"}, sorted(g["tithe"])
+    # HOW BIG A LINE OF TYPE IS TRAVELS, on the same footing as status.size: it was decided here
+    # and the real UI cannot recover it from anything else in the file.
+    assert isinstance(g["tithe"]["labelSize"], int) and g["tithe"]["labelSize"] > 0
     assert isinstance(g["tithe"]["tokenSize"], int) and g["tithe"]["tokenSize"] > 0
     assert isinstance(g["tithe"]["tokenSpread"], int) and g["tithe"]["tokenSpread"] >= 0
     assert "tokenGap" not in g["tithe"], (
@@ -2001,7 +2025,9 @@ process.stdout.write(JSON.stringify({layout: g, text: JSON.stringify(g)}));
         "the default state names an icon it has not got")
     assert '"icon"' not in text.replace('"iconName"', ""), (
         "the production export carries an image-pool key for a tithe token")
-    assert set(g["city"]) == {"x", "y", "width", "height", "visible", "label"}, sorted(g["city"])
+    assert set(g["city"]) == {"x", "y", "width", "height", "visible", "label",
+                              "labelSize"}, sorted(g["city"])
+    assert isinstance(g["city"]["labelSize"], int) and g["city"]["labelSize"] > 0
     assert "counts" not in g["city"] and "shown" not in g["city"], (
         "the City exports this session's occupancy as production layout")
 
@@ -2489,17 +2515,21 @@ process.stdout.write(JSON.stringify(out));
 
     assert got["clerical"]["leftAsset"] == "k_piety", got["clerical"]
     assert got["clerical"]["rightAsset"] == "k_coins", got["clerical"]
-    assert got["clerical"]["leftLabel"] == "Gain Piety", got["clerical"]
+    assert got["clerical"]["leftLabel"] == "Gain X piety", got["clerical"]
 
     assert got["produce"]["leftAsset"] == "k_wheat", (
         "opening Produce did not change what the left slot resolves to: %s" % got["produce"])
-    assert got["produce"]["leftLabel"] == "Gain Wheat", got["produce"]
+    assert got["produce"]["leftLabel"] == "Gain X wheat", got["produce"]
 
     # A duty with no artwork loaded resolves to nothing rather than to the last one's picture.
     assert got["taxation"]["leftAsset"] is None, (
         "opening a duty with no artwork left the previous duty's picture in the slot: %s"
         % got["taxation"])
-    assert got["taxation"]["leftLabel"] == "Action A", got["taxation"]
+    # Taxation has real wording now, and only ONE action -- so the left box carries its caption
+    # and the right box is not drawn at all. `rightLabel` here is whatever artLabel() would say
+    # if it were asked, which is why it is not what this checks; the drawn-or-not claim belongs
+    # with the acceptance suite that can see the DOM.
+    assert got["taxation"]["leftLabel"] == "Gain X resources", got["taxation"]
 
     assert got["backAgain"] == got["clerical"], (
         "coming back to Clerical did not restore what it showed: %s vs %s"
@@ -2521,13 +2551,64 @@ process.stdout.write(JSON.stringify(out));
 
     assert "scenic" not in got["slotKeys"] and "image" not in got["slotKeys"], (
         "an artwork slot stores a picture of its own: %s" % got["slotKeys"])
-    assert got["swapped"]["label"] == "Gain Coins", got["swapped"]
+    assert got["swapped"]["label"] == "Gain X silver", got["swapped"]
     assert got["swapped"]["dutyUntouched"] == "k_piety", (
         "swapping which action the slot shows wrote through to the duty: %s" % got["swapped"])
 
 
 
 @needs_node
+@needs_node
+def test_a_session_saved_before_the_wording_changed_takes_the_new_wording(lab):
+    """The symptom this exists to prevent: the generator is re-run, duty_text.json has been
+    edited, and the lab still shows the old words.
+
+    The lab keeps the whole state in localStorage and merges it over the defaults, so the saved
+    copy wins -- for ever, silently, and looking exactly like the build not having happened. The
+    stamped wording fingerprint is what makes the two cases separable: a session saved against
+    different words gives them up, one saved against these keeps whatever was typed into the
+    ACTION panel.
+
+    Falsified by dropping the fingerprint check, which would discard typed wording on every
+    load, or by removing the refresh, which brings the original bug back.
+    """
+    body = """
+const out = {};
+// A session from an earlier build: old wording, no fingerprint, and some real work of its own.
+const old = JSON.parse(JSON.stringify(DEFAULT_STATE));
+old.duties.clerical.actionA.name = "Gain Piety";
+old.duties.clerical.actionA.shortLabel = "Gain Piety";
+old.duties.taxation.actionA.shortLabel = "Action A";
+delete old.duties.taxation.actions;
+delete old.textVersion;
+old.wheel.width = 1000;
+applyState(old);
+out.stale = [S.duties.clerical.actionA.name, S.duties.clerical.actionA.shortLabel,
+             S.duties.taxation.actionA.shortLabel, S.duties.taxation.actions];
+out.staleKeptWork = S.wheel.width;
+
+// A session saved against THIS wording, carrying something somebody typed.
+const mine = JSON.parse(JSON.stringify(DEFAULT_STATE));
+mine.textVersion = TEXT_VERSION;
+mine.duties.clerical.actionA.shortLabel = "My own wording";
+applyState(mine);
+out.typed = S.duties.clerical.actionA.shortLabel;
+process.stdout.write(JSON.stringify(out));
+"""
+    got = _in_node(body)
+    d = lab.default_state()
+    want = [d["duties"]["clerical"]["actionA"]["name"],
+            d["duties"]["clerical"]["actionA"]["shortLabel"],
+            d["duties"]["taxation"]["actionA"]["shortLabel"],
+            d["duties"]["taxation"]["actions"]]
+    assert got["stale"] == want, (
+        "a session saved before the wording changed kept the old words: %s" % (got["stale"],))
+    assert got["staleKeptWork"] == 1000, (
+        "refreshing the wording threw away the rest of the session")
+    assert got["typed"] == "My own wording", (
+        "wording typed into the panel was discarded; the fingerprint matched, so it is work")
+
+
 def test_an_older_layout_keeps_its_work_and_loses_only_its_coordinates():
     """What V4 carries across the boundary, and the one thing it deliberately does not.
 
@@ -2641,9 +2722,10 @@ process.stdout.write(JSON.stringify(out));
         "the acolyte ring kept its 950px-wheel coordinates: %s" % (got["anchor"],))
 
     # ---- and the shape is V4's
-    assert got["dutyKeys"] == ["actionA", "actionB", "card", "clock", "figures", "name"], (
+    assert got["dutyKeys"] == ["actionA", "actionB", "actions", "card", "clock",
+                               "figures", "name"], (
         "the migrated duty is not a V4 duty: %s" % got["dutyKeys"])
-    assert got["displayKeys"] == ["artLeft", "artRight", "highlight"], got["displayKeys"]
+    assert got["displayKeys"] == ["artLeft", "artRight", "effectUpper", "highlight"], got["displayKeys"]
     assert got["inHandKeys"] == ["count", "label", "seat"], got["inHandKeys"]
     assert got["retired"] == [], "retired V3 switches survived: %s" % got["retired"]
     assert got["titheRetired"] == [], (
@@ -2838,6 +2920,58 @@ process.stdout.write(JSON.stringify(out));
 
 
 
+def _strip_js_comments(src):
+    """Drop // and /* */ comments, leaving string literals alone.
+
+    Deliberately small and deliberately not a JavaScript parser. It tracks quotes so that a `//`
+    inside a string -- a URL, say -- is not mistaken for the start of a comment, and it tracks
+    nothing else, because the only thing asking is a name search.
+    """
+    out = []
+    i, n = 0, len(src)
+    quote = None
+    while i < n:
+        c = src[i]
+        if quote:
+            out.append(c)
+            if c == "\\" and i + 1 < n:
+                out.append(src[i + 1])
+                i += 2
+                continue
+            if c == quote:
+                quote = None
+            i += 1
+            continue
+        if c in "\"'`":
+            quote = c
+            out.append(c)
+            i += 1
+            continue
+        if c == "/" and i + 1 < n and src[i + 1] == "/":
+            j = src.find("\n", i)
+            i = n if j < 0 else j
+            continue
+        if c == "/" and i + 1 < n and src[i + 1] == "*":
+            j = src.find("*/", i + 2)
+            i = n if j < 0 else j + 2
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
+def test_the_comment_stripper_leaves_code_and_strings_alone():
+    """Because the guard above is only as good as this, and it is easy to get subtly wrong."""
+    assert _strip_js_comments("var a = 1; // titheLabel\nvar b = 2;") == "var a = 1; \nvar b = 2;"
+    assert _strip_js_comments("/* titheLabel */ var a = 1;") == " var a = 1;"
+    # A RETIRED NAME INSIDE A STRING IS STILL A READ as far as this guard is concerned -- it is
+    # how bracket access is written -- so the stripper must not swallow string literals.
+    assert "titheLabel" in _strip_js_comments('var a = d["titheLabel"];')
+    # A // inside a string is not a comment.
+    assert _strip_js_comments('var u = "http://x/y"; var b = 2;') == 'var u = "http://x/y"; var b = 2;'
+    assert _strip_js_comments("var s = 'a // b'; // gone") == "var s = 'a // b'; "
+
+
 def test_no_live_code_reaches_for_the_retired_status_fields(lab):
     """The fields V4 retired, checked for by name, because a stale read is silent.
 
@@ -2851,12 +2985,18 @@ def test_no_live_code_reaches_for_the_retired_status_fields(lab):
     Excluding it by slicing the file at migrate() would also excuse anything defined after it, so
     the exemption is per-function instead.
 
+    COMMENTS ARE NOT CODE, and this used to scan them. It went red on a comment that merely
+    NAMED a retired field while explaining why a new helper was called something else -- a false
+    positive that pushes the next person towards a worse name or towards deleting the guard. A
+    check for stale READS has no business reading prose, so the comments come out first. This
+    does not weaken it: the falsification below puts a real read back and it still fails.
+
     Falsified by leaving a live read of any retired name outside the migration.
     """
     tmpl = TMPL.read_text(encoding="utf-8")
     start = tmpl.index("function migrate(")
     end = tmpl.index("function deepMerge(")
-    live = tmpl[:start] + tmpl[end:]
+    live = _strip_js_comments(tmpl[:start] + tmpl[end:])
 
     retired = ["status.context", "status.preset", "contextVisible", "contextSize",
                "autoContext", "accentColour", "summaryDim", "titheInSummary", "inHandOverride",
@@ -2998,3 +3138,305 @@ def test_the_status_panel_offers_one_field_per_state_and_writes_only_that_one(la
     assert sorted(d["status"]["byView"]) == sorted(v[0] for v in lab.VIEW_STATES)
 
 
+
+
+# =================================================================================================
+# THE TWO CAPTIONS THAT ARE NOT ON ARTWORK.
+#
+# TAKE TITHE and THE CITY were the last text on the board whose size was fixed in the stylesheet.
+# Making them adjustable is easy; making them adjustable WITHOUT MOVING ANYTHING is the part
+# worth guarding, and that is what most of these are about.
+# =================================================================================================
+
+def test_the_caption_controls_open_at_the_size_the_stylesheet_already_drew(lab):
+    """A new control must start where the design is, or shipping it silently restyles the board.
+
+    The two numbers exist in two places -- the generator's default and the stylesheet's fallback
+    -- and they have to agree. The fallback is not decoration: it is what a browser draws if the
+    custom property is ever missing, so a fallback that disagreed with the default would make a
+    failure mode look like a design.
+
+    Falsified by changing either number on its own.
+    """
+    S = lab.default_state()
+    assert S["tithe"]["labelSize"] == lab.TITHE_LABEL_SIZE == 17
+    assert S["city"]["labelSize"] == lab.CITY_LABEL_SIZE == 13
+
+    tmpl = TMPL.read_text(encoding="utf-8")
+    tl = re.search(r"#titheObj \.tl\{[^}]*?font:600 var\(--cap,(\d+)px\)", tmpl, re.S)
+    cl = re.search(r"#cityObj \.cl\{font:600 var\(--cap,(\d+)px\)", tmpl)
+    assert tl and int(tl.group(1)) == S["tithe"]["labelSize"], (
+        "the Tithe caption's CSS fallback is not the default size, so a page whose property "
+        "never arrived would draw a different board rather than the same one")
+    assert cl and int(cl.group(1)) == S["city"]["labelSize"], (
+        "the City caption's CSS fallback is not the default size")
+
+
+def test_the_two_captions_are_not_one_number(lab):
+    """They label different kinds of thing and are deliberately different sizes.
+
+    TAKE TITHE is a choice offered alongside the two actions and matches their caption; THE CITY
+    heads a reserve nobody picks. A single shared constant would assert those are the same job.
+
+    Falsified by collapsing them to one constant.
+    """
+    assert lab.TITHE_LABEL_SIZE != lab.CITY_LABEL_SIZE
+
+
+def test_the_tithe_card_reserves_what_the_caption_measured_not_what_it_guessed(lab):
+    """The reserve is derived, and derived from the RENDER rather than from the font size.
+
+    A reserve computed as one line-height is wrong as soon as the caption wraps, which TAKE
+    TITHE does at 34px in a 178px card -- the second line then sits on the tokens. So the height
+    is read back off the drawn element. Three things have to stay true:
+
+      * it is read AFTER the stage has the node, because everything is built into a fragment and
+        a detached node measures 0 -- which is exactly the bug this went through;
+      * it is read BEFORE paintMetrics(), because the overflow figure painted there is measured
+        against the reserve;
+      * the cached measurement is cleared when the card is not drawn, so a stale height from an
+        earlier state cannot be quoted at you.
+
+    Falsified by moving the call above the insertion, below paintMetrics(), or by dropping the
+    reset.
+    """
+    tmpl = _strip_js_comments(TMPL.read_text(encoding="utf-8"))
+    insert = tmpl.index("st.appendChild(frag);")
+    fit = tmpl.index("fitBandCaptions();", insert)
+    metrics = tmpl.index("paintMetrics();", insert)
+    assert insert < fit < metrics, (
+        "fitBandCaptions() must run after the stage has the nodes and before the metrics that "
+        "are measured against what it sets")
+    body = tmpl[tmpl.index("function fitBandCaptions("):]
+    body = body[:body.index("\n}\n") + 3]
+    assert "offsetHeight" in body, "fitBandCaptions() no longer measures the caption"
+    # THE OFFSET IS SET BEFORE THE HEIGHT IS READ. A caption moved after it was measured is a
+    # caption whose reserve was worked out against where it used to be.
+    assert body.index("tl.style.bottom") < body.index("offsetHeight"), (
+        "the Tithe caption's height is read before it has been put on its line")
+    # `card.style.paddingBottom`, not the first paddingBottom in the function -- that one is the
+    # artwork's effect caption being dropped onto the bottom line, which is a different thing
+    # and comes earlier.
+    assert body.index("offsetHeight") < body.index("card.style.paddingBottom"), (
+        "the reserve is set before the height it is supposed to reserve has been read")
+    assert re.search(r"TITHE_CAP_H = null;\s*\n\s*if \(titheMode", tmpl), (
+        "the measurement is no longer forgotten when the Tithe card is not drawn, so the "
+        "overflow reading can quote a caption height from some earlier state")
+
+
+def test_nothing_still_reserves_a_fixed_thirty_six(lab):
+    """The old constant is gone, and the derived one agrees with it at the default.
+
+    36px of bottom padding was right for exactly one caption size. The number surviving anywhere
+    -- in the stylesheet, or as the old TITHE_CHROME -- would mean something is still sizing
+    itself for a 17px caption while the control says otherwise.
+
+    Falsified by leaving TITHE_CHROME in place, or by putting padding-bottom:36px back.
+    """
+    tmpl = _strip_js_comments(TMPL.read_text(encoding="utf-8"))
+    assert "TITHE_CHROME" not in tmpl, (
+        "TITHE_CHROME is back, and it cannot know how tall the caption turned out to be")
+    assert "titheChrome()" in tmpl
+    # The derived figure at the default must be the number that was there before: 10px off the
+    # bottom, a 17px caption at 1.2 line-heights, and 6px of air.
+    derived = 10 + round(1.2 * lab.TITHE_LABEL_SIZE) + 6
+    assert derived == 36, derived
+    # THE STYLESHEET KEEPS ITS 36, and that is not a leftover -- it is the same bargain as the
+    # `var(--cap,17px)` fallback beside it. render() overwrites it on every pass, so the CSS
+    # value is only ever seen if the property never arrived, and it should then show the design
+    # rather than some other number. What it must not do is disagree with the derived default.
+    css = re.search(r"#titheObj\{[^}]*?padding-bottom:(\d+)px\}", tmpl, re.S)
+    assert css, "the Tithe card no longer carries a bottom reserve in the stylesheet at all"
+    assert int(css.group(1)) == derived, (
+        "the stylesheet's fallback reserve is %s but the derived default is %d, so a page that "
+        "never got the inline value would draw a card nobody designed"
+        % (css.group(1), derived))
+
+
+def test_one_size_covers_the_city_in_both_of_its_phases(lab):
+    """The same line of the same box, saying what is in it -- so one control, not two.
+
+    The region is THE CITY until sowing and ACOLYTES IN HAND during it. Both are drawn into the
+    same `.cl` element and both read cityCapSize(). Two controls would let the box change its
+    type size halfway through a turn for no reason a player could see.
+
+    Falsified by giving either branch its own size.
+    """
+    tmpl = _strip_js_comments(TMPL.read_text(encoding="utf-8"))
+    branches = re.findall(r"body = '<div class=cl style=\"--cap:' \+ (\w+)\(\)", tmpl)
+    assert len(branches) == 2, ("expected the City's two phases to be drawn by two branches, "
+                                "found %d" % len(branches))
+    assert branches[0] == branches[1] == "cityCapSize", branches
+
+
+def test_every_caption_on_the_board_is_bounded_by_the_same_two_numbers(lab):
+    """8 and 60, written once.
+
+    There were four copies before the Tithe and the City wanted them too. Six copies that agree
+    only by coincidence is how a bound drifts: somebody widens one and the inspector starts
+    accepting a size that normalisation then silently takes back on the next load.
+
+    Falsified by writing the bound out again anywhere.
+    """
+    tmpl = _strip_js_comments(TMPL.read_text(encoding="utf-8"))
+    assert tmpl.count("CAP_MIN = 8, CAP_MAX = 60") == 1
+    assert "8, 60" not in tmpl, (
+        "the caption bound is written out longhand somewhere as well as being named")
+    # Every caption size goes through it -- the artwork's two and the two new ones.
+    for fn in ("clampCap(v)", "clampCap(e.labelSize)", "clampCap(e.nameSize)",
+               "clampCap(S.tithe.labelSize)", "clampCap(S.city.labelSize)"):
+        assert fn in tmpl, "%s no longer shares the common bound" % fn
+
+
+def test_a_caption_size_that_is_missing_and_one_that_is_absurd_are_different_problems(lab):
+    """Absent goes to the default; out of range is pulled into range and kept.
+
+    A session saved before these controls existed has no value and must open at the design. A
+    session carrying 900 was composed by somebody who meant "as big as it goes", and opening it
+    at 17 would throw away a decision rather than bound it.
+
+    Falsified by writing either case as `+v || default`, which conflates them.
+    """
+    tmpl = _strip_js_comments(TMPL.read_text(encoding="utf-8"))
+    body = tmpl[tmpl.index("function capFor("):][:400]
+    assert "undefined" in body and "null" in body and "isNaN" in body, (
+        "capFor no longer distinguishes a missing value from an unreadable one")
+    # The `||`s above are the guard, and are fine. What is banned is falling back THROUGH one --
+    # `+v || dflt` quietly turns a legitimate 0 into the default, and 0 is how a hand-edited
+    # file says "smallest". The bound takes it to 8; `||` would take it to 17.
+    assert not re.search(r"\+?v\s*\|\|\s*\w*[Dd]flt", body), (
+        "capFor falls back with `||`, which cannot tell a missing size from a zero one")
+    assert body.index("isNaN") < body.index("?"), (
+        "the unreadable case is no longer decided before the value is used")
+    for key in ("S.tithe.labelSize = capFor(", "S.city.labelSize = capFor("):
+        assert key in tmpl, "%s is not normalised on load" % key
+
+
+# =================================================================================================
+# ONE LINE ACROSS THE ACTION BAND.
+#
+# The four captions on the band print on two baselines: the artwork's action names and THE CITY
+# along the top, the artwork's effect lines and TAKE TITHE along the bottom. What these guard is
+# that it stays true at any combination of the four sizes -- it was true before only by accident,
+# and the accident did not survive the first turn of a size control.
+#
+# WHETHER THE BASELINES ACTUALLY COINCIDE IS A QUESTION FOR A BROWSER, not for a source file, and
+# tests/layout_lab/accept45.mjs is what asks it: it probes the rendered captions across a matrix
+# of sizes and reports the worst spread on either line. These are the shape of the arithmetic
+# that makes the answer come out, which is the part that can rot without anything looking wrong.
+# =================================================================================================
+
+def test_the_band_line_is_set_by_the_tallest_caption_on_it(lab):
+    """Not by the artwork, and this is the whole design.
+
+    Lining the other two up on the artwork was tried first and is impossible in general: a 26px
+    City heading carries its baseline 24px below its own box top, a 17px artwork name carries
+    its 15.8px below the same top, and no padding reconciles those without pushing a caption out
+    of its card. Doing it anyway means a silent clamp -- which is what the first version did, and
+    what it looked like was a control that stopped working past a certain number.
+
+    So the tallest caption on each edge sets that edge's line and everything else is dropped onto
+    it. At the default sizes the tallest IS the artwork, so the artwork does not move.
+
+    Falsified by taking the max over anything narrower, or by measuring from the artwork alone.
+    """
+    tmpl = _strip_js_comments(TMPL.read_text(encoding="utf-8"))
+    for fn, edge in (("bandTopInset", "topCapSizes"), ("bandBottomInset", "bottomCapSizes")):
+        body = tmpl[tmpl.index("function %s(" % fn):][:200]
+        assert "maxOf(%s()" % edge in body, (
+            "%s no longer takes the tallest caption on its edge, so a caption bigger than the "
+            "artwork's is either clipped or silently left off the line" % fn)
+        assert "CAP_PAD" in body, "%s no longer leaves the artwork's own padding" % fn
+
+
+def test_both_artwork_slots_count_towards_the_line_even_when_one_is_hidden(lab):
+    """A one-action duty hides the right slot, and the band must not jump when it does.
+
+    Taxation and Allocation draw one artwork; the others draw two. If the hidden slot's size were
+    dropped from the reckoning, stepping the wheel from Clerical to Taxation could move both
+    baselines -- the whole band shifting as a side effect of which duty is reached.
+
+    Falsified by filtering the sizes by artUsed().
+    """
+    tmpl = _strip_js_comments(TMPL.read_text(encoding="utf-8"))
+    for fn in ("topCapSizes", "bottomCapSizes"):
+        body = tmpl[tmpl.index("function %s(" % fn):][:280]
+        assert '"left"' in body and '"right"' in body, (
+            "%s no longer counts both artwork slots" % fn)
+        assert "artUsed" not in body and "visible" not in body, (
+            "%s skips a slot that is not on screen, so the band moves when a one-action duty "
+            "is reached" % fn)
+    assert "cityCapSize()" in tmpl[tmpl.index("function topCapSizes("):][:280]
+    assert "titheCapSize()" in tmpl[tmpl.index("function bottomCapSizes("):][:280]
+
+
+def test_the_baseline_is_measured_at_each_size_because_it_does_not_scale(lab):
+    """A baseline is rounded to a whole pixel, so the fraction is not one number.
+
+    Read off the same face at line-height 1.2 it comes out 0.875 at 8px, 0.882 at 17 and 0.930 at
+    100. A single constant is around three pixels out at the top of the range, on the one thing
+    this code exists to line up. So the probe is set to each size in use and read.
+
+    The probe must also be REAL: off screen rather than display:none, which has no layout and
+    nothing to measure, and set exactly as the captions are or it answers about another face.
+
+    Falsified by caching one fraction and scaling it, or by hiding the probe properly.
+    """
+    tmpl = TMPL.read_text(encoding="utf-8")
+    assert "#capProbe" in tmpl and 'id=capProbe' in tmpl
+    css = re.search(r"#capProbe\{([^}]*)\}", tmpl).group(1)
+    assert "display:none" not in css, (
+        "the probe is display:none, which gives it no layout and no baseline to read")
+    assert "visibility:hidden" in css and "left:-9999px" in css
+    assert "/1.2 Georgia,serif" in css, "the probe is not set as the captions are"
+
+    code = _strip_js_comments(tmpl)
+    body = code[code.index("function capBase("):][:700]
+    assert "CAP_BASE[F]" in body and "getBoundingClientRect" in body, (
+        "capBase no longer measures, or no longer caches what it measured")
+    assert "probe.style.fontSize" in body, (
+        "capBase no longer asks about the size it was given, so it is back to one fraction "
+        "scaled -- which is what the rounding makes wrong")
+    # A cache that outlives a late-arriving font is a wrong number for the whole session.
+    assert "CAP_BASE = {};" in code[code.index("document.fonts.ready"):][:200], (
+        "the measurements are not dropped when fonts finish loading")
+
+
+def test_a_caption_that_cannot_be_measured_falls_back_rather_than_collapsing(lab):
+    """No probe, or a figure that cannot be a baseline, must not put a caption at zero.
+
+    capBase returning 0 would drop every caption onto its box edge and, worse, would look
+    deliberate. The guards are a missing probe and a reading outside the line box.
+
+    Falsified by removing either fallback.
+    """
+    code = _strip_js_comments(TMPL.read_text(encoding="utf-8"))
+    body = code[code.index("function capBase("):][:700]
+    assert "if (!bl) return" in body, "a missing probe no longer has a fallback"
+    assert re.search(r"if \(!\(v > 0 && v < F \* CAP_LH\)\)", body), (
+        "a reading that cannot be a baseline is used anyway")
+
+
+def test_the_stylesheet_fallbacks_are_what_the_derivation_gives_at_the_defaults(lab):
+    """Every caption's position is overwritten each render, so the CSS is only ever seen if the
+    inline value never arrived -- and it should then show the design rather than some other
+    number.
+
+    The Tithe caption's `bottom` and the City card's `padding-top` are the two that changed:
+    5px and 8.53px, against the artwork's plain 6px, because those two cards carry a 1px border
+    the artwork does not and the City's 13px type needs more room above it than the artwork's 17.
+
+    Falsified by changing a default size without the fallback following.
+    """
+    tmpl = TMPL.read_text(encoding="utf-8")
+    tl = re.search(r"#titheObj \.tl\{[^}]*?bottom:(\d+)px", tmpl, re.S)
+    assert tl and int(tl.group(1)) == 6 - 1, (
+        "at equal sizes the Tithe caption wants the artwork's 6px less its own 1px border")
+    city = re.search(r"#cityObj\{[^}]*?padding-top:([\d.]+)px\}", tmpl, re.S)
+    assert city, "the City card no longer carries a fallback padding-top"
+    assert 7.5 < float(city.group(1)) < 9.5, city.group(1)
+    # All four captions share one line-height, or there are two baseline fractions to keep right.
+    for sel in (r"\.art \.cap\{", r"\.art \.anm\{", r"#titheObj \.tl\{", r"#cityObj \.cl\{"):
+        block = re.search(sel + r"[^}]*\}", tmpl, re.S).group(0)
+        assert "/1.2 Georgia,serif" in block, (
+            "%s is not at the band's line-height any more" % sel)

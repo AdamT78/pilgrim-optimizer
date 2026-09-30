@@ -185,8 +185,12 @@ const onWheel = await p.evaluate(() => {
           namesOnWheel: names.filter(nm => wheelText.includes(nm))};
 });
 ck('3 wheel is bare', 'no label object survives on a duty', !onWheel.hasLabel, onWheel.keys.join(','));
+// `actions` -- 1 or 2 -- joined the duty in V4.5, when Taxation and Allocation turned out to
+// have one action each. It is derived from ui/board_v2/duty_text.json at build time and says
+// nothing about WHERE a duty sits, which is the only thing this section cares about.
 ck('3 wheel is bare', 'duty keys are name/clock/actions/card/figures',
-   onWheel.keys.join(',') === 'name,clock,actionA,actionB,card,figures', onWheel.keys.join(','));
+   onWheel.keys.join(',') === 'name,clock,actions,actionA,actionB,card,figures',
+   onWheel.keys.join(','));
 ck('3 wheel is bare', 'nothing but acolytes overlaps the wheel in ACTION',
    onWheel.bad.filter(x => x !== 'city').length === 0, onWheel.bad.join(',') || 'none');
 // An inline SVG's tagName is lowercase in an HTML document, an <img>'s is upper.
@@ -216,9 +220,20 @@ ck('4 ribbon', 'the row fits the module', ribbon[0].x >= 0 && ribbon[7].x + ribb
    ribbon[0].x + '..' + (ribbon[7].x + ribbon[7].w));
 ck('4 ribbon', 'the row sits above the wheel', Math.max(...ribbon.map(c => c.y + c.h)) <= W.y,
    Math.max(...ribbon.map(c => c.y + c.h)) + ' vs ' + W.y);
-ck('4 ribbon', 'every card shows two actions', ribbon.every(c => c.acts.length === 2),
+// AS MANY ROWS AS THE DUTY HAS ACTIONS, which is two for six of them and one for Taxation and
+// Allocation. This used to demand two everywhere; a card summarises what a duty offers, so a
+// second empty row would summarise something that is not there.
+const ACTS = {clerical: 2, taxation: 1, produce: 2, build_roads: 2,
+              construct: 2, give_alms: 2, ordination: 2, allocation: 1};
+const wantActs = Object.values(ACTS);
+ck('4 ribbon', 'each card shows as many actions as its duty has',
+   ribbon.map(c => c.acts.length).join(',') === wantActs.join(','),
+   ribbon.map(c => c.acts.length).join(',') + ' vs ' + wantActs.join(','));
+ck('4 ribbon', 'and exactly one has one, twice',
+   ribbon.filter(c => c.acts.length === 1).length === 2,
    ribbon.map(c => c.acts.length).join(','));
-ck('4 ribbon', 'every action carries a seal', ribbon.every(c => c.seals === 2),
+ck('4 ribbon', 'every action carries a seal',
+   ribbon.every((c, i) => c.seals === wantActs[i]),
    ribbon.map(c => c.seals).join(','));
 ck('4 ribbon', 'no "OR" anywhere on a card',
    !ribbon.some(c => c.acts.join(' ').split(/\s+/).includes('OR')));
@@ -323,7 +338,7 @@ ck('8 preview', 'clicking a card opens both artworks', pv.n === 2, pv.n);
 ck('8 preview', 'both are badged PREVIEW', pv.badges === 2, pv.badges);
 ck('8 preview', 'a preview is NOT a choice', pv.choice === 0, pv.choice);
 ck('8 preview', 'captions are that duty\'s two action names',
-   pv.caps.join(' | ') === 'Gain Piety | Gain Coins', pv.caps.join(' | '));
+   pv.caps.join(' | ') === 'Gain X piety | Gain X silver', pv.caps.join(' | '));
 ck('8 preview', 'TITHE NEVER APPEARS IN A PREVIEW', !pv.tithe);
 ck('8 preview', 'the previewed card is marked', pv.marked === 1, pv.marked);
 ck('8 preview', 'the view did not change', pv.view === 'ready', pv.view);
@@ -333,7 +348,7 @@ pv = await p.evaluate(() => ({duty: S.previewDuty,
   caps: [].slice.call(document.querySelectorAll('.obj[data-kind=art] .cap')).map(c => c.textContent.trim()),
   marked: [].slice.call(document.querySelectorAll('.obj[data-kind=card].previewing')).map(e => e.dataset.id)}));
 ck('8 preview', 'clicking another card switches the preview', pv.duty === 'produce', pv.duty);
-ck('8 preview', 'captions follow the switch', pv.caps.join(' | ') === 'Gain Wheat | Gain Stone', pv.caps.join(' | '));
+ck('8 preview', 'captions follow the switch', pv.caps.join(' | ') === 'Gain X wheat | Gain X stone', pv.caps.join(' | '));
 ck('8 preview', 'only one card is marked', pv.marked.join(',') === 'produce', pv.marked.join(','));
 
 await p.click('.obj[data-kind=card][data-id=produce]'); await p.waitForTimeout(200);
@@ -364,7 +379,11 @@ await p.click('.obj[data-kind=card][data-id=taxation]'); await p.waitForTimeout(
 const sowPv = await p.evaluate(() => ({n: document.querySelectorAll('.obj[data-kind=art]').length,
   badges: document.querySelectorAll('.obj[data-kind=art] .pv').length,
   tithe: !!document.getElementById('titheObj')}));
-ck('8 preview', 'preview works while SOWING', sowPv.n === 2 && sowPv.badges === 2, sowPv.n + '/' + sowPv.badges);
+// ONE BOX, because the duty this clicks is Taxation and Taxation has one action. It asked for
+// two until V4.5 and the change is the point rather than an inconvenience: the one-action rule
+// has to hold in SOWING exactly as it does in READY, and this is the only place that proves it.
+ck('8 preview', 'preview works while SOWING', sowPv.n === 1 && sowPv.badges === 1,
+   sowPv.n + '/' + sowPv.badges);
 ck('8 preview', 'still no Tithe while previewing in SOWING', !sowPv.tithe);
 
 await setView('action'); await p.waitForTimeout(150);
@@ -377,7 +396,7 @@ const inAct = await p.evaluate(() => ({
 ck('8 preview', 'ACTION shows no PREVIEW badge', inAct.badges === 0, inAct.badges);
 ck('8 preview', 'ACTION artworks read as choices', inAct.choice === 2, inAct.choice);
 ck('8 preview', 'ACTION shows the reached duty, not the previewed one',
-   inAct.caps.join(' | ') === 'Gain Piety | Gain Coins', inAct.caps.join(' | '));
+   inAct.caps.join(' | ') === 'Gain X piety | Gain X silver', inAct.caps.join(' | '));
 ck('8 preview', 'the reached card is marked reached', inAct.reached.join(',') === 'clerical', inAct.reached.join(','));
 ck('8 preview', 'Tithe is back in ACTION', inAct.tithe);
 const clickAct = await p.evaluate(() => { const c = document.querySelector('.obj[data-kind=card][data-id=produce]');
@@ -398,7 +417,7 @@ ck('8 preview', 'changing the view drops an open preview',
    carried.opened === 'give_alms' && carried.afterSwitch === null,
    carried.opened + ' -> ' + carried.afterSwitch);
 ck('8 preview', 'ACTION ignores a preview set behind its back',
-   carried.caps.join(' | ') === 'Gain Piety | Gain Coins', carried.caps.join(' | '));
+   carried.caps.join(' | ') === 'Gain X piety | Gain X silver', carried.caps.join(' | '));
 await p.evaluate(() => { S.previewDuty = null; setView('action'); });
 
 // ---------------------------------------------------------------------------------------------

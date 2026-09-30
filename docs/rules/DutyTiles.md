@@ -110,6 +110,23 @@ Duty tile categories are not action names. Use the following concrete action nam
 | `allocation` | `allocation`, `tithe` |
 | `taxation` | `taxation`, `tithe` |
 
+## What the cards call these
+
+The ids above are the engine's. What a player reads on a duty's two action boxes -- the action's
+name, and a line saying what it does -- lives in `ui/board_v2/duty_text.json`, which the layout
+lab reads at build time. `clerical_devotion` is **Devotion / Gain Piety** there; most of the rest
+are still undecided and say so.
+
+That file joins to this table by the action id, and
+`tests/layout_lab/test_duty_text.py` fails if it names an id this table does not have. Rename an
+action here and that guard is what notices, rather than a caption quietly describing something
+the engine no longer does.
+
+Three duties do not divide the same way on a card as they do here, and the file records each as
+an open question rather than papering over it: Construct has three actions for two boxes,
+Ordination is one action with two *ordered* steps rather than a choice, and Allocation, Taxation
+and Build Roads each have one action or none against two boxes of art.
+
 ## Runtime implications
 
 - Majority/parity/minority is still computed on the selected **physical** duty position.
