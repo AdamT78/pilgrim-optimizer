@@ -33,13 +33,33 @@ def _assets():
                   if p.is_file() and p.suffix.lower() in ASSET_SUFFIXES)
 
 
+def _suggested(missing):
+    """The entry the project's own default would give these files, ready to paste.
+
+    A guard that only says "no" costs whoever hit it a trip through the other entries to work out
+    the shape. Since the default is stated -- ChatGPT unless an entry says otherwise -- the
+    failure can simply hand over the line it expects, and the two fields below are genuinely all
+    it demands. Anything richer (what a file was cropped from, what it was rescaled by) is worth
+    writing and is not required to pass.
+    """
+    lines = ['    "%s": { "state": "present", "licence": "openai-generated" },' % m
+             for m in missing]
+    return ("\n\nPaste into the \"files\" object of ui/board_v2/attribution.json:\n\n"
+            + "\n".join(lines)
+            + "\n\nThat is the stated default for this tree. If one of these is NOT "
+              "ChatGPT-generated -- a third-party icon, a hand-drawn asset, script output -- give "
+              "it the right licence and say where it came from instead; see defaultProvenance in "
+              "that file.")
+
+
 def test_every_asset_in_the_tree_has_an_entry(record):
     """The whole point. A file with no entry is a gap, never an implicit default."""
     assert _assets(), "found no assets under ui/board_v2/ at all -- has the tree moved?"
     missing = [str(p.relative_to(TREE)) for p in _assets()
                if str(p.relative_to(TREE)) not in record["files"]]
     assert not missing, (
-        "no entry in ui/board_v2/attribution.json for: %s" % ", ".join(missing))
+        "%d asset(s) under ui/board_v2/ have no entry in attribution.json: %s%s"
+        % (len(missing), ", ".join(missing), _suggested(missing)))
 
 
 def test_the_record_does_not_name_files_that_are_gone(record):
