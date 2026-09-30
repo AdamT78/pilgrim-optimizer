@@ -897,3 +897,54 @@ value.** With gaps of `-20 / -10 / 12` the readout says so and colours it as a w
 gap control reads `0`, because `0` is the nearest spacing that control could actually apply.
 Displaying it changes nothing — the row keeps its overlap until the control is operated. This is
 intended UI behaviour, not a rounding artefact or a known defect.
+
+**V4.3 — the duty action art workflow.** Sixteen action illustrations, eight duties by two
+actions, and the decision that shapes everything else is that each duty's two are **one drawing
+cropped twice** rather than two drawings. Two separately generated pictures of a priest receiving
+coins and a priest at prayer look like two places; two overlapping windows onto one continuous
+master look like one place seen twice, and the shared middle ground is what the eye uses to tie
+them together. `tools/duty_art/crop_duty_master.py` cuts the pair, `ui/board_v2/duty_actions/`
+holds a committed folder per duty so the tree exists before the art does, and the master is kept
+forever — a crop is reversible while the master exists, a regeneration is not, because the same
+prompt does not produce the same picture twice. The lab gained a DUTY ART PAIR panel that assigns
+the left and right artwork per duty, using the same image pool as everything else: the state
+holds a key, the bytes live outside it.
+
+**V4.4 — tithe resource tokens.** The `W` / `S` / `Ag` placeholders became circular token
+artwork, with the letters kept as the fallback rather than removed — the tool has to stay usable
+with no assets loaded at all, so a missing token reads as a letter and not as a broken image.
+Each PNG is the complete token, rim and disc and motif painted in, so the card draws the image
+and nothing else; putting one back inside the old `.res` disc would give it two rims.
+
+Two bugs came out of this release and both are worth remembering, because neither was visible in
+the code that contained it. A newly loaded token appeared simultaneously in a duty's action slot:
+`IMG_SEQ` restarts at 0 on every page load while the autosave keeps image KEYS and strips only
+BYTES, so the state still claimed `im1` with nothing behind it and the next image loaded was
+handed `im1` and became that asset too. `reserveImageKeys()` now takes every key the state claims
+out of circulation before anything can issue a new one. And the sliders moved exactly one step
+per drag: the setters called `panels()`, which replaces `titheCtl.innerHTML` and throws away the
+very control the mouse is holding. It read as a slider that would not move; it was a slider that
+had been destroyed. The setters end in `commit()`, and `render()` syncs the controls in place.
+
+**V4.5 — the triangle, and a correction made in the artwork.** The tokens were laid out as a flex
+pyramid with a token GAP and a per-resource SCALE, and both measured the wrong thing. A gap is the
+space BETWEEN two boxes, so it could not be set without also deciding what "bigger" meant: every
+step of the size control shoved the tokens apart and the two fought each other. The three now
+stand on the vertices of an invisible equilateral triangle, apex up — spread is its side, measured
+centre to centre, size is how big all three are, and neither touches the other. See *The tithe
+tokens* above for how it behaves.
+
+The scale control went because the problem it existed for was not a layout problem. Silver read
+about a ninth smaller than the other two, and the reason was in the files: measured as a fraction
+of their own square the solid discs came out 0.906 / 0.847 / 0.802 for stone / wheat / silver. A
+slider in the studio would have hidden that and left the production pipeline to reproduce it, so
+the masters were re-exported to match instead. **A correction that belongs in the asset does not
+belong in a control** — the studio's job is to find the fault, not to compensate for it.
+
+The migration is the other thing worth keeping. `tokenGap` becomes `tokenSpread` by adding one
+token, so a session saved by the flex build is recovered rather than reset — but the conversion
+has to run in `migrate()`, on the incoming file. Written after `deepMerge`, as it first was, it
+does nothing whatsoever: the defaults have already filled the absence it looks for, and the file's
+own arrangement has quietly become the default one. It ran, it was wrong, and nothing about the
+state afterwards showed that it had not worked. The acceptance suite caught it; reading the code
+did not.
