@@ -16,6 +16,18 @@
     }
   },
   "files": {
+    "duty_art_lab/reference/ground_plate_32deg.png": {
+      "state": "present",
+      "title": "Camera reference: ground plate at 32 degrees",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action art",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "the camera the duty action briefs ask for, 1677 x 938 on a transparent margin. generate_duty_art_lab.py inlines it as a data URI so the viewfinder can offer it for download and let a candidate scene be compared against the floor angle the brief asked for.",
+      "notes": "reference, not shipped -- nothing on the board draws it. The plate subtends 33.2 degrees, not the 34.0 the whole file measures: the transparent margin is taller in proportion than the picture, so the generator measures the alpha bounding box instead. The inconsistency between this angle and the floors that come back from the briefs is still open; prompts/02-adjacent-seam-working.md is the candidate fix.",
+      "bytes": 2654271,
+      "sha256": "3e543e44aa96028544e6a217a08e36162c8d621d004a44990383bb2f815a8aa6"
+    },
     "layout_lab/assets/duty_wheel_v2.svg": {
       "state": "present",
       "title": "Duty wheel v2, at aspect 1.887",

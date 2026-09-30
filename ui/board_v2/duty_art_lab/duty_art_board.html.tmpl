@@ -1,0 +1,247 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Duty action art __BUILD__</title>
+<style>
+  :root{--ink:#e7ddc6;--dim:#9c9075;--line:#ffffff1c;--hot:#d8b26a;--warn:#e08a6a;--ok:#8fae6a}
+  *{box-sizing:border-box}
+  html,body{margin:0;background:#0b0a09;color:var(--ink);
+    font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
+  #page{padding:20px 22px;max-width:1180px}
+  h1{margin:0 0 4px;font:600 19px/1.2 Georgia,serif;letter-spacing:.04em}
+  .sub{color:var(--dim);margin:0 0 4px;max-width:80ch}
+  #tally{margin:14px 0 22px;padding:10px 12px;border:1px solid var(--line);border-radius:5px;
+    background:#ffffff05}
+  #bar{display:flex;height:9px;border-radius:2px;overflow:hidden;margin:8px 0 6px;
+    background:#ffffff0d}
+  #bar i{display:block;height:100%}
+  #bar .done{background:var(--ok)} #bar .todo{background:#ffffff12}
+
+  .duty{margin:0 0 26px;padding-top:14px;border-top:1px solid var(--line)}
+  .dh{display:flex;align-items:baseline;gap:10px;margin-bottom:9px;flex-wrap:wrap}
+  .dh b{font:600 15px/1.2 Georgia,serif;letter-spacing:.07em;text-transform:uppercase}
+  .dh .n{color:var(--dim);font-size:11px}
+  .dh .one{color:var(--hot);font-size:11px;border:1px solid #6b5c3e;border-radius:2px;
+    padding:1px 5px}
+  /* THE BAND, AT THE BOARD'S OWN SIZE AND WITH THE BOARD'S OWN GAP. Judging art at any other
+     size answers a different question, and this page exists to be judged from. */
+  .band{display:flex;background:#000;padding:10px;border-radius:5px;border:1px solid var(--line);
+    width:max-content}
+  .slot{position:relative}
+  .slot img{display:block;outline:1px solid #ffffff2e}
+  /* AN EMPTY SLOT IS THE POINT, so it is drawn rather than left out: a dashed frame the exact
+     size of the card, carrying the name of the action nobody has drawn yet. */
+  .slot.empty{border:1px dashed #d8b26a55;background:#d8b26a08;display:grid;place-items:center;
+    text-align:center;padding:10px}
+  .slot.empty span{color:#d8b26aaa;font-size:11px;line-height:1.5}
+  .slot.empty b{display:block;color:var(--hot);font:600 13px/1.3 Georgia,serif;
+    letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px}
+  /* A duty that offers one action has no second card at all -- not an empty one. Showing a
+     blank there would put it on the list of things to draw, and it is not one. */
+  .slot.na{border:1px dashed #ffffff1a;display:grid;place-items:center;text-align:center}
+  .slot.na span{color:#5f594e;font-size:11px}
+  .cap{position:absolute;left:0;right:0;bottom:0;padding:5px 8px;
+    font:600 11px/1.2 Georgia,serif;letter-spacing:.1em;text-transform:uppercase;color:#e2d7bc;
+    background:linear-gradient(transparent,#000000cc 62%);pointer-events:none}
+  .ver{position:absolute;right:5px;top:5px;font-size:9px;letter-spacing:.06em;color:#cfc4a8;
+    background:#0d0c0ac9;border:1px solid #ffffff22;border-radius:2px;padding:1px 4px}
+  .ver.inlab{color:var(--ok);border-color:#8fae6a55}
+  .ver.notlab{color:var(--warn);border-color:#e08a6a55}
+
+  .aside{margin-top:8px;display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start}
+  .masters img{display:block;border:1px solid var(--line);border-radius:3px;margin-top:4px}
+  .k{color:var(--dim);font-size:11px}
+  .btns{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+  button{background:#241f17;color:var(--ink);border:1px solid #6b5c3e;border-radius:3px;
+    padding:4px 8px;font:11px/1.4 ui-monospace,monospace;cursor:pointer}
+  button:hover{background:#2f281d}
+  .warn{color:var(--warn)} .good{color:var(--ok)} .dimc{color:var(--dim)}
+  .note{color:var(--dim);font-size:11px;margin-top:6px;max-width:78ch}
+  #briefPick{margin:-10px 0 22px;color:var(--dim);font-size:11px}
+  #briefPick select{background:#151310;color:var(--ink);border:1px solid var(--line);
+    border-radius:3px;padding:3px 6px;font:11px/1.4 ui-monospace,monospace;margin:0 4px}
+  .nosub{color:var(--warn)}
+</style>
+
+<div id=page>
+  <h1>Duty action art</h1>
+  <p class=sub>Every action slot on the board, in the wheel's own order, at the size the board
+  draws them. The duties and their order come from the layout lab; the action names from
+  <code>duty_text.json</code>; the art from <code>ui/board_v2/duty_actions/</code>. Nothing here
+  is typed.</p>
+  <div id=tally></div>
+  <div id=briefPick></div>
+  <div id=list></div>
+</div>
+
+<script>
+var D = __DATA__, BAND = D.band;
+var el = function(id){ return document.getElementById(id); };
+function esc(s){ return String(s).replace(/[&<>"]/g, function(c){
+  return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+
+// NEWEST FIRST. The files are versioned by a _vNN suffix and the last one is the one being
+// looked at; an alphabetical first would show v01 forever.
+function newest(list){
+  if (!list || !list.length) return null;
+  return list.slice().sort(function(a, b){
+    return a.file.localeCompare(b.file, undefined, {numeric: true});
+  }).pop();
+}
+
+function slotHtml(s, side, inLab){
+  if (s) s = Object.assign({}, s, {inLab: inLab});
+  var w = BAND.card_w, h = BAND.card_h;
+  var dim = 'width:' + w + 'px;height:' + h + 'px';
+  if (s === null)
+    return '<div class="slot na" style="' + dim + '"><span>this duty offers<br>one action</span></div>';
+  var art = newest(s.art);
+  if (!art)
+    return '<div class="slot empty" style="' + dim + '"><span><b>' + esc(s.label || side)
+         + '</b>' + (s.name ? esc(s.name) + '<br>' : '') + 'not drawn yet</span></div>';
+  // IS THIS THE FILE THE LAB WILL OPEN WITH? The board and the generated lab now ask the same
+  // function which slot a file belongs in, so they should always agree -- and the moment they
+  // do not, this badge is where it shows, rather than in a lab that quietly opens blank.
+  var v = (art.file.match(/_v(\d+)/) || [,null])[1];
+  var inLab = s.inLab && s.inLab === art.file;
+  var mark = inLab ? '' : (s.inLab ? ' \u2260' : ' \u2717');
+  var why = inLab ? 'the lab opens with this file'
+          : (s.inLab ? 'the lab opens with ' + s.inLab + ' instead'
+                     : 'the lab will NOT open with any art here \u2014 no slot is recorded for '
+                       + 'it in attribution.json');
+  return '<div class=slot style="' + dim + '">'
+       + '<img src="' + art.src + '" width="' + w + '" height="' + h + '" alt="">'
+       + '<div class=cap>' + esc(s.label || "") + '</div>'
+       + '<div class="ver' + (inLab ? ' inlab' : ' notlab') + '" title="'
+       + esc(art.folder + '/' + art.file + ' \u2014 ' + why) + '">'
+       + esc(v ? "v" + v : art.file) + mark + '</div></div>';
+}
+
+el("list").innerHTML = D.duties.map(function(d, i){
+  var pair = '<div class=band>' + slotHtml(d.left, "action A", d.inLab.left)
+           + '<div style="width:' + BAND.gap + 'px"></div>'
+           + slotHtml(d.actions === 1 ? null : d.right, "action B", d.inLab.right) + '</div>';
+  var m = newest(d.masters);
+  var aside = '<div class=aside>'
+    + '<div class=masters><span class=k>master</span>'
+      + (m ? '<img src="' + m.src + '" width="260" alt=""><div class=k>' + esc(m.file) + '</div>'
+           : '<div class="k warn" style="margin-top:4px">none &mdash; nothing to re-cut from</div>')
+    + '</div>'
+    + '<div><span class=k>folders</span><div class=k>'
+      + (d.folders.length ? d.folders.map(esc).join('<br>') : 'none') + '</div></div>'
+    + (d.unplaced.length ? '<div><span class="k warn">not placed</span><div class=k>'
+        + d.unplaced.map(function(u){ return esc(u.folder + '/' + u.file); }).join('<br>')
+        + '</div></div>' : '')
+    + '</div>';
+  var names = [d.left && d.left.label, d.actions === 1 ? null : (d.right && d.right.label)]
+                .filter(Boolean).map(esc).join('  &middot;  ');
+  return '<div class=duty><div class=dh><b>' + esc(d.name) + '</b>'
+       + '<span class=n>' + names + '</span>'
+       + (d.actions === 1 ? '<span class=one>one action</span>' : '')
+       + '</div>' + pair + aside
+       + '<div class=btns><button data-brief="' + i + '">copy a brief for '
+       + esc(d.name) + '</button></div></div>';
+}).join("");
+
+// THE TALLY IS COUNTED, NOT WRITTEN DOWN. A page about what is missing that had a hand-kept
+// number on it would be wrong the first time somebody drew something.
+(function(){
+  var slots = 0, done = 0, masters = 0, inLab = 0;
+  D.duties.forEach(function(d){
+    ["left","right"].forEach(function(k){
+      if (k === "right" && d.actions === 1) return;
+      if (!d[k]) return;
+      slots++;
+      if (newest(d[k].art)) done++;
+      if (d.inLab[k]) inLab++;
+    });
+    if (newest(d.masters)) masters++;
+  });
+  el("tally").innerHTML =
+      '<b>' + done + ' of ' + slots + ' action slots drawn</b>'
+    + '  <span class=k>&middot; ' + masters + ' of ' + D.duties.length
+        + ' duties have a master to re-cut from</span>'
+    + '<div id=bar><i class=done style="width:' + (100*done/slots) + '%"></i>'
+    + '<i class=todo style="width:' + (100*(slots-done)/slots) + '%"></i></div>'
+    + '<span class=k>A dashed gold frame is an action nobody has drawn. A grey one is a duty '
+    + 'that offers a single action, so there is no second card to draw.</span>'
+    + '<div class=note>A badge in <b class=good>green</b> is the file the generated lab will '
+        + 'actually open with. <b class=warn>Red</b> means it will not: either no slot is '
+        + 'recorded for it, or a different file wins. Both pages ask the same function which '
+        + 'slot a file belongs in, so they should never disagree &mdash; if they do, this is '
+        + 'where it shows.</div>'
+    + (inLab !== done
+        ? '<div class="note warn"><b>' + done + ' slot(s) have art on disk but the lab opens '
+          + 'with ' + inLab + '.</b> The difference is files whose slot cannot be established.</div>'
+        : '')
+    + (D.artNotes.length ? '<div class="note warn"><b>Left out of the lab:</b><br>'
+        + D.artNotes.map(esc).join('<br>')
+        + '<br>The folder names came from wording that has since changed, so they neither match '
+        + 'duty_text.json nor sort into slot order &mdash; Clerical\'s left is '
+        + '<code>gain_piety</code> and its right is <code>gain_coins</code>. Adding '
+        + '<code>"slot": "left"</code> to an entry settles it for good.</div>' : '');
+})();
+
+// A COMPLETE BRIEF PER DUTY. It used to copy the two action names and two "[describe it]"
+// markers -- 264 characters under a button that said "copy a brief", which is not a brief. The
+// whole text is here now, with the shape paragraph already computed at 3:1 and the duty's own
+// names substituted. What is still a marker is the SUBJECT, and only where nobody has written
+// one: subjects.json has Clerical and nothing else, and the page says which is which rather
+// than handing out a placeholder that looks like content.
+el("briefPick").innerHTML = 'Each button copies the whole of '
+  + '<select id=whichBrief>' + D.briefs.map(function(b, i){
+      return '<option value="' + i + '">' + esc(b.title) + '</option>'; }).join("")
+  + '</select> with that duty\'s action names in it, at 3:1. '
+  + 'The <i>original</i> brief is not offered here because it substitutes nothing &mdash; it '
+  + 'names Clerical\'s actions whichever button you press. It is on the viewfinder, where '
+  + 'copied-verbatim is the point.';
+
+function briefFor(d){
+  var b = D.briefs[+el("whichBrief").value];
+  var subj = D.subjects[d.slug] || {};
+  var missing = [];
+  if (!subj.left) missing.push("left");
+  if (d.actions > 1 && !subj.right) missing.push("right");
+  var text = b.text
+    .replace(/\{\{LEFT_ACTION\}\}/g, d.left.name || d.left.label || "LEFT ACTION")
+    .replace(/\{\{RIGHT_ACTION\}\}/g,
+             d.actions === 1 ? "(this duty offers ONE action -- see the note at the end)"
+                             : (d.right.name || d.right.label || "RIGHT ACTION"))
+    .replace(/\{\{LEFT_SUBJECT\}\}/g, subj.left || "- [nobody has written this down yet]")
+    .replace(/\{\{RIGHT_SUBJECT\}\}/g, subj.right || "- [nobody has written this down yet]");
+  // A ONE-ACTION DUTY GETS TOLD SO, at the end where it will be read. Handing it a brief built
+  // around two zones without a word about it is how you get two scenes for a duty that offers
+  // one, and only find out after generating.
+  if (d.actions === 1)
+    text += "\n\n======================================================================\n"
+          + "THIS DUTY OFFERS ONE ACTION\n"
+          + "======================================================================\n\n"
+          + "The board draws a single card for it, not two. Ignore the two-zone split above:\n"
+          + "compose ONE scene across the whole width, and do not put a seam down the middle.\n";
+  return {text: text, missing: missing};
+}
+
+[].forEach.call(document.querySelectorAll("[data-brief]"), function(btn){
+  btn.onclick = function(){
+    var r = briefFor(D.duties[+this.dataset.brief]);
+    var a = document.createElement("textarea");
+    a.value = r.text; document.body.appendChild(a); a.select();
+    try { document.execCommand("copy"); } catch (e) {}
+    a.remove();
+    var was = this.dataset.label || this.textContent;
+    this.dataset.label = was;
+    this.textContent = r.missing.length
+      ? "copied \u2014 " + r.missing.join(" and ") + " subject still blank"
+      : "copied \u2014 complete";
+    var me = this; setTimeout(function(){ me.textContent = was; }, 2200);
+  };
+});
+
+// WHICH DUTIES HAVE NO SUBJECT WRITTEN DOWN, said on the page rather than discovered on paste.
+[].forEach.call(document.querySelectorAll("[data-brief]"), function(btn){
+  var d = D.duties[+btn.dataset.brief], s = D.subjects[d.slug] || {};
+  var need = (!s.left) || (d.actions > 1 && !s.right);
+  if (need) btn.insertAdjacentHTML("afterend",
+    '<span class="k nosub" style="align-self:center">no subject written yet &mdash; '
+    + 'add it to subjects.json</span>');
+});
+</script>
