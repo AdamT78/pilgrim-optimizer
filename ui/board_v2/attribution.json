@@ -49,6 +49,7 @@
       "collection": "Pilgrim board_v2 duty action art",
       "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
       "licence": "openai-generated",
+      "slot": "master",
       "role": "the single wide scene both Clerical action images are cut from, 2172 x 724. Kept forever: if the artwork slots change shape the master is re-cropped, never re-generated, because the same prompt does not produce the same picture twice.",
       "notes": "master, not shipped. The two crops below are what the board draws."
     },
@@ -59,54 +60,33 @@
       "collection": "Pilgrim board_v2 duty action art",
       "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
       "licence": "openai-generated",
+      "slot": "master",
       "role": "the second wide Clerical scene, 2046 x 768. A SEPARATE GENERATION, not a re-render of v01 and not the same drawing at another size -- v01 is 2172 x 724. Kept forever for the same reason v01 is: the same prompt does not produce the same picture twice, so if the artwork slots change shape this is re-cropped and never re-generated.",
       "notes": "master, not shipped. Neither generation is retired: v01 and v02 are both on disk and which one the board draws is a composition decision, not a provenance one."
     },
-    "duty_actions/clerical/gain_piety/clerical_gain_piety_v01.png": {
+    "duty_actions/clerical/masters/clerical_master_v03.png": {
       "state": "present",
-      "title": "Clerical gain piety",
+      "title": "Clerical duty action master, third generation",
       "creator": "Generated with ChatGPT (OpenAI)",
       "collection": "Pilgrim board_v2 duty action art",
-      "source": "cropped from duty_actions/clerical/masters/clerical_master_v01.png; the picture itself is model output, the crop is deterministic",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
       "licence": "openai-generated",
-      "role": "the left action image, 1120 x 560, the LEFT window onto the master",
-      "modifications": "cropped from the master by tools/duty_art/crop_duty_master.py: vertical centre y 82 to 642, horizontal x 0 to 1120. The two windows overlap by 68 px and share that strip exactly, which is the point of cutting one drawing twice rather than generating two.",
-      "reproducibleBy": "tools/duty_art/crop_duty_master.py",
-      "notes": "tests/layout_lab/test_duty_art_crop.py re-cuts the master and asserts this file matches pixel for pixel, so the pair cannot drift from its recipe."
+      "slot": "master",
+      "role": "the third wide Clerical scene, 2172 x 724, and the one the board draws from. The first to be CUT adjacent rather than overlapping, which is what its two crops below are.",
+      "notes": "master, not shipped. Generated from the ORIGINAL brief -- prompts/00-original-discard-gutter.md in ui/board_v2/duty_art_lab -- which asked for a wide central discard gutter, so its composition predates the adjacent cut it is now used with. Chosen over v04 on the picture. Two things measured and not fixed: the most vertically uniform column near the middle sits at 54.7% of the width where the seam falls at 50%, so the gap does not land on the pillar; and the palette its brief asks for is not honoured, median saturation coming back around 0.24 against the 0.06-0.10 of its own swatches.",
+      "sha256": "a4aed83fe176a67d1f2b561979f269c73bd28b99c5bf566ebe144ee9fdaec82e"
     },
-    "duty_actions/clerical/gain_piety/clerical_gain_piety_v02.png": {
+    "duty_actions/clerical/masters/clerical_master_v04.png": {
       "state": "present",
-      "title": "Clerical gain piety, second generation",
+      "title": "Clerical duty action master, fourth generation",
       "creator": "Generated with ChatGPT (OpenAI)",
       "collection": "Pilgrim board_v2 duty action art",
-      "source": "cut from duty_actions/clerical/masters/clerical_master_v02.png; the picture itself is model output, the cut is deterministic",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
       "licence": "openai-generated",
-      "role": "the left action image, 1120 x 560, the LEFT window onto the v02 master",
-      "modifications": "cut from the master at x 3 to 1123, y 104 to 664. VERIFIED BY RE-CUTTING, not quoted from a command line: the committed file is byte-identical to that rectangle of the master. The two windows overlap by 200 px and share that strip exactly.",
-      "notes": "NOT PRODUCED BY tools/duty_art/crop_duty_master.py, and the entry deliberately carries no reproducibleBy for that reason. The script anchors both crops flush to the master's edges; this pair is inset 3 px at each side, symmetrically, and is RGB where the script writes RGBA. The geometry above is exact and was checked, so the pair is reproducible in principle -- but not by the tool as it stands, and saying otherwise would give a false recipe. OPEN QUESTION: whether the 3 px inset is deliberate, such as trimming a dirty generated edge, or incidental. If deliberate the script wants an inset option and this pair should go under the same pixel-for-pixel guard as v01; if not, the pair should be re-cut flush."
-    },
-    "duty_actions/clerical/gain_coins/clerical_gain_coins_v01.png": {
-      "state": "present",
-      "title": "Clerical gain coins",
-      "creator": "Generated with ChatGPT (OpenAI)",
-      "collection": "Pilgrim board_v2 duty action art",
-      "source": "cropped from duty_actions/clerical/masters/clerical_master_v01.png; the picture itself is model output, the crop is deterministic",
-      "licence": "openai-generated",
-      "role": "the right action image, 1120 x 560, the RIGHT window onto the master",
-      "modifications": "cropped from the master by tools/duty_art/crop_duty_master.py: vertical centre y 82 to 642, horizontal x 1052 to 2172. The two windows overlap by 68 px and share that strip exactly, which is the point of cutting one drawing twice rather than generating two.",
-      "reproducibleBy": "tools/duty_art/crop_duty_master.py",
-      "notes": "tests/layout_lab/test_duty_art_crop.py re-cuts the master and asserts this file matches pixel for pixel, so the pair cannot drift from its recipe."
-    },
-    "duty_actions/clerical/gain_coins/clerical_gain_coins_v02.png": {
-      "state": "present",
-      "title": "Clerical gain coins, second generation",
-      "creator": "Generated with ChatGPT (OpenAI)",
-      "collection": "Pilgrim board_v2 duty action art",
-      "source": "cut from duty_actions/clerical/masters/clerical_master_v02.png; the picture itself is model output, the cut is deterministic",
-      "licence": "openai-generated",
-      "role": "the right action image, 1120 x 560, the RIGHT window onto the v02 master",
-      "modifications": "cut from the master at x 923 to 2043, y 104 to 664. VERIFIED BY RE-CUTTING, not quoted from a command line: the committed file is byte-identical to that rectangle of the master. The two windows overlap by 200 px and share that strip exactly.",
-      "notes": "NOT PRODUCED BY tools/duty_art/crop_duty_master.py -- see the note on its left counterpart, which carries the full reasoning and the open question about the 3 px inset."
+      "slot": "master",
+      "role": "a fourth Clerical scene, 2172 x 724. NOT CUT AND NOT DRAWN -- kept only because it exists.",
+      "notes": "master, not shipped and not in use. The first generated from prompts/01-adjacent-seam.md, and it did what that brief asked: its most uniform central column sits at 50.9% against v03's 54.7%, so the board's gap falls on the pillar. v03 was preferred on the picture anyway. Kept because the same prompt does not produce the same picture twice, so discarding a generation discards it for good; if the seam ever matters more than the composition, this is the one to cut.",
+      "sha256": "7f153ae25702fd5d53928b899847d7f32d386db5b13e0e4912cd4c8df8d7dfaa"
     },
     "tokens/masters/token_wheat_v01.png": {
       "state": "present",
@@ -115,7 +95,30 @@
       "collection": "Pilgrim board_v2 resource tokens",
       "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
       "licence": "openai-generated",
+      "slot": "master",
       "role": "the untouched original of tokens/resources/token_wheat.png, kept so the optical correction below stays reversible",
+      "notes": "master, not shipped"
+    },
+    "tokens/masters/token_stone_v01.png": {
+      "state": "present",
+      "title": "Stone resource token, as generated",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 resource tokens",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "slot": "master",
+      "role": "the untouched original of tokens/resources/token_stone.png, kept so the optical correction below stays reversible",
+      "notes": "master, not shipped"
+    },
+    "tokens/masters/token_silver_v01.png": {
+      "state": "present",
+      "title": "Silver resource token, as generated",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 resource tokens",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "slot": "master",
+      "role": "the untouched original of tokens/resources/token_silver.png, kept so the optical correction below stays reversible",
       "notes": "master, not shipped"
     },
     "tokens/resources/token_wheat.png": {
@@ -128,16 +131,6 @@
       "role": "the wheat token the Tithe card draws, 1254 x 1254. The PNG is the COMPLETE token -- rim, disc and motif are painted in -- so the layout draws the image and nothing behind or around it.",
       "modifications": "rescaled x1.070 about its own centre so all three tokens read the same size at one tokenSize. Measured as a fraction of the square, the solid disc went from 0.5547 to 0.6354, matching stone's 0.6365; nothing is clipped at the canvas edge. The correction is made in the artwork rather than by a per-token slider in the layout lab, so production does not have to reproduce a studio adjustment."
     },
-    "tokens/masters/token_stone_v01.png": {
-      "state": "present",
-      "title": "Stone resource token, as generated",
-      "creator": "Generated with ChatGPT (OpenAI)",
-      "collection": "Pilgrim board_v2 resource tokens",
-      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
-      "licence": "openai-generated",
-      "role": "the untouched original of tokens/resources/token_stone.png, kept so the optical correction below stays reversible",
-      "notes": "master, not shipped"
-    },
     "tokens/resources/token_stone.png": {
       "state": "present",
       "title": "Stone resource token",
@@ -148,16 +141,6 @@
       "role": "the stone token the Tithe card draws, 1254 x 1254. The PNG is the COMPLETE token -- rim, disc and motif are painted in -- so the layout draws the image and nothing behind or around it.",
       "modifications": "none. Stone was already the largest of the three at a solid-disc fraction of 0.6365, so it is the size the other two were brought to; its pixels are identical to its master and only the PNG encoding differs."
     },
-    "tokens/masters/token_silver_v01.png": {
-      "state": "present",
-      "title": "Silver resource token, as generated",
-      "creator": "Generated with ChatGPT (OpenAI)",
-      "collection": "Pilgrim board_v2 resource tokens",
-      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
-      "licence": "openai-generated",
-      "role": "the untouched original of tokens/resources/token_silver.png, kept so the optical correction below stays reversible",
-      "notes": "master, not shipped"
-    },
     "tokens/resources/token_silver.png": {
       "state": "present",
       "title": "Silver resource token",
@@ -167,6 +150,34 @@
       "licence": "openai-generated",
       "role": "the silver token the Tithe card draws, 1254 x 1254. The PNG is the COMPLETE token -- rim, disc and motif are painted in -- so the layout draws the image and nothing behind or around it.",
       "modifications": "rescaled x1.129 about its own centre so all three tokens read the same size at one tokenSize. Measured as a fraction of the square, the solid disc went from 0.4997 to 0.6372, matching stone's 0.6365; nothing is clipped at the canvas edge. The correction is made in the artwork rather than by a per-token slider in the layout lab, so production does not have to reproduce a studio adjustment."
+    },
+    "duty_actions/clerical/gain_piety/clerical_gain_piety_left_v03.png": {
+      "state": "present",
+      "title": "Clerical devotion, third generation",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action art",
+      "source": "cut from duty_actions/clerical/masters/clerical_master_v03.png; the picture is model output, the cut is deterministic",
+      "licence": "openai-generated",
+      "slot": "left",
+      "role": "the LEFT action image, 1065 x 522, showing Devotion. Ratio 2.0402 against the slot's 2.0380, so `fit: cover` clips 0.4 of a slot pixel -- against the 3.5 px every 1120 x 560 crop lost.",
+      "modifications": "cut at (0, 101, 1065, 623) by tools/duty_art/crop_duty_master.py --y 101. ADJACENT, NOT OVERLAPPING: the master is cropped once to the action band's own 4.1576:1, then split where the board's 15 px gap falls, so the gap hides 42 px of picture rather than the two cards sharing a strip. The card's shape is the slot's shape by construction, whatever the master's width.",
+      "reproducibleBy": "tools/duty_art/crop_duty_master.py",
+      "notes": "The cut reads the card size and the gap from the layout lab's default_state(), so it cannot drift from the box it lands in. `slot` is declared rather than inferred: the folder names came from wording that has since changed and no longer sort into slot order -- gain_piety is actionA and gain_coins actionB, which alphabetically is backwards.",
+      "sha256": "6625d5dd16d66062dd9df0c06a0d7b740957c0ca50ae0fed483124ded96e5b30"
+    },
+    "duty_actions/clerical/gain_coins/clerical_gain_coins_right_v03.png": {
+      "state": "present",
+      "title": "Clerical silversmith, third generation",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action art",
+      "source": "cut from duty_actions/clerical/masters/clerical_master_v03.png; the picture is model output, the cut is deterministic",
+      "licence": "openai-generated",
+      "slot": "right",
+      "role": "the RIGHT action image, 1065 x 522, showing Silversmith. Ratio 2.0402 against the slot's 2.0380, so `fit: cover` clips 0.4 of a slot pixel -- against the 3.5 px every 1120 x 560 crop lost.",
+      "modifications": "cut at (1107, 101, 2172, 623) by tools/duty_art/crop_duty_master.py --y 101. ADJACENT, NOT OVERLAPPING: the master is cropped once to the action band's own 4.1576:1, then split where the board's 15 px gap falls, so the gap hides 42 px of picture rather than the two cards sharing a strip. The card's shape is the slot's shape by construction, whatever the master's width.",
+      "reproducibleBy": "tools/duty_art/crop_duty_master.py",
+      "notes": "The cut reads the card size and the gap from the layout lab's default_state(), so it cannot drift from the box it lands in. `slot` is declared rather than inferred: the folder names came from wording that has since changed and no longer sort into slot order -- gain_piety is actionA and gain_coins actionB, which alphabetically is backwards.",
+      "sha256": "feea0ef90a06cc9829451db581f3a04bfab7e671f44a64c362e852fee588ea94"
     }
   },
   "assetDirs": [
