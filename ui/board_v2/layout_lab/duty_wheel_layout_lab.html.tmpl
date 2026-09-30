@@ -165,7 +165,12 @@ body.clean .card.previewing{border-color:#8fae6a44;border-radius:4px;padding:7px
   color:#e2d7bc;background:linear-gradient(#000000cc 38%,transparent)}
 /* PREVIEW is informational. It says so, and it does not respond to the pointer the way a choice
    does -- the brief's point is that reading about a duty must not look like taking it. */
-.art .pv{position:absolute;left:8px;top:8px;font:600 10px/1 ui-monospace,monospace;
+/* THE BADGE MOVED TO THE RIGHT when the action name arrived at the top left, because they were
+   sitting on top of each other: on Give Alms the badge covered the word ALMS completely and ate
+   the first half of DONATE BUILDING. The name is content and keeps the corner; the badge is
+   chrome and gives way. It is still the first thing read on a preview -- nothing else is up
+   there on the right. */
+.art .pv{position:absolute;right:8px;top:8px;font:600 10px/1 ui-monospace,monospace;
   letter-spacing:.18em;color:#9fc49a;background:#0d140c;border:1px solid #8fae6a44;
   border-radius:2px;padding:3px 6px}
 body.clean .art.choice:hover{filter:brightness(1.08);cursor:pointer}
@@ -528,6 +533,29 @@ function artLabel(side){
 function phLabel(side, a, e){
   if (e.labelVisible && artName(side)) return "";
   return (a && (a.name || a.shortLabel)) || e.slot;
+}
+// HOW MANY ACTIONS THE SHOWN DUTY HAS. Taxation and Allocation have one; the rest have two.
+// Read off the state rather than off a list here, because duty_text.json is where it is decided
+// and a second list would be a second thing to keep in step.
+// THE NAME'S SIZE, falling back to the caption's. A session saved before the two sizes were
+// separate carries only `labelSize`, and the head should open at the size that session was saved
+// at rather than at a default that would quietly resize somebody's composition on load.
+function nameSizeOf(e){
+  var n = +e.nameSize;
+  return (isNaN(n) || n <= 0) ? e.labelSize : n;
+}
+function dutyActions(slug){
+  var D = slug && S.duties[slug];
+  return (D && D.actions) || 2;
+}
+// Whether THIS side's box is drawn for the duty on screen. The right box is simply absent on a
+// one-action duty: the left box keeps its size and its place, and nothing slides over to fill
+// the gap, which is the same rule the rest of this layout follows -- Tithe and the City never
+// move because something else changed either.
+function artUsed(side){
+  if (side !== "right") return true;
+  var d = shownDuty();
+  return !d || dutyActions(d) > 1;
 }
 function artName(side){
   var d = shownDuty();
@@ -998,6 +1026,7 @@ function render(){
     ["left", "right"].forEach(function(side){
       var e = artOf(side);
       if (!e.visible) return;
+      if (!artUsed(side)) return;       // Taxation and Allocation have one action
       var a = shown ? (actionOf(shown, e.slot) || {}) : {};
       var cls = "art " + e.fit + (isPreview ? "" : " choice");
       var inner;
@@ -1026,7 +1055,7 @@ function render(){
       // it is a bare picture, and a name without its effect would be the wrong half to keep.
       if (e.labelVisible && artName(side)){
         var anm = document.createElement("div");
-        anm.className = "anm"; anm.style.setProperty("--cap", e.labelSize + "px");
+        anm.className = "anm"; anm.style.setProperty("--cap", nameSizeOf(e) + "px");
         anm.textContent = artName(side);
         d.appendChild(anm);
       }
@@ -1093,7 +1122,9 @@ function render(){
   DUTY_ORDER.forEach(function(slug){
     var D = S.duties[slug], cd = D.card;
     if (!cd.visible) return;
-    var acts = ACTIONS.map(function(a, i){
+    // ONE ROW FOR A ONE-ACTION DUTY. The card summarises what the duty offers, so a
+    // second empty row would be summarising something that is not there.
+    var acts = ACTIONS.slice(0, dutyActions(slug)).map(function(a, i){
       var act = D[a.key] || {};
       return '<div class=act>' + sealHtml(act.seal, i === 0 ? "A" : "B")
            + '<span>' + esc(act.shortLabel || act.name || a.label) + '</span></div>';
@@ -1764,11 +1795,22 @@ function inspector(){
        + '<option value=cover' + (o.fit === "cover" ? " selected" : "") + '>cover</option>'
        + '<option value=contain' + (o.fit === "contain" ? " selected" : "") + '>contain</option>'
        + '</select></div>';
-    h += '<div class="row two"><span>caption</span>'
+    // ONE SWITCH, TWO SIZES. The switch is still one thing -- the box is either labelled or
+    // it is a bare picture -- but the head and the foot carry different amounts of text and are
+    // sized apart: every action NAME fits one line at 17px while half the effect lines wrap to
+    // two, so they were never going to want the same number for long.
+    h += '<div class="row two"><span>captions</span>'
        + btn(o.labelVisible ? "on" : "off",
              function(){ o.labelVisible = !o.labelVisible; commit(); }, !!o.labelVisible)
-       + field(o.labelSize, function(v){ o.labelSize = clamp(Math.round(v), 8, 60); commit(true); })
        + '</div>';
+    h += '<div class="row two"><span>name size</span>'
+       + field(nameSizeOf(o), function(v){ o.nameSize = clamp(Math.round(v), 8, 60);
+                                           commit(true); })
+       + '<span class=hint style="text-align:left">top left</span></div>';
+    h += '<div class="row two"><span>effect size</span>'
+       + field(o.labelSize, function(v){ o.labelSize = clamp(Math.round(v), 8, 60);
+                                         commit(true); })
+       + '<span class=hint style="text-align:left">bottom left</span></div>';
     h += '<div class=hint>the picture comes from whichever duty is on screen ('
        + esc(shownDuty() ? S.duties[shownDuty()].name : "none") + ') — load it in '
        + '<b>duty actions</b></div>';
@@ -2688,7 +2730,10 @@ function gameLayout(){
   };
   DUTY_ORDER.forEach(function(slug){
     var D = S.duties[slug], F = D.figures, cd = D.card;
-    var d = {name: D.name,
+    // HOW MANY ACTIONS THE DUTY OFFERS travels with it. The real UI cannot work it out from
+    // the two wording slots, because a one-action duty still carries both -- the second simply
+    // says nothing -- and "shortLabel is empty" is a weaker thing to reason from than a count.
+    var d = {name: D.name, actions: D.actions,
              card: {x: cd.x, y: cd.y, width: cd.width, height: cd.height,
                     visible: !!cd.visible}};
     ACTIONS.forEach(function(a){
@@ -2707,7 +2752,8 @@ function gameLayout(){
     var e = artOf(side);
     out.artwork[side] = {x: e.x, y: e.y, width: e.width, height: e.height, slot: e.slot,
                          fit: e.fit, opacity: e.opacity, visible: !!e.visible,
-                         labelVisible: !!e.labelVisible, labelSize: e.labelSize};
+                         labelVisible: !!e.labelVisible, labelSize: e.labelSize,
+                         nameSize: nameSizeOf(e)};
   });
   return out;
 }
@@ -2992,6 +3038,11 @@ function applyState(d){
     if (ACTIONS.map(function(a){ return a.key; }).indexOf(e.slot) < 0)
       e.slot = side === "left" ? "actionA" : "actionB";
     e.labelSize = clamp(Math.round(e.labelSize), 8, 60);
+    // NOT `|| labelSize` inside the clamp: a session saved before the split has no nameSize at
+    // all, and the head must open at the size that session was composed at rather than at this
+    // build's default. nameSizeOf() does the falling back; this only bounds what is there.
+    e.nameSize = (e.nameSize === undefined || e.nameSize === null || isNaN(+e.nameSize))
+               ? null : clamp(Math.round(+e.nameSize), 8, 60);
   });
   S.players = (Array.isArray(S.players) ? S.players : []).slice(0, 4).map(function(p, i){
     var d0 = DEFAULT_STATE.players[i];

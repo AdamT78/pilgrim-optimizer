@@ -880,9 +880,14 @@ def test_nothing_on_the_wheel_identifies_which_duty_a_space_is(lab):
     """
     d = lab.default_state()
     for slug, D in d["duties"].items():
-        assert set(D) == {"name", "clock", "actionA", "actionB", "card", "figures"}, (
-            "%s carries %s -- V4 duties hold wording, a ribbon card and an acolyte anchor, and "
-            "nothing that would mark out a space on the wheel" % (slug, sorted(D)))
+        # `actions` is 1 or 2 -- Taxation and Allocation have one. Derived from
+        # duty_text.json at build time rather than being a second switch to keep in step, and it
+        # says nothing about WHERE a duty is, which is all this guard is about.
+        assert set(D) == {"name", "clock", "actionA", "actionB", "actions", "card",
+                          "figures"}, (
+            "%s carries %s -- V4 duties hold wording, how many actions the duty has, a ribbon "
+            "card and an acolyte anchor, and nothing that would mark out a space on the wheel"
+            % (slug, sorted(D)))
         assert "label" not in D and "summary" not in D and "titheLabel" not in D
 
     # The template must not draw one either. A blocklist of names to look for is the weak way to
@@ -1496,43 +1501,41 @@ def test_the_eight_reference_cards_open_as_one_row_in_wheel_order(lab):
 
 
 
-def test_the_action_names_are_the_known_ones_and_taxation_is_left_obviously_blank(lab):
-    """Starting wording, and one deliberate gap.
+def test_every_duty_opens_with_the_wording_its_file_gives_it(lab):
+    """Starting wording, and how many actions each duty offers.
 
-    The brief supplies the action names that are already decided and says Taxation's are not --
-    to use temporary labels and not to invent final wording. An obvious placeholder is the point:
-    a plausible invented name is exactly the kind that survives into production unnoticed.
+    This used to assert a list of labels typed here and that Taxation was still an obvious
+    placeholder. Both premises are gone: the wording moved into ui/board_v2/duty_text.json, and
+    Taxation was given real wording along with the news that it has only ONE action. A list
+    retyped here would now be a third copy of something that already has an owner, so this checks
+    the relationship instead -- every duty opens at whatever that file says.
 
-    Falsified by giving Taxation something that reads like a real action.
+    Falsified by the generator inventing wording, or by a duty's action count disagreeing with
+    the file.
     """
     d = lab.default_state()
-    known = {
-        "clerical": ("Gain Piety", "Gain Coins"),
-        "allocation": ("Relocate Acolytes", "Special Activity"),
-        "build_roads": ("Build Road", "Build Shrine"),
-        "ordination": ("Ordain", "Send on Mission"),
-        "give_alms": ("Give Alms", "Donate Building"),
-        "produce": ("Gain Wheat", "Gain Stone"),
-        "construct": ("Construct Building", "Construct Road"),
-    }
-    # READ OFF shortLabel, NOT name. These are what each action DOES, and until V4.5 both
-    # fields held the same string so either would have passed. `name` is the action's own name
-    # now -- Devotion, Silversmith -- and is null wherever the wording has not been written, so
-    # asserting this list against it would be asserting the wrong half.
-    for slug, (a, b) in known.items():
-        got = (d["duties"][slug]["actionA"]["shortLabel"],
-               d["duties"][slug]["actionB"]["shortLabel"])
-        assert got == (a, b), "%s opens as %s, not %s" % (slug, got, (a, b))
+    said = lab.duty_text()
 
-    tax = (d["duties"]["taxation"]["actionA"]["shortLabel"],
-           d["duties"]["taxation"]["actionB"]["shortLabel"])
-    assert tax == ("Action A", "Action B"), (
-        "Taxation has been given wording (%s). The brief says not to invent it -- an obvious "
-        "placeholder is the point, because a plausible one survives into production" % (tax,))
+    for slug, slots in said.items():
+        first = slots[lab.ACTIONS[0][0]]
+        assert d["duties"][slug]["actionA"]["shortLabel"] == first["shortLabel"], slug
+        assert d["duties"][slug]["actionA"]["name"] == first["name"], slug
 
-    # The short planning label is what the compact summary shows, so it must not be empty.
+    # ONE ACTION OR TWO, and the state must agree with the file rather than carry its own idea.
+    single = [s for s, v in said.items() if v[lab.ACTIONS[1][0]] is None]
+    assert sorted(single) == ["allocation", "taxation"], (
+        "the one-action duties are %s; Taxation and Allocation are the two that have one action "
+        "each, so a change here is a change to the game" % sorted(single))
     for slug, D in d["duties"].items():
-        for slot, _ in lab.ACTIONS:
+        want = 1 if said[slug][lab.ACTIONS[1][0]] is None else 2
+        assert D["actions"] == want, (
+            "%s says it has %d actions and its file says %d" % (slug, D["actions"], want))
+
+    # The summary row needs something to print for every action a duty actually has.
+    for slug, D in d["duties"].items():
+        for i, (slot, _) in enumerate(lab.ACTIONS):
+            if i >= D["actions"]:
+                continue
             assert D[slot]["shortLabel"], "%s/%s has no short label for its summary" % (slug, slot)
 
 
@@ -1697,7 +1700,7 @@ process.stdout.write(JSON.stringify(out));
     # A V1 file has no action objects at all -- it carried a single `art` -- so the migration
     # has to synthesise them, and what it synthesises is this build's default wording. Both
     # fields, because they stopped being the same string in V4.5.
-    assert a["shortLabel"] == "Gain Piety", (
+    assert a["shortLabel"] == "Gain X piety", (
         "Action A did not take this build's default wording: %r" % a["shortLabel"])
     assert a["name"] == "Devotion", (
         "Action A did not take this build's default action name: %r" % a["name"])
@@ -1972,7 +1975,10 @@ process.stdout.write(JSON.stringify({layout: g, text: JSON.stringify(g)}));
 
     assert len(g["duties"]) == 8
     for slug, d in g["duties"].items():
-        assert set(d) == {"name", "card", "actionA", "actionB", "figures"}, sorted(d)
+        # `actions` travels because the real UI cannot infer it: a one-action duty still
+        # carries both wording slots, the second simply saying nothing.
+        assert set(d) == {"name", "actions", "card", "actionA", "actionB",
+                          "figures"}, sorted(d)
         assert set(d["card"]) == {"x", "y", "width", "height", "visible"}, sorted(d["card"])
         for slot in ("actionA", "actionB"):
             assert set(d[slot]) == {"name", "shortLabel"}, (
@@ -1986,13 +1992,13 @@ process.stdout.write(JSON.stringify({layout: g, text: JSON.stringify(g)}));
     # BOTH fields travel, and they are two different things: the action's name and what it
     # does. They were the same string until V4.5, so an export carrying only one of them would
     # have looked complete.
-    assert g["duties"]["clerical"]["actionA"]["shortLabel"] == "Gain Piety"
+    assert g["duties"]["clerical"]["actionA"]["shortLabel"] == "Gain X piety"
     assert g["duties"]["clerical"]["actionA"]["name"] == "Devotion"
 
     for side in ("left", "right"):
         e = g["artwork"][side]
         assert set(e) == {"x", "y", "width", "height", "slot", "fit", "opacity", "visible",
-                          "labelVisible", "labelSize"}, sorted(e)
+                          "labelVisible", "labelSize", "nameSize"}, sorted(e)
         assert e["slot"] in ("actionA", "actionB")
     assert g["artwork"]["left"]["slot"] != g["artwork"]["right"]["slot"]
 
@@ -2504,17 +2510,21 @@ process.stdout.write(JSON.stringify(out));
 
     assert got["clerical"]["leftAsset"] == "k_piety", got["clerical"]
     assert got["clerical"]["rightAsset"] == "k_coins", got["clerical"]
-    assert got["clerical"]["leftLabel"] == "Gain Piety", got["clerical"]
+    assert got["clerical"]["leftLabel"] == "Gain X piety", got["clerical"]
 
     assert got["produce"]["leftAsset"] == "k_wheat", (
         "opening Produce did not change what the left slot resolves to: %s" % got["produce"])
-    assert got["produce"]["leftLabel"] == "Gain Wheat", got["produce"]
+    assert got["produce"]["leftLabel"] == "Gain X wheat", got["produce"]
 
     # A duty with no artwork loaded resolves to nothing rather than to the last one's picture.
     assert got["taxation"]["leftAsset"] is None, (
         "opening a duty with no artwork left the previous duty's picture in the slot: %s"
         % got["taxation"])
-    assert got["taxation"]["leftLabel"] == "Action A", got["taxation"]
+    # Taxation has real wording now, and only ONE action -- so the left box carries its caption
+    # and the right box is not drawn at all. `rightLabel` here is whatever artLabel() would say
+    # if it were asked, which is why it is not what this checks; the drawn-or-not claim belongs
+    # with the acceptance suite that can see the DOM.
+    assert got["taxation"]["leftLabel"] == "Gain X resources", got["taxation"]
 
     assert got["backAgain"] == got["clerical"], (
         "coming back to Clerical did not restore what it showed: %s vs %s"
@@ -2536,7 +2546,7 @@ process.stdout.write(JSON.stringify(out));
 
     assert "scenic" not in got["slotKeys"] and "image" not in got["slotKeys"], (
         "an artwork slot stores a picture of its own: %s" % got["slotKeys"])
-    assert got["swapped"]["label"] == "Gain Coins", got["swapped"]
+    assert got["swapped"]["label"] == "Gain X silver", got["swapped"]
     assert got["swapped"]["dutyUntouched"] == "k_piety", (
         "swapping which action the slot shows wrote through to the duty: %s" % got["swapped"])
 
@@ -2656,7 +2666,8 @@ process.stdout.write(JSON.stringify(out));
         "the acolyte ring kept its 950px-wheel coordinates: %s" % (got["anchor"],))
 
     # ---- and the shape is V4's
-    assert got["dutyKeys"] == ["actionA", "actionB", "card", "clock", "figures", "name"], (
+    assert got["dutyKeys"] == ["actionA", "actionB", "actions", "card", "clock",
+                               "figures", "name"], (
         "the migrated duty is not a V4 duty: %s" % got["dutyKeys"])
     assert got["displayKeys"] == ["artLeft", "artRight", "highlight"], got["displayKeys"]
     assert got["inHandKeys"] == ["count", "label", "seat"], got["inHandKeys"]

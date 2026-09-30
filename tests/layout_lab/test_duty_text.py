@@ -64,10 +64,21 @@ def test_the_rules_table_is_still_readable():
 
 
 def test_every_duty_and_slot_is_present(text, lab):
+    """Both keys always exist. A duty with one action spells its second slot `null` rather than
+    leaving the key out, so a typo in the key name still fails instead of quietly meaning
+    'one action'."""
     slugs = [d[0] for d in lab.DUTIES]
     assert sorted(text["duties"]) == sorted(slugs), sorted(text["duties"])
     for slug, entry in text["duties"].items():
         assert sorted(k for k in entry) == list(SLOTS), (slug, sorted(entry))
+        assert entry[SLOTS[0]] is not None, "%s has no first action" % slug
+
+
+def test_only_taxation_and_allocation_have_one_action(text):
+    """Which duties offer one action is a fact about the game, so it is named rather than
+    counted. Anything else going null here is a design change and should say so out loud."""
+    single = sorted(s for s, e in text["duties"].items() if e[SLOTS[1]] is None)
+    assert single == ["allocation", "taxation"], single
 
 
 def test_every_engine_action_named_here_exists_in_the_rules(text):
@@ -76,6 +87,8 @@ def test_every_engine_action_named_here_exists_in_the_rules(text):
     ids = canonical_ids()
     for slug, entry in text["duties"].items():
         for slot in SLOTS:
+            if entry[slot] is None:
+                continue          # a one-action duty
             action = entry[slot].get("engineAction")
             if action is None:
                 continue
@@ -90,6 +103,8 @@ def test_a_box_always_has_something_to_say(text):
     would be indistinguishable from a mistake."""
     for slug, entry in text["duties"].items():
         for slot in SLOTS:
+            if entry[slot] is None:
+                continue          # a one-action duty
             label = entry[slot].get("shortLabel")
             assert isinstance(label, str) and label.strip(), (slug, slot, label)
             name = entry[slot].get("name", None)
@@ -101,6 +116,8 @@ def test_the_wording_is_stored_as_written_not_shouted(text):
     quieter, and the two conventions would drift into the same file."""
     for slug, entry in text["duties"].items():
         for slot in SLOTS:
+            if entry[slot] is None:
+                continue          # a one-action duty
             for field in ("name", "shortLabel"):
                 v = entry[slot].get(field)
                 if isinstance(v, str) and len(v) > 3:
@@ -124,6 +141,11 @@ def test_the_starting_layout_actually_uses_the_file(text, lab):
     for slug, entry in text["duties"].items():
         for slot in SLOTS:
             got = S["duties"][slug][slot]
+            if entry[slot] is None:
+                # The slot still exists so the schema stays one shape for all eight duties; it
+                # simply says nothing, and nothing draws it.
+                assert got["shortLabel"] == "" and got["name"] is None, (slug, slot, got)
+                continue
             assert got["shortLabel"] == entry[slot]["shortLabel"], (slug, slot)
             assert got["name"] == entry[slot].get("name"), (slug, slot)
 

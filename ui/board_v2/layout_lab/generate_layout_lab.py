@@ -223,7 +223,16 @@ def duty_text() -> dict:
             raise SystemExit("duty_text.json has no entry for %r" % slug)
         slots = {}
         for key, _ in ACTIONS:
-            slot = entry.get(key)
+            slot = entry.get(key, "missing")
+            # A NULL actionB IS A DUTY WITH ONE ACTION, not an oversight -- Taxation and
+            # Allocation have one each. It is spelled null rather than left out so that a typo in
+            # the key still fails loudly; `entry.get(key)` alone could not tell the two apart.
+            if slot is None:
+                if key == ACTIONS[0][0]:
+                    raise SystemExit("duty_text.json: %s has no first action, which no duty "
+                                     "can be missing" % slug)
+                slots[key] = None
+                continue
             if not isinstance(slot, dict):
                 raise SystemExit("duty_text.json: %s has no %s" % (slug, key))
             label = slot.get("shortLabel")
@@ -497,13 +506,19 @@ def default_state() -> dict:
         fx, fy = _on_ellipse(deg, FIG_RX, FIG_RY)
         fu, fv = _norm(fx, fy)
         d = {"name": name, "clock": deg}
+        # DERIVED FROM THE TEXT FILE, not a second switch to keep in step. A duty either has
+        # a second action or it does not, and duty_text.json is where that is said.
+        d["actions"] = 1 if TEXT[slug][ACTIONS[1][0]] is None else 2
         for slot, _ in ACTIONS:
             # ASSETS ONLY -- no geometry. The two shared slots in `display` own the box.
             # `name` and `shortLabel` are two different things now and no longer shadow each
             # other: the name is the duty action's own (DEVOTION), the shortLabel is what it does
             # (GAIN PIETY). They were the same string in every duty until the wording moved into
             # duty_text.json, which is why one caption could stand in for both.
-            said = TEXT[slug][slot]
+            # The second slot still EXISTS on a one-action duty: the schema is fixed, an
+            # older session merges against it, and the export keeps one shape for all eight. It
+            # simply carries nothing and is never drawn.
+            said = TEXT[slug][slot] or {"name": None, "shortLabel": ""}
             d[slot] = {"name": said["name"], "shortLabel": said["shortLabel"],
                        "seal": None, "sealName": None,
                        "scenic": None, "scenicName": None}
@@ -545,10 +560,17 @@ def default_state() -> dict:
                   "opacity": 1.0, "locked": False, "image": None, "imageName": None},
         "duties": duties,
         "display": {
+            # TWO SIZES PER BOX. `labelSize` is the effect line at the foot and keeps its
+            # name, so an older session opens at the size it was saved with; `nameSize` is the
+            # action name at the head and is new. They start equal and are set separately,
+            # because the two lines are different lengths -- seven of the fourteen effect lines
+            # wrap to two at 17px while every name fits one.
             "artLeft": dict(ART_LEFT, slot="actionA", fit="cover", opacity=1.0,
-                            locked=False, visible=True, labelVisible=True, labelSize=17),
+                            locked=False, visible=True, labelVisible=True,
+                            labelSize=17, nameSize=17),
             "artRight": dict(ART_RIGHT, slot="actionB", fit="cover", opacity=1.0,
-                             locked=False, visible=True, labelVisible=True, labelSize=17),
+                             locked=False, visible=True, labelVisible=True,
+                             labelSize=17, nameSize=17),
             # A lightweight overlay at the reached duty's own anchor. Never a change to the
             # imported wheel asset: the SVG may not expose its segments, and recolouring
             # somebody's artwork from a layout tool is not this page's business.

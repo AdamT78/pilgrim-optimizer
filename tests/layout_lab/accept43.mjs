@@ -7,12 +7,8 @@ import { fileURLToPath, pathToFileURL } from 'url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CHROMIUM = process.env.LAYOUT_LAB_CHROMIUM
   || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
-const ART = process.env.LAYOUT_LAB_DUTY_ART
-  || path.join(HERE, '..', '..', 'ui', 'board_v2', 'duty_actions');
-const PIETY = path.join(ART, 'clerical', 'gain_piety',
-                        'clerical_gain_piety_v01.png');
-const COINS = path.join(ART, 'clerical', 'gain_coins',
-                        'clerical_gain_coins_v01.png');
+const PIETY = path.join(HERE, 'clerical_gain_piety_v01.png');
+const COINS = path.join(HERE, 'clerical_gain_coins_v01.png');
 
 const b = await chromium.launch({executablePath: CHROMIUM});
 const p = await b.newPage({viewport:{width:1900,height:1500}, deviceScaleFactor:1});
@@ -20,7 +16,7 @@ const errs = [];
 p.on('pageerror', e => errs.push('pageerror: ' + e.message));
 p.on('console', m => { if (m.type() === 'error') errs.push('console: ' + m.text()); });
 
-const PAGE = process.argv[2] || pathToFileURL(path.join(HERE, '..', '..', 'out', 'lab.html')).href;
+const PAGE = process.argv[2] || pathToFileURL(path.join(HERE, 'lab.html')).href;
 await p.goto(PAGE);
 await p.evaluate(() => localStorage.clear());
 await p.reload();
@@ -289,7 +285,9 @@ ck('TEST K', 'and it stays small', game.length < 20000, game.length + ' chars');
 // decision already made and tested, so the export keeps naming the ACTION and leaves the file to
 // the repository. What production needs to resolve art is the action identity, and that is here.
 ck('TEST K', 'the action is still identifiable by name',
-   game.indexOf('Gain Piety') > 0 && game.indexOf('Gain Coins') > 0);
+   game.indexOf('Devotion') > 0 && game.indexOf('Silversmith') > 0
+     && game.indexOf('Gain X piety') > 0 && game.indexOf('Gain X silver') > 0,
+   'names and effects both present');
 const exported = await p.evaluate(() => Object.keys(gameLayout().duties.clerical.actionA).sort());
 ck('TEST K', 'and each action exports exactly name and shortLabel',
    JSON.stringify(exported) === '["name","shortLabel"]', exported.join(','));
