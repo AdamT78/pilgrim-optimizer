@@ -258,6 +258,7 @@ body.clean #cityObj{background:#ffffff04}
 .row.four{grid-template-columns:70px repeat(4,1fr)}
 .row span{color:var(--dim);text-align:right}
 .btns{display:flex;gap:5px;flex-wrap:wrap;margin:5px 0}
+#bSave.dirty{border-color:var(--hot);color:var(--hot)}
 #status{color:var(--dim);min-height:17px;margin-top:8px;font-size:11px}
 #status.ok{color:var(--ok)} #status.bad{color:var(--warn)}
 #scaleTag{color:var(--dim)}
@@ -294,6 +295,7 @@ body.clean #cityObj{background:#ffffff04}
     <span class=tag>· 1 / 2 / 3 state · f full screen</span>
     <span class=tag id=buildTag></span>
     <span class=sp></span>
+    <button id=bSave title="write the layout and the pictures into this browser">save</button>
     <button id=bReset>reset lab</button>
     <button id=bExport>export lab session</button>
     <button id=bImport>import lab session</button>
@@ -383,7 +385,13 @@ var scale = 1;                           // stage display scale, CSS px per desi
 // undo snapshots cost kilobytes, a Lab Session exports with or without bytes from the same
 // object, and a lost asset can say which file to reload.
 // =============================================================================================
+// THE ARTWORK THAT CAME WITH THE BUILD. Keyed "bundled:<duty>:<side>" so it cannot collide
+// with the "imN" keys putImage() hands out, and so a glance at a saved session says where a
+// picture came from. Seeded before anything reads the pool, because the default state already
+// points at these keys.
+var BUNDLED_ART = __BUNDLED_ART__;
 var IMAGES = {};
+Object.keys(BUNDLED_ART).forEach(function(k){ IMAGES[k] = BUNDLED_ART[k]; });
 var IMG_SEQ = 0;
 function putImage(url){ var k = "im" + (++IMG_SEQ); IMAGES[k] = url; return k; }
 
@@ -808,11 +816,16 @@ function spread(values){
   return {lo: lo, hi: hi, uniform: lo === hi};
 }
 function cardGroup(){
-  var ws = [], hs = [], ys = [];
+  var ws = [], hs = [], ys = [], bs = [];
   DUTY_ORDER.forEach(function(s){
-    var c = S.duties[s].card; ws.push(c.width); hs.push(c.height); ys.push(c.y);
+    var c = S.duties[s].card;
+    ws.push(c.width); hs.push(c.height); ys.push(c.y);
+    // THE BOTTOM EDGE, WHICH IS NOT y + A SHARED HEIGHT. The height control writes one number
+    // into all eight, but a card can be resized on its own, so the bottoms are their own
+    // measurement rather than something derived from the tops.
+    bs.push(c.y + c.height);
   });
-  return {w: spread(ws), h: spread(hs), y: spread(ys)};
+  return {w: spread(ws), h: spread(hs), y: spread(ys), b: spread(bs)};
 }
 
 // THE THREE HORIZONTAL GAPS OF THE ACTION ROW, left to right, measured rather than remembered.
@@ -935,6 +948,23 @@ function alignCardTops(){
   // Clerical is the row anchor, as it is everywhere else in this file.
   var y = S.duties[DUTY_ORDER[0]].card.y;
   DUTY_ORDER.forEach(function(s){ S.duties[s].card.y = y; });
+  commit();
+}
+// THE BOTTOMS, WHICH IS A DIFFERENT THING WHENEVER THE HEIGHTS DIFFER. Levelling the tops of
+// cards of unequal height leaves their bottoms ragged against the action row below, and that
+// lower edge is the one the eye reads as the line -- it is what the action band sits under.
+//
+// HEIGHTS ARE NOT TOUCHED. The obvious shortcut is to give every card the anchor's height and
+// call the bottoms level, which is a resize wearing an alignment's name: it would silently undo
+// a card somebody had deliberately made taller. Each card keeps its own height and moves.
+function alignCardBottoms(){
+  if (!requireUnlocked(needs("align the duty cards", ALL_CARDS()))) return;
+  var anchor = S.duties[DUTY_ORDER[0]].card;
+  var bottom = anchor.y + anchor.height;
+  DUTY_ORDER.forEach(function(s){
+    var c = S.duties[s].card;
+    c.y = Math.round(bottom - c.height);
+  });
   commit();
 }
 
@@ -1400,8 +1430,12 @@ function paintMetrics(){
         // legitimate thing to try, so it is measured and coloured rather than prevented.
         + row("cards → row", v < 0 ? "overlap " + (-v) + " px" : v + " px", v < 0 ? "bad" : "")
         + '</div>';
+  // BOTH EDGES ARE REPORTED, because with unequal heights one can be level while the other is
+  // not, and a page that only mentioned the tops would look like it had nothing to say.
   if (!cg.y.uniform) h += '<div class=hint>card tops vary by ' + (cg.y.hi - cg.y.lo)
                         + ' px · <b>align card tops</b> levels them</div>';
+  if (!cg.b.uniform) h += '<div class=hint>card bottoms vary by ' + (cg.b.hi - cg.b.lo)
+                        + ' px · <b>align card bottoms</b> levels them, heights untouched</div>';
   host.innerHTML = h;
 }
 
@@ -2643,7 +2677,8 @@ function panels(){
     + ' step=1 value="' + cg.h.lo + '">'
     + '<div class=hint>writes the same height into all eight · x, y and width are left alone, '
     + 'and nothing below is pushed down</div>'
-    + '<div class=btns>' + btn("align card tops", alignCardTops) + '</div>'
+    + '<div class=btns>' + btn("align card tops", alignCardTops)
+                        + btn("align card bottoms", alignCardBottoms) + '</div>'
 
     + '<div class=sub>action art</div>'
     + '<div class=row><span>both w</span><input type=number id=hpArtWN min=' + HELPERS.artW[0]
@@ -2887,7 +2922,10 @@ function statusFits(){
 function labSession(withImages){
   var used = {};
   if (withImages){
-    function mark(k){ if (k && IMAGES[k]) used[k] = IMAGES[k]; }
+    // ARTWORK THAT CAME WITH THE BUILD IS LEFT OUT. It is in the page already, so a copy in
+    // every session file would be pure weight -- and on reopening, the build supplies it for
+    // any slot the session leaves empty, which is exactly the slots it came from.
+    function mark(k){ if (k && IMAGES[k] && !BUNDLED_ART[k]) used[k] = IMAGES[k]; }
     mark(S.wheel.image); mark(S.tithe.image);
     // The three resource tokens, or a session exported "with images" would reopen showing the
     // letters again and look like the art had been lost.
@@ -2994,6 +3032,30 @@ function gameLayout(){
 
 function validate(d){
   if (!d || typeof d !== "object" || Array.isArray(d)) throw new Error("not an object");
+
+  // IS THIS A LAB SESSION AT ALL? This page exports two files and they are not interchangeable.
+  // A GAME LAYOUT is design decisions on their way out to production: boxes, wording, sizes --
+  // and deliberately none of the editor's own state and none of the image bytes. A LAB SESSION
+  // is everything, optionally including the pictures.
+  //
+  // Both have `canvas` and all eight `duties`, so everything below this passed a game layout
+  // happily and applyState then filled the missing half from the defaults. What came out looked
+  // like a successful import and had lost every picture in it: the action artwork went black
+  // and the three painted tithe tokens fell back to the letters W, S and Ag. It said
+  // "imported", so there was nothing to suggest the file had been the wrong one.
+  //
+  // The test is positive in both directions rather than a guess at one: a game layout has a
+  // top-level `artwork` and no `display`; a session has `display` and no top-level `artwork`.
+  if (d.artwork && !d.display)
+    throw new Error("that is a GAME LAYOUT, not a lab session -- it carries the boxes and the "
+                  + "wording for production and deliberately no pictures and no editor state. "
+                  + "Importing it would blank the artwork. Use 'export lab session' to make a "
+                  + "file this can read, and answer OK when it asks about images.");
+  // NOTHING BROADER THAN THAT. Requiring `display` outright was tried and is wrong twice over:
+  // validate() is on applyState's path, not only the importer's, and a V2 or V3 session is a
+  // sparse object that migrate() fills in -- neither carries `display`, and both are files this
+  // page is supposed to open. The tests caught it.
+
   if (!d.canvas || d.canvas.width !== CANVAS_W || d.canvas.height !== CANVAS_H)
     throw new Error("canvas is not " + CANVAS_W + "x" + CANVAS_H);
   if (!d.duties || typeof d.duties !== "object") throw new Error("no duties");
@@ -3204,6 +3266,22 @@ function migrate(d){
   }
   d.textVersion = TEXT_VERSION;
 
+  // An empty slot takes whatever artwork the build brought for it. A slot somebody has loaded
+  // their own file into is left alone -- theirs wins, and always did.
+  if (d.duties){
+    DUTY_ORDER.forEach(function(s){
+      var D = d.duties[s];
+      if (!D) return;
+      ACTIONS.forEach(function(a){
+        var act = D[a.key], dflt = DEFAULT_STATE.duties[s][a.key];
+        if (act && !act.scenic && dflt.scenic){
+          act.scenic = dflt.scenic;
+          act.scenicName = dflt.scenicName;
+        }
+      });
+    });
+  }
+
   d.version = STATE_VERSION;
   return d;
 }
@@ -3358,6 +3436,103 @@ function applyState(d){
 // that structural -- there are no image bytes in S to save -- and the strip pass below is the
 // belt to those braces, so a future field holding a data URL cannot reintroduce the problem.
 // =============================================================================================
+// =============================================================================================
+// THE PICTURES ARE KEPT IN INDEXEDDB, and the state in localStorage, and that split is the
+// whole reason reopening this page used to lose the art.
+//
+// localStorage tops out around 4 MB on this browser and a session carrying the action artwork
+// is several times that, so the autosave was built to throw the image bytes away -- which it
+// did silently, and correctly by its own lights, every single time. Everything downstream was a
+// workaround for that one fact: exporting a session "with images", importing it again, and a
+// game layout that looked like a session and blanked the art.
+//
+// IndexedDB on this same file:// page reports a half-gigabyte quota and reads a 5 MB value back
+// without complaint. It is the right drawer for bytes. The state stays in localStorage because
+// it is small, synchronous and already works.
+//
+// FAILURE IS SILENT BY DESIGN HERE, with one exception. A browser in private mode, or with site
+// data blocked, will refuse to open the database; the page must still work, just without
+// remembering pictures. So every path below tolerates a missing store, and the one place it
+// speaks up is when it was asked to save and could not.
+var IMG_DB = null, IMG_DB_READY = null;
+function imgDb(){
+  if (IMG_DB_READY) return IMG_DB_READY;
+  IMG_DB_READY = new Promise(function(res){
+    var req;
+    try { req = indexedDB.open("dutyWheelLab", 1); }
+    catch (e){ return res(null); }
+    req.onupgradeneeded = function(){ req.result.createObjectStore("images"); };
+    req.onsuccess = function(){ IMG_DB = req.result; res(IMG_DB); };
+    req.onerror = function(){ res(null); };
+    req.onblocked = function(){ res(null); };
+    setTimeout(function(){ res(IMG_DB); }, 4000);
+  });
+  return IMG_DB_READY;
+}
+function imgTx(mode){
+  return imgDb().then(function(db){
+    if (!db) return null;
+    try { return db.transaction("images", mode).objectStore("images"); }
+    catch (e){ return null; }
+  });
+}
+// WRITTEN AS A SET, NOT A DIFF. The pool is small in number -- a couple of dozen keys at most --
+// and rewriting it whole means a cleared artwork's bytes actually go, rather than accumulating
+// in a store nobody looks at until the quota runs out.
+function imgSave(){
+  return imgTx("readwrite").then(function(st){
+    if (!st) return false;
+    // Artwork that came with the build is already in the page; storing it again would put a
+    // second copy of every picture in the browser for nothing.
+    var keep = usedImageKeys();
+    Object.keys(BUNDLED_ART).forEach(function(k){ delete keep[k]; });
+    st.clear();
+    Object.keys(IMAGES).forEach(function(k){ if (keep[k]) st.put(IMAGES[k], k); });
+    return true;
+  }).catch(function(){ return false; });
+}
+function imgLoadAll(){
+  return imgTx("readonly").then(function(st){
+    if (!st) return 0;
+    return new Promise(function(res){
+      // BOTH HANDLERS GO ON NOW, and whichever finishes last does the work. Nesting the second
+      // inside the first returned nothing every time: by the time the values arrived the keys
+      // request had already succeeded, so a handler attached to it afterwards was attached to
+      // an event that had been and gone. The database had the pictures in it the whole time.
+      var kq = st.getAllKeys(), vq = st.getAll();
+      var keys = null, vals = null, done = false;
+      function join(){
+        if (done || keys === null || vals === null) return;
+        done = true;
+        var n = 0;
+        keys.forEach(function(k, i){ if (vals[i]){ IMAGES[k] = vals[i]; n++; } });
+        reserveImageKeys(IMAGES);
+        res(n);
+      }
+      kq.onsuccess = function(){ keys = kq.result; join(); };
+      vq.onsuccess = function(){ vals = vq.result; join(); };
+      kq.onerror = vq.onerror = function(){ if (!done){ done = true; res(0); } };
+      setTimeout(function(){ if (!done){ done = true; res(0); } }, 4000);
+    });
+  }).catch(function(){ return 0; });
+}
+function imgClear(){
+  return imgTx("readwrite").then(function(st){ if (st) st.clear(); }).catch(function(){});
+}
+// EVERY KEY THE STATE ACTUALLY POINTS AT. The same walk labSession(true) does, so what is kept
+// and what is exported cannot drift apart.
+function usedImageKeys(){
+  var used = {};
+  function mark(k){ if (k) used[k] = 1; }
+  mark(S.wheel.image); mark(S.tithe.image);
+  (S.tithe.resources || []).forEach(function(r){ mark(r.icon); });
+  DUTY_ORDER.forEach(function(s){
+    ACTIONS.forEach(function(a){ var x = S.duties[s][a.key]; mark(x.seal); mark(x.scenic); });
+  });
+  PLAYER_IDS.forEach(function(p){ mark(S.acolytes.painted[p]); mark(S.acolytes.colored[p]); });
+  return used;
+}
+
 function stripDataUrls(o){
   if (o === null || typeof o !== "object") return o;
   if (Array.isArray(o)) return o.map(stripDataUrls);
@@ -3374,10 +3549,35 @@ function say(msg, bad){
   e.textContent = msg; e.className = bad ? "bad" : "ok";
   clearTimeout(say._t); say._t = setTimeout(function(){ e.className = ""; }, 4000);
 }
+// NOTHING SAVES ON ITS OWN. Twenty-eight places used to call save(true) after every drag,
+// keystroke and slider, and the Save button is the only thing that writes now. Those calls are
+// left where they are -- they mark the page dirty instead, which is the honest thing for them
+// to be saying, and rewriting all twenty-eight to say markDirty() would be the same change with
+// more surface to get wrong.
+var DIRTY = false;
+function markDirty(){
+  if (DIRTY) return;
+  DIRTY = true;
+  var b = el("bSave");
+  if (b){ b.classList.add("dirty"); b.textContent = "save \u2022"; }
+}
+function markClean(){
+  DIRTY = false;
+  var b = el("bSave");
+  if (b){ b.classList.remove("dirty"); b.textContent = "save"; }
+}
+
 function save(quiet){
+  if (quiet){ markDirty(); return; }      // an autosave call. It only says something changed.
   try { localStorage.setItem(STORE_KEY, JSON.stringify(stripDataUrls(S))); }
-  catch (e){ if (!quiet) say("could not save: " + e.message, true); return; }
-  if (!quiet) say("saved to this browser");
+  catch (e){ say("could not save: " + e.message, true); return; }
+  imgSave().then(function(ok){
+    var n = Object.keys(usedImageKeys()).length;
+    if (ok) markClean();
+    say(ok ? "saved \u2014 layout and " + n + " picture(s). It will open like this."
+           : "layout saved, but the picture store could not be opened, so artwork will not "
+             + "come back on reload", !ok);
+  });
 }
 function load(){
   var raw = null;
@@ -3484,7 +3684,14 @@ el("bMode").onclick = function(){ setMode(S.mode === "edit" ? "clean" : "edit");
                                   save(true); };
 el("bUndo").onclick = function(){ say(stepHistory(-1) ? "undo" : "nothing to undo"); };
 el("bRedo").onclick = function(){ say(stepHistory(1) ? "redo" : "nothing to redo"); };
-el("bReset").onclick = function(){ applyState(clone(DEFAULT_STATE)); histReset(); save(true);
+// RESET GOES BACK TO THE BUILD, NOT TO NOTHING. Emptying the pool outright took the bundled
+// artwork with it, so the default state came back pointing at keys whose bytes had just been
+// thrown away -- the slots kept their filenames and drew placeholders. What reset means here is
+// "forget what I loaded", and what the build brought is not that.
+el("bReset").onclick = function(){ IMAGES = {}; IMG_SEQ = 0; imgClear();
+                                  Object.keys(BUNDLED_ART).forEach(function(k){
+                                    IMAGES[k] = BUNDLED_ART[k]; });
+                                  applyState(clone(DEFAULT_STATE)); histReset(); save(false);
                                    say("lab reset"); };
 
 function download(name, text, type){
@@ -3523,12 +3730,26 @@ function fallbackCopy(t){
   catch (e){ say("could not copy", true); }
   a.remove();
 }
+el("bSave").onclick = function(){ save(false); };
+// Ctrl/Cmd-S, because that is the key everybody presses and the browser's own Save Page As is
+// not what anybody wants here.
+addEventListener("keydown", function(e){
+  if ((e.metaKey || e.ctrlKey) && (e.key === "s" || e.key === "S")){
+    e.preventDefault(); save(false);
+  }
+});
 el("bImport").onclick = function(){ el("fImport").click(); };
 el("fImport").onchange = function(){
   var f = this.files && this.files[0]; if (!f) return;
   var rd = new FileReader();
   rd.onload = function(){
-    try { importSession(JSON.parse(rd.result)); say("imported " + f.name); }
+    try {
+      var d = JSON.parse(rd.result);
+      var n = d && d.images ? Object.keys(d.images).length : 0;
+      importSession(d);
+      say("imported " + f.name + (n ? " with " + n + " image(s)"
+          : " \u2014 GEOMETRY ONLY, it carried no images, so artwork is blank"), !n);
+    }
     catch (e){ say("import refused: " + e.message, true); }
   };
   rd.readAsText(f); this.value = "";
@@ -3606,4 +3827,14 @@ S = clone(DEFAULT_STATE);
 if (!load()){ applyState(clone(DEFAULT_STATE)); }
 histReset();
 relayout();
+
+// THE PICTURES ARRIVE AFTER THE PAGE DOES, because reading them is asynchronous and the layout
+// must not wait on a database to draw. The state is already on screen with its image KEYS in
+// place; this fills the pool behind them and repaints. If the store cannot be opened the page
+// simply stays as it was, which is what it always did.
+imgLoadAll().then(function(n){
+  if (!n) return;
+  render(); panels();
+  say("reopened with " + n + " picture(s) from this browser");
+});
 </script>
