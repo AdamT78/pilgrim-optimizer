@@ -8,7 +8,13 @@ the files still open and still look right.
 import importlib.util
 import pathlib
 
-import pytest
+from PIL import Image, ImageChops
+
+# IMPORTED, NOT importorskip'd. Three of the guards below used to reach for pillow that way, so
+# on any machine without it -- CI, as it turned out -- they skipped, and a skip reads as green.
+# The lane that runs them installs pillow; if it ever stops, these must go red rather than
+# quietly stop checking that the committed crops are still what the recipe produces. Same
+# argument the dev extras make for scipy: the test of a thing cannot degrade with it.
 
 # tests/layout_lab/ -> tests/ -> the repo root. This lives beside the other layout lab guards
 # so that adding duty art runs it in the lab lane rather than dragging the whole engine suite
@@ -69,8 +75,6 @@ def test_the_committed_clerical_pair_is_what_the_recipe_produces(tmp_path):
     NOT byte by byte: PNG encoders differ between Pillow versions, so identical pixels can land in
     different files. Pixels are the thing being claimed.
     """
-    Image = pytest.importorskip("PIL.Image", reason="pillow is needed to compare the crops")
-    ImageChops = pytest.importorskip("PIL.ImageChops")
     for p in (MASTER, LEFT, RIGHT):
         assert p.is_file(), "missing committed asset: %s" % p.relative_to(ROOT)
 
@@ -95,7 +99,6 @@ def test_the_geometry_the_readme_documents_is_the_geometry_the_script_uses():
     with the code is how the wrong crop box gets used a year from now, so the real numbers are
     asserted here and stated in the README.
     """
-    Image = pytest.importorskip("PIL.Image")
     w, h = Image.open(MASTER).size
     assert (w, h) == (2172, 724), (w, h)
 
@@ -117,8 +120,6 @@ def test_the_two_crops_actually_overlap_and_share_that_strip():
     A crop pair that merely abuts would satisfy every dimension check above and still lose the
     continuity the master exists to provide.
     """
-    Image = pytest.importorskip("PIL.Image")
-    ImageChops = pytest.importorskip("PIL.ImageChops")
     overlap = 1120 * 2 - 2172
     assert overlap > 0, "the crops do not overlap at all"
     a = Image.open(LEFT).convert("RGBA")
