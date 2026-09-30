@@ -560,6 +560,16 @@ def default_state() -> dict:
                   "opacity": 1.0, "locked": False, "image": None, "imageName": None},
         "duties": duties,
         "display": {
+            # ONE SWITCH FOR BOTH BOXES, and it sits on `display` rather than beside the
+            # sizes, because it is not the same kind of decision. How big a caption is belongs
+            # to the box it is in; whether the effect line shouts is a convention for the whole
+            # composition, and having it twice would only raise the question of what a board
+            # with one box shouting and one not is supposed to mean.
+            #
+            # TRUE is the default because that is how the card has always drawn. Turning it off
+            # shows what duty_text.json actually stores -- "Gain X piety" rather than
+            # "GAIN X PIETY" -- which is the form the wording is written and reused in.
+            "effectUpper": True,
             # TWO SIZES PER BOX. `labelSize` is the effect line at the foot and keeps its
             # name, so an older session opens at the size it was saved with; `nameSize` is the
             # action name at the head and is new. They start equal and are set separately,

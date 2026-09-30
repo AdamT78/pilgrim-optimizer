@@ -1407,7 +1407,7 @@ def test_an_action_owns_its_assets_and_the_two_shared_slots_own_the_geometry(lab
             for banned in ("x", "y", "width", "height", "u", "v"):
                 assert banned not in a
 
-    assert sorted(d["display"]) == ["artLeft", "artRight", "highlight"], sorted(d["display"])
+    assert sorted(d["display"]) == ["artLeft", "artRight", "effectUpper", "highlight"], sorted(d["display"])
     for side in ("artLeft", "artRight"):
         e = d["display"][side]
         assert {"x", "y", "width", "height", "slot"} <= set(e), sorted(e)
@@ -2669,7 +2669,7 @@ process.stdout.write(JSON.stringify(out));
     assert got["dutyKeys"] == ["actionA", "actionB", "actions", "card", "clock",
                                "figures", "name"], (
         "the migrated duty is not a V4 duty: %s" % got["dutyKeys"])
-    assert got["displayKeys"] == ["artLeft", "artRight", "highlight"], got["displayKeys"]
+    assert got["displayKeys"] == ["artLeft", "artRight", "effectUpper", "highlight"], got["displayKeys"]
     assert got["inHandKeys"] == ["count", "label", "seat"], got["inHandKeys"]
     assert got["retired"] == [], "retired V3 switches survived: %s" % got["retired"]
     assert got["titheRetired"] == [], (

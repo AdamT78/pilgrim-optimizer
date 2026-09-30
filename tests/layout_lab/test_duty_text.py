@@ -170,3 +170,43 @@ def test_a_missing_file_stops_the_build_rather_than_drawing_blanks(lab, monkeypa
     with pytest.raises(SystemExit) as e:
         lab.duty_text()
     assert "duty_text.json" in str(e.value)
+
+
+def test_the_effect_line_shouts_by_default_and_the_switch_can_stop_it(lab):
+    """One switch, for both boxes, and it starts on.
+
+    The card has always uppercased the effect line, so ON is the default and turning it off is
+    the new thing: it shows the sentence duty_text.json actually holds -- "Gain X piety", proper
+    nouns intact -- which is the form the wording is written and reused in.
+
+    It governs the effect line ALONE. The action name is a label and stays set the way the card
+    sets labels, so nothing here should touch it.
+    """
+    d = lab.default_state()
+    assert d["display"]["effectUpper"] is True, (
+        "the effect line has always shouted; off is the choice, not the default")
+    # ONE switch, not one per box: a composition with one box shouting and the other not is not
+    # a thing anybody wants to be able to make by accident.
+    for side in ("artLeft", "artRight"):
+        assert "effectUpper" not in d["display"][side], (
+            "%s carries its own casing switch; it belongs to the composition, not the box" % side)
+
+    src = (lab.HERE / "duty_wheel_layout_lab.html.tmpl").read_text(encoding="utf-8")
+    # The class is what the renderer hangs it on, and the CSS is what makes the class mean
+    # something. Either alone is a switch that does nothing.
+    assert '.art .cap.asis{text-transform:none}' in src
+    assert 'S.display.effectUpper ? "" : " asis"' in src
+    # And it must not reach the name.
+    assert '.art .anm.asis' not in src, (
+        "the action name is a label and is set the way the card sets labels")
+
+
+def test_a_session_saved_before_the_switch_keeps_shouting(lab):
+    """The trap this avoids: `!!undefined` is false, so coercing an absent key would turn the
+    switch OFF on load and silently restyle every caption in somebody's saved composition.
+    Absent means 'saved before this existed', which is the default."""
+    src = (lab.HERE / "duty_wheel_layout_lab.html.tmpl").read_text(encoding="utf-8")
+    i = src.index("S.display.effectUpper = (S.display.effectUpper === undefined")
+    block = src[i:i + 400]
+    assert "DEFAULT_STATE.display.effectUpper" in block, (
+        "an absent switch must fall back to the default, not to false")

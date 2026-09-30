@@ -156,6 +156,12 @@ body.clean .card.previewing{border-color:#8fae6a44;border-radius:4px;padding:7px
 .art .cap{position:absolute;left:0;right:0;bottom:0;padding:6px 10px;
   font:600 var(--cap)/1.2 Georgia,serif;letter-spacing:.11em;text-transform:uppercase;
   color:#e2d7bc;background:linear-gradient(transparent,#000000cc 62%)}
+/* THE EFFECT LINE AS STORED. The caption shouts by default and this turns that off for it
+   alone: the action NAME keeps its uppercase, because a name is a label and a label is set the
+   way the card sets labels. What this reveals is the sentence duty_text.json actually holds --
+   "Gain X piety", with its proper nouns intact -- which is the form that can be reused in a
+   tooltip or a rules sheet, and the form worth judging the wording in. */
+.art .cap.asis{text-transform:none}
 /* THE NAME IS THE CAPTION MIRRORED, deliberately: same face, same size, same tracking, same
    scrim, flipped top to bottom. They are a pair on one picture, and two different treatments
    would read as two different kinds of thing. Both take --cap from the one label-size control,
@@ -1047,7 +1053,10 @@ function render(){
       d.style.opacity = e.opacity;
       if (e.labelVisible && artLabel(side)){
         var cap = document.createElement("div");
-        cap.className = "cap"; cap.style.setProperty("--cap", e.labelSize + "px");
+        // A CLASS RATHER THAN AN INLINE STYLE, so the state of the switch can be read off
+        // the DOM by anything looking at it -- a test, or somebody with the inspector open.
+        cap.className = "cap" + (S.display.effectUpper ? "" : " asis");
+        cap.style.setProperty("--cap", e.labelSize + "px");
         cap.textContent = artLabel(side);
         d.appendChild(cap);
       }
@@ -2206,7 +2215,15 @@ function panels(){
 
   // ---- action artwork ------------------------------------------------------------------------------
   var ex = '<div class=hint>two boxes, not sixteen. Whichever duty is previewed or reached lends '
-         + 'them its two scenic images.</div>';
+         + 'them its two scenic images.</div>'
+       // ONE SWITCH FOR BOTH BOXES, so it sits above the per-side controls rather than inside
+       // the loop that would otherwise draw it twice saying the same thing.
+       + '<div class=row><span style="text-align:left" colspan=2>'
+       + '<label style="cursor:pointer"><input type=checkbox id=effUp'
+       + (S.display.effectUpper ? ' checked' : '') + '> effect text in upper case</label>'
+       + '</span></div>'
+       + '<div class=hint>the action NAME always shouts; this is the line at the foot. Off shows '
+       + 'it as duty_text.json stores it.</div>';
   ["left", "right"].forEach(function(side){
     var e = artOf(side);
     ex += '<div class=row><span>' + side + '</span><span style="text-align:left">'
@@ -2296,6 +2313,11 @@ function panels(){
       + '<div class=row><span>offset y</span>'
       + '<input type=number id=hlDy min=-300 max=300 value="' + S.display.highlight.dy + '"></div>';
   el("artCtl").innerHTML = ex;
+  var effUp = el("effUp");
+  if (effUp) effUp.onchange = function(){
+    S.display.effectUpper = !!effUp.checked;
+    commit();                      // NOT commitPanels(): rebuilding would drop the focus ring
+  };
   [].forEach.call(el("artCtl").querySelectorAll("[data-artslot]"), function(s){
     s.onchange = function(){ artOf(s.dataset.artslot).slot = s.value; commitPanels(); };
   });
@@ -2711,6 +2733,9 @@ function gameLayout(){
     artwork: {},
     // The mark on the reached duty, which was sized and coloured here and cannot be recreated
     // from anything else in this file.
+    // WHETHER THE EFFECT LINE SHOUTS travels: it is a decision taken here about how the card
+    // reads, and the real UI has the stored sentence but no way to know which form was chosen.
+    effectUpper: !!S.display.effectUpper,
     highlight: {width: H.width, height: H.height, dy: H.dy, style: H.style,
                 visible: !!H.visible, opacity: H.opacity, colour: H.colour},
     // WHEN Tithe and the City are on screen is a phase the game already knows; WHAT they look
@@ -3005,6 +3030,14 @@ function applyState(d){
         || isNaN(+S.tithe.tokenSpread)
           ? DEFAULT_STATE.tithe.tokenSpread : +S.tithe.tokenSpread),
       HELPERS.tokenSpread[0], HELPERS.tokenSpread[1]);
+
+  // NOT `!!S.display.effectUpper`. A session saved before this switch existed has no such
+  // key, and coercing an absent value would turn it OFF on load -- silently restyling every
+  // caption in somebody's saved composition. Absent means "saved before this existed", which is
+  // the default, and only an explicit false turns it off.
+  S.display.effectUpper = (S.display.effectUpper === undefined
+                           || S.display.effectUpper === null)
+                        ? DEFAULT_STATE.display.effectUpper : !!S.display.effectUpper;
 
   S.wheel.width = clamp(S.wheel.width, MIN_SIZE, 4000);
   S.wheel.naturalRatio = WHEEL_RATIO;
