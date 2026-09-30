@@ -199,7 +199,14 @@ jobs:
           python-version: "3.13"
           cache: pip
           cache-dependency-path: pyproject.toml
-      - run: pip install -e ".[dev]"
+      # TWO INSTALLS, because this job has two audiences. The lint below runs on every change
+      # and needs ruff alone; the engine tests further down need the lot. Installing `dev`
+      # unconditionally meant an artwork-only pull request sat through numpy, scipy, pillow and
+      # playwright -- tens of megabytes of wheels, none of them imported -- to reach a linter that
+      # finishes in seconds. That was the largest remaining cost on a board_v2 change.
+      - run: pip install -e ".[lint]"
+      - if: needs.changes.outputs.engine == 'true'
+        run: pip install -e ".[dev]"
       # Deliberately narrow: undefined/shadowed names must gate, while existing E501s do not.
       # This one runs on EVERY change, design-only included: it is repo-wide, it takes seconds,
       # and it is exactly what caught fourteen undefined-name errors in ui/ the day that tree
