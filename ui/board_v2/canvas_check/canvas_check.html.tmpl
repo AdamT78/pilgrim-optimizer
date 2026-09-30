@@ -1,0 +1,120 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>board_v2 canvas check __BUILD__</title>
+<style>
+  :root{--ink:#e7ddc6;--dim:#9c9075;--rule:#ffffff22}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:#0b0a09;color:var(--ink);
+    font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace}
+  #wrap{position:absolute;inset:0;display:grid;place-items:center;overflow:hidden}
+  /* The canvas is scaled to whatever window this is opened in, and the scale is REPORTED rather
+     than hidden: every number on the page is in canvas pixels, and knowing you are looking at
+     them at 41% is the difference between judging a layout and judging a thumbnail. */
+  #fit{transform-origin:top left}
+  #canvas{position:relative;background:#141210;outline:1px solid var(--rule)}
+  /* The free strip. It is drawn as a hole rather than as a thing: no fill, no content, because
+     the one question this page answers is how much room is left, and anything drawn in here
+     would be an answer to a different question. */
+  #free{position:absolute;left:0;top:0;border:1px dashed #d8b26a88;background:#d8b26a08;
+    display:grid;place-content:center;justify-items:center;text-align:center;padding:0 10px}
+  #free b{display:block;font-size:26px;letter-spacing:.06em;color:#d8b26a}
+  #free span{display:block;margin-top:6px;color:#d8b26acc;font-size:15px}
+  /* The module, flush right. 1400 x 1200, drawn from the layout lab's own default state. */
+  #module{position:absolute;top:0;background:#000;outline:1px solid #ffffff2e}
+  #module .box{position:absolute;border:1px solid #ffffff26;background:#ffffff08;
+    display:grid;place-items:center;overflow:hidden}
+  #module .box i{font-style:normal;color:var(--dim);font-size:12px;letter-spacing:.08em;
+    text-transform:uppercase;padding:0 4px;text-align:center}
+  #module .wheel{position:absolute;pointer-events:none}
+  #module .wheel svg{width:100%;height:100%;display:block}
+  #bar{position:fixed;left:0;right:0;bottom:0;padding:9px 14px;background:#000000d9;
+    border-top:1px solid var(--rule);display:flex;gap:22px;flex-wrap:wrap;align-items:baseline}
+  #bar b{color:#fff;font-weight:600}
+  #bar .k{color:var(--dim)}
+  #keys{position:fixed;right:14px;top:12px;color:var(--dim);text-align:right;line-height:1.7;
+    background:#000000e0;border:1px solid var(--rule);border-radius:3px;padding:8px 12px}
+  #keys b{color:var(--ink)}
+  body.bare #bar,body.bare #keys{display:none}
+</style>
+
+<div id=wrap><div id=fit><div id=canvas>
+  <div id=free><b></b><span></span></div>
+  <div id=module>__MODULE__</div>
+</div></div></div>
+
+<div id=keys></div>
+<div id=bar></div>
+
+<script>
+// THREE CANVASES, READ FROM gen_game_view AT BUILD TIME rather than typed here. They are the same
+// three the v1 wheel space check puts on keys 1, 2 and 3, and their heights are whatever
+// geometry() says -- so if the height ever stops being 1200 this page follows without an edit.
+var CANVASES = __CANVASES__;
+var MODULE_W = __MODULE_W__, MODULE_H = __MODULE_H__;
+var ci = 0;
+
+var canvas = document.getElementById("canvas");
+var free   = document.getElementById("free");
+var module_ = document.getElementById("module");
+var fit    = document.getElementById("fit");
+
+function paint(){
+  var C = CANVASES[ci];
+  var gap = C.w - MODULE_W;            // the whole question, in one subtraction
+
+  canvas.style.width  = C.w + "px";
+  canvas.style.height = C.h + "px";
+
+  // FLUSH RIGHT, because that is where the free space was asked for. Nothing here centres the
+  // module or pads it: a margin invented on this page would be a layout decision smuggled into
+  // a measurement.
+  module_.style.left   = Math.max(0, gap) + "px";
+  module_.style.width  = MODULE_W + "px";
+  module_.style.height = MODULE_H + "px";
+
+  free.style.width   = Math.max(0, gap) + "px";
+  free.style.height  = C.h + "px";
+  free.style.display = gap > 0 ? "grid" : "none";
+  free.querySelector("b").textContent = gap + " x " + C.h;
+  free.querySelector("span").textContent =
+    "free  ·  " + (100 * gap / C.w).toFixed(1) + "% of the canvas";
+
+  // The module is 1200 tall and so is every canvas, so it fills the height exactly. If that ever
+  // stops being true it must SAY so rather than silently crop, which is what this line is for.
+  var over = MODULE_H - C.h;
+  document.getElementById("bar").innerHTML =
+      '<span><span class=k>canvas ' + (ci + 1) + '</span> <b>' + C.w + ' x ' + C.h + '</b></span>'
+    + '<span><span class=k>module</span> <b>' + MODULE_W + ' x ' + MODULE_H + '</b>'
+        + (over > 0 ? ' <b style="color:#e08a6a">overruns the canvas by ' + over + ' px</b>' : '')
+        + '</span>'
+    + '<span><span class=k>free to the left</span> <b>' + Math.max(0, gap) + ' x ' + C.h + '</b>'
+        + ' <span class=k>(' + (100 * Math.max(0, gap) / C.w).toFixed(1) + '%)</span></span>'
+    + '<span><span class=k>shown at</span> <b>' + Math.round(100 * K) + '%</b>'
+        + ' <span class=k>· every number above is in canvas pixels</span></span>';
+  document.getElementById("keys").innerHTML =
+    CANVASES.map(function(c, i){
+      return '<div>' + (i === ci ? '<b>' : '') + (i + 1) + ' &nbsp;' + c.w + ' x ' + c.h
+           + (i === ci ? '</b>' : '') + '</div>';
+    }).join("") + '<div style="margin-top:8px">h &nbsp;hide this</div>';
+}
+
+// Scale to the window. Measured against the window rather than assumed, and re-measured on
+// resize, because the whole point of the exercise is how much room there really is.
+var K = 1;
+function layout(){
+  var C = CANVASES[ci];
+  var availW = innerWidth - 40, availH = innerHeight - 90;
+  K = Math.min(availW / C.w, availH / C.h, 1);
+  fit.style.transform = "scale(" + K + ")";
+  fit.style.width  = (C.w * K) + "px";
+  fit.style.height = (C.h * K) + "px";
+  paint();
+}
+
+addEventListener("keydown", function(e){
+  if (e.key >= "1" && e.key <= String(CANVASES.length)){ ci = +e.key - 1; layout(); }
+  else if (e.key === "h") document.body.classList.toggle("bare");
+});
+addEventListener("resize", layout);
+layout();
+</script>
