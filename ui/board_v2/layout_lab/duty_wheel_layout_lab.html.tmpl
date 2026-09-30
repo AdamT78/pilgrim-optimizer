@@ -156,6 +156,13 @@ body.clean .card.previewing{border-color:#8fae6a44;border-radius:4px;padding:7px
 .art .cap{position:absolute;left:0;right:0;bottom:0;padding:6px 10px;
   font:600 var(--cap)/1.2 Georgia,serif;letter-spacing:.11em;text-transform:uppercase;
   color:#e2d7bc;background:linear-gradient(transparent,#000000cc 62%)}
+/* THE NAME IS THE CAPTION MIRRORED, deliberately: same face, same size, same tracking, same
+   scrim, flipped top to bottom. They are a pair on one picture, and two different treatments
+   would read as two different kinds of thing. Both take --cap from the one label-size control,
+   so there is still a single number for how loud this artwork speaks. */
+.art .anm{position:absolute;left:0;right:0;top:0;padding:6px 10px;
+  font:600 var(--cap)/1.2 Georgia,serif;letter-spacing:.11em;text-transform:uppercase;
+  color:#e2d7bc;background:linear-gradient(#000000cc 38%,transparent)}
 /* PREVIEW is informational. It says so, and it does not respond to the pointer the way a choice
    does -- the brief's point is that reading about a duty must not look like taking it. */
 .art .pv{position:absolute;left:8px;top:8px;font:600 10px/1 ui-monospace,monospace;
@@ -501,11 +508,32 @@ function shownDuty(){
   return (S.previewDuty && S.duties[S.previewDuty]) ? S.previewDuty : null;
 }
 function previewing(){ return S.view !== "action" && !!shownDuty(); }
+// WHAT THE ACTION DOES -- Gain Piety -- at the foot of the artwork.
+//
+// It used to read `a.name || a.shortLabel`, which worked only because every duty had the same
+// string in both: the generator wrote one label into both fields. They are two different things
+// now, and the order matters -- a box whose name is still undecided must fall back to what it
+// does, not to nothing.
 function artLabel(side){
   var d = shownDuty();
   if (!d) return "";
   var a = actionOf(d, artOf(side).slot);
-  return (a && (a.name || a.shortLabel)) || artOf(side).slot;
+  return (a && (a.shortLabel || a.name)) || artOf(side).slot;
+}
+// THE ACTION'S OWN NAME -- Devotion, Silversmith -- at the head of it. Null until a duty's
+// wording is settled, and a box without one draws no line at all rather than an empty strip,
+// which would read as a missing asset.
+// What an EMPTY box calls itself. Blank when the name is already on screen above it, so the
+// placeholder adds a fact rather than an echo.
+function phLabel(side, a, e){
+  if (e.labelVisible && artName(side)) return "";
+  return (a && (a.name || a.shortLabel)) || e.slot;
+}
+function artName(side){
+  var d = shownDuty();
+  if (!d) return "";
+  var a = actionOf(d, artOf(side).slot);
+  return (a && a.name) || "";
 }
 
 function objOf(kind, id){
@@ -976,10 +1004,13 @@ function render(){
       if (haveImage(a.scenic)) inner = '<img src="' + imgSrc(a.scenic) + '" alt="">';
       else if (a.scenic && a.scenicName){
         cls += " missing";
-        inner = '<div class=ph><b>' + esc(a.name || e.slot) + '</b>Reload: '
+        // THE PLACEHOLDER NAMES THE BOX ONLY WHEN NOTHING ELSE DOES. With the action name now
+        // drawn at the head of the artwork, repeating it in the middle was the same word three
+        // times on one empty box; it falls back to the slot when a duty has no name yet.
+        inner = '<div class=ph><b>' + esc(phLabel(side, a, e)) + '</b>Reload: '
               + esc(a.scenicName) + '</div>';
       } else {
-        inner = '<div class=ph><b>' + esc(a.name || e.slot) + '</b>scenic artwork</div>';
+        inner = '<div class=ph><b>' + esc(phLabel(side, a, e)) + '</b>scenic artwork</div>';
       }
       var d = make("art", side, rectOf("art", side), cls,
                    '<span class=nm>artwork ' + side + ' · ' + esc(e.slot) + '</span>' + inner,
@@ -990,6 +1021,14 @@ function render(){
         cap.className = "cap"; cap.style.setProperty("--cap", e.labelSize + "px");
         cap.textContent = artLabel(side);
         d.appendChild(cap);
+      }
+      // Same switch as the caption, because they are one decision: either the box is labelled or
+      // it is a bare picture, and a name without its effect would be the wrong half to keep.
+      if (e.labelVisible && artName(side)){
+        var anm = document.createElement("div");
+        anm.className = "anm"; anm.style.setProperty("--cap", e.labelSize + "px");
+        anm.textContent = artName(side);
+        d.appendChild(anm);
       }
       // THE BADGE IS THE POINT OF THE PREVIEW. Reading about a duty must not look like taking it.
       if (isPreview){

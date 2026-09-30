@@ -1,0 +1,192 @@
+{
+  "note": "What the layout lab prints on a duty's two action boxes, and the only place it is written down. `name` is the duty action's NAME and goes top-left on the artwork; `shortLabel` is WHAT IT DOES and goes bottom-left. generate_layout_lab.py reads this file at build time and DUTIES no longer carries the labels, so there is one owner.",
+  "casing": "Stored as written, uppercased by CSS. Put `Gain Piety` here, not `GAIN PIETY` -- the card decides how to shout, and a value that is already shouting cannot be reused anywhere quieter.",
+  "joinsOn": "`engineAction` is an action id from docs/rules/DutyTiles.md, under Canonical Action Names, and is the only thing tying this file to the engine. tests/layout_lab/test_duty_text.py fails if an id here is not in that table. The wording is this file's business; the ids are not.",
+  "filling": "A null is an open question, not an oversight, and the guard requires null rather than an empty string so 'not decided yet' stays distinguishable from 'deliberately blank'. `unresolved` records a question about the DUTY rather than the wording -- usually that the engine and the two art boxes do not divide the same way.",
+  "strengths": "docs/rules/Duties.md: majority is duty value 2, parity 1, minority 1. Only Devotion is filled in, from that rule plus what the action gives. An effect does not have to scale with the duty value, so the rest wait rather than being inferred -- a guessed number on a card is worse than no number.",
+  "duties": {
+    "clerical": {
+      "actionA": {
+        "engineAction": "clerical_devotion",
+        "name": "Devotion",
+        "shortLabel": "Gain Piety",
+        "byStrength": {
+          "minority": "Gain 1 Piety",
+          "parity": "Gain 1 Piety",
+          "majority": "Gain 2 Piety"
+        }
+      },
+      "actionB": {
+        "engineAction": "clerical_silversmith",
+        "name": "Silversmith",
+        "shortLabel": "Gain Coins",
+        "byStrength": {
+          "minority": null,
+          "parity": null,
+          "majority": null
+        }
+      }
+    },
+    "taxation": {
+      "actionA": {
+        "engineAction": "taxation",
+        "name": null,
+        "shortLabel": "Action A",
+        "byStrength": {
+          "minority": null,
+          "parity": null,
+          "majority": null
+        },
+        "unresolved": "One engine action with a step-1 chosen resource and a step-2 bonus from other majority tiles. Both labels are still placeholders and how the boxes divide it is undecided."
+      },
+      "actionB": {
+        "engineAction": "taxation",
+        "name": null,
+        "shortLabel": "Action B",
+        "byStrength": {
+          "minority": null,
+          "parity": null,
+          "majority": null
+        }
+      }
+    },
+    "produce": {
+      "actionA": {
+        "engineAction": "produce_wheat",
+        "name": null,
+        "shortLabel": "Gain Wheat",
+        "byStrength": {
+          "minority": null,
+          "parity": null,
+          "majority": null
+        }
+      },
+      "actionB": {
+        "engineAction": "produce_stone",
+        "name": null,
+        "shortLabel": "Gain Stone",
+        "byStrength": {
+          "minority": null,
+          "parity": null,
+          "majority": null
+        }
+      }
+    },
+    "build_roads": {
+      "actionA": {
+        "engineAction": null,
+        "name": null,
+        "shortLabel": "Build Road",
+        "byStrength": {
+          "minority": null,
+          "parity": null,
+          "majority": null
+        },
+        "unresolved": "The art folders are build_road and build_shrine, but the engine has only build_roads_deferred, a scaffold with no spatial placement yet. Neither box has an engine action to point at until that lands."
+      },
+      "actionB": {
+        "engineAction": null,
+        "name": null,
+        "shortLabel": "Build Shrine",
+        "byStrength": {
+          "minority": null,
+          "parity": null,
+          "majority": null
+        }
+      }
+    },
+    "construct": {
+      "actionA": {
+        "engineAction": "construct_building",
+        "name": null,
+        "shortLabel": "Construct Building",
+        "byStrength": {
+          "minority": null,
+          "parity": null,
+          "majority": null
+        }
+      },
+      "actionB": {
+        "engineAction": "construct_road_deferred",
+        "name": null,
+        "shortLabel": "Construct Road",
+        "byStrength": {
+          "minority": null,
+          "parity": null,
+          "majority": null
+        },
+        "unresolved": "DutyTiles.md gives Construct THREE engine actions for two boxes: construct_building, construct_road_deferred and construct_building_and_road_deferred. The third has no box. Either the card does not name it separately, or this duty needs a different layout."
+      }
+    },
+    "give_alms": {
+      "actionA": {
+        "engineAction": "give_alms_paid",
+        "name": null,
+        "shortLabel": "Give Alms",
+        "byStrength": {
+          "minority": null,
+          "parity": null,
+          "majority": null
+        }
+      },
+      "actionB": {
+        "engineAction": "give_alms_donate_building",
+        "name": null,
+        "shortLabel": "Donate Building",
+        "byStrength": {
+          "minority": null,
+          "parity": null,
+          "majority": null
+        }
+      }
+    },
+    "ordination": {
+      "actionA": {
+        "engineAction": "ordination",
+        "name": null,
+        "shortLabel": "Ordain",
+        "byStrength": {
+          "minority": null,
+          "parity": null,
+          "majority": null
+        },
+        "engineStep": "ordain"
+      },
+      "actionB": {
+        "engineAction": "ordination",
+        "name": null,
+        "shortLabel": "Send on Mission",
+        "byStrength": {
+          "minority": null,
+          "parity": null,
+          "majority": null
+        },
+        "engineStep": "mission",
+        "unresolved": "Ordination is ONE engine action with two ORDERED steps, ordain then mission, so these boxes are steps rather than alternatives -- DutyTiles.md notes `ordain; mission` is legal at duty value 2. A card offering them as a choice would misdescribe the rule."
+      }
+    },
+    "allocation": {
+      "actionA": {
+        "engineAction": "allocation",
+        "name": null,
+        "shortLabel": "Relocate Acolytes",
+        "byStrength": {
+          "minority": null,
+          "parity": null,
+          "majority": null
+        },
+        "unresolved": "One engine action, `allocation`, against two art folders: relocate_acolytes and special_activity. Whether those are two engine actions in waiting or two faces of one is recorded nowhere."
+      },
+      "actionB": {
+        "engineAction": "allocation",
+        "name": null,
+        "shortLabel": "Special Activity",
+        "byStrength": {
+          "minority": null,
+          "parity": null,
+          "majority": null
+        }
+      }
+    }
+  }
+}

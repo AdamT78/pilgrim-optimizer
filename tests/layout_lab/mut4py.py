@@ -161,9 +161,11 @@ MUTS = [
          '                   "x": 600, "y": 700, "width": 178, "height": 184}',
   "centre_is_left_empty or crowded", "the in-hand pool given a box of its own again"),
  # ---- assets vs geometry ------------------------------------------------------------------------------------
- ("gen", '            d[slot] = {"name": text, "shortLabel": text,',
+ # The slot's two labels stopped being one `text` in V4.5, when the wording moved into
+ # ui/board_v2/duty_text.json and `name` and `shortLabel` became different things.
+ ("gen", '            d[slot] = {"name": said["name"], "shortLabel": said["shortLabel"],',
          '            d[slot] = {"x": 1, "y": 2, "width": 3, "height": 4,\n'
-         '                       "name": text, "shortLabel": text,',
+         '                       "name": said["name"], "shortLabel": said["shortLabel"],',
   "action_owns_its_assets or game_layout", "geometry back on an action"),
  # ---- the acolyte ring ---------------------------------------------------------------------------------------
  ("gen", "FIG_RX, FIG_RY = round(WHEEL_W * 0.385), round(WHEEL_H * 0.34)",

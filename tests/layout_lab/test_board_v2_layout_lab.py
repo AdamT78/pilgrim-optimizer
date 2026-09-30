@@ -1515,11 +1515,17 @@ def test_the_action_names_are_the_known_ones_and_taxation_is_left_obviously_blan
         "produce": ("Gain Wheat", "Gain Stone"),
         "construct": ("Construct Building", "Construct Road"),
     }
+    # READ OFF shortLabel, NOT name. These are what each action DOES, and until V4.5 both
+    # fields held the same string so either would have passed. `name` is the action's own name
+    # now -- Devotion, Silversmith -- and is null wherever the wording has not been written, so
+    # asserting this list against it would be asserting the wrong half.
     for slug, (a, b) in known.items():
-        got = (d["duties"][slug]["actionA"]["name"], d["duties"][slug]["actionB"]["name"])
+        got = (d["duties"][slug]["actionA"]["shortLabel"],
+               d["duties"][slug]["actionB"]["shortLabel"])
         assert got == (a, b), "%s opens as %s, not %s" % (slug, got, (a, b))
 
-    tax = (d["duties"]["taxation"]["actionA"]["name"], d["duties"]["taxation"]["actionB"]["name"])
+    tax = (d["duties"]["taxation"]["actionA"]["shortLabel"],
+           d["duties"]["taxation"]["actionB"]["shortLabel"])
     assert tax == ("Action A", "Action B"), (
         "Taxation has been given wording (%s). The brief says not to invent it -- an obvious "
         "placeholder is the point, because a plausible one survives into production" % (tax,))
@@ -1666,7 +1672,7 @@ applyState(v1);
 const C = S.duties.clerical;
 out.actionA = {keys: Object.keys(C.actionA).sort(),
                scenic: C.actionA.scenic, scenicName: C.actionA.scenicName,
-               name: C.actionA.name};
+               name: C.actionA.name, shortLabel: C.actionA.shortLabel};
 out.actionB = {scenic: C.actionB.scenic, name: C.actionB.name};
 out.stillHasArt = ("art" in C) || ("art" in C.actionA);
 out.figures = {x: C.figures.x, y: C.figures.y, arrangement: C.figures.arrangement,
@@ -1688,8 +1694,13 @@ process.stdout.write(JSON.stringify(out));
     assert a["keys"] == ["name", "scenic", "scenicName", "seal", "sealName", "shortLabel"], (
         "the migrated Action A is not a V3 asset object: %s" % a["keys"])
     assert not got["stillHasArt"], "an `art` object survived the migration"
-    assert a["name"] == "Gain Piety", (
-        "Action A did not take this build's default wording: %r" % a["name"])
+    # A V1 file has no action objects at all -- it carried a single `art` -- so the migration
+    # has to synthesise them, and what it synthesises is this build's default wording. Both
+    # fields, because they stopped being the same string in V4.5.
+    assert a["shortLabel"] == "Gain Piety", (
+        "Action A did not take this build's default wording: %r" % a["shortLabel"])
+    assert a["name"] == "Devotion", (
+        "Action A did not take this build's default action name: %r" % a["name"])
 
     b = got["actionB"]
     assert b["scenic"] is None, "Action B came up holding an image nothing loaded"
@@ -1972,7 +1983,11 @@ process.stdout.write(JSON.stringify({layout: g, text: JSON.stringify(g)}));
             sorted(d["figures"])
         assert "label" not in d, "%s exports a duty label, which V4 removed" % slug
         assert "summary" not in d, "%s exports a V3 summary box" % slug
-    assert g["duties"]["clerical"]["actionA"]["name"] == "Gain Piety"
+    # BOTH fields travel, and they are two different things: the action's name and what it
+    # does. They were the same string until V4.5, so an export carrying only one of them would
+    # have looked complete.
+    assert g["duties"]["clerical"]["actionA"]["shortLabel"] == "Gain Piety"
+    assert g["duties"]["clerical"]["actionA"]["name"] == "Devotion"
 
     for side in ("left", "right"):
         e = g["artwork"][side]

@@ -383,10 +383,28 @@ ck('TEST 10', 'duty card geometry and visibility',
    Object.keys(g.duties).length === 8
      && Object.values(g.duties).every(d => has(d.card, ['x','y','width','height','visible'])),
    Object.keys(g.duties.clerical.card).join(','));
-ck('TEST 10', 'the action wording',
+// THE EXPORT CARRIES BOTH FIELDS, AND AN UNNAMED ACTION EXPORTS AS "". They held the same
+// string until V4.5, when they became two different things: `name` is the action's own name and
+// `shortLabel` is what it does. Most duties have no name written yet.
+//
+// The null in ui/board_v2/duty_text.json does NOT survive to here, and that is applyState's
+// doing rather than an oversight: it coerces both fields to strings on load, so the panel, the
+// renderer and this export never have to handle a null. Null is how the source file says "not
+// decided"; "" is how the state says "no name to draw". The distinction is kept where it is
+// useful -- in the file somebody edits -- and flattened where it would only mean two code paths.
+//
+// What must NOT happen is the empty name falling back to the label. That is the shadowing this
+// change existed to undo, and it is why clerical is checked for both values rather than one.
+ck('TEST 10', 'the action wording: both fields, an unnamed action exporting empty',
    Object.values(g.duties).every(d => ['actionA','actionB'].every(k =>
-     typeof d[k].name === 'string' && typeof d[k].shortLabel === 'string'))
-     && g.duties.clerical.actionA.name === 'Gain Piety');
+     typeof d[k].shortLabel === 'string' && d[k].shortLabel.length > 0
+       && typeof d[k].name === 'string'))
+     && g.duties.clerical.actionA.name === 'Devotion'
+     && g.duties.clerical.actionA.shortLabel === 'Gain Piety'
+     && g.duties.produce.actionA.name === ''
+     && g.duties.produce.actionA.shortLabel === 'Gain Wheat',
+   'clerical ' + JSON.stringify(g.duties.clerical.actionA.name)
+     + ' · produce ' + JSON.stringify(g.duties.produce.actionA.name));
 ck('TEST 10', 'artwork fit, opacity and captions',
    ['left','right'].every(s => has(g.artwork[s],
      ['x','y','width','height','slot','fit','opacity','visible','labelVisible','labelSize'])),

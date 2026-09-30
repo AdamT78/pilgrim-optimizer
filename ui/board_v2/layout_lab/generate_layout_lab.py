@@ -183,18 +183,61 @@ FULL_BOARD_CANVASES = (2039, 2283)
 # the player gets now that nothing on the wheel is labelled.
 #
 # THE ACTION NAMES ARE STARTING TEXT and every one stays editable. Taxation's two are left as
-# "Action A" and "Action B" on purpose: the real wording is not decided, and a plausible
-# placeholder is the kind that survives into production unnoticed.
+# THE ACTION WORDING IS NOT HERE ANY MORE. It moved to ../duty_text.json, which the UI edits
+# constantly and which also records the engine action each box answers to; leaving a copy in this
+# tuple would have meant two files disagreeing about what a card says the first time one of them
+# was edited alone. What stays is what this file is actually for: the slug, the duty's own name,
+# and the angle its space sits at on the wheel.
 DUTIES = (
-    ("clerical",    "Clerical",    0,   "Gain Piety",         "Gain Coins"),
-    ("taxation",    "Taxation",    45,  "Action A",           "Action B"),
-    ("produce",     "Produce",     90,  "Gain Wheat",         "Gain Stone"),
-    ("build_roads", "Build Roads", 135, "Build Road",         "Build Shrine"),
-    ("construct",   "Construct",   180, "Construct Building", "Construct Road"),
-    ("give_alms",   "Give Alms",   225, "Give Alms",          "Donate Building"),
-    ("ordination",  "Ordination",  270, "Ordain",             "Send on Mission"),
-    ("allocation",  "Allocation",  315, "Relocate Acolytes",  "Special Activity"),
+    ("clerical",    "Clerical",    0),
+    ("taxation",    "Taxation",    45),
+    ("produce",     "Produce",     90),
+    ("build_roads", "Build Roads", 135),
+    ("construct",   "Construct",   180),
+    ("give_alms",   "Give Alms",   225),
+    ("ordination",  "Ordination",  270),
+    ("allocation",  "Allocation",  315),
 )
+
+DUTY_TEXT_ASSET = HERE.parent / "duty_text.json"
+
+
+def duty_text() -> dict:
+    """What each action box says, read rather than retyped.
+
+    LOUD ON ANYTHING MISSING. A duty with no entry, or a slot with no `shortLabel`, is a card that
+    would draw with a blank caption and look finished -- so the build stops instead. `name` may be
+    null, because the duty action names are still being decided and a box without one simply does
+    not draw its top line; `shortLabel` may not, because that is the caption the card has always
+    had.
+    """
+    import json
+    if not DUTY_TEXT_ASSET.is_file():
+        raise SystemExit("ui/board_v2/duty_text.json is missing; it owns what the action boxes "
+                         "say and nothing here has a copy")
+    data = json.loads(DUTY_TEXT_ASSET.read_text(encoding="utf-8")).get("duties", {})
+    out = {}
+    for slug, _name, _angle in DUTIES:
+        entry = data.get(slug)
+        if not entry:
+            raise SystemExit("duty_text.json has no entry for %r" % slug)
+        slots = {}
+        for key, _ in ACTIONS:
+            slot = entry.get(key)
+            if not isinstance(slot, dict):
+                raise SystemExit("duty_text.json: %s has no %s" % (slug, key))
+            label = slot.get("shortLabel")
+            if not isinstance(label, str) or not label.strip():
+                raise SystemExit("duty_text.json: %s/%s has no shortLabel, so its card would "
+                                 "draw an empty caption" % (slug, key))
+            name = slot.get("name")
+            if name is not None and (not isinstance(name, str) or not name.strip()):
+                raise SystemExit("duty_text.json: %s/%s has a blank name. Use null for 'not "
+                                 "decided'; a blank string is indistinguishable from a mistake"
+                                 % (slug, key))
+            slots[key] = {"name": name, "shortLabel": label}
+        out[slug] = slots
+    return out
 
 ACTIONS = (("actionA", "Action A"), ("actionB", "Action B"))
 
@@ -434,7 +477,7 @@ def card_slots() -> dict:
     """
     return {slug: {"x": CARD_X0 + i * (CARD_W + CARD_GAP), "y": RIBBON["y"],
                    "width": CARD_W, "height": RIBBON["height"]}
-            for i, (slug, _n, _d, _a, _b) in enumerate(DUTIES)}
+            for i, (slug, _n, _d) in enumerate(DUTIES)}
 
 
 def default_state() -> dict:
@@ -448,14 +491,20 @@ def default_state() -> dict:
     a lost asset say which file to reload.
     """
     slots = card_slots()
+    TEXT = duty_text()
     duties = {}
-    for slug, name, deg, a_name, b_name in DUTIES:
+    for slug, name, deg in DUTIES:
         fx, fy = _on_ellipse(deg, FIG_RX, FIG_RY)
         fu, fv = _norm(fx, fy)
         d = {"name": name, "clock": deg}
-        for slot, text in (("actionA", a_name), ("actionB", b_name)):
+        for slot, _ in ACTIONS:
             # ASSETS ONLY -- no geometry. The two shared slots in `display` own the box.
-            d[slot] = {"name": text, "shortLabel": text,
+            # `name` and `shortLabel` are two different things now and no longer shadow each
+            # other: the name is the duty action's own (DEVOTION), the shortLabel is what it does
+            # (GAIN PIETY). They were the same string in every duty until the wording moved into
+            # duty_text.json, which is why one caption could stand in for both.
+            said = TEXT[slug][slot]
+            d[slot] = {"name": said["name"], "shortLabel": said["shortLabel"],
                        "seal": None, "sealName": None,
                        "scenic": None, "scenicName": None}
         seats = START_SEATS.get(slug) or [PLAYERS[0]["id"]] * 4
