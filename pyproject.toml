@@ -11,6 +11,13 @@ requires-python = ">=3.12"
 dependencies = []
 
 [project.optional-dependencies]
+# The linter runs on EVERY change, design-only included, so it gets an extra of its own. Pulling
+# it out of `dev` is worth a few lines: `dev` carries numpy, scipy, pillow and playwright, and
+# installing forty-odd megabytes of wheels to run a linter that imports none of them was the
+# largest remaining cost on a pull request that only touches artwork.
+lint = [
+  "ruff>=0.5.0",
+]
 dev = [
   # numpy is not optional and never was: tools/ui_debug/sculpt_metrics.py imports it at module
   # level, and everything that measures a sculpt or a plate imports that. It was undeclared and
