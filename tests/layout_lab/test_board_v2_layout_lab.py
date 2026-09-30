@@ -3202,13 +3202,23 @@ def test_the_tithe_card_reserves_what_the_caption_measured_not_what_it_guessed(l
     """
     tmpl = _strip_js_comments(TMPL.read_text(encoding="utf-8"))
     insert = tmpl.index("st.appendChild(frag);")
-    fit = tmpl.index("fitTitheCaption();", insert)
+    fit = tmpl.index("fitBandCaptions();", insert)
     metrics = tmpl.index("paintMetrics();", insert)
     assert insert < fit < metrics, (
-        "fitTitheCaption() must run after the stage has the node and before the metrics that "
+        "fitBandCaptions() must run after the stage has the nodes and before the metrics that "
         "are measured against what it sets")
-    assert "offsetHeight" in tmpl[tmpl.index("function fitTitheCaption("):][:400], (
-        "fitTitheCaption() no longer measures anything")
+    body = tmpl[tmpl.index("function fitBandCaptions("):]
+    body = body[:body.index("\n}\n") + 3]
+    assert "offsetHeight" in body, "fitBandCaptions() no longer measures the caption"
+    # THE OFFSET IS SET BEFORE THE HEIGHT IS READ. A caption moved after it was measured is a
+    # caption whose reserve was worked out against where it used to be.
+    assert body.index("tl.style.bottom") < body.index("offsetHeight"), (
+        "the Tithe caption's height is read before it has been put on its line")
+    # `card.style.paddingBottom`, not the first paddingBottom in the function -- that one is the
+    # artwork's effect caption being dropped onto the bottom line, which is a different thing
+    # and comes earlier.
+    assert body.index("offsetHeight") < body.index("card.style.paddingBottom"), (
+        "the reserve is set before the height it is supposed to reserve has been read")
     assert re.search(r"TITHE_CAP_H = null;\s*\n\s*if \(titheMode", tmpl), (
         "the measurement is no longer forgotten when the Tithe card is not drawn, so the "
         "overflow reading can quote a caption height from some earlier state")
@@ -3300,3 +3310,133 @@ def test_a_caption_size_that_is_missing_and_one_that_is_absurd_are_different_pro
         "the unreadable case is no longer decided before the value is used")
     for key in ("S.tithe.labelSize = capFor(", "S.city.labelSize = capFor("):
         assert key in tmpl, "%s is not normalised on load" % key
+
+
+# =================================================================================================
+# ONE LINE ACROSS THE ACTION BAND.
+#
+# The four captions on the band print on two baselines: the artwork's action names and THE CITY
+# along the top, the artwork's effect lines and TAKE TITHE along the bottom. What these guard is
+# that it stays true at any combination of the four sizes -- it was true before only by accident,
+# and the accident did not survive the first turn of a size control.
+#
+# WHETHER THE BASELINES ACTUALLY COINCIDE IS A QUESTION FOR A BROWSER, not for a source file, and
+# tests/layout_lab/accept45.mjs is what asks it: it probes the rendered captions across a matrix
+# of sizes and reports the worst spread on either line. These are the shape of the arithmetic
+# that makes the answer come out, which is the part that can rot without anything looking wrong.
+# =================================================================================================
+
+def test_the_band_line_is_set_by_the_tallest_caption_on_it(lab):
+    """Not by the artwork, and this is the whole design.
+
+    Lining the other two up on the artwork was tried first and is impossible in general: a 26px
+    City heading carries its baseline 24px below its own box top, a 17px artwork name carries
+    its 15.8px below the same top, and no padding reconciles those without pushing a caption out
+    of its card. Doing it anyway means a silent clamp -- which is what the first version did, and
+    what it looked like was a control that stopped working past a certain number.
+
+    So the tallest caption on each edge sets that edge's line and everything else is dropped onto
+    it. At the default sizes the tallest IS the artwork, so the artwork does not move.
+
+    Falsified by taking the max over anything narrower, or by measuring from the artwork alone.
+    """
+    tmpl = _strip_js_comments(TMPL.read_text(encoding="utf-8"))
+    for fn, edge in (("bandTopInset", "topCapSizes"), ("bandBottomInset", "bottomCapSizes")):
+        body = tmpl[tmpl.index("function %s(" % fn):][:200]
+        assert "maxOf(%s()" % edge in body, (
+            "%s no longer takes the tallest caption on its edge, so a caption bigger than the "
+            "artwork's is either clipped or silently left off the line" % fn)
+        assert "CAP_PAD" in body, "%s no longer leaves the artwork's own padding" % fn
+
+
+def test_both_artwork_slots_count_towards_the_line_even_when_one_is_hidden(lab):
+    """A one-action duty hides the right slot, and the band must not jump when it does.
+
+    Taxation and Allocation draw one artwork; the others draw two. If the hidden slot's size were
+    dropped from the reckoning, stepping the wheel from Clerical to Taxation could move both
+    baselines -- the whole band shifting as a side effect of which duty is reached.
+
+    Falsified by filtering the sizes by artUsed().
+    """
+    tmpl = _strip_js_comments(TMPL.read_text(encoding="utf-8"))
+    for fn in ("topCapSizes", "bottomCapSizes"):
+        body = tmpl[tmpl.index("function %s(" % fn):][:280]
+        assert '"left"' in body and '"right"' in body, (
+            "%s no longer counts both artwork slots" % fn)
+        assert "artUsed" not in body and "visible" not in body, (
+            "%s skips a slot that is not on screen, so the band moves when a one-action duty "
+            "is reached" % fn)
+    assert "cityCapSize()" in tmpl[tmpl.index("function topCapSizes("):][:280]
+    assert "titheCapSize()" in tmpl[tmpl.index("function bottomCapSizes("):][:280]
+
+
+def test_the_baseline_is_measured_at_each_size_because_it_does_not_scale(lab):
+    """A baseline is rounded to a whole pixel, so the fraction is not one number.
+
+    Read off the same face at line-height 1.2 it comes out 0.875 at 8px, 0.882 at 17 and 0.930 at
+    100. A single constant is around three pixels out at the top of the range, on the one thing
+    this code exists to line up. So the probe is set to each size in use and read.
+
+    The probe must also be REAL: off screen rather than display:none, which has no layout and
+    nothing to measure, and set exactly as the captions are or it answers about another face.
+
+    Falsified by caching one fraction and scaling it, or by hiding the probe properly.
+    """
+    tmpl = TMPL.read_text(encoding="utf-8")
+    assert "#capProbe" in tmpl and 'id=capProbe' in tmpl
+    css = re.search(r"#capProbe\{([^}]*)\}", tmpl).group(1)
+    assert "display:none" not in css, (
+        "the probe is display:none, which gives it no layout and no baseline to read")
+    assert "visibility:hidden" in css and "left:-9999px" in css
+    assert "/1.2 Georgia,serif" in css, "the probe is not set as the captions are"
+
+    code = _strip_js_comments(tmpl)
+    body = code[code.index("function capBase("):][:700]
+    assert "CAP_BASE[F]" in body and "getBoundingClientRect" in body, (
+        "capBase no longer measures, or no longer caches what it measured")
+    assert "probe.style.fontSize" in body, (
+        "capBase no longer asks about the size it was given, so it is back to one fraction "
+        "scaled -- which is what the rounding makes wrong")
+    # A cache that outlives a late-arriving font is a wrong number for the whole session.
+    assert "CAP_BASE = {};" in code[code.index("document.fonts.ready"):][:200], (
+        "the measurements are not dropped when fonts finish loading")
+
+
+def test_a_caption_that_cannot_be_measured_falls_back_rather_than_collapsing(lab):
+    """No probe, or a figure that cannot be a baseline, must not put a caption at zero.
+
+    capBase returning 0 would drop every caption onto its box edge and, worse, would look
+    deliberate. The guards are a missing probe and a reading outside the line box.
+
+    Falsified by removing either fallback.
+    """
+    code = _strip_js_comments(TMPL.read_text(encoding="utf-8"))
+    body = code[code.index("function capBase("):][:700]
+    assert "if (!bl) return" in body, "a missing probe no longer has a fallback"
+    assert re.search(r"if \(!\(v > 0 && v < F \* CAP_LH\)\)", body), (
+        "a reading that cannot be a baseline is used anyway")
+
+
+def test_the_stylesheet_fallbacks_are_what_the_derivation_gives_at_the_defaults(lab):
+    """Every caption's position is overwritten each render, so the CSS is only ever seen if the
+    inline value never arrived -- and it should then show the design rather than some other
+    number.
+
+    The Tithe caption's `bottom` and the City card's `padding-top` are the two that changed:
+    5px and 8.53px, against the artwork's plain 6px, because those two cards carry a 1px border
+    the artwork does not and the City's 13px type needs more room above it than the artwork's 17.
+
+    Falsified by changing a default size without the fallback following.
+    """
+    tmpl = TMPL.read_text(encoding="utf-8")
+    tl = re.search(r"#titheObj \.tl\{[^}]*?bottom:(\d+)px", tmpl, re.S)
+    assert tl and int(tl.group(1)) == 6 - 1, (
+        "at equal sizes the Tithe caption wants the artwork's 6px less its own 1px border")
+    city = re.search(r"#cityObj\{[^}]*?padding-top:([\d.]+)px\}", tmpl, re.S)
+    assert city, "the City card no longer carries a fallback padding-top"
+    assert 7.5 < float(city.group(1)) < 9.5, city.group(1)
+    # All four captions share one line-height, or there are two baseline fractions to keep right.
+    for sel in (r"\.art \.cap\{", r"\.art \.anm\{", r"#titheObj \.tl\{", r"#cityObj \.cl\{"):
+        block = re.search(sel + r"[^}]*\}", tmpl, re.S).group(0)
+        assert "/1.2 Georgia,serif" in block, (
+            "%s is not at the band's line-height any more" % sel)

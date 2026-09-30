@@ -656,7 +656,68 @@ offered alongside the two actions and this one heads a reserve nobody picks. Col
 number would assert those are the same job, which is the one thing the two sizes exist to deny.
 
 Unlike Tithe, nothing here needs room reserved for it: the heading is an ordinary flex child and
-the figures below take what is left.
+the figures below take what is left. Where it *starts* is derived — see the next section.
+
+## One line across the band
+
+The action band prints four captions on two baselines. The artwork's action **names** and **THE
+CITY** share the top one; the artwork's **effect lines** and **TAKE TITHE** share the bottom. Not
+near each other — on the same line, at whatever the four size controls are set to. Four captions at
+four heights stops the band reading as a row.
+
+They lined up before any of this by accident, and the accident is worth stating because it is the
+kind that looks like a design: 9px of City padding put 13px of type exactly where 6px of artwork
+padding put 17px, to the pixel. Nothing held it there, and the first turn of a size control broke
+it.
+
+**The line belongs to the band, not to the artwork.** Lining the other two up on the artwork was
+tried first and cannot work in general: a 26px City heading carries its baseline 24px below its own
+box top and a 17px artwork name carries its 15.8px below the same top, so no padding reconciles
+them without pushing a caption out of its card. Doing it anyway means a silent clamp — which is
+what the first attempt did, and what it looked like from outside was a control that stopped working
+past a certain number.
+
+So the **tallest caption on each edge sets that edge's line** and everything else is dropped onto it
+by padding. Two things follow that are worth naming:
+
+At the default sizes the tallest caption *is* the artwork, so the artwork does not move and the
+board is the board. And because every caption's offset is measured from the same line, none of them
+can be pushed outside its own card — the tallest gets the artwork's own 6px and nothing gets less.
+That containment is what taking the maximum actually buys, and it is not obvious: the captions
+agree with each other whichever line is chosen, because the arithmetic is self-correcting. What the
+wrong line costs is reachability, not agreement.
+
+**Both artwork slots count even when one is hidden.** Taxation and Allocation draw a single action,
+so the right slot is absent — but its caption sizes still feed the maximum. Dropping them would move
+both baselines as the wheel is stepped from a two-action duty to a one-action duty, which is a
+layout change as a side effect of which duty was reached.
+
+### Why the baseline is measured at every size
+
+A baseline sits a fixed fraction of the font size below its line box in theory and does not in
+practice: the browser rounds it to a whole pixel. Read off the same face at line-height 1.2 the
+fraction comes out 0.875 at 8px, 0.882 at 17 and 0.930 at 100.
+
+Be precise about what that costs, because the obvious objection is that a self-consistent error
+cancels — and it mostly does. Every caption on an edge is placed by the same function, so a wrong
+figure moves the whole line rather than breaking it. What does *not* cancel is the difference
+between two sizes. Assume the theoretical 0.93 and a 17px caption is thought to carry its baseline
+15.81px down when it really carries it 15.0, while a 13px one is thought to carry its 12.09 down
+when it really carries it 12.0. The two errors differ, and the City heading lands 0.72px off the
+artwork's **at the default sizes**.
+
+So a hidden probe off the left edge of the page is set to each size in use and read. It is the only
+element on the page whose job is to be measured: `visibility:hidden` rather than `display:none`,
+which would give it no layout and no baseline to read.
+
+The measurements are cached, since they cannot change for a given size, and dropped once if
+`document.fonts.ready` resolves — a figure measured against a fallback face would otherwise stand
+for the rest of the session with nothing to correct it.
+
+`tests/layout_lab/accept45.mjs` is what actually checks any of this. It probes the rendered
+captions across a matrix of size combinations and reports the worst spread on either line; correct
+code scores 0.02px against a 0.3px tolerance. The tolerance is load-bearing rather than decorative
+— at 0.75px the suite passed with the per-size measurement replaced by a constant.
 
 V3 had the City below the wheel and the in-hand counter in the wheel's centre. V4 brings both into
 the band: the wheel now runs to the bottom of the module, and the count reads better beside the
@@ -865,17 +926,20 @@ artwork's captions are — TAKE TITHE and GAIN COINS are the same kind of thing 
 same kind of choice. It is absolutely positioned, so where it falls in the markup decides
 nothing.
 
-Its size is a control, in the object inspector beside the label itself, and **the card keeps room
-for whatever it turns out to be.** The reserve used to be a flat 36px in the stylesheet, which was
+Its size is a control, in the object inspector beside the label itself, and it prints on the same
+baseline as the artwork's effect lines — see *One line across the band* below. **The card keeps
+room for whatever the caption turns out to be.** The reserve used to be a flat 36px in the stylesheet, which was
 right for exactly one caption size; it is now read back off the drawn caption after the stage has
 it. Estimating it from the font size was tried and was wrong in a way worth recording: the caption
 spans the card's full width and wraps like any other text, so TAKE TITHE at 34px is two lines in a
 178px card, and a reserve worked out as one line-height let the second line sit on the tokens. How
 tall a run of text turns out to be is a question for the browser.
 
-At the default 17px the derived reserve is exactly the 36 that was hard-coded before, which is the
-point of the exercise: adding the control moved nothing. The stage is pixel-identical in all three
-view states across the change.
+The reserve is now measured from where the caption ends up rather than from a fixed 10px offset,
+so at the defaults it comes to 31px rather than the old 36 — the caption moved down 5px to reach
+the band's bottom line and took the reserve with it. That 5px is the only thing on the whole board
+this change moved: the stage is pixel-identical in READY and SOWING, and in ACTION SELECTION the
+diff is 4,640 pixels in a 122×132 region lying entirely inside the Tithe card.
 
 The reserve does not stop growing. A 60px caption takes 88px of a 184px card and the tokens get
 what is left — reported by the crowding note rather than hidden by shrinking something, the same

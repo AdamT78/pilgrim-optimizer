@@ -195,7 +195,11 @@ body.clean .art.choice:hover::after{content:"";position:absolute;inset:0;
    said about the same kind of choice. It sits at the BOTTOM of the card and centred, where the
    captions sit, rather than heading the card from the top.
    No scrim: the caption over artwork needs one to stay legible, this card is plain dark. */
-#titheObj .tl{position:absolute;left:0;right:0;bottom:10px;text-align:center;
+/* `bottom` and #cityObj's padding-top are both OVERWRITTEN on every render with the figure
+   that puts this baseline on the artwork's. The values here are the fallback -- what a browser
+   draws if the inline value never arrives -- and are the figures the derivation gives at the
+   default sizes, so the fallback shows the design rather than some other number. */
+#titheObj .tl{position:absolute;left:0;right:0;bottom:5px;text-align:center;
   font:600 var(--cap,17px)/1.2 Georgia,serif;letter-spacing:.11em;text-transform:uppercase;
   color:#e2d7bc}
 /* THE ARRANGEMENT IS A TRIANGLE, NOT A STACK OF ROWS. Flex rows can only space tokens by the
@@ -217,9 +221,10 @@ body.clean #titheObj.choice:hover{filter:brightness(1.1);cursor:pointer}
 
 /* Band 3c: the City, and the acolytes in hand that borrow its region while sowing. */
 #cityObj{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
-  border-radius:5px;background:#ffffff05;border:1px solid #ffffff10;padding:9px}
+  border-radius:5px;background:#ffffff05;border:1px solid #ffffff10;padding:9px;
+  padding-top:8.53px}
 body.clean #cityObj{background:#ffffff04}
-#cityObj .cl{font:600 var(--cap,13px)/1.1 Georgia,serif;letter-spacing:.16em;
+#cityObj .cl{font:600 var(--cap,13px)/1.2 Georgia,serif;letter-spacing:.16em;
   text-transform:uppercase;color:#b9ae96}
 #cityObj .row{display:flex;align-items:flex-end;justify-content:center;gap:14px;flex:1;
   min-height:0}
@@ -233,6 +238,14 @@ body.clean #cityObj{background:#ffffff04}
 .hl.ring{border-radius:50%;border:2px solid var(--hl);box-shadow:0 0 18px var(--hl)}
 
 /* Inspector */
+/* THE SIZE HERE IS ONLY A STARTING VALUE -- capBase() sets it to each size it is asked about
+   and reads the answer, because a baseline is rounded to a whole pixel and so does not scale.
+   Everything else must match the captions exactly: same face, same weight, same line-height.
+   Off screen rather than display:none, which would give it no layout and nothing to measure. */
+#capProbe{position:absolute;left:-9999px;top:0;visibility:hidden;pointer-events:none;
+  font:600 17px/1.2 Georgia,serif;letter-spacing:.11em}
+#capProbe .bl{display:inline-block;width:0;height:0;vertical-align:baseline}
+
 #side h3{margin:12px 0 5px;font-size:10px;letter-spacing:.1em;text-transform:uppercase;
   color:var(--dim);border-bottom:1px solid var(--line);padding-bottom:3px;cursor:pointer;
   display:flex;justify-content:space-between}
@@ -289,6 +302,12 @@ body.clean #cityObj{background:#ffffff04}
     <button id=bPng>export png</button>
     <input id=fImport type=file accept=".json,application/json" hidden>
   </div>
+
+  <!-- THE BASELINE PROBE. Off screen, never drawn, and the only thing on the page whose job
+       is to be measured. Set exactly as the artwork captions are, at a deliberately large size
+       so the fraction it yields is precise, with a zero-height inline-block inside it: such a
+       box sits ON the baseline, so its bottom edge IS the baseline. -->
+  <div id=capProbe>H<span class=bl></span></div>
 
   <div id=wrap>
     <div id=fit>
@@ -407,9 +426,92 @@ function haveImage(key){ return !!(key && IMAGES[key]); }
 // It does NOT stop growing. A 60px caption reserves 88px of a 184px card and the tokens have
 // what is left -- reported by tokenOverflow() rather than hidden by shrinking something, the
 // same bargain the rest of this card strikes.
-// The caption is pinned this far off the bottom (the stylesheet's `bottom:10px`), and this
-// much air is left between it and the lowest token.
-var TITHE_CAP_BOTTOM = 10, TITHE_CAP_AIR = 6;
+// =============================================================================================
+// ONE HORIZONTAL LINE ACROSS THE BAND.
+//
+// The action band prints four captions on two lines. THE CITY reads with the artwork's action
+// NAMES along the top; TAKE TITHE reads with the artwork's EFFECT lines along the bottom. Not
+// near them -- ON them, on one baseline each, at whatever the four size controls are set to.
+// Four captions at four heights stops the band reading as a row.
+//
+// They lined up before this by accident, and the accident is worth stating: 9px of City padding
+// put 13px of type exactly where 6px of artwork padding put 17px. Nothing held it there. The
+// first turn of either size control broke it, which is what prompted this.
+//
+// THE LINE BELONGS TO THE BAND, NOT TO THE ARTWORK. Lining the other two up on the artwork was
+// tried first and cannot work: a 26px City heading carries its baseline 24px below its own box
+// top and a 17px artwork name carries its 15.8px below the same top, so there is no padding
+// that puts the first where the second is without pushing it out of the card. Instead the
+// TALLEST caption on each edge sets where that edge's baseline falls and everything else is
+// dropped onto it. At the default sizes the tallest is the artwork, so the artwork does not
+// move and the board is the board.
+//
+// WHY IT IS MEASURED PER SIZE. A baseline sits a fixed fraction of the font size below its line
+// box in theory, and does not in practice: the browser ROUNDS it to a whole pixel, so the
+// fraction read off one face at one line-height comes out 0.875 at 8px, 0.882 at 17 and 0.930
+// at 100.
+//
+// Be precise about what that costs, because the obvious objection is that a self-consistent
+// error cancels. It mostly does -- every caption on an edge is placed by the same function, so
+// a wrong figure moves the whole line rather than breaking it. What does NOT cancel is the
+// difference between two SIZES. Assume the theoretical 0.93 and a 17px caption is thought to
+// carry its baseline 15.81px down when it really carries it 15.0, while a 13px one is thought
+// to carry its 12.09 down when it really carries it 12.0: the two errors differ, and the City
+// heading lands 0.72px off the artwork's at the DEFAULT sizes. Small, and on the one thing this
+// code exists to line up. So the probe is set to each size in use and read.
+var CAP_PAD = 6;            // .art .cap and .art .anm, padding top and bottom
+var CAP_LH = 1.2;           // their line-height, now shared by all four captions
+var BAND_BORDER = 1;        // the Tithe and City cards have a 1px border; the artwork has none
+
+// HOW FAR THE FIRST BASELINE SITS BELOW A LINE BOX'S TOP, in px, at one font size. Cached
+// because it cannot change for a given size, and dropped once if fonts arrive late -- a figure
+// measured against a fallback face would otherwise stand for the rest of the session.
+var CAP_BASE = {};
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(function(){
+  CAP_BASE = {};
+  if (typeof render === "function") render();
+});
+function capBase(size){
+  var F = Math.round(size);
+  if (CAP_BASE[F] !== undefined) return CAP_BASE[F];
+  var probe = el("capProbe"), bl = probe && probe.querySelector(".bl");
+  if (!bl) return F * 0.93;                       // no probe: the theoretical figure, near enough
+  probe.style.fontSize = F + "px";
+  var v = bl.getBoundingClientRect().bottom - probe.getBoundingClientRect().top;
+  if (!(v > 0 && v < F * CAP_LH)) v = F * 0.93;   // a figure that cannot be a baseline is not used
+  CAP_BASE[F] = v;
+  return v;
+}
+// And how far it sits ABOVE the line box's bottom, which is what a caption pinned to the bottom
+// of its card needs. For a caption of more than one line this is still the LAST line's baseline,
+// which is the one that has to agree with its neighbours.
+function capDrop(size){ return Math.round(size) * CAP_LH - capBase(size); }
+
+// THE FOUR CAPTIONS ON THE BAND, by edge. Both artwork slots are here and the right one is not
+// skipped when it is hidden: a duty with one action would otherwise move the whole line, and the
+// band would jump as the wheel is stepped through the duties.
+function topCapSizes(){
+  return [nameSizeOf(artOf("left")), nameSizeOf(artOf("right")), cityCapSize()];
+}
+function bottomCapSizes(){
+  return [artOf("left").labelSize, artOf("right").labelSize, titheCapSize()];
+}
+function maxOf(list, f){
+  return list.reduce(function(m, v){ var x = f(v); return x > m ? x : m; }, 0);
+}
+// Where the two lines fall, as a distance in from the band's top and bottom edges. The tallest
+// caption on the edge gets the artwork's own 6px and sets the line; nothing gets less room.
+function bandTopInset(){ return CAP_PAD + maxOf(topCapSizes(), capBase); }
+function bandBottomInset(){ return CAP_PAD + maxOf(bottomCapSizes(), capDrop); }
+
+// WHAT EACH CAPTION NEEDS SO ITS BASELINE LANDS ON THE LINE. Padding, not position, so a caption
+// that wraps still grows the way it always did -- downwards from the top line, upwards from the
+// bottom one.
+function capPadTop(size, border){ return bandTopInset() - capBase(size) - (border || 0); }
+function capPadBottom(size, border){ return bandBottomInset() - capDrop(size) - (border || 0); }
+
+// The air left between the Tithe caption and the lowest token.
+var TITHE_CAP_AIR = 6;
 
 // WHAT THE CAPTION ACTUALLY TOOK, measured after it was drawn. Cached beside IMG_DIMS and for
 // the same reason: it is a fact about what the browser did, not a layout decision, so it has no
@@ -427,17 +529,36 @@ function titheCapHeight(){
   return TITHE_CAP_H === null ? Math.round(1.2 * titheCapSize()) : TITHE_CAP_H;
 }
 function titheReserve(){
-  return TITHE_CAP_BOTTOM + Math.round(titheCapHeight()) + TITHE_CAP_AIR;
+  return Math.round(capPadBottom(titheCapSize(), BAND_BORDER))
+       + Math.round(titheCapHeight()) + TITHE_CAP_AIR;
 }
 function titheChrome(){ return 10 + titheReserve() + 4; }
 // READ THE HEIGHT BACK, THEN MAKE THE ROOM. One pass is enough and it cannot loop: the caption
 // is positioned against the card's padding BOX, and padding-bottom does not change that box's
 // WIDTH -- so the text cannot re-wrap in response to the room being made for it. A second pass
 // would measure the same number.
-function fitTitheCaption(){
+// DROP EVERY CAPTION ON THE BAND ONTO ITS LINE. One pass, after the stage has the nodes,
+// because a node still in the fragment has no height to read and the Tithe card's reserve
+// depends on how tall its caption turned out.
+function fitBandCaptions(){
+  ["left", "right"].forEach(function(side){
+    var o = el("stage").querySelector('.obj[data-kind="art"][data-id="' + side + '"]');
+    if (!o) return;
+    var e = artOf(side);
+    var anm = o.querySelector(".anm"), cap = o.querySelector(".cap");
+    if (anm) anm.style.paddingTop = capPadTop(nameSizeOf(e)) + "px";
+    if (cap) cap.style.paddingBottom = capPadBottom(e.labelSize) + "px";
+  });
+
+  var city = el("cityObj");
+  // The City heading is an ordinary flex child, so where it starts is the card's own padding.
+  if (city) city.style.paddingTop = capPadTop(cityCapSize(), BAND_BORDER) + "px";
+
   var card = el("titheObj");
-  var cap = card && card.querySelector(".tl");
-  TITHE_CAP_H = cap ? cap.offsetHeight : null;
+  var tl = card && card.querySelector(".tl");
+  if (tl) tl.style.bottom = capPadBottom(titheCapSize(), BAND_BORDER) + "px";
+  // AFTER the offset is set, because the reserve is measured against where the caption ended up.
+  TITHE_CAP_H = tl ? tl.offsetHeight : null;
   if (card) card.style.paddingBottom = titheReserve() + "px";
 }
 var TITHE_SIDES = 20;
@@ -1150,7 +1271,7 @@ function render(){
     dt.id = "titheObj";
     // The bottom reserve is NOT set here. Everything on this stage is built into a fragment and
     // inserted in one go at the end of render(), and a node that is not in the document has no
-    // height to read -- see fitTitheCaption(), which runs once the stage has it.
+    // height to read -- see fitBandCaptions(), which runs once the stage has them.
     if (!T.locked && titheMode === "yes") handles(dt, "tithe");
   }
 
@@ -1224,7 +1345,7 @@ function render(){
   st.appendChild(frag);
   // NOW the caption has a height, so now the card can reserve the room it needs. Before
   // paintMetrics(), because the overflow reading it paints is measured against that reserve.
-  fitTitheCaption();
+  fitBandCaptions();
   drawGuides();
   // LAST, AND FROM HERE RATHER THAN FROM EACH CONTROL. Every path that changes geometry ends in
   // a render, so hanging these off this one place is what makes "always current" true by
@@ -1348,7 +1469,7 @@ function capFor(v, dflt){
 // NAMED FOR THE CAPTION, NOT FOR THE FIELD. `titheLabelSize` would have been the obvious name
 // and is the wrong one: V4 retired a duty field called `titheLabel`, and the guard that checks
 // no live code still reads it is a substring test, so the obvious name sets it off. The names
-// here follow .tl's own neighbourhood -- TITHE_CAP_BOTTOM, titheCapHeight, fitTitheCaption --
+// here follow .tl's own neighbourhood -- titheCapHeight, fitBandCaptions --
 // which is where it belonged anyway.
 function titheCapSize(){ return clampCap(S.tithe.labelSize); }
 function cityCapSize(){ return clampCap(S.city.labelSize); }
