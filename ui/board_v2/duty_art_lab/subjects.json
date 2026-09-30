@@ -1,0 +1,10 @@
+{
+  "note": "What each duty's two action scenes SHOW. The briefs in prompts/ are about shape, camera, palette and register -- they are the same for every duty. This is the part that differs, and it is kept here so the viewfinder and the art board fill in the same words rather than each carrying their own copy.",
+  "filling": "A duty with nothing written down yet is absent from `duties` rather than present and empty, so a page can tell 'nobody has decided' from 'deliberately blank' and say so. One dash per line, in the order they matter.",
+  "duties": {
+    "clerical": {
+      "left": "- a lone monk prostrate on the flagstones\n- beneath a vast dark crucifix\n- in an austere gothic nave\n- with one guttering candle",
+      "right": "- a hard-faced medieval smith\n- striking a coin die with a hammer\n- a heavy working surface\n- a compact forge or charcoal fire\n- an armed medieval man watching from the shadow behind him"
+    }
+  }
+}

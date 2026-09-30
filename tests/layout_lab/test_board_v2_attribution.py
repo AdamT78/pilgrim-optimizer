@@ -10,6 +10,7 @@ did not, and the difference showed.
 The file is data, not documentation: a reader that answers "may we ship this, and who do we
 credit" has to be able to trust that a missing entry is impossible rather than merely unlikely.
 """
+import hashlib
 import json
 import pathlib
 
@@ -22,6 +23,21 @@ RECORD = TREE / "attribution.json"
 # What counts as an asset here. Source, documentation and the empty-folder markers are not.
 ASSET_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".svg", ".gif", ".avif"}
 
+# BUILD OUTPUT IS NOT A NEW ASSET. ui/.gitignore declares every `generated/` directory under ui/
+# to be output, and a generator that writes an image into one is copying a file that is already
+# tracked and already recorded: the duty art viewfinder drops the camera reference beside its page
+# so the page's download link has a real file to point at rather than a data URI the browser will
+# not save. Recording those copies would be worse than leaving them out -- "state": "present"
+# would be a claim about a path that does not exist in a fresh clone, and
+# test_the_record_does_not_name_files_that_are_gone would fail on that clone. The exclusion holds
+# only while the copies really are copies, and the test below is what makes that true rather than
+# assumed.
+GENERATED = "generated"
+
+
+def _is_generated(p):
+    return GENERATED in p.relative_to(TREE).parts
+
 
 @pytest.fixture(scope="module")
 def record():
@@ -30,7 +46,12 @@ def record():
 
 def _assets():
     return sorted(p for p in TREE.rglob("*")
-                  if p.is_file() and p.suffix.lower() in ASSET_SUFFIXES)
+                  if p.is_file() and p.suffix.lower() in ASSET_SUFFIXES and not _is_generated(p))
+
+
+def _generated_assets():
+    return sorted(p for p in TREE.rglob("*")
+                  if p.is_file() and p.suffix.lower() in ASSET_SUFFIXES and _is_generated(p))
 
 
 def _suggested(missing):
@@ -115,3 +136,32 @@ def test_a_derived_file_says_what_it_came_from(record):
         mods = entry.get("modifications", "")
         if mods and mods != "none" and not mods.startswith("none"):
             assert entry.get("source"), "%s is modified but names no source" % name
+
+
+def test_a_generated_asset_is_only_ever_a_copy_of_a_recorded_one(record):
+    """The exclusion above, paid for.
+
+    Skipping `generated/` is safe for a duplicate and unsafe for anything else. A generator that
+    started writing ORIGINAL artwork into its output directory would slip past the entry check
+    entirely, which is the precise failure this module was written to stop -- nine images reached
+    the tree unrecorded once already, and none of them was noticed. So every asset under a
+    `generated/` directory has to be byte-for-byte a file that is on the record. A copy passes and
+    costs nothing; anything new fails here and has to say where it came from.
+
+    Vacuous on a fresh clone, where nothing has been built yet. That is correct: there is nothing
+    to vouch for until a generator has run.
+    """
+    recorded = {}
+    for p in _assets():
+        if str(p.relative_to(TREE)) in record["files"]:
+            recorded.setdefault(hashlib.sha256(p.read_bytes()).hexdigest(),
+                                str(p.relative_to(TREE)))
+    strays = [str(p.relative_to(TREE)) for p in _generated_assets()
+              if hashlib.sha256(p.read_bytes()).hexdigest() not in recorded]
+    assert not strays, (
+        "%d asset(s) under a generated/ directory are not a copy of anything on the record: %s.\n"
+        "Build output is skipped by the entry check on the understanding that it duplicates a "
+        "tracked file. These do not, so either the generator is producing original artwork -- in "
+        "which case it belongs in the tree with an entry of its own -- or it is deriving a new "
+        "image from a recorded one, in which case say so with derivedFrom."
+        % (len(strays), ", ".join(strays)))

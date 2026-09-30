@@ -50,6 +50,8 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import base64
+import io
 import pathlib
 import re
 import sys
@@ -337,17 +339,29 @@ assert WHEEL_X >= WHEEL_MARGIN_MIN - 1, "the wheel runs off the side of the modu
 # ONE LINE AND NOTHING ELSE. V3 carried a small context field above it -- SOW, CLERICAL -- which
 # said what the rest of the screen was already saying. Centred light text on the dark field: no
 # parchment, no frame, nothing that competes with the wheel.
-STATUS = {"x": 28, "y": 10, "width": 1344, "height": 55}
-STATUS_SIZE = 30
+#
+# 29 TALL AT 18px, DOWN FROM 55 AT 30px. One line of 18px occupies about 22, and the remainder was
+# slack that did nothing but push the ribbon down. What it gave up went to the cards below, which
+# are the one place on this board where a few more pixels buy something a player can read.
+STATUS = {"x": 28, "y": 10, "width": 1344, "height": 29}
+STATUS_SIZE = 18
 
 # ---- band 2: the duty reference ribbon ----------------------------------------------------------
 # Eight cards in one row, in wheel order. They are REFERENCE, not controls: clicking one previews
 # its two scenic actions and chooses nothing, in every state.
 #
-# 150 TALL BECAUSE THE SEALS ARE 34. V3's summaries were short enough that an action seal had to
+# 175 TALL BECAUSE THE SEALS ARE 34. V3's summaries were short enough that an action seal had to
 # be about 18px, which is too small to ever hold a readable pictorial icon. The height was bought
-# from the empty strip that used to sit under the wheel.
-RIBBON = {"x": 28, "y": 78, "width": 1344, "height": 150}
+# from the empty strip that used to sit under the wheel, and then from the instruction above it:
+# the row opens at 51 rather than 78 and runs to 226, which leaves the action band at 240 its
+# clearance and nothing over.
+#
+# Y AND HEIGHT ARE ONE COMPOSITION, NOT TWO PREFERENCES. They were arrived at in the lab with the
+# eight cards equalised and their bottoms aligned, and they only fit together: under the old
+# 55-tall instruction a row starting at 51 would run beneath it, and at the old y of 78 a 175-tall
+# row would run into the band. Both of those are refused by tests, which is what makes it safe to
+# state the pair here instead of measuring them again.
+RIBBON = {"x": 28, "y": 51, "width": 1344, "height": 175}
 CARD_GAP = 10
 CARD_W = (RIBBON["width"] - (len(DUTIES) - 1) * CARD_GAP) // len(DUTIES)
 CARD_X0 = RIBBON["x"] + (RIBBON["width"] - (len(DUTIES) * CARD_W
@@ -524,6 +538,118 @@ def card_slots() -> dict:
             for i, (slug, _n, _d) in enumerate(DUTIES)}
 
 
+# =================================================================================================
+# THE ACTION ARTWORK IS BUILT INTO THE PAGE.
+#
+# It used to be loaded by hand every time, and then kept in the browser -- which meant it lived
+# in one browser on one machine and vanished the moment you opened the page anywhere else. The
+# art is already in this repository, under duty_actions/, versioned and recorded. A page
+# generated from this repository should show it.
+#
+# DOWNSCALED TO TWICE THE SLOT, which is 750 x 368. The slot is 375 wide, so that is retina and
+# the page costs about 150 KB per image instead of 1.8 MB. It is a view, not the asset: the
+# cutter and the attribution record still point at the full-resolution file, and loading one by
+# hand still replaces the bundled copy for that slot.
+#
+# WHICH SLOT A FILE BELONGS IN cannot be derived from its folder -- `gain_piety` is Clerical's
+# actionA and `gain_coins` its actionB, which alphabetically is backwards -- so it is read from
+# attribution.json, which already records it. A file whose slot cannot be established is left
+# out and named on stderr rather than guessed into place.
+# HERE is layout_lab/; the art sits beside it under board_v2/.
+ART_DIR = HERE.parent / "duty_actions"
+ART_SCALE = 2
+ART_JPEG_Q = 86
+
+
+def slot_of(rel: str, entry: dict) -> str | None:
+    """Which slot a recorded file belongs in: "left", "right", "master", or None.
+
+    PUBLIC, because ui/board_v2/duty_art_lab reports on the same files and a second copy of this
+    rule is how a board comes to show art the lab will not open with. Three routes, in order: an
+    explicit `slot` on the attribution entry, `_left`/`_right` in the filename as
+    crop_duty_master.py writes them, then the word LEFT or RIGHT in the entry's `role` prose,
+    which is where the existing entries say it.
+    """
+    slot = entry.get("slot")
+    if slot in ("left", "right", "master"):
+        return slot
+    name = rel.rsplit("/", 1)[-1].lower()
+    if "_left" in name:
+        return "left"
+    if "_right" in name:
+        return "right"
+    role = (entry.get("role", "") or "") + " " + (entry.get("notes", "") or "")
+    if re.search(r"\bLEFT\b|left action", role):
+        return "left"
+    if re.search(r"\bRIGHT\b|right action", role):
+        return "right"
+    if "master" in role.lower():
+        return "master"
+    return None
+
+
+def bundled_art(width: int, height: int) -> tuple[dict, dict, list]:
+    """The newest action image for each duty and slot, as data URIs the page can draw.
+
+    Returns (images by key, {slug: {actionA: (key, filename)}}, notes). Missing Pillow or a
+    missing tree is not fatal -- the page is still a layout tool without pictures -- but it is
+    reported, because a lab that quietly opened empty is the thing this exists to stop.
+    """
+    notes: list = []
+    try:
+        from PIL import Image
+    except ImportError:
+        notes.append("Pillow is not installed, so no artwork is built in. "
+                     "pip install pillow, then re-run.")
+        return {}, {}, notes
+    if not ART_DIR.is_dir():
+        notes.append("no duty_actions/ folder at %s, so no artwork is built in" % ART_DIR)
+        return {}, {}, notes
+
+    attrib_file = ART_DIR.parent / "attribution.json"
+    placed: dict = {}
+    if attrib_file.is_file():
+        for path, e in json.loads(attrib_file.read_text(encoding="utf-8"))\
+                .get("files", {}).items():
+            if path.startswith("duty_actions/"):
+                rel = path[len("duty_actions/"):]
+                placed[rel] = slot_of(rel, e)
+
+    images: dict = {}
+    by_duty: dict = {}
+    side_to_action = {"left": ACTIONS[0][0], "right": ACTIONS[1][0]}
+    for slug, _name, _angle in DUTIES:
+        folder = ART_DIR / slug
+        if not folder.is_dir():
+            continue
+        newest: dict = {}
+        for f in sorted(folder.rglob("*.png")):
+            rel = f.relative_to(ART_DIR).as_posix()
+            side = placed.get(rel)
+            if side is None and f.parent.name == "masters":
+                side = "master"
+            if side not in ("left", "right"):
+                if side is None:
+                    notes.append("%s: no slot recorded, left out" % rel)
+                continue
+            # Sorted ascending, so the last one wins -- _v02 over _v01.
+            newest[side] = f
+        for side, f in newest.items():
+            key = "bundled:%s:%s" % (slug, side)
+            im = Image.open(f).convert("RGB").resize(
+                (width * ART_SCALE, height * ART_SCALE), Image.LANCZOS)
+            buf = io.BytesIO()
+            im.save(buf, "JPEG", quality=ART_JPEG_Q, optimize=True)
+            images[key] = "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+            by_duty.setdefault(slug, {})[side_to_action[side]] = [key, f.name]
+    return images, by_duty, notes
+
+
+# Built once at import, because default_state() is called more than once and re-encoding a
+# dozen JPEGs each time would be the slowest thing in the build.
+ART_IMAGES, ART_BY_DUTY, ART_NOTES = bundled_art(ART_LEFT["width"], ART_LEFT["height"])
+
+
 def default_state() -> dict:
     """THE ONE PLACE THE STARTING LAYOUT IS DECIDED.
 
@@ -555,9 +681,14 @@ def default_state() -> dict:
             # older session merges against it, and the export keeps one shape for all eight. It
             # simply carries nothing and is never drawn.
             said = TEXT[slug][slot] or {"name": None, "shortLabel": ""}
+            # THE ARTWORK COMES WITH THE BUILD when the repository has it. Not a fallback and
+            # not a placeholder: this is the committed file for that slot, so a freshly
+            # generated page opens showing the board as it actually stands.
+            art = ART_BY_DUTY.get(slug, {}).get(slot)
             d[slot] = {"name": said["name"], "shortLabel": said["shortLabel"],
                        "seal": None, "sealName": None,
-                       "scenic": None, "scenicName": None}
+                       "scenic": art[0] if art else None,
+                       "scenicName": art[1] if art else None}
         seats = START_SEATS.get(slug) or [PLAYERS[0]["id"]] * 4
         d["card"] = dict(slots[slug], visible=True, locked=False)
         d["figures"] = {"x": round(fx), "y": round(fy),
@@ -668,6 +799,7 @@ def default_state() -> dict:
 _TOKENS = ("__BUILD_VERSION__", "__DEFAULT_STATE__", "__CANVAS_W__", "__CANVAS_H__",
            "__DUTY_ORDER__", "__DUTY_ACTIONS__", "__FULL_BOARDS__", "__SAFE_MARGIN__",
            "__WHEEL_RATIO__", "__WHEEL_VIEWBOX__", "__ELEVATION__", "__HELPER_RANGES__",
+           "__BUNDLED_ART__",
            "__STATE_VERSION__", "__TEXT_VERSION__", "__ACOLYTE_RANGE__", "__ACOLYTE_ASPECT__",
            "__BACKGROUNDS__", "__ZOOM_STEPS__", "__PLAYER_IDS__", "__VIEW_STATES__",
            "__SEAL_SIZE__", "__WHEEL_SVG__")
@@ -693,6 +825,7 @@ def build() -> str:
         # JSON-ENCODED, not pasted between quotes: the markup contains both newlines and
         # double quotes, and a JavaScript string literal tolerates neither.
         "__WHEEL_SVG__": json.dumps(wheel_svg()),
+        "__BUNDLED_ART__": json.dumps(ART_IMAGES),
         "__STATE_VERSION__": json.dumps(STATE_VERSION),
         "__TEXT_VERSION__": json.dumps(duty_text_version(duty_text())),
         "__BUILD_VERSION__": json.dumps(BUILD_VERSION),

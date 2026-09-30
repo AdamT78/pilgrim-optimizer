@@ -1676,7 +1676,8 @@ const C = S.duties.clerical;
 out.actionA = {keys: Object.keys(C.actionA).sort(),
                scenic: C.actionA.scenic, scenicName: C.actionA.scenicName,
                name: C.actionA.name, shortLabel: C.actionA.shortLabel};
-out.actionB = {scenic: C.actionB.scenic, name: C.actionB.name};
+out.actionB = {scenic: C.actionB.scenic, scenicName: C.actionB.scenicName,
+               name: C.actionB.name};
 out.stillHasArt = ("art" in C) || ("art" in C.actionA);
 out.figures = {x: C.figures.x, y: C.figures.y, arrangement: C.figures.arrangement,
                anchorX: C.figures.anchorX === undefined ? null : C.figures.anchorX,
@@ -1688,6 +1689,7 @@ out.cityHasPlayers = ("players" in S.city);
 out.inHandSeat = S.inHand.seat;
 out.version = S.version;
 out.pool = Object.keys(IMAGES).map(k => IMAGES[k]);
+out.poolKeys = Object.keys(IMAGES);
 out.stateHasDataUrl = JSON.stringify(S).indexOf("data:") >= 0;
 process.stdout.write(JSON.stringify(out));
 """ % json.dumps(v1)
@@ -1706,13 +1708,31 @@ process.stdout.write(JSON.stringify(out));
         "Action A did not take this build's default action name: %r" % a["name"])
 
     b = got["actionB"]
-    assert b["scenic"] is None, "Action B came up holding an image nothing loaded"
+    # V4.6 ONWARDS THIS IS THE OPPOSITE OF A BUG. An empty action slot takes whatever artwork
+    # the build carries for it, which is how a freshly generated page opens showing the board as
+    # it stands rather than showing sixteen placeholders. What it must never do is take art for
+    # a slot the repository has none for, or overwrite a file somebody loaded themselves -- both
+    # guarded below and in test_a_saved_slot_keeps_its_own_artwork.
+    if b["scenic"] is None:
+        assert b["scenicName"] is None, (
+            "Action B has a filename but no image: %r" % b["scenicName"])
+    else:
+        assert b["scenic"].startswith("bundled:"), (
+            "Action B came up holding an image nothing loaded and the build did not bundle: %r"
+            % b["scenic"])
+        assert b["scenicName"], "bundled artwork arrived with no filename to identify it"
 
     # The image: bytes in the pool, a key in the state, and no data URL anywhere in the state.
     # Through TWO migrations -- the V1 artwork became Action A's art, and that art's picture then
     # became Action A's scenic asset when the boxes went away.
-    assert got["pool"] == ["data:image/png;base64,AAAA"], (
+    # THE POOL IS NO LONGER JUST THE MIGRATED IMAGE. From V4.6 the build seeds it with whatever
+    # action artwork the repository holds, so the test is that the V1 image ARRIVED, not that it
+    # arrived alone -- and that the rest of the pool is the build's, not stray state.
+    assert "data:image/png;base64,AAAA" in got["pool"], (
         "the V1 image did not reach the pool: %s" % got["pool"])
+    strays = [k for k in got["poolKeys"]
+              if not k.startswith("bundled:") and not k.startswith("im")]
+    assert not strays, "the pool holds keys from neither the build nor putImage(): %s" % strays
     assert a["scenic"] and not str(a["scenic"]).startswith("data:"), (
         "the state still holds a data URL rather than a pool key: %r" % a["scenic"])
     assert a["scenicName"] == "old.png", "the filename was lost, so a lost asset cannot say which"
