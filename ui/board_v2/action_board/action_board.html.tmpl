@@ -55,10 +55,20 @@ html,body{margin:0;background:#07070a;color:var(--ink);
 /* The cross-highlight: hovering a wheel face lights its tile and the other way round. One class,
    set from one place, so the two directions cannot drift apart. */
 .tile.lit{border-color:var(--line);box-shadow:0 0 0 1px #c9b27a66}
+/* THE PLACEHOLDER IS A DISC; THE REAL SEAL IS NOT. The wax seals are drawn with a scalloped,
+   irregular rim, so the container's own circle would show through at every bay of it and the
+   round crop would shear the peaks off. Once a picture lands the container stops drawing -- the
+   same correction the Tithe tokens needed, and the one tokens/README.md warns about. */
 .seal{position:absolute;border-radius:50%;background:radial-gradient(70% 70% at 36% 30%,#6e2d26,#3d1512);
   border:1px solid #1f0b09;display:grid;place-items:center;cursor:pointer}
-.seal.empty{background:#141210;border:1px dashed #3a352c}
+/* THE EMPTY SLOT IS DRAWN THE SIZE THE SEAL WILL BE, not the size of its box. Every disc on this
+   board fills 0.906 of its own square -- geometry.py owns that figure and a test holds the files
+   to it -- so a placeholder filling the whole box promises a seal bigger than any that can land
+   in it, on twelve slots at once. The scale comes from GEO; it is not typed here. */
+.seal.empty{background:#141210;border:1px dashed #3a352c;transform:scale(var(--solid))}
+.seal.filled{background:none;border:0;border-radius:0}
 .seal img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
+.seal.filled img{border-radius:0;object-fit:contain}
 
 /* ---- the two action cards -------------------------------------------------------------- */
 .art{overflow:hidden;background:#000;cursor:pointer}
@@ -101,6 +111,16 @@ html,body{margin:0;background:#07070a;color:var(--ink);
   border:1px solid #6b5c3e;display:grid;place-items:center;cursor:pointer;
   color:#e4d6b4;font:700 15px/1 ui-monospace,monospace}
 .tok img{width:100%;height:100%;object-fit:contain;display:block;background:none;border:0}
+/* EACH PNG IS THE COMPLETE MARK -- its rim, its disc and its motif are painted into the artwork,
+   which tokens/README.md says in as many words. A container with a disc of its own behind it and
+   a border around it gives every one of them two rims, and it did. The disc and border below are
+   for the LETTER fallback only, and `.filled` takes them off the moment a picture is there.
+
+   THE CLASS IS `filled` AND NOT `art` BECAUSE `.art` IS THE BIG CARD. A token marked `.art`
+   matched the card's own rule -- `overflow:hidden;background:#000;cursor:pointer` -- and only
+   looked right because the line below happened to win on specificity. A second container, the
+   seal, would have inherited the same accident. */
+.tok.filled{background:none;border:0;border-radius:0}
 .pawn{position:absolute;display:grid;place-items:center}
 .pawn svg{width:100%;height:100%;display:block;overflow:visible}
 .pawn .n{position:absolute;font:700 17px/1 Georgia,serif;color:#1b1a16;text-shadow:0 1px 0 #ffffff40}
@@ -232,20 +252,29 @@ function drawTiles(){
     var t = GEO.tiles[d.slug];
     var tile = el("div", "tile", box(t));
     tile.id = "tile-" + d.slug;
-    var nm = el("div", "nm", {top: "14px", fontSize: px(GEO.ribbon.nameSize)}, tile);
+    // THE LINE HEIGHT IS SET, not left to the font. geometry.py measures the seals from where
+    // this line of type ends, and with no line-height in the CSS the browser used Georgia's own
+    // and drew 15px where the module had worked on 16.
+    var nm = el("div", "nm", {top: px(GEO.ribbon.nameTop), fontSize: px(GEO.ribbon.nameSize),
+                              lineHeight: String(GEO.ribbon.nameLh)}, tile);
     nm.textContent = d.name;
     var info = dutyOf(d.slug);
     var n = info ? info.actions : 1;
-    var gw = n * GEO.ribbon.seal + (n - 1) * GEO.ribbon.sealGap;
+    // THE DIAGONAL IS NOT WORKED OUT HERE. geometry.py hands over both arrangements already
+    // placed, relative to the tile, so the one fact about where a seal sits has one owner. The
+    // page lays out what it is given and knows nothing about insets or overlaps.
+    var at = GEO.ribbon.sealSlots[String(n)];
     for (var i = 0; i < n; i++){
       var slot = i === 0 ? "actionA" : "actionB";
-      var sx = (t.width - gw) / 2 + i * (GEO.ribbon.seal + GEO.ribbon.sealGap);
-      var seal = el("div", "seal", {left: px(sx), top: px(GEO.ribbon.sealY - t.y),
-                                    width: px(GEO.ribbon.seal), height: px(GEO.ribbon.seal)}, tile);
+      var p = at[i];
+      var seal = el("div", "seal", {left: px(p.x), top: px(p.y),
+                                    width: px(p.size), height: px(p.size),
+                                    zIndex: String(i + 1)}, tile);
       seal.dataset.duty = d.slug; seal.dataset.slot = slot; seal.dataset.kind = "seal";
       seal.dataset.hoverDuty = d.slug; seal.dataset.hoverSlot = slot;
       var key = info && info[slot] && info[slot].seal;
-      if (key && IMAGES[key]) { var im = document.createElement("img"); im.src = IMAGES[key]; seal.appendChild(im); }
+      if (key && IMAGES[key]) { var im = document.createElement("img"); im.src = IMAGES[key];
+                                seal.appendChild(im); seal.classList.add("filled"); }
       else seal.classList.add("empty");
       seal.addEventListener("click", slotClick);
       wireDrop(seal);
@@ -311,18 +340,29 @@ function drawSide(){
   var p = el("div", "panel", box(t));
   p.id = "tithe";
   p.addEventListener("click", function(){ if (!S.editing) select("tithe"); });
-  var y = 21;
+  // EVERY NUMBER IN THIS COLUMN COMES FROM GEO. The three seals used to start at a 21 typed
+  // here and the label sat on a 14, which is how the column survived the seals going from 64 to
+  // 78 without anybody noticing the label had been pushed at.
+  var y = t.tokenY;
   t.order.forEach(function(name){
-    var k = "token:" + name;
-    var e = el("div", "tok", {left: px((t.width - t.token) / 2), top: px(y),
+    // THE SEAL, NOT THE COIN. A seal on this board means a thing you can take, and its colour
+    // says which kind -- red for a duty action, grey for a resource. The Tithe column is the
+    // third choice beside the two actions, so it speaks the same language they do. The coin is
+    // still built in and is the fallback, and a letter is the fallback to that, because the
+    // page has to stay usable with no assets at all.
+    var k = IMAGES["seal:" + name] ? "seal:" + name
+          : IMAGES["token:" + name] ? "token:" + name : null;
+    var e = el("div", "tok", {left: px(t.tokenX), top: px(y),
                               width: px(t.token), height: px(t.token)}, p);
     e.dataset.kind = "token"; e.dataset.slot = name;
-    if (IMAGES[k]) { var im = document.createElement("img"); im.src = IMAGES[k]; e.appendChild(im); }
-    else e.textContent = name.slice(0,1).toUpperCase();
+    if (k) { var im = document.createElement("img"); im.src = IMAGES[k];
+             e.appendChild(im); e.classList.add("filled"); }
+    else e.textContent = name.slice(0, 1).toUpperCase();
     wireDrop(e);
     y += t.token + t.tokenGap;
   });
-  var lb = el("div", "lb", {bottom: "14px", fontSize: px(t.labelSize)}, p);
+  var lb = el("div", "lb", {bottom: px(t.labelBottom), fontSize: px(t.labelSize),
+                            lineHeight: String(t.lh)}, p);
   lb.textContent = "Take Tithe";
 
   var tc = GEO.confirm.tithe;
@@ -332,18 +372,22 @@ function drawSide(){
 
   [["showMap", "Show Map"], ["hire", "Hire Building"]].forEach(function(pair){
     var o = GEO[pair[0]];
-    var e = el("div", "btn standing", Object.assign(box(o), {fontSize: "13px", padding: "0 8px"}));
+    var e = el("div", "btn standing", Object.assign(box(o), {
+      fontSize: px(GEO.standing.size), padding: "0 " + px(GEO.standing.padX)}));
     e.textContent = pair[1];
   });
 
+  // THE CITY GRID IS HANDED OVER PLACED, like the seals in a duty tile. It used to be worked out
+  // here from `(c.width - 24) / 2` with 8px margins -- and 132 is the panel's OUTER width, so the
+  // grid drew 9px from the left edge and 7px from the right, leaning two pixels with nothing
+  // watching. Its four vertical figures agreed with nothing else on the board either.
   var c = GEO.city;
   var cp = el("div", "panel", box(c));
-  var cl = el("div", "lb", {top: "10px", fontSize: "12px"}, cp);
+  var cl = el("div", "lb", {top: px(c.labelTop), fontSize: px(c.labelSize),
+                            lineHeight: String(c.lh)}, cp);
   cl.textContent = "The City";
   GEO.players.forEach(function(pl, i){
-    var w = (c.width - 24) / 2, h = 116;
-    var f = el("div", "pawn", {left: px(8 + (i % 2) * (w + 8)), top: px(34 + Math.floor(i / 2) * 126),
-                               width: px(w), height: px(h)}, cp);
+    var f = el("div", "pawn", box(c.figures[i]), cp);
     f.innerHTML = pawnSvg(pl.colour);
     var n = el("div", "n", null, f);
     n.textContent = S.city[pl.id];
@@ -587,6 +631,7 @@ function fit(){
 
 board.style.width = px(GEO.canvas.width);
 board.style.height = px(GEO.canvas.height);
+board.style.setProperty("--solid", String(GEO.ribbon.solidFraction));
 document.getElementById("buildTag").textContent = "build " + BUILD.version;
 document.getElementById("bEdit").addEventListener("click", function(){
   S.editing = !S.editing;

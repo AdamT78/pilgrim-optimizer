@@ -67,6 +67,50 @@ ART_DIR = BOARD / "duty_actions"
 TOKEN_DIR = BOARD / "tokens" / "resources"
 MANIFEST = BOARD / "metadata" / "action_board.json"
 
+# A duty's seals live under its own folder, beside the pictures of its actions, because they are
+# two drawings OF THE SAME ACTION and splitting them would make a slot's art and a slot's seal two
+# things to keep in step. ONE name, here, used by the walk that reads them and the save that
+# writes them -- the folder was typed twice and the second one would have been the one to drift.
+SEAL_SUBDIR = "seals"
+
+
+def non_slot_folders() -> tuple:
+    """Folder names under a duty that are NOT one of its actions, per attribution.json.
+
+    THE SKIP IS A SHARED FACT AND THE WRITE IS NOT. SEAL_SUBDIR above says where this tool
+    PUTS a seal; this says which folders every tool that walks the tree must step over, and
+    three tools walk it. Each carried its own copy of the word "masters", so when `seals`
+    appeared only this one was taught about it -- and the layout lab went on to draw a wax
+    seal of 78 pixels as Clerical`s 590 x 295 action card. The fallback is the tree as it
+    stood before the key existed.
+    """
+    try:
+        got = json.loads(ATTRIB_FILE.read_text(encoding="utf-8")).get("nonSlotFolders")
+    except Exception:
+        got = None
+    return tuple(got) if got else ("masters", SEAL_SUBDIR)
+
+
+def image_suffixes() -> tuple:
+    """Extensions an image in this tree may carry, per attribution.json.
+
+    The shipped prints are WebP and the masters are PNG, and three generators plus the tests
+    all have to look for both. The list went into attribution.json for the same reason
+    nonSlotFolders did: four copies of one fact is four chances to teach three of them.
+    """
+    try:
+        got = json.loads(ATTRIB_FILE.read_text(encoding="utf-8")).get("imageSuffixes")
+    except Exception:
+        got = None
+    return tuple(got) if got else (".png", ".webp")
+
+
+def images_under(folder: pathlib.Path, deep: bool = True) -> list:
+    """Every image under a folder, newest-last by name, whatever it is encoded as."""
+    want = set(image_suffixes())
+    found = folder.rglob("*") if deep else folder.glob("*")
+    return sorted((f for f in found if f.suffix.lower() in want), key=lambda f: f.as_posix())
+
 BUILD_VERSION = "0.1"
 
 # A view, not the asset. Twice the card is 1180 x 590, which is retina on the board and about
@@ -207,6 +251,7 @@ def bundled_art() -> tuple[dict, dict, list]:
                 placed[path[len("duty_actions/"):]] = slot_of(path[len("duty_actions/"):], e)
 
     side_to_slot = {"left": "actionA", "right": "actionB"}
+    skip = non_slot_folders()
     images: dict = {}
     by_duty: dict = {}
     for slug, _name, _deg in G.DUTIES:
@@ -214,7 +259,13 @@ def bundled_art() -> tuple[dict, dict, list]:
         if not folder.is_dir():
             continue
         newest: dict = {}
-        for f in sorted(folder.rglob("*.png")):
+        for f in images_under(folder):
+            # The seals live under the same duty folder and are a different kind of picture, so
+            # they are walked by bundled_seals and skipped here. Without this they would arrive
+            # recorded as left and right and be inlined as card art -- a 78px wax seal stretched
+            # across 590 x 295, which is a thing a test should not have to catch.
+            if set(f.relative_to(folder).parts) & set(skip):
+                continue
             rel = f.relative_to(ART_DIR).as_posix()
             side = placed.get(rel)
             if side is None and f.parent.name == "masters":
@@ -231,18 +282,88 @@ def bundled_art() -> tuple[dict, dict, list]:
     return images, by_duty, notes
 
 
+def bundled_seals() -> tuple[dict, dict, list]:
+    """The newest recorded wax seal for each duty and slot, inlined at twice its drawn size.
+
+    THE RECORD GATES THE SEAL, exactly as it gates the card art: a PNG that nobody wrote down is
+    a PNG nobody can say where it came from, and the board would rather draw its dashed
+    placeholder than show one. `masters/` holds the untouched originals and is recorded as such,
+    so the same test keeps them off the board.
+
+    SAME VOCABULARY AS THE ART -- left and right, not actionA and actionB. One slot has one name
+    in the records whichever kind of picture is being talked about, and `record()` already maps
+    the page's actionA onto it.
+    """
+    notes: list = []
+    try:
+        import PIL  # noqa: F401
+    except ImportError:
+        return {}, {}, []                       # bundled_art has already said why
+    if not ART_DIR.is_dir():
+        return {}, {}, []
+
+    placed: dict = {}
+    if ATTRIB_FILE.is_file():
+        rec = json.loads(ATTRIB_FILE.read_text(encoding="utf-8")).get("files", {})
+        for path, e in rec.items():
+            if path.startswith("duty_actions/"):
+                placed[path[len("duty_actions/"):]] = slot_of(path[len("duty_actions/"):], e)
+
+    side_to_slot = {"left": "actionA", "right": "actionB"}
+    images: dict = {}
+    by_duty: dict = {}
+    for slug, _name, _deg in G.DUTIES:
+        folder = ART_DIR / slug / SEAL_SUBDIR
+        if not folder.is_dir():
+            continue
+        newest: dict = {}
+        for f in images_under(folder):
+            rel = f.relative_to(ART_DIR).as_posix()
+            side = placed.get(rel)
+            if side not in ("left", "right"):
+                if side is None:
+                    notes.append("%s: no slot recorded, left out" % rel)
+                continue
+            newest[side] = f                      # sorted ascending, so _v03 beats _v02
+        for side, f in newest.items():
+            key = "seal:%s:%s" % (slug, side_to_slot[side])
+            images[key] = _inline(f, (G.SEAL * 2, G.SEAL * 2), "PNG")
+            by_duty.setdefault(slug, {})[side_to_slot[side]] = [key, f.name]
+    return images, by_duty, notes
+
+
 def bundled_tokens() -> tuple[dict, list]:
-    """The three Tithe resources, at twice their drawn size, with their alpha kept."""
+    """The three Tithe resources, in both treatments, at twice their drawn size.
+
+    TWO SETS OF ART FOR THE SAME THREE THINGS, and that is deliberate. `seal_*` is a grey wax
+    seal and `token_*` is a coin. The board's rule is that a SEAL is something you can take and
+    its colour says which kind -- red for a duty action, grey for a resource -- so the Tithe
+    column, which is the third choice beside the two actions, draws seals. The coins stay here
+    because they are what a resource looks like once it is yours rather than on offer, which is
+    a different job on a different surface.
+
+    Both are loaded and the page prefers the seal, so swapping back is a one-line change in the
+    template rather than a rebuild of the assets.
+    """
     notes: list = []
     out: dict = {}
     if not TOKEN_DIR.is_dir():
-        return out, ["no tokens/resources/ at %s, so the Tithe column draws discs" % TOKEN_DIR]
-    for name in G.TOKEN_ORDER:
-        f = TOKEN_DIR / ("token_%s.png" % name)
-        if not f.is_file():
-            notes.append("token_%s.png is missing, so that resource draws as a disc" % name)
-            continue
-        out["token:%s" % name] = _inline(f, (G.TOKEN * 2, G.TOKEN * 2), "PNG")
+        return out, ["no tokens/resources/ at %s, so the Tithe column draws letters" % TOKEN_DIR]
+    for kind in ("seal", "token"):
+        for name in G.TOKEN_ORDER:
+            # THE EXTENSION IS NOT PART OF THE NAME. These were "%s_%s.png" and the day the
+            # prints became WebP the Tithe column fell back to drawing letters, with a note
+            # saying the files were missing while they sat right there.
+            found = [f for f in (TOKEN_DIR / ("%s_%s%s" % (kind, name, sfx))
+                                 for sfx in image_suffixes()) if f.is_file()]
+            if not found:
+                notes.append("%s_%s is missing in every format this tree reads"
+                             % (kind, name))
+                continue
+            f = found[0]
+            out["%s:%s" % (kind, name)] = _inline(f, (G.TOKEN * 2, G.TOKEN * 2), "PNG")
+    if not any(k.startswith("seal:") for k in out):
+        notes.append("no resource seals found, so the Tithe column falls back to the coins")
     return out, notes
 
 
@@ -250,8 +371,9 @@ def build() -> tuple[str, list]:
     if not TMPL.is_file():
         raise SystemExit("the template is not at %s" % TMPL)
     art, by_duty, notes = bundled_art()
+    seals, seal_by_duty, snotes = bundled_seals()
     tokens, tnotes = bundled_tokens()
-    notes += tnotes
+    notes += snotes + tnotes
 
     text = duty_text()
     duties = {}
@@ -262,19 +384,20 @@ def build() -> tuple[str, list]:
         for slot in G.ACTIONS:
             s = said.get(slot) or {"name": None, "shortLabel": ""}
             a = by_duty.get(slug, {}).get(slot)
+            w = seal_by_duty.get(slug, {}).get(slot)
             entry[slot] = {"name": s["name"], "shortLabel": s["shortLabel"],
                            # byStrength is carried through untouched. The board prints the
                            # stored line; the numbers are the game's business, not this page's.
                            "byStrength": s.get("byStrength"),
                            "art": a[0] if a else None, "artFile": a[1] if a else None,
-                           "seal": None, "sealFile": None}
+                           "seal": w[0] if w else None, "sealFile": w[1] if w else None}
         duties[slug] = entry
 
     page = TMPL.read_text(encoding="utf-8")
     fill = {
         "__GEOMETRY__": json.dumps(G.as_dict()),
         "__DUTIES__": json.dumps(duties),
-        "__IMAGES__": json.dumps({**art, **tokens}),
+        "__IMAGES__": json.dumps({**art, **seals, **tokens}),
         "__WHEEL_SVG__": json.dumps(wheel_svg()),
         "__SAVEKEYS__": json.dumps(SAVE_KEYS),
         "__BUILD__": json.dumps({"version": BUILD_VERSION, "notes": notes}),
@@ -352,8 +475,8 @@ def next_version(folder: pathlib.Path, stem: str) -> pathlib.Path:
     overwriting IS the undo.
     """
     n = 0
-    for f in folder.glob("%s_v*.png" % stem):
-        m = re.search(r"_v(\d+)\.png$", f.name)
+    for f in images_under(folder, deep=False):
+        m = re.match(re.escape(stem) + r"_v(\d+)$", f.stem)
         if m:
             n = max(n, int(m.group(1)))
     return folder / ("%s_v%02d.png" % (stem, n + 1))
@@ -362,20 +485,27 @@ def next_version(folder: pathlib.Path, stem: str) -> pathlib.Path:
 def slot_folder(duty: str, slot: str) -> str | None:
     """Which folder this duty's slot keeps its pictures in.
 
-    attribution.json's `slotFolders` is the answer and is checked first, because it covers the
-    slots that have no picture yet -- which is twelve of the fourteen. The per-file records are
-    the fallback, and they agree with it for the two that do; a file already placed is the
-    stronger evidence of where its siblings go, so a disagreement is worth knowing about and
-    the map wins only where nothing has landed.
+    A PICTURE ALREADY PLACED IS THE STRONGER EVIDENCE of where its siblings go, so the per-file
+    records are read first and attribution.json's `slotFolders` answers the slots that have none
+    -- which was twelve of the fourteen. (This docstring used to claim the opposite order to the
+    code underneath it. The code was right and the prose had drifted.)
+
+    A SEAL IS NOT AN ACTION PICTURE, and it is recorded in the same vocabulary -- left and right
+    -- under the same duty. So the scan steps over the non-slot folders, or the first seal filed
+    for a duty with no artwork yet becomes that slot's answer: Give Alms' right action reported
+    its folder as "seals", which is where the save would then have written a 590 x 295 card.
     """
     if not ATTRIB_FILE.is_file():
         return None
     doc = json.loads(ATTRIB_FILE.read_text(encoding="utf-8"))
     want = {"actionA": "left", "actionB": "right"}.get(slot, slot)
+    skip = set(non_slot_folders())
     for path, e in doc.get("files", {}).items():
         if not path.startswith("duty_actions/%s/" % duty):
             continue
         rel = path[len("duty_actions/"):]
+        if set(rel.split("/")) & skip:
+            continue
         if slot_of(rel, e) == want:
             return rel.split("/")[1]
     return (doc.get("slotFolders", {}).get(duty) or {}).get(slot)
@@ -387,7 +517,7 @@ def empty_folders(duty: str) -> list:
     if not d.is_dir():
         return []
     return sorted(f.name for f in d.iterdir()
-                  if f.is_dir() and f.name != "masters" and not any(f.glob("*.png")))
+                  if f.is_dir() and f.name != "masters" and not images_under(f))
 
 
 def _short(p: pathlib.Path) -> str:
@@ -440,7 +570,7 @@ def save(sent: dict) -> list:
             side = {"actionA": "left", "actionB": "right"}.get(img["slot"], img["slot"])
             stem = "%s_%s_%s" % (img["duty"], folder_name, side)
         elif img["kind"] == "seal":
-            folder = ART_DIR / img["duty"] / "seals"
+            folder = ART_DIR / img["duty"] / SEAL_SUBDIR
             stem = "%s_%s_seal" % (img["duty"], img["slot"])
         elif img["kind"] == "token":
             folder = TOKEN_DIR

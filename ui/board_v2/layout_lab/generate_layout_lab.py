@@ -557,6 +557,43 @@ def card_slots() -> dict:
 # out and named on stderr rather than guessed into place.
 # HERE is layout_lab/; the art sits beside it under board_v2/.
 ART_DIR = HERE.parent / "duty_actions"
+
+def non_slot_folders(attrib_file) -> tuple:
+    """Folder names under a duty that are NOT one of its actions.
+
+    attribution.json owns this, because every tool that walks duty_actions/ has to agree about it
+    and each one used to carry its own copy of the word "masters". When `seals` appeared, the
+    action board was taught about it and this walk was not, and a 78px wax seal was drawn as a
+    590 x 295 action card. The fallback is what the tree looked like before the key existed.
+    """
+    try:
+        import json as _json
+        got = _json.loads(attrib_file.read_text(encoding="utf-8")).get("nonSlotFolders")
+    except Exception:
+        got = None
+    return tuple(got) if got else ("masters", "seals")
+
+
+def image_suffixes(attrib_file) -> tuple:
+    """Extensions an image in this tree may carry, per attribution.json.
+
+    The shipped prints are WebP and the masters are PNG. This walk looked for "*.png" and
+    would simply have stopped finding the art, quietly, with nothing to say about it.
+    """
+    try:
+        import json as _json
+        got = _json.loads(attrib_file.read_text(encoding="utf-8")).get("imageSuffixes")
+    except Exception:
+        got = None
+    return tuple(got) if got else (".png", ".webp")
+
+
+def images_under(folder, attrib_file) -> list:
+    """Every image under a folder, newest-last by name, whatever it is encoded as."""
+    want = set(image_suffixes(attrib_file))
+    return sorted((f for f in folder.rglob("*") if f.suffix.lower() in want),
+                  key=lambda f: f.as_posix())
+
 ART_SCALE = 2
 ART_JPEG_Q = 86
 
@@ -617,13 +654,16 @@ def bundled_art(width: int, height: int) -> tuple[dict, dict, list]:
 
     images: dict = {}
     by_duty: dict = {}
+    skip = non_slot_folders(attrib_file)
     side_to_action = {"left": ACTIONS[0][0], "right": ACTIONS[1][0]}
     for slug, _name, _angle in DUTIES:
         folder = ART_DIR / slug
         if not folder.is_dir():
             continue
         newest: dict = {}
-        for f in sorted(folder.rglob("*.png")):
+        for f in images_under(folder, attrib_file):
+            if set(f.relative_to(folder).parts) & set(skip):
+                continue              # a seal is not this duty's card art; see non_slot_folders
             rel = f.relative_to(ART_DIR).as_posix()
             side = placed.get(rel)
             if side is None and f.parent.name == "masters":

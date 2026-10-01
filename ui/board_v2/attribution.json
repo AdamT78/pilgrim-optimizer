@@ -174,7 +174,7 @@
       "role": "the untouched original of tokens/resources/token_silver.png, kept so the optical correction below stays reversible",
       "notes": "master, not shipped"
     },
-    "tokens/resources/token_wheat.png": {
+    "tokens/resources/token_wheat.webp": {
       "state": "present",
       "title": "Wheat resource token",
       "creator": "Generated with ChatGPT (OpenAI)",
@@ -182,9 +182,10 @@
       "source": "tokens/masters/token_wheat_v01.png",
       "licence": "openai-generated",
       "role": "the wheat token the Tithe card draws, 1254 x 1254. The PNG is the COMPLETE token -- rim, disc and motif are painted in -- so the layout draws the image and nothing behind or around it.",
-      "modifications": "rescaled x1.070 about its own centre so all three tokens read the same size at one tokenSize. Measured as a fraction of the square, the solid disc went from 0.5547 to 0.6354, matching stone's 0.6365; nothing is clipped at the canvas edge. The correction is made in the artwork rather than by a per-token slider in the layout lab, so production does not have to reproduce a studio adjustment."
+      "modifications": "rescaled x1.070 about its own centre so all three tokens read the same size at one tokenSize. Measured as a fraction of the square, the solid disc went from 0.5547 to 0.6354, matching stone's 0.6365; nothing is clipped at the canvas edge. The correction is made in the artwork rather than by a per-token slider in the layout lab, so production does not have to reproduce a studio adjustment.",
+      "notes": "re-encoded as WebP at quality 90 from the PNG beside it in masters/; the drawing is unchanged and the master is the archive"
     },
-    "tokens/resources/token_stone.png": {
+    "tokens/resources/token_stone.webp": {
       "state": "present",
       "title": "Stone resource token",
       "creator": "Generated with ChatGPT (OpenAI)",
@@ -192,9 +193,10 @@
       "source": "tokens/masters/token_stone_v01.png",
       "licence": "openai-generated",
       "role": "the stone token the Tithe card draws, 1254 x 1254. The PNG is the COMPLETE token -- rim, disc and motif are painted in -- so the layout draws the image and nothing behind or around it.",
-      "modifications": "none. Stone was already the largest of the three at a solid-disc fraction of 0.6365, so it is the size the other two were brought to; its pixels are identical to its master and only the PNG encoding differs."
+      "modifications": "none. Stone was already the largest of the three at a solid-disc fraction of 0.6365, so it is the size the other two were brought to; its pixels are identical to its master and only the PNG encoding differs.",
+      "notes": "re-encoded as WebP at quality 90 from the PNG beside it in masters/; the drawing is unchanged and the master is the archive"
     },
-    "tokens/resources/token_silver.png": {
+    "tokens/resources/token_silver.webp": {
       "state": "present",
       "title": "Silver resource token",
       "creator": "Generated with ChatGPT (OpenAI)",
@@ -202,7 +204,8 @@
       "source": "tokens/masters/token_silver_v01.png",
       "licence": "openai-generated",
       "role": "the silver token the Tithe card draws, 1254 x 1254. The PNG is the COMPLETE token -- rim, disc and motif are painted in -- so the layout draws the image and nothing behind or around it.",
-      "modifications": "rescaled x1.129 about its own centre so all three tokens read the same size at one tokenSize. Measured as a fraction of the square, the solid disc went from 0.4997 to 0.6372, matching stone's 0.6365; nothing is clipped at the canvas edge. The correction is made in the artwork rather than by a per-token slider in the layout lab, so production does not have to reproduce a studio adjustment."
+      "modifications": "rescaled x1.129 about its own centre so all three tokens read the same size at one tokenSize. Measured as a fraction of the square, the solid disc went from 0.4997 to 0.6372, matching stone's 0.6365; nothing is clipped at the canvas edge. The correction is made in the artwork rather than by a per-token slider in the layout lab, so production does not have to reproduce a studio adjustment.",
+      "notes": "re-encoded as WebP at quality 90 from the PNG beside it in masters/; the drawing is unchanged and the master is the archive"
     },
     "duty_actions/clerical/gain_piety/clerical_gain_piety_left_v03.png": {
       "state": "present",
@@ -231,6 +234,683 @@
       "reproducibleBy": "tools/duty_art/crop_duty_master.py",
       "notes": "The cut reads the card size and the gap from the layout lab's default_state(), so it cannot drift from the box it lands in. `slot` is declared rather than inferred: the folder names came from wording that has since changed and no longer sort into slot order -- gain_piety is actionA and gain_coins actionB, which alphabetically is backwards.",
       "sha256": "feea0ef90a06cc9829451db581f3a04bfab7e671f44a64c362e852fee588ea94"
+    },
+    "tokens/masters/seal_wheat_v01.png": {
+      "state": "present",
+      "title": "Wheat resource seal, as generated",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 resource seals",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, before the optical correction",
+      "notes": "master, not shipped"
+    },
+    "tokens/masters/seal_stone_v01.png": {
+      "state": "present",
+      "title": "Stone resource seal, as generated",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 resource seals",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, before the optical correction",
+      "notes": "master, not shipped"
+    },
+    "tokens/masters/seal_silver_v01.png": {
+      "state": "present",
+      "title": "Silver resource seal, as generated",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 resource seals",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, before the optical correction",
+      "notes": "master, not shipped"
+    },
+    "tokens/resources/seal_wheat.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 resource seals",
+      "title": "Wheat resource seal",
+      "slot": "resource",
+      "role": "a wheat seal for the Take Tithe column. A SEAL on this board is a thing you can take and its colour says which kind -- red for a duty action, grey for a resource -- so the Tithe column, which is the third choice beside the two actions, speaks the same language they do. The artwork is the COMPLETE mark: rim, disc and motif are painted in, so the layout draws the image and nothing behind or around it.",
+      "notes": "exported from tokens/masters/seal_wheat_v02.png; scaled x0.9854 about its own centre, from 0.919 of its square to the board's 0.906; re-encoded as WebP at quality 90, the drawing unchanged",
+      "reproducibleBy": "duty_art_lab/prompts/seals/02-tithe-wheat-grey.md"
+    },
+    "tokens/resources/seal_stone.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 resource seals",
+      "title": "Stone resource seal",
+      "slot": "resource",
+      "role": "a stone seal for the Take Tithe column. A SEAL on this board is a thing you can take and its colour says which kind -- red for a duty action, grey for a resource -- so the Tithe column, which is the third choice beside the two actions, speaks the same language they do. The artwork is the COMPLETE mark: rim, disc and motif are painted in, so the layout draws the image and nothing behind or around it.",
+      "notes": "exported from tokens/masters/seal_stone_v02.png; scaled x0.9727 about its own centre, from 0.931 of its square to the board's 0.906; re-encoded as WebP at quality 90, the drawing unchanged",
+      "reproducibleBy": "duty_art_lab/prompts/seals/03-tithe-stone-grey.md"
+    },
+    "tokens/resources/seal_silver.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 resource seals",
+      "title": "Silver resource seal",
+      "slot": "resource",
+      "role": "a silver seal for the Take Tithe column. A SEAL on this board is a thing you can take and its colour says which kind -- red for a duty action, grey for a resource -- so the Tithe column, which is the third choice beside the two actions, speaks the same language they do. The artwork is the COMPLETE mark: rim, disc and motif are painted in, so the layout draws the image and nothing behind or around it.",
+      "notes": "exported from tokens/masters/seal_silver_v02.png; scaled x0.9914 about its own centre, from 0.914 of its square to the board's 0.906; re-encoded as WebP at quality 90, the drawing unchanged",
+      "reproducibleBy": "duty_art_lab/prompts/seals/05-tithe-silver-grey.md"
+    },
+    "duty_actions/clerical/seals/masters/clerical_actionA_seal_master_v01.png": {
+      "state": "present",
+      "title": "Clerical gain piety seal, as generated",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, before the optical correction",
+      "notes": "master, not shipped; the original of clerical_actionA_seal_v01.webp"
+    },
+    "duty_actions/clerical/seals/masters/clerical_actionB_seal_master_v01.png": {
+      "state": "present",
+      "title": "Clerical gain coins seal, as generated",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, before the optical correction",
+      "notes": "master, not shipped; the original of clerical_actionB_seal_v01.webp"
+    },
+    "duty_actions/clerical/seals/clerical_actionA_seal_v01.webp": {
+      "state": "present",
+      "title": "Clerical gain piety seal",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "slot": "left",
+      "role": "a red wax seal for Clerical's LEFT action, drawn in the duty tile",
+      "notes": "scaled x0.9653 about its own centre, from 0.939 of its square to the board's 0.906; re-encoded as WebP at quality 90 from the PNG beside it in masters/; the drawing is unchanged and the master is the archive",
+      "reproducibleBy": "unrecorded -- this one predates the folder the briefs are kept in. If the text turns up it goes in duty_art_lab/prompts/seals/ with a `produces:` header and this field names it."
+    },
+    "duty_actions/clerical/seals/clerical_actionB_seal_v01.webp": {
+      "state": "present",
+      "title": "Clerical gain coins seal",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "slot": "right",
+      "role": "a red wax seal for Clerical's RIGHT action, drawn in the duty tile",
+      "notes": "scaled x0.9444 about its own centre, from 0.959 of its square to the board's 0.906; re-encoded as WebP at quality 90 from the PNG beside it in masters/; the drawing is unchanged and the master is the archive",
+      "reproducibleBy": "unrecorded -- this one predates the folder the briefs are kept in. If the text turns up it goes in duty_art_lab/prompts/seals/ with a `produces:` header and this field names it."
+    },
+    "duty_actions/ordination/seals/masters/ordination_actionA_seal_master_v01.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "title": "Ordination ordain seal, as generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, before the optical correction",
+      "notes": "master, not shipped; the original of ordination_actionA_seal_v01.webp"
+    },
+    "duty_actions/ordination/seals/masters/ordination_actionB_seal_master_v01.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "title": "Ordination send on mission seal, as generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, before the optical correction",
+      "notes": "master, not shipped; the original of ordination_actionB_seal_v01.webp"
+    },
+    "duty_actions/ordination/seals/ordination_actionA_seal_v01.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "title": "Ordination ordain seal",
+      "slot": "left",
+      "role": "a red wax seal for Ordination's LEFT action, drawn in the duty tile",
+      "notes": "scaled x0.9374 about its own centre, from 0.967 of its square to the board's 0.906; re-encoded as WebP at quality 90 from the PNG beside it in masters/; the drawing is unchanged and the master is the archive",
+      "reproducibleBy": "unrecorded -- this one predates the folder the briefs are kept in. If the text turns up it goes in duty_art_lab/prompts/seals/ with a `produces:` header and this field names it."
+    },
+    "duty_actions/ordination/seals/ordination_actionB_seal_v01.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "title": "Ordination send on mission seal",
+      "slot": "right",
+      "role": "a red wax seal for Ordination's RIGHT action, drawn in the duty tile",
+      "notes": "scaled x0.9452 about its own centre, from 0.959 of its square to the board's 0.906; re-encoded as WebP at quality 90 from the PNG beside it in masters/; the drawing is unchanged and the master is the archive",
+      "reproducibleBy": "unrecorded -- this one predates the folder the briefs are kept in. If the text turns up it goes in duty_art_lab/prompts/seals/ with a `produces:` header and this field names it."
+    },
+    "duty_actions/build_roads/seals/masters/build_roads_actionA_seal_master_v01.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "title": "Build Roads build a road seal, as generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, before the optical correction",
+      "notes": "master, not shipped; the original of build_roads_actionA_seal_v01.webp"
+    },
+    "duty_actions/build_roads/seals/build_roads_actionA_seal_v01.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "title": "Build Roads build a road seal",
+      "slot": "left",
+      "role": "a red wax seal for Build Roads' LEFT action, drawn in the duty tile",
+      "notes": "scaled x0.9222 about its own centre, from 0.982 of its square to the board's 0.906; re-encoded as WebP at quality 90 from the PNG beside it in masters/; the drawing is unchanged and the master is the archive",
+      "reproducibleBy": "unrecorded -- this one predates the folder the briefs are kept in. If the text turns up it goes in duty_art_lab/prompts/seals/ with a `produces:` header and this field names it."
+    },
+    "duty_actions/build_roads/seals/masters/build_roads_actionB_seal_master_v01.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "title": "Build Roads build a shrine seal, as generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, before the optical correction",
+      "notes": "master, not shipped; the original of build_roads_actionB_seal_v01.webp"
+    },
+    "duty_actions/build_roads/seals/build_roads_actionB_seal_v01.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "title": "Build Roads build a shrine seal",
+      "slot": "right",
+      "role": "a red wax seal for Build Roads' RIGHT action, drawn in the duty tile",
+      "notes": "scaled x0.9444 about its own centre, from 0.959 of its square to the board's 0.906; re-encoded as WebP at quality 90 from the PNG beside it in masters/; the drawing is unchanged and the master is the archive",
+      "reproducibleBy": "unrecorded -- this one predates the folder the briefs are kept in. If the text turns up it goes in duty_art_lab/prompts/seals/ with a `produces:` header and this field names it."
+    },
+    "duty_actions/taxation/seals/masters/taxation_actionA_seal_master_v01.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "title": "Taxation seal, as generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, before the optical correction",
+      "notes": "master, not shipped; the original of taxation_actionA_seal_v01.webp"
+    },
+    "duty_actions/taxation/seals/taxation_actionA_seal_v01.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "title": "Taxation collect the tax seal",
+      "slot": "left",
+      "role": "a red wax seal for Taxation's one action, drawn centred in the duty tile",
+      "notes": "scaled x0.9074 about its own centre, from 0.998 of its square to the board's 0.906; re-encoded as WebP at quality 90 from the PNG beside it in masters/; the drawing is unchanged and the master is the archive",
+      "reproducibleBy": "unrecorded -- this one predates the folder the briefs are kept in. If the text turns up it goes in duty_art_lab/prompts/seals/ with a `produces:` header and this field names it."
+    },
+    "duty_actions/allocation/seals/masters/allocation_actionA_seal_master_v01.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "title": "Allocation seal, as generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, before the optical correction",
+      "notes": "master, not shipped; the original of allocation_actionA_seal_v01.webp"
+    },
+    "duty_actions/allocation/seals/allocation_actionA_seal_v01.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "title": "Allocation relocate acolytes seal",
+      "slot": "left",
+      "role": "a red wax seal for Allocation's one action, drawn centred in the duty tile",
+      "notes": "scaled x0.9382 about its own centre, from 0.966 of its square to the board's 0.906; re-encoded as WebP at quality 90 from the PNG beside it in masters/; the drawing is unchanged and the master is the archive",
+      "reproducibleBy": "unrecorded -- this one predates the folder the briefs are kept in. If the text turns up it goes in duty_art_lab/prompts/seals/ with a `produces:` header and this field names it."
+    },
+    "duty_actions/construct/seals/masters/construct_actionA_seal_master_v01.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "title": "Construct construct building seal, as generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, before the optical correction",
+      "notes": "master, not shipped; the original of construct_actionA_seal_v01.webp"
+    },
+    "duty_actions/construct/seals/construct_actionA_seal_v01.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "title": "Construct construct building seal",
+      "slot": "left",
+      "role": "a red wax seal for Construct's LEFT action, drawn in the duty tile",
+      "notes": "scaled x0.9645 about its own centre, from 0.939 of its square to the board's 0.906; re-encoded as WebP at quality 90 from the PNG beside it in masters/; the drawing is unchanged and the master is the archive",
+      "reproducibleBy": "unrecorded -- this one predates the folder the briefs are kept in. If the text turns up it goes in duty_art_lab/prompts/seals/ with a `produces:` header and this field names it."
+    },
+    "duty_actions/construct/seals/masters/construct_actionB_seal_master_v01.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "title": "Construct construct road seal, as generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, before the optical correction",
+      "notes": "master, not shipped; the original of construct_actionB_seal_v01.webp"
+    },
+    "duty_actions/construct/seals/construct_actionB_seal_v01.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "title": "Construct construct road seal",
+      "slot": "right",
+      "role": "a red wax seal for Construct's RIGHT action, drawn in the duty tile",
+      "notes": "scaled x0.9170 about its own centre, from 0.988 of its square to the board's 0.906; re-encoded as WebP at quality 90 from the PNG beside it in masters/; the drawing is unchanged and the master is the archive",
+      "reproducibleBy": "unrecorded -- this one predates the folder the briefs are kept in. If the text turns up it goes in duty_art_lab/prompts/seals/ with a `produces:` header and this field names it."
+    },
+    "duty_actions/give_alms/seals/masters/give_alms_actionA_seal_master_v01.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "title": "Give Alms give alms seal, as generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, before the optical correction",
+      "notes": "master, not shipped; the original of give_alms_actionA_seal_v01.webp"
+    },
+    "duty_actions/give_alms/seals/give_alms_actionA_seal_v01.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "title": "Give Alms give alms seal",
+      "slot": "left",
+      "role": "a red wax seal for Give Alms's LEFT action, drawn in the duty tile",
+      "notes": "scaled x0.9282 about its own centre, from 0.976 of its square to the board's 0.906; re-encoded as WebP at quality 90 from the PNG beside it in masters/; the drawing is unchanged and the master is the archive",
+      "reproducibleBy": "unrecorded -- this one predates the folder the briefs are kept in. If the text turns up it goes in duty_art_lab/prompts/seals/ with a `produces:` header and this field names it."
+    },
+    "duty_actions/give_alms/seals/masters/give_alms_actionB_seal_master_v01.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "title": "Give Alms donate building seal, as generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, before the optical correction",
+      "notes": "master, not shipped; the original of give_alms_actionB_seal_v01.webp"
+    },
+    "duty_actions/give_alms/seals/give_alms_actionB_seal_v01.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "title": "Give Alms donate building seal",
+      "slot": "right",
+      "role": "a red wax seal for Give Alms's RIGHT action, drawn in the duty tile",
+      "notes": "scaled x0.9413 about its own centre, from 0.963 of its square to the board's 0.906; re-encoded as WebP at quality 90 from the PNG beside it in masters/; the drawing is unchanged and the master is the archive",
+      "reproducibleBy": "unrecorded -- this one predates the folder the briefs are kept in. If the text turns up it goes in duty_art_lab/prompts/seals/ with a `produces:` header and this field names it."
+    },
+    "duty_actions/produce/seals/masters/produce_actionA_seal_master_v01.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "title": "Produce gain wheat seal, as generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, before the optical correction",
+      "notes": "master, not shipped; the original of produce_actionA_seal_v01.webp"
+    },
+    "duty_actions/produce/seals/produce_actionA_seal_v01.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "title": "Produce gain wheat seal",
+      "slot": "left",
+      "role": "a red wax seal for Produce's LEFT action, drawn in the duty tile",
+      "notes": "scaled x0.9351 about its own centre, from 0.969 of its square to the board's 0.906; re-encoded as WebP at quality 90 from the PNG beside it in masters/; the drawing is unchanged and the master is the archive",
+      "reproducibleBy": "unrecorded -- this one predates the folder the briefs are kept in. If the text turns up it goes in duty_art_lab/prompts/seals/ with a `produces:` header and this field names it."
+    },
+    "duty_actions/produce/seals/masters/produce_actionB_seal_master_v01.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "title": "Produce gain stone seal, as generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, before the optical correction",
+      "notes": "master, not shipped; the original of produce_actionB_seal_v01.webp"
+    },
+    "duty_actions/produce/seals/produce_actionB_seal_v01.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "title": "Produce gain stone seal",
+      "slot": "right",
+      "role": "a red wax seal for Produce's RIGHT action, drawn in the duty tile",
+      "notes": "scaled x0.9374 about its own centre, from 0.967 of its square to the board's 0.906; re-encoded as WebP at quality 90 from the PNG beside it in masters/; the drawing is unchanged and the master is the archive",
+      "reproducibleBy": "unrecorded -- this one predates the folder the briefs are kept in. If the text turns up it goes in duty_art_lab/prompts/seals/ with a `produces:` header and this field names it."
+    },
+    "tokens/masters/seal_wheat_v02.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 resource seals",
+      "title": "Wheat resource seal v02, as generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, before the optical correction",
+      "notes": "master, not shipped"
+    },
+    "tokens/masters/seal_stone_v02.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 resource seals",
+      "title": "Stone resource seal v02, as generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, before the optical correction",
+      "notes": "master, not shipped"
+    },
+    "tokens/masters/seal_silver_v02.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 resource seals",
+      "title": "Silver resource seal v02, as generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, before the optical correction",
+      "notes": "master, not shipped"
+    },
+    "duty_actions/produce/seals/masters/produce_actionA_seal_master_v02.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "title": "Produce gain wheat seal v02, as generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, before the optical correction",
+      "notes": "master, not shipped; the original of produce_actionA_seal_v02.webp"
+    },
+    "duty_actions/produce/seals/produce_actionA_seal_v02.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "title": "Produce gain wheat seal v02",
+      "slot": "left",
+      "role": "a red wax seal for Produce's LEFT action, drawn in the duty tile",
+      "notes": "scaled x0.9829 about its own centre, from 0.922 of its square to the board's 0.906; re-encoded as WebP at quality 90 from produce_actionA_seal_master_v02.png, the drawing unchanged",
+      "reproducibleBy": "duty_art_lab/prompts/seals/01-produce-gain-wheat-red.md"
+    },
+    "duty_actions/produce/seals/masters/produce_actionB_seal_master_v02.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "title": "Produce gain stone seal v02, as generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, before the optical correction",
+      "notes": "master, not shipped; the original of produce_actionB_seal_v02.webp"
+    },
+    "duty_actions/produce/seals/produce_actionB_seal_v02.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "title": "Produce gain stone seal v02",
+      "slot": "right",
+      "role": "a red wax seal for Produce's RIGHT action, drawn in the duty tile",
+      "notes": "scaled x0.9539 about its own centre, from 0.950 of its square to the board's 0.906; re-encoded as WebP at quality 90 from produce_actionB_seal_master_v02.png, the drawing unchanged",
+      "reproducibleBy": "duty_art_lab/prompts/seals/04-produce-gain-stone-red.md"
+    },
+    "duty_actions/give_alms/seals/masters/give_alms_actionA_seal_master_v02.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "title": "Give Alms give alms seal v02, as generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, before the optical correction",
+      "notes": "master, not shipped; the original of give_alms_actionA_seal_v02.webp"
+    },
+    "duty_actions/give_alms/seals/give_alms_actionA_seal_v02.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "title": "Give Alms give alms seal v02",
+      "slot": "left",
+      "role": "a red wax seal for Give Alms's LEFT action, drawn in the duty tile",
+      "reproducibleBy": "duty_art_lab/prompts/seals/08-give-alms-alms-red.md",
+      "notes": "scaled x0.9966 about its own centre, from 0.909 of its square to the board's 0.906; re-encoded as WebP at quality 90 from give_alms_actionA_seal_master_v02.png, the drawing unchanged"
+    },
+    "duty_actions/give_alms/seals/masters/give_alms_actionB_seal_master_v02.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "title": "Give Alms donate building seal v02, as generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, before the optical correction",
+      "notes": "master, not shipped; the original of give_alms_actionB_seal_v02.webp"
+    },
+    "duty_actions/give_alms/seals/give_alms_actionB_seal_v02.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "title": "Give Alms donate building seal v02",
+      "slot": "right",
+      "role": "a red wax seal for Give Alms's RIGHT action, drawn in the duty tile",
+      "reproducibleBy": "duty_art_lab/prompts/seals/07-give-alms-donate-building-red.md",
+      "notes": "scaled x1.0072 about its own centre, from 0.900 of its square to the board's 0.906; re-encoded as WebP at quality 90 from give_alms_actionB_seal_master_v02.png, the drawing unchanged"
+    },
+    "duty_actions/build_roads/seals/masters/build_roads_actionA_seal_master_v02.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "title": "Build Roads build road seal v02, as generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, before the optical correction",
+      "notes": "master, not shipped; the original of build_roads_actionA_seal_v02.webp"
+    },
+    "duty_actions/build_roads/seals/build_roads_actionA_seal_v02.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "title": "Build Roads build road seal v02",
+      "slot": "left",
+      "role": "a red wax seal for Build Roads's LEFT action, drawn in the duty tile",
+      "reproducibleBy": "duty_art_lab/prompts/seals/09-build-roads-road-red.md",
+      "notes": "scaled x0.9628 about its own centre, from 0.941 of its square to the board's 0.906; re-encoded as WebP at quality 90 from build_roads_actionA_seal_master_v02.png, the drawing unchanged"
+    },
+    "duty_actions/build_roads/seals/masters/build_roads_actionB_seal_master_v02.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "title": "Build Roads build shrine seal v02, as generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, before the optical correction",
+      "notes": "master, not shipped; the original of build_roads_actionB_seal_v02.webp"
+    },
+    "duty_actions/build_roads/seals/build_roads_actionB_seal_v02.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "title": "Build Roads build shrine seal v02",
+      "slot": "right",
+      "role": "a red wax seal for Build Roads's RIGHT action, drawn in the duty tile",
+      "reproducibleBy": "duty_art_lab/prompts/seals/10-build-roads-shrine-red.md",
+      "notes": "scaled x0.9710 about its own centre, from 0.933 of its square to the board's 0.906; re-encoded as WebP at quality 90 from build_roads_actionB_seal_master_v02.png, the drawing unchanged"
+    },
+    "duty_actions/allocation/seals/masters/allocation_actionA_seal_master_v02.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "title": "Allocation relocate acolytes seal v02, as generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, before the optical correction",
+      "notes": "master, not shipped; the original of allocation_actionA_seal_v02.webp"
+    },
+    "duty_actions/allocation/seals/allocation_actionA_seal_v02.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "title": "Allocation relocate acolytes seal v02",
+      "slot": "left",
+      "role": "a red wax seal for Allocation's LEFT action, drawn in the duty tile",
+      "reproducibleBy": "duty_art_lab/prompts/seals/11-allocation-red.md",
+      "notes": "scaled x0.9335 about its own centre, from 0.970 of its square to the board's 0.906; re-encoded as WebP at quality 90 from allocation_actionA_seal_master_v02.png, the drawing unchanged"
+    },
+    "duty_actions/taxation/seals/masters/taxation_actionA_seal_master_v02.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "title": "Taxation action a seal v02, as generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, before the optical correction",
+      "notes": "master, not shipped; the original of taxation_actionA_seal_v02.webp"
+    },
+    "duty_actions/taxation/seals/taxation_actionA_seal_v02.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "title": "Taxation action a seal v02",
+      "slot": "left",
+      "role": "a red wax seal for Taxation's LEFT action, drawn in the duty tile",
+      "reproducibleBy": "duty_art_lab/prompts/seals/12-taxation-red.md",
+      "notes": "scaled x0.9125 about its own centre, from 0.993 of its square to the board's 0.906; re-encoded as WebP at quality 90 from taxation_actionA_seal_master_v02.png, the drawing unchanged"
+    },
+    "duty_actions/build_roads/seals/masters/build_roads_actionA_seal_master_v03.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "title": "Build Roads build road seal v03, as generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, before the optical correction",
+      "notes": "master, not shipped; the original of build_roads_actionA_seal_v03.webp"
+    },
+    "duty_actions/build_roads/seals/build_roads_actionA_seal_v03.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "title": "Build Roads build road seal v03",
+      "slot": "left",
+      "role": "a red wax seal for Build Roads's LEFT action, drawn in the duty tile",
+      "reproducibleBy": "duty_art_lab/prompts/seals/13-build-roads-road-red-legible.md",
+      "notes": "scaled x1.0442 about its own centre, from 0.868 of its square to the board's 0.906; re-encoded as WebP at quality 90 from build_roads_actionA_seal_master_v03.png, the drawing unchanged"
+    },
+    "duty_actions/allocation/seals/masters/allocation_actionA_seal_master_v03.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "title": "Allocation relocate acolytes seal v03, as generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, before the optical correction",
+      "notes": "master, not shipped; the original of allocation_actionA_seal_v03.webp"
+    },
+    "duty_actions/allocation/seals/allocation_actionA_seal_v03.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "title": "Allocation relocate acolytes seal v03",
+      "slot": "left",
+      "role": "a red wax seal for Allocation's LEFT action, drawn in the duty tile",
+      "reproducibleBy": "duty_art_lab/prompts/seals/15-allocation-red-ground.md",
+      "notes": "scaled x0.9620 about its own centre, from 0.942 of its square to the board's 0.906; re-encoded as WebP at quality 90 from allocation_actionA_seal_master_v03.png, the drawing unchanged"
+    },
+    "duty_actions/build_roads/seals/masters/build_roads_actionB_seal_master_v03.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "title": "Build Roads build shrine seal v03, as generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, before the optical correction",
+      "notes": "master, not shipped; the original of build_roads_actionB_seal_v03.webp"
+    },
+    "duty_actions/build_roads/seals/build_roads_actionB_seal_v03.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 duty action seals",
+      "title": "Build Roads build shrine seal v03",
+      "slot": "right",
+      "role": "a red wax seal for Build Roads's RIGHT action, drawn in the duty tile",
+      "reproducibleBy": "duty_art_lab/prompts/seals/14-build-roads-shrine-red-legible.md",
+      "notes": "scaled x1.0217 about its own centre, from 0.887 of its square to the board's 0.906; re-encoded as WebP at quality 90 from build_roads_actionB_seal_master_v03.png, the drawing unchanged"
     }
   },
   "assetDirs": [
@@ -272,5 +952,15 @@
       "actionA": "relocate_acolytes"
     }
   },
+  "nonSlotFoldersNote": "Folders under a duty that are NOT one of its actions. Every tool that walks duty_actions/ has to skip them, and until this key existed each one carried its own copy of the word 'masters' -- so when 'seals' appeared, the action board was taught about it and the layout lab was not, and the layout lab quietly drew a 78px wax seal as Clerical's 590x295 action card. One list, read by every walk.",
+  "nonSlotFolders": [
+    "masters",
+    "seals"
+  ],
+  "imageSuffixesNote": "Extensions an image in this tree may carry, for the walks that look for one. The SHIPPED prints are WebP at quality 90 -- 40 MB of PNG became 7 MB for a worst-case difference of 12 of 255 on one pixel, measured on the seal composited over its tile at the size the board actually inlines. The MASTERS stay PNG: they are the archive, and a lossy archive is not one. Three generators and the tests look for images here, so the list lives in one place rather than four.",
+  "imageSuffixes": [
+    ".png",
+    ".webp"
+  ],
   "defaultProvenance": "UNLESS AN ENTRY SAYS OTHERWISE, AN IMAGE IN THIS TREE WAS GENERATED WITH ChatGPT (OpenAI) and carries the openai-generated licence. That is the project's stated default for artwork, not a guess made per file: anything with a different origin -- a third-party icon, a hand-drawn asset, deterministic script output -- has to say so in its own entry, because the default would otherwise quietly mislabel it. A new image added here with no entry at all is a gap, not an implicit default; tests/layout_lab/test_board_v2_attribution.py fails on one."
 }
