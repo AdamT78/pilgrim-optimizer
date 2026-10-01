@@ -1,3 +1,0 @@
-Production crops for allocation -> special_activity: allocation_special_activity_vNN.png
-Cropped from the master by tools/duty_art/crop_duty_master.py.
-Never overwrite an older variant; add the next vNN.

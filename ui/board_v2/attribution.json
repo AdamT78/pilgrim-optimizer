@@ -88,6 +88,59 @@
       "notes": "master, not shipped and not in use. The first generated from prompts/01-adjacent-seam.md, and it did what that brief asked: its most uniform central column sits at 50.9% against v03's 54.7%, so the board's gap falls on the pillar. v03 was preferred on the picture anyway. Kept because the same prompt does not produce the same picture twice, so discarding a generation discards it for good; if the seam ever matters more than the composition, this is the one to cut.",
       "sha256": "7f153ae25702fd5d53928b899847d7f32d386db5b13e0e4912cd4c8df8d7dfaa"
     },
+    "duty_actions/ordination/masters/ordination_master_v01.png": {
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action art",
+      "licence": "openai-generated",
+      "state": "present",
+      "title": "Ordination duty action master",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no seed on record. The brief is on record: ui/board_v2/duty_art_lab/prompts/03-shared-pier.md.",
+      "slot": "master",
+      "role": "the single wide scene both Ordination action images are cut from, 2172 x 724. Kept forever: if the artwork slots change shape the master is re-cropped, never re-generated, because the same prompt does not produce the same picture twice.",
+      "notes": "master, not shipped. THE FIRST MASTER FROM THE SHARED-PIER BRIEF, which stopped asking for a wide central gutter to throw away and asked instead for one narrow masonry pier on the centre line, shared between the two cards. Three were generated in the same few minutes and all three produced the pier; this is the second (18:59), chosen on the picture over the third (19:01), which measured better on every number here. Measured and not fixed: the most vertically uniform column sits at 47.1% of the width where the seam falls at 50%, and the palette is still not honoured -- median saturation 0.180 against the 0.06-0.10 its own swatches ask for. Both are better than the Clerical master that shipped, which measures 45.3% and 0.243, and the saturated tail fell furthest: 4.1% of pixels at or above 0.30 against Clerical v03's 17.1%. SUPERSEDED BY v02 and kept anyway, per the rule for masters in this tree. Its two crops were cut, recorded and then retired unshipped when the panorama brief replaced the shared-pier one; the crops are gone, this is not.",
+      "bytes": 3741794,
+      "sha256": "a4e6b0ffde3b5acacde871ba5f7d8cccde09e69e4bbd1246313278e7df93cff7"
+    },
+    "duty_actions/ordination/masters/ordination_master_v02.png": {
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action art",
+      "licence": "openai-generated",
+      "state": "present",
+      "title": "Ordination duty action master, second generation",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no seed on record. The brief is on record: ui/board_v2/duty_art_lab/prompts/04-open-panorama.md, run with two attached references -- the camera plate, and clerical_master_v03.png as a reference for LINE ONLY.",
+      "slot": "master",
+      "role": "the single wide scene both Ordination action images are cut from, 2172 x 724, and the one the board draws. Kept forever: if the artwork slots change shape the master is re-cropped, never re-generated, because the same prompt does not produce the same picture twice.",
+      "notes": "master, not shipped. NO DIVIDER. v01 hid the cut behind a masonry pier down the centre line, which worked and read as a contrivance. This one hides it in distance instead: an open churchyard road occupies the middle, and the seam falls in mud and puddles where there is no structure to misalign. Measured, with the caveats that matter. The seam mismatch is 35.0 at the 46th percentile of its own image, which looks poor beside v01's 28.8 at the 8th and is not comparable: that statistic ranks a cut against the quietest place available, and in an open road nowhere is quiet. Inspected at full height instead, the join is not visible. A vertical-alignment check reported a 14 px step; injecting known 4 px and 8 px steps showed the check recovers them on architecture and wanders on bare texture, so that reading is noise and nothing continuous crosses the seam here to step. Chosen on the picture over a sibling generated a minute later, which measured greyer still at 0.149. What is NOT resolved: both groups sit further out towards the edges than the brief asks, so each card carries more open ground on its inner side than v01 did. That was judged by eye; two attempts to measure it failed, edge density being a poor proxy for compositional weight in an engraving where mud hatches as densely as a face.",
+      "bytes": 3543706,
+      "sha256": "df109933cb49b24f253f0cc44afe7f0be42a87d66fa7b9070589620aa82bc313"
+    },
+    "duty_actions/ordination/ordain/ordination_ordain_left_v02.png": {
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action art",
+      "licence": "openai-generated",
+      "state": "present",
+      "title": "Ordination, ordain",
+      "source": "cut from duty_actions/ordination/masters/ordination_master_v02.png; the picture is model output, the cut is deterministic",
+      "slot": "left",
+      "role": "the LEFT action image, 1065 x 522, showing Ordain: a bishop laying his hand on a kneeling man on the church steps, a cross-bearer and candle-bearers behind him in the doorway. Ratio 2.0402 against the slot's 2.0380, so `fit: cover` clips 0.4 of a slot pixel.",
+      "modifications": "cut at (0, 101, 1065, 623) by tools/duty_art/crop_duty_master.py --y 101. ADJACENT, NOT OVERLAPPING: the master is cropped once to the band's aspect and split at the gap, so the left window ends at x 1065 and the right begins at x 1107. The 42 px between them is what the board's 15 px gap covers; nothing is shared and nothing is drawn twice. TINT MATCHED to duty_actions/clerical/masters/clerical_master_v03.png at full strength (--match, sha256 a4aed83fe176a67d1f2b561979f269c73bd28b99c5bf566ebe144ee9fdaec82e), so the two duties on the board agree. The transform matches the mean and spread of the two CIELAB chroma channels of the reference's BAND and leaves L* alone: a* +1.61/1.50 -> +2.45/2.22, b* +5.28/2.68 -> +7.80/4.37. Median saturation went 0.176 to 0.247 against the reference's 0.239 while L mean held at 65.2 and its spread at 37.6 -> 37.5. NOT DONE IN THE BRIEF, and that is the finding rather than a shortcut: eleven masters across four briefs came back between 0.15 and 0.27, the scatter inside a single brief being wider than the distance from the greyest to the warmest, so wording steers the average and cannot set the value. No pixel moves, so registration is untouched, and the master is stored unmatched so any crop can be cut again against a different reference.",
+      "bytes": 1234899,
+      "sha256": "ec0095e39090e02324b61e2b6ef8cf48916788432b8b2049d84c340f9811d401"
+    },
+    "duty_actions/ordination/send_on_mission/ordination_send_on_mission_right_v02.png": {
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action art",
+      "licence": "openai-generated",
+      "state": "present",
+      "title": "Ordination, send on mission",
+      "source": "cut from duty_actions/ordination/masters/ordination_master_v02.png; the picture is model output, the cut is deterministic",
+      "slot": "right",
+      "role": "the RIGHT action image, 1065 x 522, showing Mission: two friars come down the road from that church, preaching at the door of a turf-and-wattle hovel. Ratio 2.0402 against the slot's 2.0380, so `fit: cover` clips 0.4 of a slot pixel.",
+      "modifications": "cut at (1107, 101, 2172, 623) by tools/duty_art/crop_duty_master.py --y 101. ADJACENT, NOT OVERLAPPING: the master is cropped once to the band's aspect and split at the gap, so the left window ends at x 1065 and the right begins at x 1107. The 42 px between them is what the board's 15 px gap covers; nothing is shared and nothing is drawn twice. TINT MATCHED to duty_actions/clerical/masters/clerical_master_v03.png at full strength (--match, sha256 a4aed83fe176a67d1f2b561979f269c73bd28b99c5bf566ebe144ee9fdaec82e), so the two duties on the board agree. The transform matches the mean and spread of the two CIELAB chroma channels of the reference's BAND and leaves L* alone: a* +1.61/1.50 -> +2.45/2.22, b* +5.28/2.68 -> +7.80/4.37. Median saturation went 0.176 to 0.247 against the reference's 0.239 while L mean held at 65.2 and its spread at 37.6 -> 37.5. NOT DONE IN THE BRIEF, and that is the finding rather than a shortcut: eleven masters across four briefs came back between 0.15 and 0.27, the scatter inside a single brief being wider than the distance from the greyest to the warmest, so wording steers the average and cannot set the value. No pixel moves, so registration is untouched, and the master is stored unmatched so any crop can be cut again against a different reference.",
+      "notes": "THE TWO SCENES ARE ONE PLACE AND ONE SEQUENCE. Ordination is a single engine action with two ordered steps, ordain then mission, and duty_text.json flags their identical effect lines as unresolved. The road running out of the churchyard to the hamlet shows the order the steps happen in, which the earlier interior-and-yard staging did not. The art is still the only thing telling the two steps apart.",
+      "bytes": 1223404,
+      "sha256": "813fedbd8c78d688846bf2f1dc61046a23b3c83ba030e8813ed42cbe61e7c17f"
+    },
     "tokens/masters/token_wheat_v01.png": {
       "state": "present",
       "title": "Wheat resource token, as generated",
@@ -186,5 +239,38 @@
     "tokens/masters",
     "tokens/resources"
   ],
+  "slotFoldersNote": "Which folder under duty_actions/ holds each duty action's pictures. IT CANNOT BE DERIVED and that is why it is written down: Clerical's actionA is `gain_piety` and its actionB `gain_coins`, while Produce's actionA is `gain_wheat` and its actionB `gain_stone` -- so neither alphabetical order nor the action's own name in duty_text.json gives the answer. It lives HERE rather than in duty_text.json because that file is the wording and says so; a folder is a fact about this tree, which is what this file is already about (see assetDirs). A duty with one action has one entry: Taxation and Allocation each have one, and the folders that were left over from before the wording existed -- taxation/action_b and allocation/special_activity -- are stale. ui/board_v2/action_board reads this when a picture lands in a slot that has none yet, and refuses to guess when a slot is missing from it.",
+  "slotFolders": {
+    "clerical": {
+      "actionA": "gain_piety",
+      "actionB": "gain_coins"
+    },
+    "taxation": {
+      "actionA": "action_a"
+    },
+    "produce": {
+      "actionA": "gain_wheat",
+      "actionB": "gain_stone"
+    },
+    "build_roads": {
+      "actionA": "build_road",
+      "actionB": "build_shrine"
+    },
+    "construct": {
+      "actionA": "construct_building",
+      "actionB": "construct_road"
+    },
+    "give_alms": {
+      "actionA": "give_alms",
+      "actionB": "donate_building"
+    },
+    "ordination": {
+      "actionA": "ordain",
+      "actionB": "send_on_mission"
+    },
+    "allocation": {
+      "actionA": "relocate_acolytes"
+    }
+  },
   "defaultProvenance": "UNLESS AN ENTRY SAYS OTHERWISE, AN IMAGE IN THIS TREE WAS GENERATED WITH ChatGPT (OpenAI) and carries the openai-generated licence. That is the project's stated default for artwork, not a guess made per file: anything with a different origin -- a third-party icon, a hand-drawn asset, deterministic script output -- has to say so in its own entry, because the default would otherwise quietly mislabel it. A new image added here with no entry at all is a gap, not an implicit default; tests/layout_lab/test_board_v2_attribution.py fails on one."
 }
