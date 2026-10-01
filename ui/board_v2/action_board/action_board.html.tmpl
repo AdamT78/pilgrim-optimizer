@@ -1,0 +1,604 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Pilgrim · action board</title>
+<!--
+  THE BOARD AT ITS FINISHED SIZE. Everything is positioned from GEO, which generate_action_board.py
+  fills in from geometry.py. There is not a number in this file that decides anything: if a value
+  is not in GEO it cannot be used here, which is what stops the geometry being written twice.
+
+  NO CONTROLS, ON PURPOSE. See the long note at the top of the generator. The toolbar is not part
+  of the board -- it sits above the canvas and holds only what is not the game: which phase is
+  showing, whether pictures can be replaced, and save.
+-->
+<style>
+:root{
+  --ink:#e2d7bc; --dim:#968e7c; --line:#c9b27a; --faint:#2c2924;
+  --panel:#0e0d0b; --panelline:#46413710;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:#07070a;color:var(--ink);
+  font:13px/1.4 ui-sans-serif,system-ui,sans-serif}
+
+/* ---- the toolbar. NOT the board. ------------------------------------------------------- */
+#bar{display:flex;align-items:center;gap:8px;padding:7px 10px;background:#111013;
+  border-bottom:1px solid #26231e;position:sticky;top:0;z-index:30;flex-wrap:wrap}
+#bar button{background:#1b1915;color:var(--ink);border:1px solid #3c372e;border-radius:3px;
+  padding:4px 10px;font:600 11px/1.4 ui-sans-serif,sans-serif;letter-spacing:.09em;
+  text-transform:uppercase;cursor:pointer}
+#bar button:hover{border-color:#6a6050}
+#bar button[aria-pressed="true"]{background:#2e2718;border-color:var(--line);color:#f0e6cd}
+#bar .tag{color:#6f6758;font-size:11px;letter-spacing:.06em}
+#bar .sp{flex:1}
+#note{padding:6px 12px;color:#9a8f77;font-size:11px;background:#15130f;
+  border-bottom:1px solid #26231e}
+#note:empty{display:none}
+
+/* ---- the stage ------------------------------------------------------------------------- */
+#wrap{display:flex;justify-content:center;padding:14px}
+#fit{transform-origin:top left}
+#board{position:relative;background:#000;overflow:hidden}
+/* DIRECT CHILDREN ONLY. `#board *` made every descendant absolute, which quietly killed the
+   text flow inside the placeholders -- a card with no picture drew its action name and "no
+   picture yet" on top of each other. Anything nested that needs placing says so itself. */
+#board > *{position:absolute}
+
+/* Upper text box. One line, centred in its own box, so nothing is clipped at any size. */
+#status{display:grid;place-items:center;text-align:center;
+  font-family:Georgia,serif;color:#e8dfca;white-space:nowrap;overflow:hidden}
+
+/* ---- the eight duty tiles -------------------------------------------------------------- */
+.tile{border:1px solid #2a2721;border-radius:4px;background:#0b0a09;cursor:pointer}
+.tile .nm{position:absolute;left:0;right:0;text-align:center;font-family:Georgia,serif;
+  font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--ink)}
+.tile.sel{background:#1a1814;border-color:#60594a}
+/* The cross-highlight: hovering a wheel face lights its tile and the other way round. One class,
+   set from one place, so the two directions cannot drift apart. */
+.tile.lit{border-color:var(--line);box-shadow:0 0 0 1px #c9b27a66}
+.seal{position:absolute;border-radius:50%;background:radial-gradient(70% 70% at 36% 30%,#6e2d26,#3d1512);
+  border:1px solid #1f0b09;display:grid;place-items:center;cursor:pointer}
+.seal.empty{background:#141210;border:1px dashed #3a352c}
+.seal img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
+
+/* ---- the two action cards -------------------------------------------------------------- */
+.art{overflow:hidden;background:#000;cursor:pointer}
+.art img{width:100%;height:100%;object-fit:cover;display:block}
+/* THE NAME ONLY. The effect line used to live along the bottom of the picture and it moved into
+   the upper text box, which halved the scrim count and handed the bottom of every card back --
+   the corner the briefs reserve for the close dark foreground element. */
+.art .nm{position:absolute;left:0;right:0;top:0;font-family:Georgia,serif;font-weight:600;
+  letter-spacing:.11em;text-transform:uppercase;color:var(--ink);
+  background:linear-gradient(#000000cc 38%,transparent)}
+.art .ph{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:14px;color:#5d5648;
+  font:400 12px/1.6 Georgia,serif;letter-spacing:.07em;
+  background:radial-gradient(70% 70% at 50% 45%,#141210,#000 82%)}
+.art .ph span{display:block}
+.art .ph b{display:block;font:600 15px/1.4 Georgia,serif;color:#857c67;letter-spacing:.1em;
+  text-transform:uppercase;margin-bottom:4px}
+/* THE HOVER LIFT IS A SCREEN OVERLAY, NOT filter: brightness(). Measured on these cards,
+   brightness(1.08) moves the shadows -- where 85% of the picture and all the hatching live --
+   by 0.4 L*, which nobody can see, while moving the flames by 4.6 and taking the blown-out area
+   from 0.119% to 1.090% of the card. Screen at 4% does the opposite: +3.2 L* in the shadows,
+   +0.5 in the flames, and it cannot clip, because screen only reaches white where the pixel
+   already is. It also leaves the flames alone for the animation to have later. */
+.art .lift{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .14s ease;
+  background:#ffd696;mix-blend-mode:screen}
+.art:hover .lift{opacity:.04}
+.art.sel{outline:2px solid var(--line);outline-offset:-1px}
+
+/* ---- buttons and the right-hand column -------------------------------------------------- */
+.btn{display:grid;place-items:center;border-radius:4px;cursor:pointer;
+  font-family:Georgia,serif;font-weight:600;letter-spacing:.16em;text-transform:uppercase;
+  text-align:center;line-height:1.35}
+.btn.primary{background:#2e2718;border:1px solid var(--line);color:#ecdfc0}
+.btn.primary:hover{background:#3a301d}
+.btn.standing{background:#141210;border:1px solid #60594a;color:#cdc2a8}
+.btn.standing:hover{border-color:#8b806a}
+.panel{border:1px solid #46413a;border-radius:5px;background:#0e0d0b}
+.panel .lb{position:absolute;left:0;right:0;text-align:center;font-family:Georgia,serif;font-weight:600;
+  letter-spacing:.16em;text-transform:uppercase;color:var(--ink)}
+.tok{position:absolute;border-radius:50%;overflow:hidden;background:radial-gradient(70% 70% at 35% 30%,#3c3527,#241d14);
+  border:1px solid #6b5c3e;display:grid;place-items:center;cursor:pointer;
+  color:#e4d6b4;font:700 15px/1 ui-monospace,monospace}
+.tok img{width:100%;height:100%;object-fit:contain;display:block;background:none;border:0}
+.pawn{position:absolute;display:grid;place-items:center}
+.pawn svg{width:100%;height:100%;display:block;overflow:visible}
+.pawn .n{position:absolute;font:700 17px/1 Georgia,serif;color:#1b1a16;text-shadow:0 1px 0 #ffffff40}
+
+/* ---- the wheel -------------------------------------------------------------------------- */
+#wheel svg{width:100%;height:100%;display:block}
+#wheel [id="ground"]{display:none}
+#wheel [id="guide"]{display:none}
+#wheel path[data-face]{cursor:default;transition:filter .12s ease}
+#wheel path[data-face].lit{filter:brightness(1.45)}
+.fig{position:absolute;pointer-events:none}
+.fig svg{width:100%;height:100%;display:block;overflow:visible}
+
+/* EDIT MODE is a mode, and it says so. In play the board must not look editable; while images
+   are being replaced every slot that can take one is outlined, so there is no guessing. */
+body.editing .art,body.editing .seal,body.editing .tok{outline:1px dashed #6f6350;cursor:copy}
+body.editing .art.drop,body.editing .seal.drop,body.editing .tok.drop{outline:2px solid var(--line)}
+</style>
+
+<div id=bar>
+  <span class=tag>phase</span>
+  <span id=phases></span>
+  <span class=sp></span>
+  <button id=bEdit aria-pressed="false" title="click a slot to replace its picture; drop a file on one at any time">images</button>
+  <button id=bSave>save</button>
+  <span class=tag id=buildTag></span>
+</div>
+<div id=note></div>
+<div id=wrap><div id=fit><div id=board></div></div></div>
+
+<script>
+// =================================================================================================
+// THE NUMBERS COME FROM geometry.py AND ARE NOT RESTATED HERE.
+var GEO    = __GEOMETRY__;
+var DUTIES = __DUTIES__;
+var IMAGES = __IMAGES__;
+var SAVE   = __SAVEKEYS__;
+var BUILD  = __BUILD__;
+// JSON-ENCODED, not pasted between quotes. The drawing is 59 KB of markup with
+// newlines and quotes of its own in it; dropped raw into a string literal it ends
+// the literal on its first apostrophe and the whole page dies with one unhelpful
+// "invalid or unexpected token".
+var WHEEL_SVG = __WHEEL_SVG__;
+
+var board = document.getElementById("board");
+var S = {
+  phase: GEO.livePhase,
+  duty: GEO.duties[0].slug,
+  slot: null,                       // the chosen action, or "tithe", or nothing yet
+  editing: false,
+  // WHO STANDS WHERE. Seeded from geometry so a fresh page opens on the crowded state the lab
+  // opens on, which is the one worth looking at -- an empty wheel tells you nothing about
+  // whether the acolytes crowd.
+  occupancy: {},
+  city: Object.assign({}, GEO.start.city)
+};
+GEO.duties.forEach(function(d){
+  var n = GEO.start.occupancy[d.slug] || 0;
+  var seats = GEO.start.seats[d.slug];
+  S.occupancy[d.slug] = [];
+  for (var i = 0; i < n; i++) S.occupancy[d.slug].push(seats ? seats[i] : "p1");
+});
+
+function el(tag, cls, css, parent){
+  var e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (css) for (var k in css) e.style[k] = css[k];
+  (parent || board).appendChild(e);
+  return e;
+}
+function box(o){ return {left:o.x+"px", top:o.y+"px", width:o.width+"px", height:o.height+"px"}; }
+function px(n){ return n + "px"; }
+function colourOf(id){
+  for (var i = 0; i < GEO.players.length; i++) if (GEO.players[i].id === id) return GEO.players[i].colour;
+  return "#8fae6a";
+}
+function dutyOf(slug){ return DUTIES[slug]; }
+
+// THE LINE IN THE UPPER BOX, and the one place that decides it. A hover shows what the hovered
+// thing does; nothing hovered shows the phase's own line. Two functions would be two answers.
+var hovered = null;
+function phaseLine(){
+  for (var i = 0; i < GEO.phases.length; i++) if (GEO.phases[i].key === S.phase) return GEO.phases[i].line;
+  return "";
+}
+function lineFor(slug, slot){
+  var d = dutyOf(slug);
+  if (!d) return phaseLine();
+  if (slot) return (d[slot] && d[slot].shortLabel) || "";
+  // A whole tile covers both of its actions, so it says both. A one-action duty says one.
+  var out = [];
+  ["actionA","actionB"].forEach(function(k){
+    if (d[k] && d[k].shortLabel) out.push(d[k].shortLabel);
+  });
+  return out.join("   ·   ");
+}
+function setStatus(){
+  var t = hovered ? lineFor(hovered.duty, hovered.slot) : phaseLine();
+  document.getElementById("statusText").textContent = t;
+}
+function hover(duty, slot){
+  hovered = duty ? {duty: duty, slot: slot || null} : null;
+  setStatus();
+  lightFace(duty);
+}
+// ONE FUNCTION FOR BOTH DIRECTIONS. Hovering a tile lights its face on the wheel and hovering a
+// face lights its tile; written twice they would disagree the first time one was changed.
+function lightFace(slug){
+  GEO.duties.forEach(function(d){
+    var tile = document.getElementById("tile-" + d.slug);
+    var face = document.querySelector('#wheel [data-face="' + d.face + '"]');
+    var on = (slug === d.slug);
+    if (tile) tile.classList.toggle("lit", on);
+    if (face) face.classList.toggle("lit", on);
+  });
+}
+
+// =================================================================================================
+// DRAWING. Every element is placed once, from GEO, and then only its contents change.
+function drawStatus(){
+  var s = GEO.status;
+  var e = el("div", null, Object.assign(box(s), {fontSize: px(s.size)}));
+  e.id = "status";
+  var t = el("span", null, null, e); t.id = "statusText"; t.style.position = "static";
+}
+
+function drawTiles(){
+  GEO.duties.forEach(function(d){
+    var t = GEO.tiles[d.slug];
+    var tile = el("div", "tile", box(t));
+    tile.id = "tile-" + d.slug;
+    var nm = el("div", "nm", {top: "14px", fontSize: px(GEO.ribbon.nameSize)}, tile);
+    nm.textContent = d.name;
+    var info = dutyOf(d.slug);
+    var n = info ? info.actions : 1;
+    var gw = n * GEO.ribbon.seal + (n - 1) * GEO.ribbon.sealGap;
+    for (var i = 0; i < n; i++){
+      var slot = i === 0 ? "actionA" : "actionB";
+      var sx = (t.width - gw) / 2 + i * (GEO.ribbon.seal + GEO.ribbon.sealGap);
+      var seal = el("div", "seal", {left: px(sx), top: px(GEO.ribbon.sealY - t.y),
+                                    width: px(GEO.ribbon.seal), height: px(GEO.ribbon.seal)}, tile);
+      seal.dataset.duty = d.slug; seal.dataset.slot = slot; seal.dataset.kind = "seal";
+      seal.dataset.hoverDuty = d.slug; seal.dataset.hoverSlot = slot;
+      var key = info && info[slot] && info[slot].seal;
+      if (key && IMAGES[key]) { var im = document.createElement("img"); im.src = IMAGES[key]; seal.appendChild(im); }
+      else seal.classList.add("empty");
+      seal.addEventListener("click", slotClick);
+      wireDrop(seal);
+    }
+    tile.dataset.hoverDuty = d.slug;
+    tile.addEventListener("click", function(slug){ return function(){ pickDuty(slug); }; }(d.slug));
+  });
+}
+// =================================================================================================
+// HOVER IS DELEGATED, AND THAT IS THE WHOLE POINT.
+//
+// It was an enter/leave pair on each element, and it had a hole that showed on exactly one path:
+// tile -> seal -> back to the same tile left the board with nothing hovered. The seals sit INSIDE
+// their tiles, and those two events deliberately do not fire between a parent and its own child --
+// so moving into the seal never left the tile, and moving back out of the seal fired the seal's
+// leave with no matching enter on the tile behind it. The line went blank while the pointer was
+// still sitting on the tile.
+//
+// Patching that one path would have left the same hole in every other nesting. So the pairs are
+// gone. mouseover BUBBLES and fires on every crossing, parent to child included, so the state is
+// recomputed from where the pointer IS rather than from a history of arrivals and departures.
+//
+// An element opts in with data-hover-duty, data-hover-slot or both, and the nearest ancestor
+// carrying either one wins -- so a seal speaks for its action and the tile around it for its duty.
+function hoverDataOf(node){
+  while (node && node !== board){
+    var d = node.dataset;
+    if (d && (d.hoverDuty || d.hoverSlot)) return d;
+    node = node.parentNode;
+  }
+  return null;
+}
+board.addEventListener("mouseover", function(ev){
+  var d = hoverDataOf(ev.target);
+  if (!d) return hover(null);
+  // A card carries only its slot: which duty it shows is state, not markup.
+  hover(d.hoverDuty || S.duty, d.hoverSlot || null);
+});
+board.addEventListener("mouseleave", function(){ hover(null); });
+
+function drawArt(){
+  ["actionA","actionB"].forEach(function(slot){
+    var a = GEO.slots[slot];
+    var art = el("div", "art", box(a));
+    art.id = "art-" + slot;
+    art.dataset.slot = slot; art.dataset.kind = "art";
+    art.dataset.hoverSlot = slot;
+    art.addEventListener("click", function(){ slotOrSelect(slot); });
+    wireDrop(art);
+    var c = GEO.confirm[slot];
+    var b = el("div", "btn primary", Object.assign(box(c), {fontSize: px(GEO.confirm.size),
+                                                            display: "none"}));
+    b.id = "confirm-" + slot;
+    b.textContent = "Confirm";
+    // Right-aligned to the card it confirms: the button sits where the thing it acts on ends.
+    b.style.left = ""; b.style.right = px(GEO.canvas.width - (c.x + c.width));
+    b.style.width = "auto"; b.style.padding = "0 22px";
+  });
+}
+
+function drawSide(){
+  var t = GEO.tithe;
+  var p = el("div", "panel", box(t));
+  p.id = "tithe";
+  p.addEventListener("click", function(){ if (!S.editing) select("tithe"); });
+  var y = 21;
+  t.order.forEach(function(name){
+    var k = "token:" + name;
+    var e = el("div", "tok", {left: px((t.width - t.token) / 2), top: px(y),
+                              width: px(t.token), height: px(t.token)}, p);
+    e.dataset.kind = "token"; e.dataset.slot = name;
+    if (IMAGES[k]) { var im = document.createElement("img"); im.src = IMAGES[k]; e.appendChild(im); }
+    else e.textContent = name.slice(0,1).toUpperCase();
+    wireDrop(e);
+    y += t.token + t.tokenGap;
+  });
+  var lb = el("div", "lb", {bottom: "14px", fontSize: px(t.labelSize)}, p);
+  lb.textContent = "Take Tithe";
+
+  var tc = GEO.confirm.tithe;
+  var b = el("div", "btn primary", Object.assign(box(tc), {fontSize: px(GEO.confirm.size),
+                                                           display: "none"}));
+  b.id = "confirm-tithe"; b.textContent = "Confirm";
+
+  [["showMap", "Show Map"], ["hire", "Hire Building"]].forEach(function(pair){
+    var o = GEO[pair[0]];
+    var e = el("div", "btn standing", Object.assign(box(o), {fontSize: "13px", padding: "0 8px"}));
+    e.textContent = pair[1];
+  });
+
+  var c = GEO.city;
+  var cp = el("div", "panel", box(c));
+  var cl = el("div", "lb", {top: "10px", fontSize: "12px"}, cp);
+  cl.textContent = "The City";
+  GEO.players.forEach(function(pl, i){
+    var w = (c.width - 24) / 2, h = 116;
+    var f = el("div", "pawn", {left: px(8 + (i % 2) * (w + 8)), top: px(34 + Math.floor(i / 2) * 126),
+                               width: px(w), height: px(h)}, cp);
+    f.innerHTML = pawnSvg(pl.colour);
+    var n = el("div", "n", null, f);
+    n.textContent = S.city[pl.id];
+    n.style.left = "50%"; n.style.top = "58%"; n.style.transform = "translate(-50%,-50%)";
+  });
+}
+
+// The acolyte, drawn rather than loaded: in the lab's own saved sessions `acolytes.painted` and
+// `.colored` are null for every seat, so the pawns on that board are procedural too. There is
+// no asset here to go missing.
+function pawnSvg(colour){
+  return '<svg viewBox="0 0 42 100" preserveAspectRatio="xMidYMax meet">' +
+    '<ellipse cx="21" cy="94" rx="14" ry="3.6" fill="#00000050"/>' +
+    '<g fill="' + colour + '" stroke="#00000055" stroke-width="1" stroke-linejoin="round">' +
+    '<path d="M21 20c-4.2 0-6.3 2.6-6.3 6.1 0 4.2-3.6 6.3-5.7 11.4C5.6 46.2 4.2 62 3.8 76.4' +
+    'c-.15 5.2 1.6 7.2 6.2 7.2h22c4.6 0 6.35-2 6.2-7.2C37.8 62 36.4 46.2 33 37.5' +
+    'c-2.1-5.1-5.7-7.2-5.7-11.4 0-3.5-2.1-6.1-6.3-6.1z"/>' +
+    '<ellipse cx="21" cy="12.5" rx="8.6" ry="9"/></g>' +
+    '<path d="M8.6 72h24.8" stroke="#00000026" stroke-width="2" fill="none"/></svg>';
+}
+
+function drawWheel(){
+  var w = GEO.wheel;
+  var holder = el("div", null, box(w));
+  holder.id = "wheel";
+  holder.innerHTML = WHEEL_SVG;
+  var svg = holder.querySelector("svg");
+  if (svg){ svg.removeAttribute("width"); svg.removeAttribute("height"); }
+  GEO.duties.forEach(function(d){
+    var face = holder.querySelector('[id="' + d.face + '"]');
+    if (!face) return;
+    face.setAttribute("data-face", d.face);
+    face.setAttribute("data-hover-duty", d.slug);
+    face.style.pointerEvents = "auto";
+  });
+  drawFigures();
+}
+
+// THE ACOLYTES RING THE WHEEL'S OWN FACES, at a fraction of it so they scale with it. The
+// fractions are geometry.py's, and they are expected to change: the centre is to stop holding
+// acolytes and the City box will show them instead.
+function drawFigures(){
+  var old = board.querySelectorAll(".fig");
+  for (var i = 0; i < old.length; i++) old[i].remove();
+  var w = GEO.wheel, h = GEO.acolytes.height, aw = Math.round(h * GEO.acolytes.aspect);
+  GEO.duties.forEach(function(d){
+    var seats = S.occupancy[d.slug] || [];
+    if (!seats.length) return;
+    var t = d.clock * Math.PI / 180;
+    var cx = w.x + w.width / 2 + w.figRx * Math.sin(t);
+    var cy = w.y + w.height / 2 - w.figRy * Math.cos(t);
+    var span = (seats.length - 1) * (aw * 0.82);
+    seats.forEach(function(seat, i){
+      var f = el("div", "fig", {left: px(Math.round(cx - span / 2 + i * aw * 0.82 - aw / 2)),
+                                top: px(Math.round(cy - h / 2)), width: px(aw), height: px(h)});
+      f.innerHTML = pawnSvg(colourOf(seat));
+    });
+  });
+}
+
+// =================================================================================================
+// WHAT CLICKING DOES. In play a click chooses; while images are being replaced a click on a slot
+// opens the picker instead. One mode switch rather than two gestures to remember.
+function pickDuty(slug){
+  if (S.editing) return;
+  S.duty = slug; S.slot = null;
+  render();
+}
+function slotOrSelect(slot){
+  if (S.editing) return pickFile({kind: "art", duty: S.duty, slot: slot});
+  select(slot);
+}
+function slotClick(ev){
+  ev.stopPropagation();
+  var d = ev.currentTarget.dataset;
+  if (S.editing) return pickFile({kind: d.kind, duty: d.duty || S.duty, slot: d.slot});
+  // IN PLAY A SEAL IS PART OF ITS TILE. The seals cover the middle of the tile, so swallowing
+  // the click here left most of the tile's own area dead -- which is how it was found.
+  if (d.duty) pickDuty(d.duty);
+}
+function select(slot){ S.slot = (S.slot === slot) ? null : slot; render(); }
+
+function render(){
+  GEO.duties.forEach(function(d){
+    var tile = document.getElementById("tile-" + d.slug);
+    if (tile) tile.classList.toggle("sel", d.slug === S.duty);
+  });
+  var info = dutyOf(S.duty);
+  ["actionA","actionB"].forEach(function(slot){
+    var art = document.getElementById("art-" + slot);
+    var a = info && info[slot];
+    var has = a && a.art && IMAGES[a.art];
+    art.innerHTML = "";
+    art.style.display = (info && info.actions === 1 && slot === "actionB") ? "none" : "";
+    if (has){
+      var im = document.createElement("img"); im.src = IMAGES[a.art]; art.appendChild(im);
+    } else {
+      var ph = document.createElement("div"); ph.className = "ph";
+      ph.innerHTML = "<b>" + ((a && a.name) || "no second action") + "</b>" +
+                     (a && a.name ? "<span>no picture yet &mdash; drop one here</span>" : "");
+      art.appendChild(ph);
+    }
+    if (a && a.name){
+      var nm = document.createElement("div"); nm.className = "nm";
+      nm.style.fontSize = px(GEO.art.capSize);
+      nm.style.padding = GEO.art.capPadY + "px " + GEO.art.capPadX + "px";
+      nm.textContent = a.name;
+      art.appendChild(nm);
+    }
+    var lift = document.createElement("div"); lift.className = "lift"; art.appendChild(lift);
+    art.classList.toggle("sel", S.slot === slot);
+    document.getElementById("confirm-" + slot).style.display = (S.slot === slot) ? "grid" : "none";
+  });
+  document.getElementById("confirm-tithe").style.display = (S.slot === "tithe") ? "grid" : "none";
+  setStatus();
+}
+
+// =================================================================================================
+// REPLACING A PICTURE. The page keeps the ORIGINAL bytes, never the copy it is displaying: the
+// board draws at 590 x 295 and a save that posted what it was showing would quietly put a small
+// JPEG over a 1120 x 560 master. The downscaling is the generator's job and happens once, at
+// build time, on the way in.
+var PENDING = [];
+function pickFile(target){
+  var inp = document.createElement("input");
+  inp.type = "file"; inp.accept = "image/png,image/jpeg,image/webp";
+  inp.addEventListener("change", function(){ if (inp.files[0]) takeFile(inp.files[0], target); });
+  inp.click();
+}
+function wireDrop(e){
+  e.addEventListener("dragover", function(ev){ ev.preventDefault(); e.classList.add("drop"); });
+  e.addEventListener("dragleave", function(){ e.classList.remove("drop"); });
+  e.addEventListener("drop", function(ev){
+    ev.preventDefault(); ev.stopPropagation(); e.classList.remove("drop");
+    var f = ev.dataTransfer.files[0]; if (!f) return;
+    var d = e.dataset;
+    takeFile(f, {kind: d.kind, duty: d.duty || S.duty, slot: d.slot});
+  });
+}
+function takeFile(file, target){
+  var r = new FileReader();
+  r.onload = function(){
+    var rec = {kind: target.kind, duty: target.duty, slot: target.slot,
+               filename: file.name, bytes: r.result};
+    PENDING = PENDING.filter(function(p){
+      return !(p.kind === rec.kind && p.duty === rec.duty && p.slot === rec.slot);
+    });
+    PENDING.push(rec);
+    // Shown at once from the original; the browser scales it to the box. The bytes kept for the
+    // save are untouched.
+    var key = rec.kind === "token" ? ("token:" + rec.slot) : ("art:" + rec.duty + ":" + rec.slot);
+    if (rec.kind === "seal") key = "seal:" + rec.duty + ":" + rec.slot;
+    IMAGES[key] = r.result;
+    var info = dutyOf(rec.duty);
+    if (info && info[rec.slot]) info[rec.slot][rec.kind === "seal" ? "seal" : "art"] = key;
+    note(PENDING.length + " picture(s) waiting to be saved");
+    board.innerHTML = ""; draw();
+  };
+  r.readAsDataURL(file);
+}
+
+function manifest(){
+  var art = {}, seals = {};
+  Object.keys(DUTIES).forEach(function(slug){
+    ["actionA","actionB"].forEach(function(slot){
+      var a = DUTIES[slug][slot];
+      if (a && a.artFile) art[slug + "/" + slot] = a.artFile;
+      if (a && a.sealFile) seals[slug + "/" + slot] = a.sealFile;
+    });
+  });
+  return {art: art, seals: seals, tokens: GEO.tithe.order.slice(),
+          acolytes: S.occupancy, city: S.city,
+          selected: {duty: S.duty, slot: S.slot}};
+}
+
+// TWO PATHS, ONE KEY LIST. Served, this POSTs and the generator writes the files and the record.
+// Opened as a file it can only download, and it says so -- but it writes the SAME keys, because
+// both read them from SAVE, which the generator filled in from its own constants.
+function doSave(){
+  var payload = {manifest: pick(manifest(), SAVE.manifest),
+                 images: PENDING.map(function(p){ return pick(p, SAVE.image); })};
+  if (location.protocol === "http:" || location.protocol === "https:"){
+    fetch("/save", {method: "POST", headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify(payload)})
+      .then(function(r){ return r.json(); })
+      .then(function(j){
+        if (j.ok){ PENDING = []; note("saved: " + j.files.join(", ")); }
+        else note("the save was refused: " + (j.error || "no reason given"));
+      })
+      .catch(function(e){ note("the save could not be sent: " + e); });
+  } else {
+    download(SAVE.manifestFile.split("/").pop(), JSON.stringify(payload.manifest, null, 1));
+    note("downloaded the manifest only -- run with --serve to write into the repository, "
+         + "and to have the " + PENDING.length + " new picture(s) filed and recorded.");
+  }
+}
+function pick(o, keys){
+  var out = {};
+  keys.forEach(function(k){ if (o[k] !== undefined) out[k] = o[k]; });
+  return out;
+}
+function download(name, text){
+  var a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], {type: "application/json"}));
+  a.download = name; a.click(); URL.revokeObjectURL(a.href);
+}
+function note(t){ document.getElementById("note").textContent = t || ""; }
+
+// =================================================================================================
+function drawPhases(){
+  var holder = document.getElementById("phases");
+  GEO.phases.forEach(function(p){
+    var b = document.createElement("button");
+    b.textContent = p.label;
+    b.setAttribute("aria-pressed", String(p.key === S.phase));
+    b.addEventListener("click", function(){
+      S.phase = p.key;
+      drawPhases();
+      note(p.key === GEO.livePhase ? "" :
+           "“" + p.label + "” is a placeholder — nothing is built behind it yet.");
+      setStatus();
+    });
+    holder.appendChild(b);
+  });
+  var kids = holder.children;
+  for (var i = 0; i < kids.length; i++)
+    kids[i].setAttribute("aria-pressed", String(GEO.phases[i].key === S.phase));
+}
+
+function draw(){
+  drawStatus(); drawTiles(); drawArt(); drawSide(); drawWheel(); render();
+}
+
+function fit(){
+  var f = document.getElementById("fit");
+  var s = Math.min(1, (window.innerWidth - 36) / GEO.canvas.width);
+  f.style.transform = "scale(" + s + ")";
+  f.style.width = (GEO.canvas.width * s) + "px";
+  f.style.height = (GEO.canvas.height * s) + "px";
+}
+
+board.style.width = px(GEO.canvas.width);
+board.style.height = px(GEO.canvas.height);
+document.getElementById("buildTag").textContent = "build " + BUILD.version;
+document.getElementById("bEdit").addEventListener("click", function(){
+  S.editing = !S.editing;
+  this.setAttribute("aria-pressed", String(S.editing));
+  document.body.classList.toggle("editing", S.editing);
+  note(S.editing ? "click a picture slot to replace it, or drop a file on one" : "");
+});
+document.getElementById("bSave").addEventListener("click", doSave);
+window.addEventListener("resize", fit);
+drawPhases();
+draw();
+fit();
+if (BUILD.notes && BUILD.notes.length) note(BUILD.notes.join("  ·  "));
+</script>
+</html>
