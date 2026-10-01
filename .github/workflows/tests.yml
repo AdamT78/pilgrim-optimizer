@@ -176,10 +176,22 @@ jobs:
       # quietly skipping in CI ever since -- so this lane could be cited as the thing that covers
       # tools/duty_art/ while in fact running almost none of it, and a skip is green.
       #
+      # NUMPY IS THE SECOND EXCEPTION, added when crop_duty_master.py learned to match tint.
+      # That transform converts to CIELAB and back over a megapixel, which is array arithmetic
+      # and nothing else. It is imported at module level, so without numpy this lane does not
+      # skip a guard -- it fails collection and takes all of tests/layout_lab with it, which is
+      # how the pillow omission above announced itself too.
+      #
+      # scikit-image would have supplied rgb2lab and was measured rather than assumed: 270 MB
+      # and ten seconds against numpy's 72 MB and three, and it arrives with scipy, imageio,
+      # tifffile, networkx and lazy-loader -- the exact wheels the paragraph above exists to
+      # keep out. Twenty lines of published colour arithmetic, tested against scikit-image for
+      # agreement and for an exact round trip, is the cheaper side of that trade.
+      #
       # The editable install is still needed because tests/conftest.py imports pilgrim at
       # collection time.
       - if: needs.changes.outputs.lab == 'true'
-        run: pip install -e . "pytest>=8.0.0" pillow
+        run: pip install -e . "pytest>=8.0.0" pillow numpy
       - name: The layout lab still holds its own invariants
         if: needs.changes.outputs.lab == 'true'
         run: pytest tests/layout_lab/ -q

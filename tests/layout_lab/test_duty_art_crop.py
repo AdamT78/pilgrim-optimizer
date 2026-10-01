@@ -6,8 +6,11 @@ the repository quietly stops being what the recipe says it is -- and nothing wou
 the files still open and still look right.
 """
 import importlib.util
+import json
 import pathlib
 
+import numpy as np
+import pytest
 from PIL import Image, ImageChops
 
 # IMPORTED, NOT importorskip'd. Three of the guards below used to reach for pillow that way, so
@@ -31,16 +34,19 @@ RIGHT = ART / "clerical" / "gain_coins" / "clerical_gain_coins_right_v03.png"
 # The one thing about the cut that is a choice rather than a consequence.
 CROP_Y = 101
 
-DUTY_ACTIONS = {
-    "clerical": ("gain_piety", "gain_coins"),
-    "taxation": ("action_a", "action_b"),
-    "produce": ("gain_wheat", "gain_stone"),
-    "build_roads": ("build_road", "build_shrine"),
-    "construct": ("construct_building", "construct_road"),
-    "give_alms": ("give_alms", "donate_building"),
-    "ordination": ("ordain", "send_on_mission"),
-    "allocation": ("relocate_acolytes", "special_activity"),
-}
+# WHICH FOLDER EACH ACTION USES IS NOT WRITTEN HERE ANY MORE. It was -- a map of eight duties
+# with two folders each -- and it was a second copy of a fact attribution.json already owns in
+# `slotFolders`, so the two could disagree and only one of them was ever read by anything that
+# ships. It also encoded a claim duty_text.json contradicts: that every duty has two actions.
+# Taxation and Allocation have one each, which that file has said all along in its
+# `singleAction` note, and the leftover taxation/action_b and allocation/special_activity
+# folders came from before the wording existed.
+def slot_folders() -> dict:
+    """attribution.json's map of duty -> {slot: folder}, which is the one place it is kept."""
+    doc = json.loads((ART.parent / "attribution.json").read_text(encoding="utf-8"))
+    folders = doc.get("slotFolders")
+    assert folders, "attribution.json has no slotFolders, so nothing says where art goes"
+    return folders
 
 
 def _crop_module():
@@ -50,20 +56,55 @@ def _crop_module():
     return mod
 
 
-def test_every_duty_has_a_master_and_two_action_folders():
+def test_every_duty_has_a_master_and_a_folder_for_each_action_it_actually_has():
     """The shape of the tree, asserted so a half-created duty is noticed at once.
 
     Empty directories do not survive a clone, so each leaf that holds no art yet carries a
     keep-file. Asserting the directories exist would pass on a machine where they were created by
     hand and fail on a fresh checkout; asserting the keep-files exist is what actually travels.
+
+    EACH ACTION IT HAS, not two. This asserted two for every duty and was wrong for three of
+    them: Taxation and Allocation have one action each, and Ordination had two retired folders
+    beside its two real ones. The count now comes from attribution.json's `slotFolders`, and the
+    test below pins that against duty_text.json so neither can drift alone.
     """
     assert ART.is_dir(), "ui/board_v2/duty_actions is missing"
-    for duty, (a, b) in DUTY_ACTIONS.items():
-        for leaf in ("masters", a, b):
+    for duty, slots in slot_folders().items():
+        for leaf in ["masters"] + sorted(slots.values()):
             d = ART / duty / leaf
             assert d.is_dir(), "missing folder: %s" % d.relative_to(ROOT)
             kept = list(d.glob("*"))
             assert kept, "%s is empty and would not survive a clone" % d.relative_to(ROOT)
+
+
+def test_the_folder_map_and_the_wording_describe_the_same_board():
+    """`slotFolders` and duty_text.json each say how many actions a duty has. One answer.
+
+    Falsified by giving a duty a second action in the wording without a folder for it, or by
+    leaving a folder behind for an action that was dropped -- which is exactly how
+    taxation/action_b and allocation/special_activity survived.
+    """
+    text = json.loads((ART.parent / "duty_text.json").read_text(encoding="utf-8"))["duties"]
+    for duty, slots in slot_folders().items():
+        said = [s for s in ("actionA", "actionB") if text[duty].get(s) is not None]
+        assert sorted(slots) == sorted(said), (
+            "%s has folders for %s and wording for %s" % (duty, sorted(slots), sorted(said)))
+    assert sorted(slot_folders()) == sorted(text), (
+        "the folder map and the wording do not cover the same duties")
+
+
+def test_no_duty_carries_a_folder_the_map_does_not_name():
+    """A folder nobody can place is art waiting to go missing.
+
+    `masters` is the one exception, and it is named here rather than inferred so that adding a
+    second exception is a decision somebody writes down.
+    """
+    folders = slot_folders()
+    for duty, slots in folders.items():
+        found = sorted(f.name for f in (ART / duty).iterdir()
+                       if f.is_dir() and f.name != "masters")
+        assert found == sorted(slots.values()), (
+            "%s has %s on disk and %s in the map" % (duty, found, sorted(slots.values())))
 
 
 def test_the_crop_script_is_installed_and_runnable():
@@ -179,3 +220,123 @@ def test_the_two_crops_do_not_overlap_and_the_gap_hides_what_is_between_them():
     band = m.convert("RGB").crop((0, g["top"], m.width, g["top"] + g["band_h"]))
     assert ImageChops.difference(rebuilt, band).getbbox() is None, (
         "the two cards plus the hidden sliver do not add back up to the master's band")
+
+
+# =================================================================================================
+# TINT MATCHING
+#
+# The point of this feature is a restraint -- that L* does not move -- so that is what most of
+# these check. A transfer that also shifted the tone would be worse than none: it would quietly
+# flatten the engraving on every duty, and the numbers it was added to fix would still look right.
+
+
+def test_lab_round_trips_exactly_and_agrees_with_the_textbook_values():
+    """The conversion is hand-written in numpy, so it has to be shown to be right.
+
+    scikit-image would have given this for free and is not a dependency of this project -- the
+    dev extras carry numpy, scipy, pillow and playwright and nothing else -- so adding one for
+    twenty lines of arithmetic would be the more expensive choice. The price of writing it out
+    is having to prove it.
+    """
+    m = _crop_module()
+    rng = np.random.default_rng(0)
+    a = rng.integers(0, 256, (64, 64, 3)).astype(np.uint8)
+    back = m.lab_to_rgb(m.rgb_to_lab(a))
+    assert np.abs(back - a).max() < 1e-6, "sRGB -> CIELAB -> sRGB is not the identity"
+
+    # Anchors anyone can check: white is L*100 and neutral, black is L*0, and mid grey is
+    # neutral with an L* near 53.4.
+    # 1e-4, not 1e-6: the sRGB primaries are published rounded, so their rows do not sum to the
+    # white point to the last bit and white lands at L* 100.000004. Demanding exactness here
+    # would be demanding that the standard's own constants be more precise than they are.
+    white, black, grey = (m.rgb_to_lab(np.array([[[255, 255, 255]]]))[0, 0],
+                          m.rgb_to_lab(np.array([[[0, 0, 0]]]))[0, 0],
+                          m.rgb_to_lab(np.array([[[128, 128, 128]]]))[0, 0])
+    assert abs(white[0] - 100) < 1e-4, "white came back at L* %.6f" % white[0]
+    assert abs(white[1]) < 1e-3 and abs(white[2]) < 1e-3, "white is not neutral"
+    assert abs(black[0]) < 1e-9
+    assert abs(grey[0] - 53.585) < 0.01, "mid grey came back at L* %.3f" % grey[0]
+    assert abs(grey[1]) < 1e-3 and abs(grey[2]) < 1e-3, "mid grey is not neutral"
+
+
+def _matched(tmp_path, strength=1.0):
+    m = _crop_module()
+    out = tmp_path / "m"
+    return m, m.crop_duty_master(MASTER, out, "l.png", "r.png", CROP_Y, True,
+                                 match=MASTER, match_strength=strength)
+
+
+def test_matching_does_not_touch_the_tone(tmp_path):
+    """THE WHOLE GUARANTEE. L* is the engraving; only the chroma may move."""
+    m = _crop_module()
+    plain = m.crop_duty_master(MASTER, tmp_path / "a", "l.png", "r.png", CROP_Y, True)
+    # A different picture as the reference, so the transform is a real one rather than a no-op.
+    ref = ART / "ordination" / "masters" / "ordination_master_v02.png"
+    if not ref.is_file():
+        pytest.skip("no second master in the tree to match against")
+    tinted = m.crop_duty_master(MASTER, tmp_path / "b", "l.png", "r.png", CROP_Y, True,
+                                match=ref)
+    for before, after in zip(plain, tinted):
+        lb = m.rgb_to_lab(np.asarray(Image.open(before).convert("RGB")))[..., 0]
+        la = m.rgb_to_lab(np.asarray(Image.open(after).convert("RGB")))[..., 0]
+        worst = np.abs(lb - la).max()
+        assert worst < 1.0, ("%s moved by up to %.3f L*; tint matching must leave the tone "
+                             "alone or it is silently re-grading the artwork" % (after.name, worst))
+        assert not ImageChops.difference(Image.open(before).convert("RGB"),
+                                         Image.open(after).convert("RGB")).getbbox() is None, (
+            "the tinted crop is byte-identical to the plain one, so nothing was matched")
+
+
+def test_matching_puts_the_chroma_where_the_reference_has_it(tmp_path):
+    """And it lands on the reference rather than merely moving towards it."""
+    m = _crop_module()
+    ref = ART / "ordination" / "masters" / "ordination_master_v02.png"
+    if not ref.is_file():
+        pytest.skip("no second master in the tree to match against")
+    left, _right = m.crop_duty_master(MASTER, tmp_path / "b", "l.png", "r.png", CROP_Y, True,
+                                      match=ref)
+    want = m.chroma_stats(np.asarray(Image.open(ref).convert("RGB")
+                                     .crop((0, CROP_Y, 2172, CROP_Y + 522))))
+    got = m.chroma_stats(np.asarray(Image.open(left).convert("RGB")))
+    for i, ch in enumerate("ab"):
+        assert abs(got[i][0] - want[i][0]) < 0.6, (
+            "%s* mean came out %+.2f against the reference's %+.2f" % (ch, got[i][0], want[i][0]))
+
+
+def test_matching_at_zero_strength_changes_nothing(tmp_path):
+    """The dial has to have a real off position, or 'a little' cannot be trusted either."""
+    m = _crop_module()
+    plain = m.crop_duty_master(MASTER, tmp_path / "a", "l.png", "r.png", CROP_Y, True)
+    none = m.crop_duty_master(MASTER, tmp_path / "b", "l.png", "r.png", CROP_Y, True,
+                              match=ART / "ordination" / "masters" / "ordination_master_v02.png"
+                              if (ART / "ordination" / "masters"
+                                  / "ordination_master_v02.png").is_file() else MASTER,
+                              match_strength=0.0)
+    for a, b in zip(plain, none):
+        assert ImageChops.difference(Image.open(a).convert("RGB"),
+                                     Image.open(b).convert("RGB")).getbbox() is None, (
+            "--match-strength 0 still altered %s" % b.name)
+
+
+def test_a_strength_outside_the_dial_is_refused(tmp_path):
+    """Silently clamping 1.5 to 1.0 would hide a typo in a recipe that gets written down."""
+    m = _crop_module()
+    for bad in (-0.1, 1.5):
+        with pytest.raises(SystemExit):
+            m.crop_duty_master(MASTER, tmp_path / str(bad), "l.png", "r.png", CROP_Y, True,
+                               match=MASTER, match_strength=bad)
+
+
+def test_the_reference_is_fitted_on_its_band_not_the_whole_file():
+    """The overscan is thrown away on both sides, so it has no vote in what the colour should be.
+
+    Measured on the Clerical master the two differ -- a* mean 2.32 over the whole file against
+    2.45 over the band -- small, and small in a direction nobody would notice until two duties
+    cut from differently proportioned masters failed to agree.
+    """
+    m = _crop_module()
+    whole = np.asarray(Image.open(MASTER).convert("RGB"))
+    band_only = whole[CROP_Y:CROP_Y + 522]
+    assert m.chroma_stats(whole) != m.chroma_stats(band_only), (
+        "this master's band and its overscan happen to have identical chroma, so this test "
+        "cannot tell the two apart -- pick another reference")

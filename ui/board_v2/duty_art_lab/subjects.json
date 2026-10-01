@@ -5,6 +5,10 @@
     "clerical": {
       "left": "- a lone monk prostrate on the flagstones\n- beneath a vast dark crucifix\n- in an austere gothic nave\n- with one guttering candle",
       "right": "- a hard-faced medieval smith\n- striking a coin die with a hammer\n- a heavy working surface\n- a compact forge or charcoal fire\n- an armed medieval man watching from the shadow behind him"
+    },
+    "ordination": {
+      "left": "- an ordination procession at the west door of a parish church\n- a bishop with crook and mitre laying his hand on a kneeling barefoot man on the\n  worn church steps\n- behind them a short file of monks with a cross-bearer and two candle-bearers,\n  coming out of the dark doorway into the grey daylight\n- the church wall rising behind, its roof line level where it crosses the centre\n- worn steps and trodden churchyard ground underfoot",
+      "right": "- two friars who have come down the road from that church, preaching at the edge of\n  a poor hamlet\n- one with his hands raised, the other carrying a satchel and a staff\n- a gaunt family at the half-shut door of a turf-and-wattle hovel, wary and closed off\n- broken cobbles, mud, a fence of stakes, a barrel, weeds at the wall foot\n- a crow on the hovel roof and one bare branch above"
     }
   }
 }
