@@ -43,11 +43,11 @@ jobs:
           # top-level directory is treated as engine work until someone decides otherwise --
           # the failure that costs fifteen minutes is cheaper than the one that ships a bug.
           #
-          # tests/layout_lab/ is design-only despite living under tests/. It holds the layout
-          # lab's browser acceptance suites and their mutation suites, which read the generated
-          # page and nothing else; pilgrim/ imports nothing from ui/ at all, so no change in
-          # there can reach the engine. It is listed in the UI condition below as well, because
-          # a path that stops triggering the engine lanes must start triggering something.
+          # tests/layout_lab/ and tests/action_board/ are design-only despite living under
+          # tests/. They hold board_v2's guards, plus the mutation and browser acceptance suites
+          # left over from the layout lab; pilgrim/ imports nothing from ui/ at all, so no change
+          # in there can reach the engine. Both are listed in the UI condition below as well,
+          # because a path that stops triggering the engine lanes must start triggering something.
           #
           # tools/duty_art/ is the same case one directory over: a crop script for the duty
           # action illustrations, importing pillow and nothing from pilgrim/, and already tested
@@ -60,7 +60,7 @@ jobs:
           #
           # .github/ is NOT on this list, on purpose. Changing the router is exactly the moment
           # to make the full suite prove it still works, even when the edit is a comment.
-          if echo "$changed" | grep -qvE '^(ui/|docs/|tests/layout_lab/|tools/duty_art/|\.gitignore$)'; then
+          if echo "$changed" | grep -qvE '^(ui/|docs/|tests/layout_lab/|tests/action_board/|tools/duty_art/|\.gitignore$)'; then
             echo "engine=true" >>"$GITHUB_OUTPUT"
           else
             echo "engine=false" >>"$GITHUB_OUTPUT"
@@ -82,7 +82,7 @@ jobs:
           # playwright, so this lane installs no browser and takes seconds -- which matters most
           # for the art, since adding a duty's pair is a frequent commit that has nothing to say
           # to the engine.
-          if echo "$changed" | grep -qE '^(ui/board_v2/|tests/layout_lab/|tools/duty_art/)'; then
+          if echo "$changed" | grep -qE '^(ui/board_v2/|tests/layout_lab/|tests/action_board/|tools/duty_art/)'; then
             echo "lab=true" >>"$GITHUB_OUTPUT"
           else
             echo "lab=false" >>"$GITHUB_OUTPUT"
@@ -192,9 +192,16 @@ jobs:
       # collection time.
       - if: needs.changes.outputs.lab == 'true'
         run: pip install -e . "pytest>=8.0.0" pillow numpy
-      - name: The layout lab still holds its own invariants
+      # BOTH DIRECTORIES, AND tests/action_board/ IS THE ONE THAT WAS MISSING. This lane is cited
+      # as what covers ui/board_v2/, and it ran tests/layout_lab/ alone -- so the 38 guards on
+      # geometry.py and the action board, the module that actually ships, never ran in CI. Three
+      # commits that changed nothing but ui/board_v2/, tools/duty_art/ and tests/layout_lab/ were
+      # design-only by the gate above, so the engine lanes that would have swept them up were
+      # skipped, and this lane did not look. A lane named for a directory it does not run is worse
+      # than no lane: it is green and it is cited.
+      - name: board_v2 still holds its own invariants
         if: needs.changes.outputs.lab == 'true'
-        run: pytest tests/layout_lab/ -q
+        run: pytest tests/action_board/ tests/layout_lab/ -q
 
   fast:
     needs: changes
