@@ -94,7 +94,7 @@ OUT = HERE / "generated" / "duty_wheel_layout_lab.html"
 # The copy is checked in rather than generated, so the lab's page is reproducible from this tree
 # alone. Nothing downstream of it re-projects it -- see WHEEL_RATIO below.
 # =============================================================================================
-WHEEL_ASSET = HERE / "assets" / "duty_wheel_v2.svg"
+WHEEL_ASSET = HERE.parent / "assets" / "duty_wheel_v2.svg"
 
 # THE GREYS ARE THE ONES THE PLACEHOLDER WORE. The drawing is built in parchment -- cream faces
 # on dark board -- which is the first board design's palette, not this one's. The lab composes

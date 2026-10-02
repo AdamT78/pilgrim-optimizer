@@ -1,7 +1,7 @@
 # The seal briefs
 
 One file per seal, **word for word as it was sent**, each marked `<!-- archival: -->` — which is
-the mechanism `generate_duty_art_lab.py` already has for exactly this: "somebody's text as they
+the mechanism `generate_duty_art_board.py` already has for exactly this: "somebody's text as they
 wrote it, kept because it produced a particular picture… it gets a button and no substitution".
 
 `<!-- produces: -->` names the file each one made. That is what `attribution.json`'s

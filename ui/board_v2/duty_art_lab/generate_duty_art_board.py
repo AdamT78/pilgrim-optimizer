@@ -36,6 +36,7 @@ import importlib.util
 import io
 import json
 import pathlib
+import re
 import sys
 import webbrowser
 
@@ -46,6 +47,155 @@ ROOT = HERE.parents[2]
 BOARD = HERE.parent
 ART = BOARD / "duty_actions"
 ATTRIB = BOARD / "attribution.json"
+PROMPTS = HERE / "prompts"
+SUBJECTS = HERE / "subjects.json"
+
+
+# ======================================================================================
+# THE BRIEFS, THE SUBJECTS AND THE SHAPE PARAGRAPH
+#
+# These four functions lived in generate_duty_art_lab.py and were imported from here. That was
+# right while two pages wanted them; the viewfinder has been retired and this is the only caller
+# left, so they live where they are used rather than in a module kept alive to lend them out.
+#
+# The DATA has not moved: prompts/ and subjects.json are where they always were, beside this file.
+# ======================================================================================
+
+
+def prompts(folder: pathlib.Path | None = None) -> list[dict]:
+    """Every brief in prompts/, in filename order.
+
+    MORE THAN ONE, AND KEPT RATHER THAN EDITED. A brief that produced a picture somebody liked
+    is evidence, and evidence gets superseded rather than overwritten: the next idea goes in a
+    new file beside this one so the two can be run against each other. The numeric prefix is
+    ordering and is stripped from the title.
+
+    The geometry paragraph is deliberately NOT in any of them -- it is computed in the page from
+    the same band the cut uses, so a brief and the cut can never describe different pictures.
+    """
+    folder = PROMPTS if folder is None else folder
+    if not folder.is_dir():
+        raise SystemExit("there are no briefs at %s" % folder)
+    out = []
+    for f in sorted(folder.glob("*.md")):
+        if f.name.lower() == "readme.md":
+            continue                       # a note to whoever edits the folder, not a brief
+        text = f.read_text(encoding="utf-8")
+        # AN ARCHIVAL BRIEF IS EXEMPT, and has to be. It is somebody's text as they wrote it,
+        # kept because it produced a particular picture, so the fields the page would otherwise
+        # fill in are already spelled out in it and must stay that way. It gets a button and no
+        # substitution; the page says what it is. Everything else must carry the full set, or
+        # the page would hand out a brief with a hole in it.
+        archival = re.search(r"<!--\s*archival:\s*(.+?)\s*-->", text, re.S)
+        if not archival:
+            for token in ("{{GEOMETRY}}", "{{LEFT_ACTION}}", "{{RIGHT_ACTION}}",
+                          "{{LEFT_SUBJECT}}", "{{RIGHT_SUBJECT}}"):
+                if token not in text:
+                    raise SystemExit("%s has no %s in it, so the page cannot fill it in. If it "
+                                     "is a record of a brief somebody ran, mark it with an "
+                                     "<!-- archival: why --> comment and it is exempt."
+                                     % (f.name, token))
+        m = re.search(r"<!--\s*title:\s*(.+?)\s*-->", text)
+        title = m.group(1) if m else re.sub(r"^\d+[-_]", "", f.stem).replace("-", " ")
+        # The HTML comments are notes to whoever edits the file, not instructions to a model.
+        body = re.sub(r"<!--.*?-->\s*", "", text, flags=re.S).lstrip()
+        out.append({"title": title, "file": f.name, "text": body,
+                    "archival": re.sub(r"\s+", " ", archival.group(1)) if archival else None})
+    if not out:
+        raise SystemExit("%s has no .md files in it" % folder)
+    return out
+
+
+def seal_prompts() -> list[dict]:
+    """The briefs that produced the wax seals, each one verbatim.
+
+    A SEPARATE FOLDER BECAUSE THEY ARE A DIFFERENT KIND OF DOCUMENT. The briefs in prompts/ are
+    ONE text run against eight duties, with the duty's own names substituted in. The seal briefs
+    are not: measured section by section they share between 13% and 67% of their words, so there
+    is no template to pull out of them -- they are separate prompts that borrow a vocabulary. Each
+    is kept as sent and marked archival, which is the exemption this module already has for
+    exactly that. prompts/seals/README.md has the measurements and what they imply.
+
+    They are also kept out of prompts/ so they are never offered as an action-card brief: the
+    per-duty buttons substitute a duty's names in, and an archival text has nothing to
+    substitute. The viewfinder enforced this by not looking in seals/; the filter in build()
+    does it here.
+    """
+    folder = PROMPTS / "seals"
+    if not folder.is_dir():
+        return []
+    got = prompts(folder)
+    for b in got:
+        for key in ("produces", "reference"):
+            m = re.search(r"<!--\s*%s:\s*(.+?)\s*-->" % key,
+                          (folder / b["file"]).read_text(encoding="utf-8"), re.S)
+            b[key] = re.sub(r"\s+", " ", m.group(1)) if m else None
+    return got
+
+
+def geometry_text(band: dict, aspect: float) -> str:
+    """The shape-and-zones paragraph, written from the band rather than typed.
+
+    IN PYTHON, AND IN ONE PLACE. It was built in the page's JavaScript, which was fine while one
+    page needed it and became a duplicated formula the moment the art board wanted the same
+    paragraph. Two implementations of one piece of arithmetic is how a brief and a cut come to
+    describe different pictures, which is the exact failure this paragraph exists to prevent.
+
+    EXPRESSED IN PROPORTIONS, NOT PIXELS, and that is not a style choice: a 2544 x 848 was asked
+    for and 2172 x 724 came back, because the generator honours the ASPECT and works to a fixed
+    pixel budget. Pixel dimensions in a brief are noise.
+    """
+    band_aspect = band["span"] / band["card_h"]
+    kept = aspect / band_aspect
+    over = (1 - kept) / 2
+    card_pct = 100 * band["card_w"] / band["span"]
+    seam_pct = 100 * band["gap"] / band["span"]
+    return (
+        "======================================================================\n"
+        "SHAPE AND ZONES - CRITICAL\n"
+        "======================================================================\n"
+        "\n"
+        "Generate ONE wide landscape image at an aspect ratio of %.1f : 1.\n"
+        "\n"
+        "Fill the whole frame. Do not letterbox it, do not add borders, and do not\n"
+        "leave empty margins at the sides.\n"
+        "\n"
+        "Do not worry about pixel dimensions. Only the RATIO matters.\n"
+        "\n"
+        "The image will be cut into TWO CARDS that sit side by side on the board with\n"
+        "a narrow gap between them. Think of the width in three parts:\n"
+        "\n"
+        "  LEFT CARD      the leftmost  %.1f%% of the width\n"
+        "  SEAM           the middle    %.1f%% of the width  (hidden by the gap)\n"
+        "  RIGHT CARD     the rightmost %.1f%% of the width\n"
+        "\n"
+        "The seam is NARROW. It is a hairline, not a corridor. Do not leave a wide\n"
+        "empty band down the middle of the picture: almost all of the middle is seen,\n"
+        "and dead floor there is dead floor on the finished cards.\n"
+        "\n"
+        "VERTICAL SAFE BAND\n"
+        "\n"
+        "Only the middle %.0f%% of the height survives the crop. The top %.1f%% and the\n"
+        "bottom %.1f%% are overscan and will be discarded.\n"
+        "\n"
+        "Keep every indispensable element - faces, hands, flames, tools, the focal\n"
+        "detail of any statue or fixture - comfortably inside that central band.\n"
+        "Architecture and floor may run to the top and bottom edges; narrative must\n"
+        "not." % (aspect, card_pct, seam_pct, card_pct,
+                  100 * kept, 100 * over, 100 * over))
+
+
+def subjects() -> dict:
+    """What each duty's two scenes show, from subjects.json.
+
+    ONE OWNER. The Clerical pair was once hard-coded into a template as a worked example while
+    this file needed the same words; a second copy is how two pages come to offer different
+    briefs for the same duty. One page is left and the file still owns it.
+    """
+    if not SUBJECTS.is_file():
+        raise SystemExit("the subject descriptions are not at %s" % SUBJECTS)
+    return json.loads(SUBJECTS.read_text(encoding="utf-8")).get("duties", {})
+
 
 def non_slot_folders(attrib_file) -> tuple:
     """Folder names under a duty that are NOT one of its actions.
@@ -101,20 +251,6 @@ BUILD_VERSION = "0.1"
 # no larger. Sixteen full-resolution crops inlined would be 20 MB of page to show 750px pictures.
 THUMB_SCALE = 2
 JPEG_Q = 82
-
-
-def viewfinder():
-    """The viewfinder's generator, imported for the things both pages need.
-
-    The briefs, the subject descriptions and the shape-and-zones paragraph all belong to one
-    owner. A copy here is how the board comes to hand out a brief the viewfinder would not.
-    """
-    p = HERE / "generate_duty_art_lab.py"
-    spec = importlib.util.spec_from_file_location("_board_vf", p)
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules["_board_vf"] = mod
-    spec.loader.exec_module(mod)
-    return mod
 
 
 def lab():
@@ -173,7 +309,7 @@ def disc_thumb(path: pathlib.Path, size: int) -> str:
 def seal_size() -> int:
     """The size the board actually draws a seal at, from the module that owns it.
 
-    Imported by path, like the layout lab and the viewfinder above, so this page shows the
+    Imported by path, like the layout lab above, so this page shows the
     seals at the size they are judged at rather than at a number typed in here."""
     p = ART.parent / "action_board" / "geometry.py"
     if not p.is_file():
@@ -185,7 +321,7 @@ def seal_size() -> int:
     return int(mod.SEAL)
 
 
-def seal_briefs(vf) -> dict:
+def seal_briefs() -> dict:
     """Which brief produced which seal, keyed by the file it names.
 
     FROM THE BRIEF'S OWN `produces:` HEADER, not from a list kept beside it. A brief that names a
@@ -193,14 +329,14 @@ def seal_briefs(vf) -> dict:
     the text is the thing that was written first.
     """
     out = {}
-    for b in vf.seal_prompts():
+    for b in seal_prompts():
         if b.get("produces"):
             out[b["produces"]] = {"file": b["file"], "title": b["title"], "text": b["text"],
                                   "reference": b.get("reference")}
     return out
 
 
-def unfiled_briefs(vf) -> list:
+def unfiled_briefs() -> list:
     """Briefs in the folder that have produced nothing yet.
 
     A brief with no `produces:` attaches to no seal, so without this it would sit in the tree
@@ -208,7 +344,7 @@ def unfiled_briefs(vf) -> list:
     says it is there and waiting rather than leaving it to a directory listing.
     """
     return [{"file": b["file"], "title": b["title"], "text": b["text"]}
-            for b in vf.seal_prompts() if not b.get("produces")]
+            for b in seal_prompts() if not b.get("produces")]
 
 
 def seals_for(duty: str, placed: dict, size: int, briefs: dict) -> dict:
@@ -277,9 +413,8 @@ def collect(m) -> dict:
     art_notes = list(getattr(m, "ART_NOTES", []) or [])
 
     seal_px = seal_size()
-    vf = viewfinder()
-    briefs = seal_briefs(vf)
-    waiting = unfiled_briefs(vf)
+    briefs = seal_briefs()
+    waiting = unfiled_briefs()
     duties = []
     # THE ORDER COMES OFF THE STATE, not off the DUTIES tuple. The state is what the lab
     # actually composes and its dict preserves the wheel's order; the tuple is only where it
@@ -334,20 +469,18 @@ def collect(m) -> dict:
 
 def build() -> str:
     data = collect(lab())
-    vf = viewfinder()
     band = dict(data["band"], span=data["band"]["card_w"] * 2 + data["band"]["gap"])
     # THE BOARD DOES NOT OFFER AN ARCHIVAL BRIEF. A per-duty button promises the duty's own
     # names in it, and an archival brief is copied verbatim with nothing substituted -- pressing
     # Produce's button and getting a brief that says DEVOTION would be worse than no button.
-    # The viewfinder still offers them, where "verbatim" is the stated contract.
-    briefs = [p for p in vf.prompts() if not p["archival"]]
+    briefs = [p for p in prompts() if not p["archival"]]
     if not briefs:
         raise SystemExit("every brief in prompts/ is marked archival, so there is none the "
                          "board can fill a duty's names into")
     for b in briefs:
-        b["text"] = b["text"].replace("{{GEOMETRY}}", vf.geometry_text(band, 3.0))
+        b["text"] = b["text"].replace("{{GEOMETRY}}", geometry_text(band, 3.0))
     data["briefs"] = briefs
-    data["subjects"] = vf.subjects()
+    data["subjects"] = subjects()
     page = TMPL.read_text(encoding="utf-8")
     for token, value in (("__DATA__", json.dumps(data)), ("__BUILD__", BUILD_VERSION)):
         if token not in page:

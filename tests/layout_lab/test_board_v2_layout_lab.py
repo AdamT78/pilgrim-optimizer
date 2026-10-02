@@ -710,8 +710,16 @@ def test_the_built_in_wheel_is_vendored_rather_than_imported(lab):
 
     assert lab.WHEEL_ASSET.is_file(), "the vendored wheel is missing"
     assert lab.WHEEL_ASSET.parent.name == "assets"
-    assert lab.WHEEL_ASSET.parent.parent == LAB, (
-        "the asset lives outside the lab's own folder: %s" % lab.WHEEL_ASSET)
+    # IN board_v2, NOT NECESSARILY IN THE LAB. This asserted the lab's own folder until the asset
+    # moved to ui/board_v2/assets/, which is where it belongs: the action board reads the same
+    # file, and the lab is the one on its way out. The claim being guarded is that the drawing is
+    # a checked-in copy rather than something imported from tools/ at build time, and that is
+    # unaffected by which folder inside board_v2 holds it.
+    assert lab.WHEEL_ASSET.parent.parent == LAB.parent, (
+        "the asset lives outside board_v2: %s" % lab.WHEEL_ASSET)
+    assert "tools" not in lab.WHEEL_ASSET.parts, (
+        "the wheel is being read out of tools/, which is the coupling this test exists to "
+        "prevent: %s" % lab.WHEEL_ASSET)
 
 
 def test_the_built_in_wheel_names_no_duty_and_carries_nothing_live(lab):
