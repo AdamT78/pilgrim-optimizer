@@ -34,7 +34,7 @@ BOARD = HERE.parent
 # generate_action_board.py: the wheel is being redesigned, so this tool owns its own copy of the
 # logic -- but the 59 KB of SVG is an asset, and an asset read from a path couples nothing. When
 # the redesign lands, this path changes and nothing else does.
-WHEEL_ASSET = BOARD / "layout_lab" / "assets" / "duty_wheel_v2.svg"
+WHEEL_ASSET = BOARD / "assets" / "duty_wheel_v2.svg"
 
 CANVAS_W, CANVAS_H = 1400, 1200
 
