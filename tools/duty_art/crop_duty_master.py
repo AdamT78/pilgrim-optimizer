@@ -28,7 +28,7 @@ replaces:
     -- 2.000 against 2.038 -- and the board quietly threw away 1.9% of every image's height
     with `fit: cover`, about five pixels off the top and five off the bottom, forever.
 
-NOTHING HERE IS TYPED. The slot size and the gap come from the layout lab's own default_state(),
+NOTHING HERE IS TYPED. The slot size and the gap come from ui/board_v2/action_board/geometry.py,
 the way ui/board_v2/canvas_check does it. The one number this file must not invent is the shape
 of the box its output goes into.
 """
@@ -44,27 +44,34 @@ from PIL import Image
 
 HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
-LAB = ROOT / "ui" / "board_v2" / "layout_lab" / "generate_layout_lab.py"
+GEOMETRY = ROOT / "ui" / "board_v2" / "action_board" / "geometry.py"
 
 
 def band() -> dict:
     """The span the two action slots occupy on the board, gap included.
 
+    FROM geometry.py, WHICH OWNS IT. The numbers used to come from the layout lab's saved state,
+    which was right while the lab was where the composition was decided. The action board is what
+    ships now, and a cut made to a draggable state is a cut made to whatever somebody last dragged.
+
     LOUD ON FAILURE. Every number below is a consequence of this one, and a hard-coded fallback
     would let the script go on cutting confidently for a board that had moved underneath it.
     """
-    if not LAB.is_file():
-        raise SystemExit("the layout lab generator is not at %s -- it owns the shape this cuts "
-                         "to and there is nothing to cut to without it" % LAB)
-    spec = importlib.util.spec_from_file_location("_crop_lab", LAB)
+    if not GEOMETRY.is_file():
+        raise SystemExit("the board's geometry is not at %s -- it owns the shape this cuts "
+                         "to and there is nothing to cut to without it" % GEOMETRY)
+    spec = importlib.util.spec_from_file_location("_crop_geometry", GEOMETRY)
     if spec is None or spec.loader is None:        # pragma: no cover - unreachable in practice
-        raise SystemExit("could not load %s" % LAB)
+        raise SystemExit("could not load %s" % GEOMETRY)
     mod = importlib.util.module_from_spec(spec)
-    sys.modules["_crop_lab"] = mod
+    sys.modules["_crop_geometry"] = mod
     spec.loader.exec_module(mod)
 
-    S = mod.default_state()
-    L, R = S["display"]["artLeft"], S["display"]["artRight"]
+    # ASKED OF THE PUBLISHED RECTS, not of ART_W and ART_H. Those two constants cannot disagree
+    # with each other, so checking them against each other would assert nothing. The slots as the
+    # board publishes them can differ, and that is the failure worth catching.
+    slots = mod.as_dict()["slots"]
+    L, R = slots["actionA"], slots["actionB"]
     if (L["width"], L["height"]) != (R["width"], R["height"]):
         raise SystemExit(
             "the two action slots are no longer the same shape (%dx%d and %dx%d). This cut "

@@ -38,7 +38,7 @@ def lab():
 def collected(lab):
     """What the page's own walk found. Anything else would be testing a copy of it."""
     try:
-        return lab.collect(lab.lab())
+        return lab.collect(lab.board())
     except SystemExit as e:                                       # pragma: no cover
         pytest.skip("the lab will not collect here: %s" % e)
 

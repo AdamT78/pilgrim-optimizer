@@ -44,8 +44,8 @@
     background:linear-gradient(transparent,#000000cc 62%);pointer-events:none}
   .ver{position:absolute;right:5px;top:5px;font-size:9px;letter-spacing:.06em;color:#cfc4a8;
     background:#0d0c0ac9;border:1px solid #ffffff22;border-radius:2px;padding:1px 4px}
-  .ver.inlab{color:var(--ok);border-color:#8fae6a55}
-  .ver.notlab{color:var(--warn);border-color:#e08a6a55}
+  .ver.inboard{color:var(--ok);border-color:#8fae6a55}
+  .ver.notboard{color:var(--warn);border-color:#e08a6a55}
 
   .aside{margin-top:8px;display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start}
   .masters img{display:block;border:1px solid var(--line);border-radius:3px;margin-top:4px}
@@ -90,7 +90,7 @@
 <div id=page>
   <h1>Duty action art</h1>
   <p class=sub>Every action slot on the board, in the wheel's own order, at the size the board
-  draws them. The duties and their order come from the layout lab; the action names from
+  draws them. The duties and their order come from the action board's geometry; the action names from
   <code>duty_text.json</code>; the art from <code>ui/board_v2/duty_actions/</code>. Nothing here
   is typed.</p>
   <div id=tally></div>
@@ -114,8 +114,8 @@ function newest(list){
   }).pop();
 }
 
-function slotHtml(s, side, inLab){
-  if (s) s = Object.assign({}, s, {inLab: inLab});
+function slotHtml(s, side, inBoard){
+  if (s) s = Object.assign({}, s, {inBoard: inBoard});
   var w = BAND.card_w, h = BAND.card_h;
   var dim = 'width:' + w + 'px;height:' + h + 'px';
   if (s === null)
@@ -124,20 +124,20 @@ function slotHtml(s, side, inLab){
   if (!art)
     return '<div class="slot empty" style="' + dim + '"><span><b>' + esc(s.label || side)
          + '</b>' + (s.name ? esc(s.name) + '<br>' : '') + 'not drawn yet</span></div>';
-  // IS THIS THE FILE THE LAB WILL OPEN WITH? The board and the generated lab now ask the same
+  // IS THIS THE FILE THE BOARD DRAWS? This page and the action board now ask the same
   // function which slot a file belongs in, so they should always agree -- and the moment they
-  // do not, this badge is where it shows, rather than in a lab that quietly opens blank.
+  // do not, this badge is where it shows, rather than in a board that quietly draws a placeholder.
   var v = (art.file.match(/_v(\d+)/) || [,null])[1];
-  var inLab = s.inLab && s.inLab === art.file;
-  var mark = inLab ? '' : (s.inLab ? ' \u2260' : ' \u2717');
-  var why = inLab ? 'the lab opens with this file'
-          : (s.inLab ? 'the lab opens with ' + s.inLab + ' instead'
-                     : 'the lab will NOT open with any art here \u2014 no slot is recorded for '
+  var inBoard = s.inBoard && s.inBoard === art.file;
+  var mark = inBoard ? '' : (s.inBoard ? ' \u2260' : ' \u2717');
+  var why = inBoard ? 'the board draws this file'
+          : (s.inBoard ? 'the board draws ' + s.inBoard + ' instead'
+                     : 'the board will NOT draw any art here \u2014 no slot is recorded for '
                        + 'it in attribution.json');
   return '<div class=slot style="' + dim + '">'
        + '<img src="' + art.src + '" width="' + w + '" height="' + h + '" alt="">'
        + '<div class=cap>' + esc(s.label || "") + '</div>'
-       + '<div class="ver' + (inLab ? ' inlab' : ' notlab') + '" title="'
+       + '<div class="ver' + (inBoard ? ' inboard' : ' notboard') + '" title="'
        + esc(art.folder + '/' + art.file + ' \u2014 ' + why) + '">'
        + esc(v ? "v" + v : art.file) + mark + '</div></div>';
 }
@@ -225,9 +225,9 @@ el("tithe").innerHTML = '<span class=k>TAKE TITHE &mdash; the three resource sea
   + 'was filed before the briefs were, and its record says so rather than guessing.</div>';
 
 el("list").innerHTML = D.duties.map(function(d, i){
-  var pair = '<div class=band>' + slotHtml(d.left, "action A", d.inLab.left)
+  var pair = '<div class=band>' + slotHtml(d.left, "action A", d.inBoard.left)
            + '<div style="width:' + BAND.gap + 'px"></div>'
-           + slotHtml(d.actions === 1 ? null : d.right, "action B", d.inLab.right) + '</div>';
+           + slotHtml(d.actions === 1 ? null : d.right, "action B", d.inBoard.right) + '</div>';
   var m = newest(d.masters);
   var aside = '<div class=aside>'
     + '<div class=masters><span class=k>master</span>'
@@ -253,14 +253,14 @@ el("list").innerHTML = D.duties.map(function(d, i){
 // THE TALLY IS COUNTED, NOT WRITTEN DOWN. A page about what is missing that had a hand-kept
 // number on it would be wrong the first time somebody drew something.
 (function(){
-  var slots = 0, done = 0, masters = 0, inLab = 0;
+  var slots = 0, done = 0, masters = 0, inBoard = 0;
   D.duties.forEach(function(d){
     ["left","right"].forEach(function(k){
       if (k === "right" && d.actions === 1) return;
       if (!d[k]) return;
       slots++;
       if (newest(d[k].art)) done++;
-      if (d.inLab[k]) inLab++;
+      if (d.inBoard[k]) inBoard++;
     });
     if (newest(d.masters)) masters++;
   });
@@ -272,16 +272,16 @@ el("list").innerHTML = D.duties.map(function(d, i){
     + '<i class=todo style="width:' + (100*(slots-done)/slots) + '%"></i></div>'
     + '<span class=k>A dashed gold frame is an action nobody has drawn. A grey one is a duty '
     + 'that offers a single action, so there is no second card to draw.</span>'
-    + '<div class=note>A badge in <b class=good>green</b> is the file the generated lab will '
+    + '<div class=note>A badge in <b class=good>green</b> is the file the action board will '
         + 'actually open with. <b class=warn>Red</b> means it will not: either no slot is '
         + 'recorded for it, or a different file wins. Both pages ask the same function which '
         + 'slot a file belongs in, so they should never disagree &mdash; if they do, this is '
         + 'where it shows.</div>'
-    + (inLab !== done
-        ? '<div class="note warn"><b>' + done + ' slot(s) have art on disk but the lab opens '
-          + 'with ' + inLab + '.</b> The difference is files whose slot cannot be established.</div>'
+    + (inBoard !== done
+        ? '<div class="note warn"><b>' + done + ' slot(s) have art on disk but the board draws '
+          + 'with ' + inBoard + '.</b> The difference is files whose slot cannot be established.</div>'
         : '')
-    + (D.artNotes.length ? '<div class="note warn"><b>Left out of the lab:</b><br>'
+    + (D.artNotes.length ? '<div class="note warn"><b>Left out of the board:</b><br>'
         + D.artNotes.map(esc).join('<br>')
         + '<br>The folder names came from wording that has since changed, so they neither match '
         + 'duty_text.json nor sort into slot order &mdash; Clerical\'s left is '
