@@ -10,8 +10,10 @@ has been.
 
 WHERE EACH THING COMES FROM, and none of it from here:
 
-  the eight duties and their order   generate_layout_lab.py's DUTY_ORDER
-  the card's size and the gap        its default_state(), the same band the cutter uses
+  the eight duties and their order   action_board/geometry.py's DUTIES
+  the card's size and the gap        the same file's ART_W, ART_H and ART_GAP
+  which slot a recorded file is in   generate_action_board.py's slot_of()
+  which file each slot is drawn with its bundled_art(), so this page reports what SHIPS
   what each action is called         ui/board_v2/duty_text.json
   how many actions a duty offers     the same file -- a null actionB means one
   the art itself                     ui/board_v2/duty_actions/<duty>/<folder>/
@@ -253,25 +255,35 @@ THUMB_SCALE = 2
 JPEG_Q = 82
 
 
-def lab():
-    p = HERE.parent / "layout_lab" / "generate_layout_lab.py"
+def board():
+    """The action board's generator, which is what this page is a list of.
+
+    IT USED TO BE THE LAYOUT LAB, and the difference is not cosmetic. The lab was a composition you
+    could drag about, so "what the lab will open with" was a statement about a saved state. The
+    action board draws one board from geometry.py and only one, so this page now reports what
+    SHIPS -- which is what somebody looking for missing art actually wants to know.
+
+    Everything this page borrows comes from here: the duty order and names, the card shape, the
+    slot rule, and which file each slot is currently drawn with.
+    """
+    p = HERE.parent / "action_board" / "generate_action_board.py"
     if not p.is_file():
-        raise SystemExit("the layout lab generator is not at %s -- it owns the duty order and "
-                         "the card size, and this page is a list of both" % p)
-    spec = importlib.util.spec_from_file_location("_board_lab", p)
+        raise SystemExit("the action board generator is not at %s -- it owns the duty order, the "
+                         "card size and the slot rule, and this page is a list of all three" % p)
+    spec = importlib.util.spec_from_file_location("_board_gen", p)
     mod = importlib.util.module_from_spec(spec)
-    sys.modules["_board_lab"] = mod
+    sys.modules["_board_gen"] = mod
     spec.loader.exec_module(mod)
     return mod
 
 
 def slots_from_attribution(m) -> dict:
-    """Which slot each recorded file sits in -- ASKED OF THE LAB, not worked out again here.
+    """Which slot each recorded file sits in -- ASKED OF THE BOARD, not worked out again here.
 
-    This used to carry its own copy of the rule. The lab's generator now needs the same answer,
-    to decide which artwork to build into the page, and two copies of one rule is how a board
-    comes to show art that the lab does not open with. The board's job is to report what the lab
-    will do, so it has to be asking the same question of the same function.
+    This used to carry its own copy of the rule. The action board needs the same answer, to decide
+    which artwork to build into the board, and two copies of one rule is how this page comes to
+    show art the board does not draw. Its job is to report what the board will do, so it has to be
+    asking the same question of the same function.
     """
     out = {}
     if not ATTRIB.is_file():
@@ -397,31 +409,26 @@ def tithe_seals(size: int, briefs: dict) -> list:
 
 
 def collect(m) -> dict:
-    S = m.default_state()
-    L, R = S["display"]["artLeft"], S["display"]["artRight"]
-    band = {"card_w": L["width"], "card_h": L["height"],
-            "gap": R["x"] - (L["x"] + L["width"])}
+    G = m.G
+    band = {"card_w": G.ART_W, "card_h": G.ART_H, "gap": G.ART_GAP}
     if not TEXT.is_file():
         raise SystemExit("duty_text.json is not at %s -- it owns what the actions are called"
                          % TEXT)
     TXT = json.loads(TEXT.read_text(encoding="utf-8"))["duties"]
     placed = slots_from_attribution(m)
 
-    # WHAT THE LAB WILL OPEN WITH, from the lab itself rather than inferred. If these two ever
-    # disagree the board is the thing that is wrong, so it is better to ask than to reconstruct.
-    bundled = getattr(m, "ART_BY_DUTY", {}) or {}
-    art_notes = list(getattr(m, "ART_NOTES", []) or [])
+    # WHAT THE BOARD WILL DRAW, from the board's own walk rather than inferred. If these two ever
+    # disagree this page is the thing that is wrong, so it is better to ask than to reconstruct.
+    _art, bundled, art_notes = m.bundled_art()
 
     seal_px = seal_size()
     briefs = seal_briefs()
     waiting = unfiled_briefs()
     duties = []
-    # THE ORDER COMES OFF THE STATE, not off the DUTIES tuple. The state is what the lab
-    # actually composes and its dict preserves the wheel's order; the tuple is only where it
-    # starts, and a page listing duties in a different order from the board would be a quiet
-    # lie about which slot is which.
-    for slug in S["duties"]:
-        d = S["duties"][slug]
+    # THE ORDER COMES OFF G.DUTIES, the same tuple the action board loops over, so this page reads
+    # top to bottom as the ribbon reads left to right. A page listing duties in a different order
+    # from the board would be a quiet lie about which slot is which.
+    for slug, duty_name, _deg in G.DUTIES:
         t = TXT.get(slug, {})
         a, b = t.get("actionA") or {}, t.get("actionB")
         folder = ART / slug
@@ -442,12 +449,12 @@ def collect(m) -> dict:
                                      band["card_h"] * THUMB_SCALE)
                         if slot in ("left", "right") else thumb(f, 520, None)}
                 found[slot if slot in found else "unplaced"].append(item)
-        inlab = bundled.get(slug, {})
+        drawn = bundled.get(slug, {})
         duties.append({
-            "slug": slug, "name": d.get("name", slug),
-            # filename the generated lab page carries for each slot, or None
-            "inLab": {"left": (inlab.get(m.ACTIONS[0][0]) or [None, None])[1],
-                      "right": (inlab.get(m.ACTIONS[1][0]) or [None, None])[1]},
+            "slug": slug, "name": duty_name,
+            # filename the action board draws in each slot, or None
+            "inBoard": {"left": (drawn.get(G.ACTIONS[0]) or [None, None])[1],
+                        "right": (drawn.get(G.ACTIONS[1]) or [None, None])[1]},
             "actions": 1 if b is None else 2,
             "left": {"name": (a.get("name") or "").strip(),
                      "label": (a.get("shortLabel") or "").strip(),
@@ -468,7 +475,7 @@ def collect(m) -> dict:
 
 
 def build() -> str:
-    data = collect(lab())
+    data = collect(board())
     band = dict(data["band"], span=data["band"]["card_w"] * 2 + data["band"]["gap"])
     # THE BOARD DOES NOT OFFER AN ARCHIVAL BRIEF. A per-duty button promises the duty's own
     # names in it, and an archival brief is copied verbatim with nothing substituted -- pressing
@@ -499,7 +506,7 @@ def main(argv=None) -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(page, encoding="utf-8")
 
-    data = collect(lab())
+    data = collect(board())
     slots = sum(d["actions"] for d in data["duties"])
     filled = sum(1 for d in data["duties"] for k in ("left", "right")
                  if d[k] and d[k]["art"])
