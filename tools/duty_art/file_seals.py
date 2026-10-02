@@ -55,17 +55,33 @@ SIDE_OF = {"actionA": "left", "actionB": "right"}
 UNRECORDED = ("unrecorded -- this one predates the folder the briefs are kept in. If the text "
               "turns up it goes in duty_art_lab/prompts/seals/ with a `produces:` header and "
               "this field names it.")
+# AND THE OTHER WAY OF NOT KNOWING, which is not the same way. A file can arrive after the
+# folder exists and still have no brief with it, because the text was not passed on. Saying it
+# predates the folder would be a dated claim about a file that does not fit it, and the record
+# would read as settled. --unbriefed is how you say so deliberately; leaving --brief off by
+# accident is what the refusal below is for.
+UNBRIEFED = ("not supplied -- this one postdates duty_art_lab/prompts/seals/ and belongs in it. "
+             "The text was not passed on with the image. When it is, it goes in the folder with "
+             "a `produces:` header and this field names it.")
 BRIEFS = BOARD / "duty_art_lab" / "prompts" / "seals"
 
 PRINT_SUFFIX = ".webp"
 PRINT_OPTS = {"quality": 90, "method": 6}
 MASTER_SUFFIX = ".png"
 
+# TWO FIELDS, ONE FACT, AND THEY HAD STOPPED AGREEING. `source` said "no prompt or seed on
+# record" on every file this tool wrote, which was true when it was written and became false the
+# moment reproducibleBy started naming a brief in the folder next door. Twenty-four records
+# asserted both at once. A record that contradicts itself is worse than one that admits it does
+# not know: the reader has to pick which half to believe, and nothing tells them which.
+#
+# So `source` no longer speaks about the prompt at all. reproducibleBy owns that, alone, and says
+# either which brief produced the file or in so many words that nobody kept it.
 PROVENANCE = {
     "state": "present",
     "creator": "Generated with ChatGPT (OpenAI)",
-    "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or "
-              "seed on record",
+    "source": "generated in ChatGPT sessions for this project; no upstream URL and no seed. "
+              "Which prompt produced it is reproducibleBy's to say, not this field's.",
     "licence": "openai-generated",
 }
 
@@ -156,7 +172,15 @@ def briefs_of(a, n: int) -> list:
     """
     given = list(a.brief or [])
     if not given:
-        return [UNRECORDED] * n
+        # NOT KNOWING HAS TO BE SAID OUT LOUD. Defaulting to UNRECORDED meant a forgotten
+        # --brief filed a dated claim -- "predates the folder" -- about a file that does not
+        # predate it, and the record then reads as answered. Say which kind of not-knowing it is.
+        if getattr(a, "unbriefed", False):
+            return [UNBRIEFED] * n
+        raise SystemExit(
+            "no --brief given. Name the brief in %s that produced each image, or pass "
+            "--unbriefed to record that the text was not supplied with it."
+            % BRIEFS.relative_to(ROOT))
     if len(given) == 1:
         given = given * n
     if len(given) != n:
@@ -307,6 +331,9 @@ def main(argv=None) -> None:
                     help="the brief(s) in ui/board_v2/duty_art_lab/prompts/seals/ that "
                          "produced these -- one, or one per image in the same order. Without "
                          "it the record says so rather than leaving the field out.")
+    ap.add_argument("--unbriefed", action="store_true",
+                    help="file an image whose brief was not supplied, recording that in so many "
+                         "words. For a file that postdates the briefs folder and belongs in it.")
     sub = ap.add_subparsers(dest="kind", required=True)
 
     d = sub.add_parser("duty", help="the red seals in a duty's tile")
@@ -315,6 +342,8 @@ def main(argv=None) -> None:
                    help="one image per action, in slot order (actionA first)")
     d.add_argument("--dry-run", action="store_true", help=argparse.SUPPRESS)
     d.add_argument("--brief", nargs="+", default=None, help=argparse.SUPPRESS)
+    d.add_argument("--unbriefed", action="store_true", default=argparse.SUPPRESS,
+                   help=argparse.SUPPRESS)
     d.add_argument("--slot", default=None, metavar="actionA|actionB",
                    help="file just this one of the duty's slots, for a version that supersedes "
                         "only half a pair")
@@ -324,6 +353,8 @@ def main(argv=None) -> None:
                    help="one image per resource, in the board's own order")
     t.add_argument("--dry-run", action="store_true", help=argparse.SUPPRESS)
     t.add_argument("--brief", nargs="+", default=None, help=argparse.SUPPRESS)
+    t.add_argument("--unbriefed", action="store_true", default=argparse.SUPPRESS,
+                   help=argparse.SUPPRESS)
 
     a = ap.parse_args(argv)
     if not hasattr(a, "slot"):
