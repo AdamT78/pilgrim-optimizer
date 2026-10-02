@@ -25,6 +25,19 @@ from PIL import Image, ImageChops
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "tools" / "duty_art" / "crop_duty_master.py"
 ART = ROOT / "ui" / "board_v2" / "duty_actions"
+
+# FOLDERS UNDER A DUTY THAT ARE NOT ONE OF ITS ACTIONS. attribution.json owns the list, because
+# three generators have to skip exactly these and this test has to permit exactly these -- four
+# copies of one fact, and the copies had already come apart once: `seals` was added to the action
+# board and not to the layout lab, which went on to draw a wax seal as a 590 x 295 action card.
+# Reading it here rather than restating it is what makes this test agree with the tools by
+# construction instead of by somebody remembering.
+#
+# `masters` is additionally REQUIRED -- every duty has its uncropped originals. The rest are
+# permitted: a duty has a `seals` folder only once somebody has drawn its seals.
+PERMITTED_EXTRA = tuple(json.loads((ART.parent / "attribution.json").read_text(encoding="utf-8"))
+                        .get("nonSlotFolders") or ("masters", "seals"))
+REQUIRED_EXTRA = ("masters",)
 # V03, cut ADJACENT. The v01 and v02 pairs were retired when the cut changed: they were
 # 1120 x 560, a ratio of 2.000 against the slot's 2.038, so the board clipped about 3.5 px off
 # every one of them with `fit: cover` and nobody saw it.
@@ -70,7 +83,7 @@ def test_every_duty_has_a_master_and_a_folder_for_each_action_it_actually_has():
     """
     assert ART.is_dir(), "ui/board_v2/duty_actions is missing"
     for duty, slots in slot_folders().items():
-        for leaf in ["masters"] + sorted(slots.values()):
+        for leaf in list(REQUIRED_EXTRA) + sorted(slots.values()):
             d = ART / duty / leaf
             assert d.is_dir(), "missing folder: %s" % d.relative_to(ROOT)
             kept = list(d.glob("*"))
@@ -96,13 +109,14 @@ def test_the_folder_map_and_the_wording_describe_the_same_board():
 def test_no_duty_carries_a_folder_the_map_does_not_name():
     """A folder nobody can place is art waiting to go missing.
 
-    `masters` is the one exception, and it is named here rather than inferred so that adding a
-    second exception is a decision somebody writes down.
+    The exceptions are PERMITTED_EXTRA at the top of this file, named rather than inferred so
+    that adding one is a decision somebody writes down. `seals` is the second: the action board
+    writes a duty's wax seals there, beside the pictures of the actions they stand for.
     """
     folders = slot_folders()
     for duty, slots in folders.items():
         found = sorted(f.name for f in (ART / duty).iterdir()
-                       if f.is_dir() and f.name != "masters")
+                       if f.is_dir() and f.name not in PERMITTED_EXTRA)
         assert found == sorted(slots.values()), (
             "%s has %s on disk and %s in the map" % (duty, found, sorted(slots.values())))
 

@@ -46,6 +46,52 @@ ROOT = HERE.parents[2]
 BOARD = HERE.parent
 ART = BOARD / "duty_actions"
 ATTRIB = BOARD / "attribution.json"
+
+def non_slot_folders(attrib_file) -> tuple:
+    """Folder names under a duty that are NOT one of its actions.
+
+    attribution.json owns this, because every tool that walks duty_actions/ has to agree about it
+    and each one used to carry its own copy of the word "masters". When `seals` appeared, the
+    action board was taught about it and this walk was not, and a 78px wax seal was drawn as a
+    590 x 295 action card. The fallback is what the tree looked like before the key existed.
+    """
+    try:
+        import json as _json
+        got = _json.loads(attrib_file.read_text(encoding="utf-8")).get("nonSlotFolders")
+    except Exception:
+        got = None
+    return tuple(got) if got else ("masters", "seals")
+
+
+def image_suffixes(attrib_file) -> tuple:
+    """Extensions an image in this tree may carry, per attribution.json.
+
+    The shipped prints are WebP and the masters are PNG. This walk looked for "*.png" and
+    would simply have stopped finding the art, quietly, with nothing to say about it.
+    """
+    try:
+        import json as _json
+        got = _json.loads(attrib_file.read_text(encoding="utf-8")).get("imageSuffixes")
+    except Exception:
+        got = None
+    return tuple(got) if got else (".png", ".webp")
+
+
+def images_under(folder, attrib_file) -> list:
+    """Every image under a folder, newest-last by name, whatever it is encoded as."""
+    want = set(image_suffixes(attrib_file))
+    return sorted((f for f in folder.rglob("*") if f.suffix.lower() in want),
+                  key=lambda f: f.as_posix())
+
+
+# WHAT THIS PAGE SKIPS IS NOT THE WHOLE NON-SLOT LIST. `nonSlotFolders` names the folders under a
+# duty that are not one of its ACTIONS -- masters and seals -- and the board's own walk skips both.
+# This page is the one that deliberately SHOWS the master: it has a bucket for it, the headline
+# counts them, and applying the list wholesale blanked the top of every duty and took the page
+# from 1984 KB to 557 with nothing to say about it. So what is skipped here is the non-slot
+# folders this page has nowhere to put.
+BUCKETED = ("masters",)
+SKIP = tuple(n for n in non_slot_folders(ATTRIB) if n not in BUCKETED)
 TEXT = BOARD / "duty_text.json"
 TMPL = HERE / "duty_art_board.html.tmpl"
 OUT = HERE / "generated" / "duty_art_board.html"
@@ -113,6 +159,107 @@ def thumb(path: pathlib.Path, w: int, h: int | None) -> str:
     return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
 
 
+def disc_thumb(path: pathlib.Path, size: int) -> str:
+    """A seal, small, WITH ITS TRANSPARENCY. thumb() flattens to RGB and encodes JPEG,
+    which is right for a rectangular card and wrong for a scalloped wax disc: it would put a
+    hard box behind every seal on the page and the thing this band is for -- the shape of the
+    rim -- is the first thing to go."""
+    im = Image.open(path).convert("RGBA").resize((size, size), Image.LANCZOS)
+    buf = io.BytesIO()
+    im.save(buf, "WEBP", quality=88, method=4)
+    return "data:image/webp;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+def seal_size() -> int:
+    """The size the board actually draws a seal at, from the module that owns it.
+
+    Imported by path, like the layout lab and the viewfinder above, so this page shows the
+    seals at the size they are judged at rather than at a number typed in here."""
+    p = ART.parent / "action_board" / "geometry.py"
+    if not p.is_file():
+        return 78
+    spec = importlib.util.spec_from_file_location("_board_geo", p)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["_board_geo"] = mod
+    spec.loader.exec_module(mod)
+    return int(mod.SEAL)
+
+
+def seal_briefs(vf) -> dict:
+    """Which brief produced which seal, keyed by the file it names.
+
+    FROM THE BRIEF'S OWN `produces:` HEADER, not from a list kept beside it. A brief that names a
+    file nobody has filed shows as a brief with nothing under it, which is the right way round:
+    the text is the thing that was written first.
+    """
+    out = {}
+    for b in vf.seal_prompts():
+        if b.get("produces"):
+            out[b["produces"]] = {"file": b["file"], "title": b["title"], "text": b["text"],
+                                  "reference": b.get("reference")}
+    return out
+
+
+def unfiled_briefs(vf) -> list:
+    """Briefs in the folder that have produced nothing yet.
+
+    A brief with no `produces:` attaches to no seal, so without this it would sit in the tree
+    showing nowhere -- which is how a revision written and then forgotten disappears. The page
+    says it is there and waiting rather than leaving it to a directory listing.
+    """
+    return [{"file": b["file"], "title": b["title"], "text": b["text"]}
+            for b in vf.seal_prompts() if not b.get("produces")]
+
+
+def seals_for(duty: str, placed: dict, size: int, briefs: dict) -> dict:
+    """Every version of this duty's seals, newest first, by the slot they are recorded in.
+
+    NEWEST FIRST BECAUSE NEWEST IS WHAT DRAWS. The action board picks a duty seal by sorting
+    the folder and taking the last, so the first entry here IS the one on the board and the
+    rest are what it superseded. The page says which, rather than leaving the reader to work
+    out that a filename sorts."""
+    out = {"left": [], "right": []}
+    folder = ART / duty / "seals"
+    if not folder.is_dir():
+        return out
+    for f in sorted(folder.glob("*")):
+        if not f.is_file() or f.suffix.lower() not in set(image_suffixes(ATTRIB)):
+            continue
+        info = placed.get(f.relative_to(ART).as_posix())
+        slot = info["slot"] if info else None
+        if slot not in out:
+            continue
+        out[slot].append({"file": f.name, "src": disc_thumb(f, size * 2),
+                          "recorded": info is not None,
+                          "brief": briefs.get(f.relative_to(ART.parent).as_posix())})
+    for v in out.values():
+        v.reverse()
+    return out
+
+
+def tithe_seals(size: int, briefs: dict) -> list:
+    """The three resource seals, which follow the OTHER convention and say so here.
+
+    A duty seal carries its version in the print and the newest draws. A resource seal has a
+    stable name -- generate_action_board looks it up as seal_wheat -- so the version lives on
+    the master and replacing the print is the change. One band showing both would imply they
+    work the same way, so this one names its master instead of its version."""
+    tokens = ART.parent / "tokens"
+    want = set(image_suffixes(ATTRIB))
+    out = []
+    for name in ("wheat", "stone", "silver"):
+        shipped = [p for p in (tokens / "resources").glob("seal_%s.*" % name)
+                   if p.suffix.lower() in want]
+        masters = sorted(p.name for p in (tokens / "masters").glob("seal_%s_v*" % name))
+        out.append({"name": name,
+                    "file": shipped[0].name if shipped else None,
+                    "src": disc_thumb(shipped[0], size * 2) if shipped else None,
+                    "masters": masters,
+                    "brief": briefs.get(shipped[0].relative_to(ART.parent).as_posix())
+                    if shipped else None})
+    return out
+
+
 def collect(m) -> dict:
     S = m.default_state()
     L, R = S["display"]["artLeft"], S["display"]["artRight"]
@@ -129,6 +276,10 @@ def collect(m) -> dict:
     bundled = getattr(m, "ART_BY_DUTY", {}) or {}
     art_notes = list(getattr(m, "ART_NOTES", []) or [])
 
+    seal_px = seal_size()
+    vf = viewfinder()
+    briefs = seal_briefs(vf)
+    waiting = unfiled_briefs(vf)
     duties = []
     # THE ORDER COMES OFF THE STATE, not off the DUTIES tuple. The state is what the lab
     # actually composes and its dict preserves the wheel's order; the tuple is only where it
@@ -141,7 +292,9 @@ def collect(m) -> dict:
         folder = ART / slug
         found = {"left": [], "right": [], "master": [], "unplaced": []}
         if folder.is_dir():
-            for f in sorted(folder.rglob("*.png")):
+            for f in images_under(folder, ATTRIB):
+                if set(f.relative_to(folder).parts) & set(SKIP):
+                    continue          # a seal is not this duty's card art
                 rel = f.relative_to(ART).as_posix()
                 info = placed.get(rel)
                 slot = info["slot"] if info else None
@@ -169,10 +322,14 @@ def collect(m) -> dict:
                 "label": (b.get("shortLabel") or "").strip(),
                 "folder": None, "art": found["right"]},
             "masters": found["master"], "unplaced": found["unplaced"],
+            "seals": seals_for(slug, placed, seal_px, briefs),
             "folders": sorted(p.name for p in folder.iterdir() if p.is_dir())
             if folder.is_dir() else [],
         })
-    return {"band": band, "duties": duties, "artNotes": art_notes}
+    return {"band": band, "duties": duties, "artNotes": art_notes,
+            "sealPx": seal_px, "titheSeals": tithe_seals(seal_px, briefs),
+            "sealBriefs": sorted(briefs.values(), key=lambda b: b["file"]) + waiting,
+            "sealBriefsWaiting": waiting}
 
 
 def build() -> str:

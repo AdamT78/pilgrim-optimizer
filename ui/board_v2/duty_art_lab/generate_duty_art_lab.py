@@ -86,7 +86,7 @@ def band_of(m) -> dict:
             "span": L["width"] * 2 + gap, "fit": L.get("fit", "cover")}
 
 
-def prompts() -> list[dict]:
+def prompts(folder: pathlib.Path | None = None) -> list[dict]:
     """Every brief in prompts/, in filename order.
 
     MORE THAN ONE, AND KEPT RATHER THAN EDITED. A brief that produced a picture somebody liked
@@ -97,10 +97,13 @@ def prompts() -> list[dict]:
     The geometry paragraph is deliberately NOT in any of them -- it is computed in the page from
     the same band the cut uses, so a brief and the cut can never describe different pictures.
     """
-    if not PROMPTS.is_dir():
-        raise SystemExit("there are no briefs at %s" % PROMPTS)
+    folder = PROMPTS if folder is None else folder
+    if not folder.is_dir():
+        raise SystemExit("there are no briefs at %s" % folder)
     out = []
-    for f in sorted(PROMPTS.glob("*.md")):
+    for f in sorted(folder.glob("*.md")):
+        if f.name.lower() == "readme.md":
+            continue                       # a note to whoever edits the folder, not a brief
         text = f.read_text(encoding="utf-8")
         # AN ARCHIVAL BRIEF IS EXEMPT, and has to be. It is somebody's text as they wrote it,
         # kept because it produced a particular picture, so the fields the page would otherwise
@@ -123,8 +126,32 @@ def prompts() -> list[dict]:
         out.append({"title": title, "file": f.name, "text": body,
                     "archival": re.sub(r"\s+", " ", archival.group(1)) if archival else None})
     if not out:
-        raise SystemExit("prompts/ has no .md files in it")
+        raise SystemExit("%s has no .md files in it" % folder)
     return out
+
+
+def seal_prompts() -> list[dict]:
+    """The briefs that produced the wax seals, each one verbatim.
+
+    A SEPARATE FOLDER BECAUSE THEY ARE A DIFFERENT KIND OF DOCUMENT. The briefs in prompts/ are
+    ONE text run against eight duties, with the duty's own names substituted in. The seal briefs
+    are not: measured section by section they share between 13% and 67% of their words, so there
+    is no template to pull out of them -- they are separate prompts that borrow a vocabulary. Each
+    is kept as sent and marked archival, which is the exemption this module already has for
+    exactly that. prompts/seals/README.md has the measurements and what they imply.
+
+    They are also kept out of prompts/ so the viewfinder cannot offer one as an action-card brief.
+    """
+    folder = PROMPTS / "seals"
+    if not folder.is_dir():
+        return []
+    got = prompts(folder)
+    for b in got:
+        for key in ("produces", "reference"):
+            m = re.search(r"<!--\s*%s:\s*(.+?)\s*-->" % key,
+                          (folder / b["file"]).read_text(encoding="utf-8"), re.S)
+            b[key] = re.sub(r"\s+", " ", m.group(1)) if m else None
+    return got
 
 
 def reference() -> dict:

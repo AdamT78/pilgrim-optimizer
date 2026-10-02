@@ -60,6 +60,31 @@
   #briefPick select{background:#151310;color:var(--ink);border:1px solid var(--line);
     border-radius:3px;padding:3px 6px;font:11px/1.4 ui-monospace,monospace;margin:0 4px}
   .nosub{color:var(--warn)}
+
+  /* ---- the seals -------------------------------------------------------------------------
+     SHOWN AT THE SIZE THE BOARD DRAWS THEM, like everything else on this page, because a wax
+     seal judged at 500px is a different object from one judged at 78. The superseded versions
+     sit beside the one that draws, dimmed, so what a new one replaced is visible rather than
+     only inferable from a filename that sorts. */
+  .seals{margin-top:8px;display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start}
+  .sealslot{display:flex;gap:8px;align-items:flex-start}
+  .sealslot .k{min-width:52px}
+  .disc{position:relative;display:block}
+  .disc img{display:block;image-rendering:auto}
+  .disc.old img{opacity:.38;filter:grayscale(.55)}
+  .disc .v{position:absolute;right:-2px;bottom:-4px;font-size:9px;letter-spacing:.06em;
+    color:#cfc4a8;background:#0d0c0ad9;border:1px solid #ffffff22;border-radius:2px;
+    padding:0 3px}
+  .disc.draws .v{color:var(--ok);border-color:#8fae6a55}
+  .brf{position:absolute;left:-3px;bottom:-4px;width:15px;height:15px;padding:0;line-height:13px;
+    text-align:center;font-size:9px;border-radius:50%;border:1px solid #6b5c3e;background:#241f17;
+    color:var(--ok);cursor:pointer}
+  .brf.none{color:#5f594e;border-color:#ffffff1a;cursor:default}
+  .sealnone{border:1px dashed #d8b26a55;background:#d8b26a08;border-radius:50%;
+    display:grid;place-items:center;color:#d8b26aaa;font-size:10px;text-align:center}
+  #tithe{margin:0 0 26px;padding:12px 14px;border:1px solid var(--line);border-radius:5px;
+    background:#0e0d0b}
+  #tithe .row{display:flex;gap:26px;align-items:flex-start;margin-top:8px;flex-wrap:wrap}
 </style>
 
 <div id=page>
@@ -70,6 +95,7 @@
   is typed.</p>
   <div id=tally></div>
   <div id=briefPick></div>
+  <div id=tithe></div>
   <div id=list></div>
 </div>
 
@@ -116,6 +142,88 @@ function slotHtml(s, side, inLab){
        + esc(v ? "v" + v : art.file) + mark + '</div></div>';
 }
 
+
+// =================================================================================================
+// THE SEALS. Two conventions, and the page shows which is which rather than implying one.
+//
+// A DUTY seal's print carries its version and the board draws the newest, so the first entry is
+// the one in play and the rest are what it superseded -- dimmed, still there, because the whole
+// point of keeping v01 is being able to look at it.
+//
+// A TITHE seal's print has a stable name, so there is no version to pick at draw time: the
+// version lives on the master and replacing the print is the change. Putting it in the same band
+// would say the two work alike, so it gets its own block that names its masters instead.
+// A SEAL WITH NO BRIEF SAYS SO. Seventeen of the nineteen were filed before the briefs were
+// kept, and a page that showed only the ones with a brief would make that look like nothing is
+// missing. The dot is the whole indicator: filled means the text that produced this file is in
+// the tree, hollow means it is not.
+function discHtml(a, px, draws){
+  var b = a.brief;
+  return '<span class="disc' + (draws ? ' draws' : ' old') + '" title="' + esc(a.file)
+       + (b ? ' \u2014 ' + esc(b.file) : ' \u2014 no brief kept') + '">'
+       + '<img src="' + a.src + '" width="' + px + '" height="' + px + '" alt="">'
+       // NO BADGE WHERE THERE IS NO VERSION. The Tithe prints carry a stable name on purpose,
+       // so a "v?" on them would invent a question the filename is not asking.
+       + (a.file.match(/_v(\d+)/)
+            ? '<span class=v>v' + esc(a.file.match(/_v(\d+)/)[1]) + '</span>' : '')
+       + (b ? '<button class=brf data-brief-file="' + esc(b.file) + '">\u25cf</button>'
+            : '<span class="brf none">\u25cb</span>')
+       + '</span>';
+}
+
+// The brief itself, copied verbatim -- it is archival, so there is nothing to substitute.
+var SEALBRIEF = {};
+(D.sealBriefs || []).forEach(function(b){ SEALBRIEF[b.file] = b; });
+document.addEventListener("click", function(ev){
+  var t = ev.target.closest && ev.target.closest("[data-brief-file]");
+  if (!t) return;
+  var b = SEALBRIEF[t.getAttribute("data-brief-file")];
+  if (!b) return;
+  navigator.clipboard.writeText(b.text).then(function(){
+    var was = t.textContent; t.textContent = "\u2713";
+    setTimeout(function(){ t.textContent = was; }, 1100);
+  });
+});
+
+function sealsHtml(d, px){
+  var slots = [["left", "action A"], ["right", "action B"]];
+  var parts = slots.map(function(pair){
+    if (pair[0] === "right" && d.actions === 1) return "";
+    var list = (d.seals || {})[pair[0]] || [];
+    var inner = list.length
+      ? list.map(function(a, i){ return discHtml(a, px, i === 0); }).join("")
+      : '<span class=sealnone style="width:' + px + 'px;height:' + px + 'px">no<br>seal</span>';
+    return '<div class=sealslot><span class=k>' + pair[1] + '</span>'
+         + '<div style="display:flex;gap:10px">' + inner + '</div></div>';
+  }).join("");
+  return '<div class=seals>' + parts + '</div>';
+}
+
+el("tithe").innerHTML = '<span class=k>TAKE TITHE &mdash; the three resource seals</span>'
+  + '<div class=row>' + D.titheSeals.map(function(t){
+      var img = t.src
+        ? discHtml({file: t.file, src: t.src, brief: t.brief}, D.sealPx, true)
+        : '<span class=sealnone style="width:' + D.sealPx + 'px;height:' + D.sealPx
+          + 'px">no<br>seal</span>';
+      return '<div><div class=k style="margin-bottom:5px">' + esc(t.name) + '</div>' + img
+           + '<div class=k style="margin-top:6px">' + (esc(t.file || "\u2014"))
+           + '<br>' + (t.masters.length ? t.masters.map(esc).join('<br>')
+                                        : '<span class=warn>no master</span>') + '</div></div>';
+    }).join("") + '</div>'
+  + '<div class=note>These keep their version on the MASTER, not on the print: the generator '
+  + 'looks the print up by name, so replacing it is the change. A duty\'s seals work the other '
+  + 'way round \u2014 the print carries the version and the newest draws.</div>'
+  + ((D.sealBriefsWaiting || []).length
+      ? '<div class=note><span class=warn>written, nothing filed against it yet:</span> '
+        + D.sealBriefsWaiting.map(function(b){
+            return '<button data-brief-file="' + esc(b.file) + '">' + esc(b.title) + '</button>';
+          }).join(" ")
+        + '</div>'
+      : '')
+  + '<div class=note>A filled dot is a seal whose brief is kept in '
+  + '<code>duty_art_lab/prompts/seals/</code>; click it to copy the text as sent. A hollow one '
+  + 'was filed before the briefs were, and its record says so rather than guessing.</div>';
+
 el("list").innerHTML = D.duties.map(function(d, i){
   var pair = '<div class=band>' + slotHtml(d.left, "action A", d.inLab.left)
            + '<div style="width:' + BAND.gap + 'px"></div>'
@@ -137,7 +245,7 @@ el("list").innerHTML = D.duties.map(function(d, i){
   return '<div class=duty><div class=dh><b>' + esc(d.name) + '</b>'
        + '<span class=n>' + names + '</span>'
        + (d.actions === 1 ? '<span class=one>one action</span>' : '')
-       + '</div>' + pair + aside
+       + '</div>' + pair + sealsHtml(d, D.sealPx) + aside
        + '<div class=btns><button data-brief="' + i + '">copy a brief for '
        + esc(d.name) + '</button></div></div>';
 }).join("");

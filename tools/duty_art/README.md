@@ -83,13 +83,70 @@ Lowercase snake_case, zero-padded versions.
 ```
 
 Never overwrite an older variant because a newer one is preferred. Add `v02` and leave `v01`
-where it is: preference is not a fact about the file, and the comparison you want to make in three
-weeks is the one you threw away.
+where it is: the comparison you want to make in three weeks is the one you threw away.
+
+**Which version draws is decided by the folder convention**, not by a setting. For anything in a
+versioned folder the newest `vNN` wins; for the Tithe resources, whichever file is sitting at the
+stable name wins. Both are facts about the files, which this note used to deny -- and that is
+deliberate while nothing needs to flip back and forth. `metadata/action_board.json` already has a
+`seals` key, written by the board's save and read by nothing; the day you want an older version
+preferred without deleting the newer one, that is the file to start reading, and this paragraph is
+the note saying so.
 
 The filenames are for humans and for the repository. **The studio does not parse them** — which
 file lands on which action is decided by which file input you chose, never by the name. A file
 called `clerical_gain_coins_v01.png` dropped into the Action A input becomes Action A's artwork,
 because assuming otherwise would silently disagree with what you did.
+
+## The seals are a different thing in the same folder
+
+A duty also has **seals**: the small red wax marks in its tile on the action board, one per
+action, under `ui/board_v2/duty_actions/<duty>/seals/`. They are not crops of a master and there
+is no overlap to think about -- each is generated on its own, square and transparent.
+
+Two things about them are worth knowing before adding any.
+
+**They are recorded in the same vocabulary as the art**, `left` and `right`, under the same duty.
+Every tool that walks `duty_actions/` therefore has to step over the folder, or it inlines a 78px
+wax seal as a 590 x 295 action card -- which the layout lab did, for one commit, until a test
+caught it. The folders a walk must skip are listed in `ui/board_v2/attribution.json` under
+`nonSlotFolders`, read by all three generators and by `tests/layout_lab`. One list.
+
+**Every set has arrived at a different size inside its own square** -- 0.939, 0.959, 0.963, 0.967,
+0.969, 0.976, 0.982, 0.988, 0.998 of it. Two seals in one tile at the same `SEAL` then differ by
+up to six per cent, which reads as a fault in the layout rather than a difference in the drawings.
+`SOLID_FRACTION` in `ui/board_v2/action_board/geometry.py` is what every disc on this board is
+held to -- the three coins, the three grey resource seals and the fourteen red ones alike -- and
+`tests/action_board` measures the files against it.
+
+### Running it
+
+```
+python tools/duty_art/file_seals.py duty clerical \
+  ~/Downloads/red_seal_clerical_piety.png \
+  ~/Downloads/red_seal_clerical_silver_smith.png
+```
+
+One image per action, in slot order. How many a duty takes is not the script's opinion:
+`slotFolders` says, and Taxation and Allocation have one action each, so giving either of them
+two files is refused rather than inventing a second slot. `--dry-run` measures and reports
+without writing. Needs `pillow` and `numpy`.
+
+The Tithe column's three grey seals go through the same tool, `file_seals.py tithe <wheat>
+<stone> <silver>`, and follow a **different folder convention on purpose**. A duty's seal print
+carries a version and the board draws the newest, so a new one supersedes by arriving. A
+resource's print has a stable name -- `generate_action_board` looks it up as `seal_wheat` -- so
+there is nothing to choose at draw time: a new one supersedes by replacing the print, the version
+lives on the master, and the print's own record names the master it was exported from.
+
+It normalises each image about its own centre, keeps the untouched original under `seals/masters/`
+for the same reason the action art keeps its master, writes the next free `vNN` rather than
+overwriting anything, and adds both to `attribution.json`. It refuses outright if a normalised
+file lands outside tolerance, instead of filing something the test would catch later.
+
+The same four steps happen when you drop a picture onto a seal in
+`ui/board_v2/action_board --serve` and press save -- same folder, same filenames, same shape of
+entry -- so a seal filed either way lands beside the other.
 
 ## Where the art belongs
 
