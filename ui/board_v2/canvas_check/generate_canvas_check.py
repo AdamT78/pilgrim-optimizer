@@ -13,21 +13,29 @@ Keys 1, 2 and 3 switch canvas, exactly as they do on the v1 space check, and for
 
 WHAT IS REAL HERE AND WHAT IS A BOX
 
-The duty wheel is the real drawing: the same vendored SVG the layout lab inlines, recoloured the
-same way, at the position and size the module's own geometry gives it. Everything else -- the
-status line, the eight duty cards, the two action artworks, Tithe and the City -- is a correctly
-sized labelled box. That is the same bargain tools/ui_debug/generate_wheel_space_check.py strikes,
+The duty wheel is the real drawing: the same vendored SVG the action board inlines, through its
+own wheel_svg(), at the position and size geometry.py gives it. Everything else -- the status
+line, the eight duty tiles, the two action artworks, the confirm bar, Tithe and the City -- is a
+correctly sized labelled box. That is the same bargain tools/ui_debug/generate_wheel_space_check.py strikes,
 and for the same reason: the question is how much room is left over, and art inside the module
 cannot change the answer.
 
 NOTHING IS RETYPED
 
 Every number on the page comes from somewhere that already owned it. The module's size and the
-position of each object come from the layout lab's own default_state(), so composing a card
-differently in the lab and re-running this reproduces it. The three canvases come from
+position of each object come from ui/board_v2/action_board/geometry.py, reached through the
+action board's own handle on it, so this page shows the board that actually ships rather than a
+second opinion about it. The three canvases come from
 ui/render/gen_game_view.py through geometry(), heights included, which is the route
 generate_wheel_space_check_v3.py takes -- so if a canvas ever stops being 1200 tall this page
 follows without being edited, and the page says so rather than cropping quietly.
+
+IT USED TO READ THE LAYOUT LAB'S default_state(). That was right while the lab was where the
+composition was decided, and wrong once the action board became the thing that ships: the lab can
+be dragged about, and a measuring instrument reporting a draggable layout measures nothing in
+particular. geometry.py owns these numbers and refuses to be nudged, which is exactly the property
+this page needs. The objects differ accordingly -- a ribbon of eight tiles and a confirm bar where
+the lab had eight cards and none.
 
 There is deliberately no fallback if either import fails. A page that silently drew hard-coded
 canvases would be worth less than no page: it would keep agreeing with itself while the numbers
@@ -52,7 +60,7 @@ import webbrowser
 
 HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
-LAB = HERE.parent / "layout_lab" / "generate_layout_lab.py"
+BOARD_GEN = HERE.parent / "action_board" / "generate_action_board.py"
 TMPL = HERE / "canvas_check.html.tmpl"
 OUT = HERE / "generated" / "canvas_check.html"
 
@@ -74,11 +82,21 @@ def _load(path: pathlib.Path, name: str):
     return mod
 
 
-def lab():
-    if not LAB.is_file():
-        raise SystemExit("the layout lab generator is not at %s -- this page draws the module "
-                         "from its geometry and has nothing to draw without it" % LAB)
-    return _load(LAB, "_canvas_check_lab")
+def board():
+    """The action board generator, which is how this page reaches geometry.py.
+
+    Through the generator rather than importing geometry.py directly, because the generator is
+    what inlines and recolours the wheel -- taking the numbers from one module and the drawing
+    from another would be two imports where the board itself manages with one. Its `G` is that
+    geometry module, and geometry.py remains the sole owner of every figure below.
+
+    The import is cheap: generate_action_board pulls in Pillow only inside the functions that
+    resize art, none of which this page calls, so loading it here costs no more than the lab did.
+    """
+    if not BOARD_GEN.is_file():
+        raise SystemExit("the action board generator is not at %s -- this page draws the module "
+                         "from its geometry and has nothing to draw without it" % BOARD_GEN)
+    return _load(BOARD_GEN, "_canvas_check_board")
 
 
 def canvases() -> list[dict]:
@@ -110,54 +128,59 @@ def canvases() -> list[dict]:
 def module_html(m) -> str:
     """The module, drawn once at 1400 x 1200 in its own coordinates.
 
-    Read off default_state() rather than off the module-level constants wherever the state has an
-    opinion: the state is what the lab actually composes, and the constants are only its starting
-    point. Where they agree this is the same picture; where somebody has moved something in the
-    lab and re-run, this follows.
+    Straight off geometry.py's constants. There is no state to read: the action board composes
+    one board and only one, which is the whole reason it replaced the lab as this page's source.
+    Every rect below is an expression in G, never a literal, so a tile that changes width here
+    changes because the board changed.
     """
-    S = m.default_state()
+    G = m.G
     parts = []
 
-    def box(x, y, w, h, label):
+    def box(x, y, w, h, label, cls="box"):
         parts.append(
-            '<div class=box style="left:%dpx;top:%dpx;width:%dpx;height:%dpx"><i>%s</i></div>'
-            % (round(x), round(y), round(w), round(h), html.escape(label)))
+            '<div class=%s style="left:%dpx;top:%dpx;width:%dpx;height:%dpx"><i>%s</i></div>'
+            % (cls, round(x), round(y), round(w), round(h), html.escape(label)))
 
-    st = S["status"]
+    st = G.STATUS
     box(st["x"], st["y"], st["width"], st["height"], "status")
 
-    for slug, duty in S["duties"].items():
-        card = duty["card"]
-        if card.get("visible", True):
-            box(card["x"], card["y"], card["width"], card["height"], duty.get("name", slug))
+    # THE RIBBON. Eight tiles on one pitch, in G.DUTIES' order and under G.DUTIES' names -- the
+    # same tuple the board itself loops over, so the strip here reads left to right exactly as
+    # the board does. The lab called these cards and let them be hidden; a tile is not optional.
+    for i, (_slug, name, _deg) in enumerate(G.DUTIES):
+        box(G.X0 + i * G.TILE_PITCH, G.RIBBON_Y, G.TILE_W, G.RIBBON_H, name)
 
-    # The action row. The two artwork slots live in display, the other two are top-level objects;
-    # all four are the same band and are drawn the same way.
-    for key, label in (("artLeft", "action art L"), ("artRight", "action art R")):
-        a = S["display"][key]
-        box(a["x"], a["y"], a["width"], a["height"], label)
-    for key, label in (("tithe", "tithe"), ("city", "city")):
-        o = S[key]
-        if o.get("visible", True):
-            box(o["x"], o["y"], o["width"], o["height"], label)
+    # The action row and the confirm bar under it, the full width of the play column.
+    box(G.X0, G.ART_Y, G.ART_W, G.ART_H, "action art L")
+    box(G.X0 + G.ART_W + G.ART_GAP, G.ART_Y, G.ART_W, G.ART_H, "action art R")
+    box(G.X0, G.CONFIRM_Y, G.PLAY_W, G.CONFIRM_H, "confirm")
 
-    # THE ONE REAL DRAWING. Same vendored SVG the lab inlines, same recolour, at the state's own
-    # wheel rect -- so this is the wheel at the size the module actually gives it.
-    w = S["wheel"]
+    # THE RIGHT-HAND COLUMN, top to bottom: Tithe beside the art, then the two standing controls,
+    # then the City. Taken from as_dict() rather than listed by hand -- the first version of this
+    # page WAS a hand-written list and it silently lost Show Map and Hire Building, which is
+    # precisely what a hand-written list of someone else's objects does.
+    rects = m.G.as_dict()
+    for key, label in (("tithe", "tithe"), ("showMap", "show map"),
+                       ("hire", "hire building"), ("city", "city")):
+        r = rects[key]
+        box(r["x"], r["y"], r["width"], r["height"], label)
+
+    # THE ONE REAL DRAWING. The board's own wheel_svg() -- same asset, same recolour, at the rect
+    # geometry gives it -- so this is the wheel at the size the module actually grants it.
     parts.append('<div class=wheel style="left:%dpx;top:%dpx;width:%dpx;height:%dpx">%s</div>'
-                 % (round(w["x"]), round(w["y"]), round(w["width"]), round(w["height"]),
+                 % (round(G.WHEEL_X), round(G.WHEEL_Y), round(G.WHEEL_W), round(G.WHEEL_H),
                     m.wheel_svg()))
     return "\n".join(parts)
 
 
 def build() -> str:
-    m = lab()
+    m = board()
     cans = canvases()
     page = TMPL.read_text(encoding="utf-8")
     for token, value in (
         ("__CANVASES__", json.dumps(cans)),
-        ("__MODULE_W__", str(m.CANVAS_W)),
-        ("__MODULE_H__", str(m.CANVAS_H)),
+        ("__MODULE_W__", str(m.G.CANVAS_W)),
+        ("__MODULE_H__", str(m.G.CANVAS_H)),
         ("__MODULE__", module_html(m)),
         ("__BUILD__", BUILD_VERSION),
     ):
@@ -189,9 +212,9 @@ def main(argv=None) -> int:
     except ValueError:
         shown = out
     print("wrote %s  (%d KB)" % (shown, len(page.encode("utf-8")) // 1024))
-    lab_mod = lab()
+    mod = board()
     for i, c in enumerate(cans, 1):
-        gap = c["w"] - lab_mod.CANVAS_W
+        gap = c["w"] - mod.G.CANVAS_W
         print("  %d  canvas %4d x %d   free to the left %4d x %d  (%.1f%%)"
               % (i, c["w"], c["h"], max(0, gap), c["h"], 100 * max(0, gap) / c["w"]))
     print("  press 1, 2 and 3 in the page to switch; h hides the chrome")
