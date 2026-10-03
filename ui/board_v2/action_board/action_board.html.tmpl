@@ -36,6 +36,12 @@ html,body{margin:0;background:#07070a;color:var(--ink);
 
 /* ---- the stage ------------------------------------------------------------------------- */
 #wrap{display:flex;justify-content:center;padding:14px}
+/* FULL SCREEN takes the chrome away and gives the padding back. Nothing here tells fit() what
+   changed: it reads the toolbar's height and the stage's padding off the page every time, so
+   hiding one and zeroing the other is enough and the scale follows. */
+body.full #bar,body.full #note{display:none}
+body.full #wrap{padding:0;align-items:center;min-height:100vh}
+body.full{background:#000}
 #fit{transform-origin:top left}
 #board{position:relative;background:#000;overflow:hidden}
 /* DIRECT CHILDREN ONLY. `#board *` made every descendant absolute, which quietly killed the
@@ -73,12 +79,25 @@ html,body{margin:0;background:#07070a;color:var(--ink);
 /* ---- the two action cards -------------------------------------------------------------- */
 .art{overflow:hidden;background:#000;cursor:pointer}
 .art img{width:100%;height:100%;object-fit:cover;display:block}
-/* THE NAME ONLY. The effect line used to live along the bottom of the picture and it moved into
-   the upper text box, which halved the scrim count and handed the bottom of every card back --
-   the corner the briefs reserve for the close dark foreground element. */
+/* THE NAME ONLY, AND NO SCRIM BEHIND IT.
+   The effect line used to live along the bottom of the picture and moved into the upper text box,
+   which halved the scrim count and handed the bottom of every card back -- the corner the briefs
+   reserve for the close dark foreground element. The second scrim has now gone the same way: the
+   briefs reserve the TOP of every action image for quiet dark ground too, so a gradient there was
+   darkening a corner that is already dark and flattening the top of fourteen pictures to buy one
+   word its contrast. The halo below buys it on the glyphs instead. If a picture ever fights the
+   name, fix the picture. */
 .art .nm{position:absolute;left:0;right:0;top:0;font-family:Georgia,serif;font-weight:600;
   letter-spacing:.11em;text-transform:uppercase;color:var(--ink);
-  background:linear-gradient(#000000cc 38%,transparent)}
+  /* THE DARK IS ON THE LETTERS, NOT OVER THE PICTURE. Three stacked shadows: a tight one that
+     separates the stroke from whatever it lands on, a wider soft one that carries the separation
+     past the serifs, and a short drop that keeps the word sitting on the image rather than
+     floating above it. Measured over the lit window on the Devotion card, which is the worst
+     ground the board has: against a glyph mask taken from the page itself, the ring of pixels
+     within 3px of a letter goes from a mean luminance of 0.264 to 0.124, which is 2.85:1 against
+     the ink becoming 5.15:1. A wider, heavier stack reaches 5.69:1 and starts to read as a smudge
+     behind the word, which is the scrim coming back by another route. */
+  text-shadow:0 0 3px #000, 0 0 3px #000, 0 1px 2px #000}
 .art .ph{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:14px;color:#5d5648;
   font:400 12px/1.6 Georgia,serif;letter-spacing:.07em;
   background:radial-gradient(70% 70% at 50% 45%,#141210,#000 82%)}
@@ -107,6 +126,9 @@ html,body{margin:0;background:#07070a;color:var(--ink);
 .panel{border:1px solid #46413a;border-radius:5px;background:#0e0d0b}
 .panel .lb{position:absolute;left:0;right:0;text-align:center;font-family:Georgia,serif;font-weight:600;
   letter-spacing:.16em;text-transform:uppercase;color:var(--ink)}
+/* Take Tithe stands in a row with the two action names, so it is tracked like them rather than
+   like the City's label below it. The City keeps the panel tracking above. */
+#tithe .lb{letter-spacing:.11em}
 .tok{position:absolute;border-radius:50%;overflow:hidden;background:radial-gradient(70% 70% at 35% 30%,#3c3527,#241d14);
   border:1px solid #6b5c3e;display:grid;place-items:center;cursor:pointer;
   color:#e4d6b4;font:700 15px/1 ui-monospace,monospace}
@@ -146,6 +168,7 @@ body.editing .art.drop,body.editing .seal.drop,body.editing .tok.drop{outline:2p
   <span class=sp></span>
   <button id=bEdit aria-pressed="false" title="click a slot to replace its picture; drop a file on one at any time">images</button>
   <button id=bSave>save</button>
+  <span class=tag>f &nbsp;full screen</span>
   <span class=tag id=buildTag></span>
 </div>
 <div id=note></div>
@@ -361,7 +384,7 @@ function drawSide(){
     wireDrop(e);
     y += t.token + t.tokenGap;
   });
-  var lb = el("div", "lb", {bottom: px(t.labelBottom), fontSize: px(t.labelSize),
+  var lb = el("div", "lb", {top: px(t.labelTop), fontSize: px(t.labelSize),
                             lineHeight: String(t.lh)}, p);
   lb.textContent = "Take Tithe";
 
@@ -493,6 +516,10 @@ function render(){
     if (a && a.name){
       var nm = document.createElement("div"); nm.className = "nm";
       nm.style.fontSize = px(GEO.art.capSize);
+      // capLh was exported and never applied, so the caption took the body's 1.4 and CAP_H was
+      // computed from a line height the page did not use. It is applied now because Take Tithe
+      // shares this line, and two line heights would put the row half a pixel out.
+      nm.style.lineHeight = String(GEO.art.capLh);
       nm.style.padding = GEO.art.capPadY + "px " + GEO.art.capPadX + "px";
       nm.textContent = a.name;
       art.appendChild(nm);
@@ -621,9 +648,29 @@ function draw(){
   drawStatus(); drawTiles(); drawArt(); drawSide(); drawWheel(); render();
 }
 
+// SCALED ON BOTH AXES, and the chrome above the stage is MEASURED rather than allowed for.
+//
+// This used to read `Math.min(1, (window.innerWidth - 36) / GEO.canvas.width)` -- width only, and
+// a 36 nobody could derive. On a wide, short window, which is every laptop, the board is 1400
+// across and fits, so the scale came back 1 and the bottom 200-odd rows of a 1200-tall board were
+// simply off the screen: the wheel cut in half with no sign that anything was missing. The canvas
+// check next door has always scaled on min(width, height) -- which is exactly why that page looked
+// right on the same screen where this one did not.
+//
+// The toolbar and the note bar sit OUTSIDE the stage and the note bar collapses when it is empty,
+// so their height is read from the page each time rather than carried as a constant that would be
+// wrong whenever the note appears.
 function fit(){
   var f = document.getElementById("fit");
-  var s = Math.min(1, (window.innerWidth - 36) / GEO.canvas.width);
+  var wrap = document.getElementById("wrap");
+  var cs = getComputedStyle(wrap);
+  var padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+  var padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+  var chrome = document.getElementById("bar").offsetHeight
+             + document.getElementById("note").offsetHeight;
+  var availW = window.innerWidth - padX;
+  var availH = window.innerHeight - chrome - padY;
+  var s = Math.min(1, availW / GEO.canvas.width, availH / GEO.canvas.height);
   f.style.transform = "scale(" + s + ")";
   f.style.width = (GEO.canvas.width * s) + "px";
   f.style.height = (GEO.canvas.height * s) + "px";
@@ -640,6 +687,68 @@ document.getElementById("bEdit").addEventListener("click", function(){
   note(S.editing ? "click a picture slot to replace it, or drop a file on one" : "");
 });
 document.getElementById("bSave").addEventListener("click", doSave);
+
+// ---- FULL SCREEN, ON F --------------------------------------------------------------------
+//
+// The board is a settled 1400 x 1200 composition and fit() already scales it into whatever room
+// there is, so the only thing between it and the whole display is the toolbar -- which is not part
+// of the board. F therefore does two things that belong together: it takes the chrome off, and it
+// asks the browser for the screen.
+//
+// THE TWO ARE KEPT SEPARATE ON PURPOSE. requestFullscreen can be refused -- a file:// page in some
+// browsers, a policy, a window that is already somebody else's full screen -- and a refusal must
+// not leave F doing nothing. The class is ours and always applies; the screen is the browser's and
+// is asked for politely. So the worst case is a board that fills the window rather than the
+// display, which is still the thing that was wanted.
+//
+// Esc leaves full screen WITHOUT passing through the key handler, so the chrome is put back by
+// fullscreenchange rather than by the keystroke. Driving it from the key alone would strand the
+// page with no toolbar and no way back to it.
+var FULL = false;
+
+function screenEl(){
+  return document.fullscreenElement || document.webkitFullscreenElement || null;
+}
+
+function setFull(on){
+  FULL = on;
+  document.body.classList.toggle("full", on);
+  fit();
+}
+
+function toggleFull(){
+  if (FULL){
+    setFull(false);
+    var exit = document.exitFullscreen || document.webkitExitFullscreen;
+    if (screenEl() && exit) exit.call(document);
+    return;
+  }
+  setFull(true);
+  var d = document.documentElement;
+  var ask = d.requestFullscreen || d.webkitRequestFullscreen;
+  if (!ask) return;                       // no API: the chrome is off and that is most of it
+  var p = ask.call(d);
+  if (p && p.catch) p.catch(function(){}); // refused: keep the chrome off, say nothing
+}
+
+document.addEventListener("keydown", function(e){
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  var t = e.target;
+  // Not while somebody is typing. There is no text field on the board today and there will be one
+  // the day a slot gets a name, and a page that swallowed the f would be a horrible way to find out.
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+  if (e.key === "f" || e.key === "F"){ e.preventDefault(); toggleFull(); }
+  else if (e.key === "Escape" && FULL && !screenEl()) setFull(false);
+});
+
+["fullscreenchange", "webkitfullscreenchange"].forEach(function(t){
+  document.addEventListener(t, function(){
+    // Left the screen by any route other than F -- Esc, the window chrome, another tab taking it.
+    if (!screenEl() && FULL) setFull(false);
+    else fit();
+  });
+});
+
 window.addEventListener("resize", fit);
 drawPhases();
 draw();
