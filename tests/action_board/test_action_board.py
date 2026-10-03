@@ -546,10 +546,15 @@ def test_three_tithe_seals_and_their_label_fit_the_box_they_are_in(geo):
     to go through the derivation rather than round the numbers until they look close enough.
     """
     assert geo.check() == [], "\n".join(geo.check())
+    # THE LABEL IS ABOVE THE SEALS NOW, so the two ends that can collide have swapped: the label
+    # must finish before the column starts, and the column must finish inside the box.
+    label_end = geo.TITHE_LABEL_TOP + geo.TITHE_LABEL_H
     end = geo.TOKEN_Y + 3 * geo.TOKEN + 2 * geo.TOKEN_GAP
-    label_top = geo.ART_H - geo.INSET - geo.TITHE_LABEL_H
-    assert end <= label_top, (
-        "the seals end at %d and the label starts at %d" % (end, label_top))
+    assert geo.TOKEN_Y >= label_end, (
+        "the label ends at %d and the seals start at %d" % (label_end, geo.TOKEN_Y))
+    assert end <= geo.TITHE_INNER_H - geo.INSET, (
+        "the seals end at %d and the column's inner edge is at %d"
+        % (end, geo.TITHE_INNER_H - geo.INSET))
     assert geo.TOKEN_GAP > 0, "three seals of %d leave no room between them" % geo.TOKEN
     assert geo.TOKEN <= geo.SIDE_W - 2 * geo.INSET, "a seal of %d does not fit a column %d wide" \
         % (geo.TOKEN, geo.SIDE_W)
@@ -568,8 +573,14 @@ def test_the_tithe_column_states_no_numbers_of_its_own(gen):
     # regression in the Tithe column, which it is not.
     body = page.split("var t = GEO.tithe;")[1].split("var tc = GEO.confirm.tithe;")[0]
     body = re.sub(r"(?m)^\s*//.*$", " ", body)
-    for key in ("t.tokenY", "t.tokenGap", "t.labelBottom", "t.token"):
+    for key in ("t.tokenY", "t.tokenGap", "t.labelTop", "t.token"):
         assert key in body, "the Tithe column no longer takes %s from GEO" % key
+    # WHICH EDGE IT IS BOUND TO, not merely that the number is read. `bottom: px(t.labelTop)` takes
+    # the value from GEO, reads correctly, passes the line above, and hangs Take Tithe back at the
+    # foot of its column -- off the row it is supposed to be standing in.
+    assert "top: px(t.labelTop)" in body, (
+        "Take Tithe is no longer hung from the top of its box, so it has left the caption row")
+    assert "bottom:" not in body, "the Tithe column is measuring from the bottom again"
     stray = [n for n in re.findall(r"(?<![\w.#-])(\d{2,4})(?![\w.%])", body)]
     assert not stray, "the Tithe column has %s typed into it" % ", ".join(stray)
 
@@ -612,17 +623,118 @@ def test_the_city_grid_is_margined_evenly_inside_its_own_border(geo):
         % (between, rows, foot))
 
 
-def test_the_two_side_panels_agree_about_their_own_label(geo):
-    """The City's was 12px set 12 from the top and the Tithe's 12px set 6 from the bottom.
+def test_take_tithe_sits_on_the_action_captions_line(geo):
+    """The three choices on offer this turn carry one row of titles, so it must BE one row.
 
-    They are the same label on the same kind of box, standing next to each other. Falsified by
-    giving either one a size or an inset of its own.
+    Take Tithe used to be a panel label at the foot of its column, sized with the City's. It is
+    now the third title in the action row, which is a different claim and a more fragile one: the
+    row holds only while the Tithe's size, its top inset and its line height are the caption's
+    rather than copies of them. Falsified by giving the Tithe a size, an inset or a line height
+    of its own -- each of which puts the row visibly out of line.
     """
-    assert geo.CITY_LABEL_SIZE == geo.TITHE_LABEL_SIZE
-    assert geo.CITY_LABEL_H == geo.TITHE_LABEL_H
-    city = geo.as_dict()["city"]
-    tithe = geo.as_dict()["tithe"]
-    assert city["labelTop"] == tithe["labelBottom"] == geo.INSET
+    assert geo.TITHE_LABEL_SIZE == geo.CAP_SIZE
+    assert geo.TITHE_LABEL_TOP == geo.CAP_PAD_Y - geo.BORDER
+    assert geo.TITHE_LABEL_H == round(geo.CAP_SIZE * geo.CAP_LH)
+
+    d = geo.as_dict()
+    tithe, art = d["tithe"], d["art"]
+    assert tithe["labelSize"] == art["capSize"], "the titles are not the same size"
+    # NOT EQUAL, AND THAT IS THE POINT. The card is unbordered and the panel is not, so a shared
+    # inset would put the two titles one pixel apart; the Tithe gives that pixel back.
+    assert tithe["labelTop"] == art["capPadY"] - geo.BORDER, (
+        "the titles do not land on the same line once the panel's border is counted")
+    assert tithe["lh"] == art["capLh"], "the titles are on different line heights"
+
+    # The City is NOT part of that row and must not be dragged into it: it is a panel label on a
+    # panel, below the fold, and it kept the 12 the Tithe gave up.
+    assert geo.CITY_LABEL_SIZE == 12
+    assert d["city"]["labelTop"] == geo.INSET
+
+
+def test_full_screen_can_always_be_left_again(gen):
+    """F takes the chrome off and asks for the display. Those are two different things.
+
+    The fault worth guarding is a page that cannot be got back. Esc leaves full screen WITHOUT
+    passing through the key handler, so if the chrome were restored by the keystroke alone the
+    board would come back with no toolbar, no save button and no way to reach either. The class is
+    therefore driven by fullscreenchange as well.
+
+    And requestFullscreen can be refused -- a file:// page, a policy, a window that is already
+    somebody else's full screen -- so the refusal is swallowed and the chrome stays off, because a
+    board filling the window is still what was asked for. A page that threw there would leave F
+    doing nothing at all.
+    """
+    page = TMPL.read_text(encoding="utf-8")
+    assert 'e.key === "f"' in page, "nothing on the board listens for F"
+    assert "body.full #bar" in page, "full screen does not take the toolbar away"
+    assert "fullscreenchange" in page, (
+        "the chrome is restored by the keystroke alone, so Esc would strand the page without a "
+        "toolbar")
+    assert "webkitfullscreenchange" in page and "webkitRequestFullscreen" in page, (
+        "only the unprefixed API is used, and this is read in Safari")
+    # The refusal must be swallowed rather than thrown.
+    assert "p.catch" in page, "a refused full-screen request would leave F doing nothing"
+    # Not while somebody is typing.
+    body = page.split('document.addEventListener("keydown"')[1].split("});")[0]
+    assert "isContentEditable" in body and "INPUT" in body, (
+        "F is swallowed from text fields, so typing an f would blank the board")
+
+
+def test_the_board_is_scaled_to_the_window_on_both_axes(gen):
+    """The board is 1400 x 1200 and a laptop window is wide and short.
+
+    fit() measured the width alone, so on any screen that could take 1400 across but not 1200 down
+    -- which is most of them -- the scale came back 1 and the bottom of the board was off the
+    screen, the wheel cut in half with nothing to say so. Falsified by dropping the height from the
+    minimum, which is the state this was found in.
+    """
+    page = TMPL.read_text(encoding="utf-8")
+    body = page.split("function fit(){")[1].split("\n}")[0]
+    # THE SCALE EXPRESSION, not the function. GEO.canvas.height appears again two lines further
+    # down, where the scaled height is written back to the box -- so looking anywhere in fit() for
+    # the word passes happily while the height has been dropped from the minimum, which is the
+    # exact fault. Asked of the one line that decides the scale instead.
+    scale = [l for l in body.splitlines() if "Math.min" in l]
+    assert len(scale) == 1, "fit() has %d candidate scale lines" % len(scale)
+    assert "GEO.canvas.width" in scale[0] and "GEO.canvas.height" in scale[0], (
+        "the scale is not taken from both axes, so the board can run off the bottom of the "
+        "window: %s" % scale[0].strip())
+    assert "innerHeight" in body, "fit() does not look at how tall the window is"
+    # The chrome above the stage is read off the page; a typed allowance goes stale the first time
+    # the note bar appears or the toolbar wraps to two rows.
+    assert "offsetHeight" in body, "fit() is guessing the height of the chrome above the board"
+    stray = [n for n in re.findall(r"(?<![\w.#-])(\d{2,4})(?![\w.%])", body)]
+    assert not stray, "fit() has %s typed into it" % ", ".join(stray)
+
+
+def test_the_caption_is_made_readable_on_the_letters_and_not_over_the_picture(gen):
+    """The scrim is gone and must not come back by the front door or the side one.
+
+    A gradient across the top of the card bought the caption its contrast by darkening a strip of
+    fourteen pictures, in the corner the briefs reserve for quiet dark ground -- paying for one
+    word with the top of every image. The halo pays for it on the glyphs instead. Falsified by
+    restoring the gradient, or by dropping the shadow and leaving the ink bare.
+    """
+    page = TMPL.read_text(encoding="utf-8")
+    block = page.split(".art .nm{")[1].split("}")[0]
+    assert "text-shadow" in block, "the action caption has no halo and sits bare on the picture"
+    assert "background" not in block, (
+        "the action caption has a background again -- the scrim was removed on purpose")
+
+
+def test_the_caption_takes_all_four_of_its_measurements_from_geo(gen):
+    """The row holds in geometry.py and can still break in the page.
+
+    capLh was exported for a long time and never applied, so the caption silently took the body's
+    1.4 while CAP_H was computed from 1.2. That cost nothing while the caption stood alone. It
+    costs the row the moment Take Tithe shares its line, because the Tithe label IS given its line
+    height and the caption would not be -- two line heights, one row, visibly out. Falsified by
+    dropping any of the four, which is exactly how the first one went missing.
+    """
+    page = TMPL.read_text(encoding="utf-8")
+    body = page.split('nm.className = "nm"')[1].split("art.appendChild(nm)")[0]
+    for key in ("GEO.art.capSize", "GEO.art.capLh", "GEO.art.capPadY", "GEO.art.capPadX"):
+        assert key in body, "the action caption no longer takes %s from GEO" % key
 
 
 def test_the_city_states_no_numbers_of_its_own(gen):

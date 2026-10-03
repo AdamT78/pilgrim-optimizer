@@ -167,8 +167,19 @@ SIDE_X = X0 + ART_W + ART_GAP + ART_W + GAP      # 1240
 SIDE_W = CANVAS_W - X0 - SIDE_X                  # 132, flush with the status bar's right edge
 
 TITHE = {"x": SIDE_X, "y": ART_Y, "width": SIDE_W, "height": ART_H}
-TITHE_LABEL_SIZE = 12
-TITHE_LABEL_H = round(TITHE_LABEL_SIZE * TILE_NAME_LH)   # 14, on the board's one line height
+# THE TITHE'S TITLE IS AN ACTION CAPTION, not a panel label. It sits at the top of its box on the
+# same line as "Ordain" and "Silversmith", because taking the tithe is the third choice in that row
+# and the three titles are one row of titles. Its size, its top inset and its line height are the
+# art caption's and are not set here, so the row cannot fall out of line by somebody editing one of
+# the three.
+TITHE_LABEL_SIZE = CAP_SIZE
+# ONE PIXEL HIGHER THAN THE CAPTION'S INSET, and that pixel is the panel's border. The action card
+# has no border, so its caption at a 6 starts 6 below the top of the card; the Tithe is a bordered
+# panel, so a child at a 6 starts 7 below the top of the box. Measured on the rendered page: the
+# two titles came out 283.4 and 284.4. This is the fault test_a_bordered_box_measures_its_children
+# _inside_its_border already names, met once more.
+TITHE_LABEL_TOP = CAP_PAD_Y - BORDER
+TITHE_LABEL_H = round(TITHE_LABEL_SIZE * CAP_LH)         # 17
 
 # A SEAL IS A SEAL, AND THEY ARE ALL ONE SIZE. The three resources in the Tithe column were drawn
 # at 64 beside duty action seals of 78, which made the third choice on this row look like a lesser
@@ -183,9 +194,12 @@ TOKEN_ORDER = ("wheat", "stone", "silver")
 # the other way, picking a gap and hoping, is how the label gets quietly pushed out of the box.
 TITHE_INNER_W, TITHE_INNER_H = inner(SIDE_W, ART_H)          # 130 x 293
 TOKEN_X = (TITHE_INNER_W - TOKEN) // 2                       # centred in the box, not beside it
-TOKEN_COLUMN_H = TITHE_INNER_H - 2 * INSET - TITHE_LABEL_H - INSET   # 261, the room above
-TOKEN_GAP = (TOKEN_COLUMN_H - 3 * TOKEN) // 2                # 13
-TOKEN_Y = INSET + (TOKEN_COLUMN_H - (3 * TOKEN + 2 * TOKEN_GAP)) // 2
+# THE SEALS HANG BELOW THE LABEL, which used to sit under them. Reading down the column: the
+# label's own inset, the label, one gap, the three seals, one inset at the foot.
+TOKEN_COLUMN_H = TITHE_INNER_H - TITHE_LABEL_TOP - TITHE_LABEL_H - 2 * INSET   # 258
+TOKEN_GAP = (TOKEN_COLUMN_H - 3 * TOKEN) // 2                # 12
+TOKEN_TOP = TITHE_LABEL_TOP + TITHE_LABEL_H + INSET          # 29, the first row the column may use
+TOKEN_Y = TOKEN_TOP + (TOKEN_COLUMN_H - (3 * TOKEN + 2 * TOKEN_GAP)) // 2
 
 # The City sits on the wheel's baseline; the two standing options stack above it, GAP_WIDE apart,
 # because they are a different kind of thing from the move being made this turn.
@@ -206,10 +220,14 @@ STANDING_PAD_X = 8
 # bordered box -- so the panel drew with a 9px margin on the left and 7px on the right, a two-pixel
 # lean nothing was watching. Vertically it was four unrelated figures: 12 above the label, 9 under
 # it, 10 between the rows and 23 at the foot, not one of them the board's own INSET or GAP. The
-# City's label was 12px set 12 from the top while the Tithe's is 12px set 6 from the bottom: two
+# City's label was 12px set 12 from the top while the Tithe's was 12px set 6 from the bottom: two
 # panels of the same kind, side by side, disagreeing about their own margins.
-CITY_LABEL_SIZE = TITHE_LABEL_SIZE               # the same label on the same kind of box
-CITY_LABEL_H = TITHE_LABEL_H
+#
+# THE TITHE HAS SINCE LEFT. Its title moved to the top of its box to stand in the action captions'
+# row and took their 14 with it, so this is no longer "the same label on the same kind of box" and
+# no longer written as one: it is a panel label on a panel, and it keeps the 12 the two once shared.
+CITY_LABEL_SIZE = 12
+CITY_LABEL_H = round(CITY_LABEL_SIZE * TILE_NAME_LH)
 CITY_COLS, CITY_ROWS = 2, 2
 CITY_INNER_W, CITY_INNER_H = inner(SIDE_W, CITY_H)       # 130 x 298
 # ONE INSET HERE TOO -- between the figures, around them, and under the label. There is nothing
@@ -404,7 +422,7 @@ def as_dict() -> dict:
                               "width": SIDE_W, "height": CONFIRM_H}},
         "side": {"x": SIDE_X, "width": SIDE_W},
         "tithe": dict(TITHE, labelSize=TITHE_LABEL_SIZE, labelH=TITHE_LABEL_H,
-                      labelBottom=INSET, lh=TILE_NAME_LH, token=TOKEN, tokenGap=TOKEN_GAP,
+                      labelTop=TITHE_LABEL_TOP, lh=CAP_LH, token=TOKEN, tokenGap=TOKEN_GAP,
                       tokenX=TOKEN_X, tokenY=TOKEN_Y, order=list(TOKEN_ORDER)),
         "showMap": SHOW_MAP, "hire": HIRE,
         "standing": {"size": STANDING_SIZE, "padX": STANDING_PAD_X},
@@ -474,13 +492,16 @@ def check() -> list:
                    % (CITY_Y + CITY_H, WHEEL_Y + WHEEL_H))
     # The Tithe column: three seals, then a label, inside one box.
     tokens_end = TOKEN_Y + 3 * TOKEN + 2 * TOKEN_GAP
-    label_top = TITHE_INNER_H - INSET - TITHE_LABEL_H
+    label_end = TITHE_LABEL_TOP + TITHE_LABEL_H
     if TOKEN_X != TITHE_INNER_W - TOKEN_X - TOKEN:
         bad.append("a Tithe seal sits %d from one side of its column and %d from the other"
                    % (TOKEN_X, TITHE_INNER_W - TOKEN_X - TOKEN))
-    if tokens_end > label_top:
-        bad.append("the three Tithe seals end at %d and the Take Tithe label starts at %d, so "
-                   "they overlap by %d" % (tokens_end, label_top, tokens_end - label_top))
+    if TOKEN_Y < label_end:
+        bad.append("the Take Tithe label ends at %d and the three seals start at %d, so they "
+                   "overlap by %d" % (label_end, TOKEN_Y, label_end - TOKEN_Y))
+    if tokens_end > TITHE_INNER_H - INSET:
+        bad.append("the three Tithe seals end at %d and the column's inner edge is at %d"
+                   % (tokens_end, TITHE_INNER_H - INSET))
     if TOKEN_GAP < 1:
         bad.append("three Tithe seals of %d leave %d between them, which is not a column"
                    % (TOKEN, TOKEN_GAP))
