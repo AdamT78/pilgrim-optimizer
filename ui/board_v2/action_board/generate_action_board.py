@@ -211,7 +211,8 @@ def slot_of(rel: str, entry: dict) -> str | None:
     """Which slot a recorded file belongs in: left, right, master, or nothing.
 
     The same three routes the layout lab uses, in the same order -- an explicit `slot`, then
-    `_left`/`_right` in the filename as crop_duty_master.py writes them, then the word LEFT or
+    `_left`/`_right` in the filename, the naming crop_duty_master.py left behind before it was
+    retired -- the convention outlived the script and every card still follows it -- then the word LEFT or
     RIGHT in the record's prose, which is where the older entries say it. The folder cannot
     decide it: `gain_piety` is Clerical's actionA and `gain_coins` its actionB, which
     alphabetically is backwards.

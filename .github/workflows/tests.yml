@@ -57,9 +57,10 @@ jobs:
           # lists have to agree, and tests/test_ci_router.py now asserts that they do, because
           # reading them side by side in a shell pipeline is exactly how this was missed.
           #
-          # tools/duty_art/ is the same case one directory over: a crop script for the duty
-          # action illustrations, importing pillow and nothing from pilgrim/, and already tested
-          # by tests/layout_lab/test_duty_art_crop.py. It triggers the lab lane below.
+          # tools/duty_art/ is the same case one directory over: file_seals.py, which files the
+          # wax seals, importing pillow and numpy and nothing from pilgrim/. It triggers the lab
+          # lane below. It used to say "a crop script ... tested by test_duty_art_crop.py"; both
+          # the script and that guard have been removed, and the directory remains for the seals.
           #
           # .gitignore is the one path here that triggers NOTHING, and deliberately. It cannot
           # change what any test does -- CI checks out a clean tree, where an ignore rule has
@@ -196,23 +197,23 @@ jobs:
       # and pilgrim itself is pure stdlib, so numpy, scipy and playwright are three large wheels
       # this lane would fetch and never import.
       #
-      # PILLOW IS THE EXCEPTION, and it was missed when the duty-art guards arrived:
-      # test_duty_art_crop.py runs the crop script, which opens images. It is installed rather
-      # than skipped around. Three of those guards used importorskip and had therefore been
-      # quietly skipping in CI ever since -- so this lane could be cited as the thing that covers
-      # tools/duty_art/ while in fact running almost none of it, and a skip is green.
+      # PILLOW IS THE EXCEPTION. The guards that open images need it, and it is installed rather
+      # than skipped around: three of them once used importorskip and had therefore been quietly
+      # skipping in CI, so this lane could be cited as the thing that covers a tree while in fact
+      # running almost none of it, and a skip is green.
       #
-      # NUMPY IS THE SECOND EXCEPTION, added when crop_duty_master.py learned to match tint.
-      # That transform converts to CIELAB and back over a megapixel, which is array arithmetic
-      # and nothing else. It is imported at module level, so without numpy this lane does not
-      # skip a guard -- it fails collection and takes all of tests/layout_lab with it, which is
-      # how the pillow omission above announced itself too.
+      # NUMPY IS THE SECOND EXCEPTION. It arrived for crop_duty_master.py's tint matching, and
+      # THAT IS NO LONGER WHY IT IS HERE -- the script and its guard were removed once nothing on
+      # the board was cut from a master. Both of its remaining users were already here and still
+      # are: tools/duty_art/file_seals.py, which scales every wax seal to the discs' 0.906, and
+      # tests/action_board/test_action_board.py, which finds a mark's alpha bounding box. Both
+      # import it at module level, so without numpy this lane does not skip a guard -- it fails
+      # collection and takes a whole directory with it, which is how the pillow omission above
+      # announced itself too.
       #
-      # scikit-image would have supplied rgb2lab and was measured rather than assumed: 270 MB
-      # and ten seconds against numpy's 72 MB and three, and it arrives with scipy, imageio,
-      # tifffile, networkx and lazy-loader -- the exact wheels the paragraph above exists to
-      # keep out. Twenty lines of published colour arithmetic, tested against scikit-image for
-      # agreement and for an exact round trip, is the cheaper side of that trade.
+      # The trade that left with the script: scikit-image would have supplied rgb2lab and was
+      # measured rather than assumed at 270 MB and ten seconds against numpy's 72 MB and three.
+      # It no longer has to be weighed; numpy is cheap enough on the two users above.
       #
       # The editable install is still needed because tests/conftest.py imports pilgrim at
       # collection time.

@@ -25,7 +25,8 @@ duty_text.json nor sort into slot order: Clerical's LEFT is `gain_piety` and its
 `gain_coins`, which alphabetically is backwards. Three things are tried, in order:
 
   1. an explicit `slot` on the file's attribution.json entry: "left", "right" or "master"
-  2. `_left` or `_right` in the filename, which is what crop_duty_master.py now writes
+  2. `_left` or `_right` in the filename, the naming crop_duty_master.py established before it
+     was retired; the convention outlived the script and every card still follows it
   3. the word LEFT or RIGHT in the entry's `role` prose, which is where the existing six say it
 
 Anything still unplaced is shown under the duty, marked, rather than dropped or guessed at.
