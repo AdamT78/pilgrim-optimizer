@@ -371,11 +371,11 @@
       "source": "cut from duty_actions/clerical/masters/clerical_master_v03.png; the picture is model output, the cut is deterministic",
       "licence": "openai-generated",
       "slot": "right",
-      "role": "the RIGHT action image, 1065 x 522, showing Silversmith. Ratio 2.0402 against the slot's 2.0380, so `fit: cover` clips 0.4 of a slot pixel -- against the 3.5 px every 1120 x 560 crop lost.",
-      "modifications": "cut at (1107, 101, 2172, 623) by tools/duty_art/crop_duty_master.py --y 101. ADJACENT, NOT OVERLAPPING: the master is cropped once to the action band's own 4.1576:1, then split where the board's 15 px gap falls, so the gap hides 42 px of picture rather than the two cards sharing a strip. The card's shape is the slot's shape by construction, whatever the master's width.",
+      "role": "the RIGHT action image, 1069 x 534, showing Silversmith. Ratio 2.00187 against the slot's 2.00000, so `fit: cover` clips 0.5 of a slot pixel.",
+      "modifications": "cut at (1103, 101, 2172, 635) by tools/duty_art/crop_duty_master.py --y 101. ADJACENT, NOT OVERLAPPING: the master is cropped once to the action band's own ratio, then split where the board's 16 px gap falls, so the gap hides 34 px of picture rather than the two cards sharing a strip. RE-CUT when the cards went to three duty tiles wide: the recipe splits the master in proportion to the card, so a narrower card moves the split. The new crop is the old one with two pixels off two edges, verified pixel-identical over the shared region, and the card is now exactly 2:1.",
       "reproducibleBy": "tools/duty_art/crop_duty_master.py",
       "notes": "Cut from clerical_master_v03.png with tools/duty_art/crop_duty_master.py at --y 101. The cut takes the card size and the gap from ui/board_v2/action_board/geometry.py, so it cannot drift from the box it lands in; it read the layout lab's saved state until that state turned out to describe a 375 x 184 card the board does not have, and these were re-cut. `slot` is declared rather than inferred: the folder names came from wording that has since changed and no longer sort into slot order -- gain_piety is actionA and gain_coins actionB, which alphabetically is backwards.",
-      "sha256": "feea0ef90a06cc9829451db581f3a04bfab7e671f44a64c362e852fee588ea94"
+      "sha256": "9aaab609ff980561592e6581e4191aab1ab2e42f5b58666166c1f714e427e5a5"
     },
     "duty_actions/clerical/gain_piety/clerical_gain_piety_left_v03.png": {
       "state": "present",
@@ -385,11 +385,11 @@
       "source": "cut from duty_actions/clerical/masters/clerical_master_v03.png; the picture is model output, the cut is deterministic",
       "licence": "openai-generated",
       "slot": "left",
-      "role": "the LEFT action image, 1065 x 522, showing Devotion. Ratio 2.0402 against the slot's 2.0380, so `fit: cover` clips 0.4 of a slot pixel -- against the 3.5 px every 1120 x 560 crop lost.",
-      "modifications": "cut at (0, 101, 1065, 623) by tools/duty_art/crop_duty_master.py --y 101. ADJACENT, NOT OVERLAPPING: the master is cropped once to the action band's own 4.1576:1, then split where the board's 15 px gap falls, so the gap hides 42 px of picture rather than the two cards sharing a strip. The card's shape is the slot's shape by construction, whatever the master's width.",
+      "role": "the LEFT action image, 1069 x 534, showing Devotion. Ratio 2.00187 against the slot's 2.00000, so `fit: cover` clips 0.5 of a slot pixel.",
+      "modifications": "cut at (0, 101, 1069, 635) by tools/duty_art/crop_duty_master.py --y 101. ADJACENT, NOT OVERLAPPING: the master is cropped once to the action band's own ratio, then split where the board's 16 px gap falls, so the gap hides 34 px of picture rather than the two cards sharing a strip. RE-CUT when the cards went to three duty tiles wide: the recipe splits the master in proportion to the card, so a narrower card moves the split. The new crop is the old one with two pixels off two edges, verified pixel-identical over the shared region, and the card is now exactly 2:1.",
       "reproducibleBy": "tools/duty_art/crop_duty_master.py",
       "notes": "Cut from clerical_master_v03.png with tools/duty_art/crop_duty_master.py at --y 101. The cut takes the card size and the gap from ui/board_v2/action_board/geometry.py, so it cannot drift from the box it lands in; it read the layout lab's saved state until that state turned out to describe a 375 x 184 card the board does not have, and these were re-cut. `slot` is declared rather than inferred: the folder names came from wording that has since changed and no longer sort into slot order -- gain_piety is actionA and gain_coins actionB, which alphabetically is backwards.",
-      "sha256": "6625d5dd16d66062dd9df0c06a0d7b740957c0ca50ae0fed483124ded96e5b30"
+      "sha256": "7d4c0f40d844e7db86e852bc65aad9271264fa19afd405db0ecdda548f194b8c"
     },
     "duty_actions/clerical/icons/clerical_actionA_icon_v01.webp": {
       "state": "present",
