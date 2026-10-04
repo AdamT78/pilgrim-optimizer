@@ -378,10 +378,19 @@ function drawArt(){
                                                             display: "none"}));
     b.id = "confirm-" + slot;
     b.textContent = "Confirm";
-    // Right-aligned to the card it confirms: the button sits where the thing it acts on ends.
-    b.style.left = ""; b.style.right = px(GEO.canvas.width - (c.x + c.width));
-    b.style.width = "auto"; b.style.padding = "0 22px";
+    fitConfirm(b, c);
   });
+}
+
+// ONE RULE FOR EVERY CONFIRM BUTTON. All three say the same word and do the same kind of thing,
+// so they are the same button: as wide as that word plus the board's padding, sitting at the
+// right-hand end of whatever it confirms. It was written inline for the two action cards and not
+// for the Tithe, so the Tithe's took its box at face value and came out the full width of the
+// panel -- three buttons, one job, two sizes. The padding was a 22 typed here; it is
+// CONFIRM_PAD_X now, because a number the drawing depends on belongs with the other ones.
+function fitConfirm(b, at){
+  b.style.left = ""; b.style.right = px(GEO.canvas.width - (at.x + at.width));
+  b.style.width = "auto"; b.style.padding = "0 " + px(GEO.confirm.padX);
 }
 
 function drawSide(){
@@ -417,6 +426,7 @@ function drawSide(){
   var b = el("div", "btn primary", Object.assign(box(tc), {fontSize: px(GEO.confirm.size),
                                                            display: "none"}));
   b.id = "confirm-tithe"; b.textContent = "Confirm";
+  fitConfirm(b, tc);
 
   [["showMap", "Show Map"], ["hire", "Hire Building"]].forEach(function(pair){
     var o = GEO[pair[0]];

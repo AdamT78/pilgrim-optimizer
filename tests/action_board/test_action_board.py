@@ -1191,3 +1191,33 @@ def test_picking_a_duty_lights_it_on_the_wheel_and_in_the_ribbon(gen):
         "the wheel's selection is not painted beside the tile's, so they can drift apart")
 
 
+def test_every_confirm_button_is_the_same_button(geo, gen):
+    """Falsified by sizing one of the three from its box instead of from its word.
+
+    All three say Confirm and do the same kind of thing, so they are one button in three places.
+    confirm_for() hands over the whole card's width, which is the span the button is aligned
+    WITHIN rather than the width it takes -- it sits at the right-hand end, where the thing it
+    acts on finishes. The Tithe's took its box at face value and came out the full width of the
+    panel: three buttons, one job, two sizes.
+
+    The rule has to be written ONCE. It was inline in the loop that draws the two action cards,
+    so the Tithe could not have it, and the padding was a 22 typed into the template where no
+    other number on this board lives.
+    """
+    page = TMPL.read_text(encoding="utf-8")
+    assert "function fitConfirm(" in page, "the confirm buttons no longer share a rule"
+    # EVERY ONE OF THEM GOES THROUGH IT -- the Tithe's is the one that did not.
+    for which in ("fitConfirm(b, c)", "fitConfirm(b, tc)"):
+        assert which in page, (
+            "a confirm button is sized by something other than fitConfirm: %s" % which)
+    assert '"0 22px"' not in page, "the button's padding is typed into the template again"
+    assert "GEO.confirm.padX" in page, "the padding no longer comes from geometry"
+    assert geo.CONFIRM_PAD_X > 0, "a confirm button with no padding is its own word and no more"
+    # AND THE BOX IT IS ALIGNED WITHIN IS STILL THE THING IT CONFIRMS, which is what puts the
+    # three of them on the edges the cards and the Tithe already stand on.
+    for slot in ("actionA", "actionB"):
+        assert geo.confirm_for(slot)["width"] == geo.art_slots()[slot]["width"], (
+            "%s's confirm is no longer aligned within its own card" % slot)
+    tithe = geo.as_dict()["confirm"]["tithe"]
+    assert tithe["x"] + tithe["width"] == geo.TITHE_X + geo.TITHE_W, (
+        "the Tithe's confirm does not finish where the Tithe does")

@@ -195,6 +195,13 @@ CAP_H = round(CAP_PAD_Y * 2 + CAP_SIZE * CAP_LH)  # 29
 CONFIRM_Y = ART_Y + ART_H + GAP                  # 488
 CONFIRM_H = 48
 CONFIRM_SIZE = 14
+# THE BUTTON IS AS WIDE AS ITS WORD, NOT AS WIDE AS ITS BOX. confirm_for() hands over the whole
+# card's width because that is the span the button is aligned WITHIN -- it sits at the right-hand
+# end of it, where the thing it acts on finishes. What it actually occupies is the word plus this
+# padding each side. The number lived in the template, which is why the Tithe's button never got
+# it: that one took its box at face value and came out the full width of the Tithe panel, a
+# different button from the two beside it doing the same job.
+CONFIRM_PAD_X = 22
 
 # ---- the right-hand column -------------------------------------------------------------------
 # SIDE_X and SIDE_W are set with the cards above, because the column is now what the cards are
@@ -479,6 +486,7 @@ def as_dict() -> dict:
                 "capPadY": CAP_PAD_Y, "capLh": CAP_LH, "capH": CAP_H},
         "slots": art_slots(),
         "confirm": {"y": CONFIRM_Y, "height": CONFIRM_H, "size": CONFIRM_SIZE,
+                    "padX": CONFIRM_PAD_X,
                     "actionA": confirm_for("actionA"), "actionB": confirm_for("actionB"),
                     "tithe": {"x": TITHE_X, "y": CONFIRM_Y,
                               "width": TITHE_W, "height": CONFIRM_H}},
