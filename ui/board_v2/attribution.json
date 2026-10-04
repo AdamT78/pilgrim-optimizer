@@ -1789,6 +1789,34 @@
       "reproducibleBy": "nothing in this repository -- the picture is model output and there is no crop step to re-run",
       "notes": "The first card art this duty has had; both folders held only a .gitkeep. `slot` is declared, not inferred -- the folder names are the wording, not the slot order -- and it is what makes the image usable at all, since one with no entry is dropped with \"no slot recorded, left out\". Produce is the duty slotFoldersNote cites as proof the folder cannot be derived: its actionA is `gain_wheat` and its actionB `gain_stone`, where Clerical's are `gain_piety` and `gain_coins`, so neither alphabetical order nor the action's own name in duty_text.json would have given the answer. With this pair every duty on the ribbon has card art.",
       "sha256": "af30c8de6a1d47fa990493406d89e3f25a483e30eeeb4e1a9f6c7f0a32dff5f2"
+    },
+    "duty_actions/ordination/ordain/ordination_ordain_left_v03.png": {
+      "state": "present",
+      "title": "Ordain, third generation and the first not cut from a master",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action art",
+      "source": "generated directly at the card's own 2:1, one image per action -- NOT cut from a shared master",
+      "licence": "openai-generated",
+      "slot": "left",
+      "role": "the LEFT action image, 1774 x 887, showing a tonsuring: a cleric in a ringed hand shearing the crown of a kneeling man's hair, the cut hair fallen on the step, a folded habit, a coil of rope and a purse laid out beside a burning brazier, ranks of hooded monks and carved saints in the nave behind. Ratio 2.0000 against the slot's 2.0000, so `fit: cover` crops nothing; at 3.59 times the 494 x 247 slot it is comfortably above the 2x a retina screen asks for. duty_text.json calls this action 'Ordain'; slotFolders puts it in actionA's folder, ordain.",
+      "modifications": "NONE. Did not go through tools/duty_art/crop_duty_master.py. That script takes one wide master and splits it into a duty's two cards, so the pair shared a scene and a crop; these two are separate pictures of separate actions and are used whole. Nothing derives their shape from geometry.py, so if the slot's ratio ever moves off 2:1 they begin cropping and no script will notice.",
+      "reproducibleBy": "nothing in this repository -- the picture is model output and there is no crop step to re-run",
+      "notes": "REPLACES THE v02 CUT, and that is the point of this pair rather than a change of subject. Ordination was the last duty whose cards came out of tools/duty_art/crop_duty_master.py, and its v02 records are the two in this file that fail their own sha256: they describe a 1065 x 522 cut at ratio 2.0402, fitted to a card of 2.0380, while the files on disk are 1071 x 536 and do not come back out of ordination_master_v02.png at any --y. The card has been exactly 2.0000 since it went to three tiles wide, so that geometry no longer exists either. The v02 files and records are left in place, as clerical v03 was when v04 replaced it; the board takes the newest, so nothing on it is cut from a master any more. `slot` is declared, not inferred.",
+      "sha256": "c8eee1a6fd26423ed5317f4bb8c9151f5b65bd3da052cd3e27617d91f036f7f3"
+    },
+    "duty_actions/ordination/send_on_mission/ordination_send_on_mission_right_v03.png": {
+      "state": "present",
+      "title": "Send on Mission, third generation and the first not cut from a master",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action art",
+      "source": "generated directly at the card's own 2:1, one image per action -- NOT cut from a shared master",
+      "licence": "openai-generated",
+      "slot": "right",
+      "role": "the RIGHT action image, 1774 x 887, showing a monk stepping out through a studded gate onto a rutted road toward a walled city, staff in hand, satchel and pectoral cross at his side, a lantern burning on the wall and a second hooded figure watching from the doorway behind him. Ratio 2.0000 against the slot's 2.0000, so `fit: cover` crops nothing; at 3.59 times the 494 x 247 slot it is comfortably above the 2x a retina screen asks for. duty_text.json calls this action 'Send on Mission'; slotFolders puts it in actionB's folder, send_on_mission.",
+      "modifications": "NONE. Did not go through tools/duty_art/crop_duty_master.py. That script takes one wide master and splits it into a duty's two cards, so the pair shared a scene and a crop; these two are separate pictures of separate actions and are used whole. Nothing derives their shape from geometry.py, so if the slot's ratio ever moves off 2:1 they begin cropping and no script will notice.",
+      "reproducibleBy": "nothing in this repository -- the picture is model output and there is no crop step to re-run",
+      "notes": "REPLACES THE v02 CUT, and that is the point of this pair rather than a change of subject. Ordination was the last duty whose cards came out of tools/duty_art/crop_duty_master.py, and its v02 records are the two in this file that fail their own sha256: they describe a 1065 x 522 cut at ratio 2.0402, fitted to a card of 2.0380, while the files on disk are 1071 x 536 and do not come back out of ordination_master_v02.png at any --y. The card has been exactly 2.0000 since it went to three tiles wide, so that geometry no longer exists either. The v02 files and records are left in place, as clerical v03 was when v04 replaced it; the board takes the newest, so nothing on it is cut from a master any more. `slot` is declared, not inferred.",
+      "sha256": "ec1500f0aa02b77fc6483b1bcb7676c9adc63560a532d272ee1dca23cf94359b"
     }
   },
   "assetDirs": [
