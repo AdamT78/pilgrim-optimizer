@@ -165,3 +165,36 @@ def test_a_generated_asset_is_only_ever_a_copy_of_a_recorded_one(record):
         "which case it belongs in the tree with an entry of its own -- or it is deriving a new "
         "image from a recorded one, in which case say so with derivedFrom."
         % (len(strays), ", ".join(strays)))
+
+
+def test_a_recorded_sha256_is_the_file_that_is_there(record):
+    """A hash that no longer matches its file is worse than no hash: it reads as verification.
+
+    THIS GUARD COULD NOT EXIST UNTIL NOW. Two entries failed it for weeks -- Ordination's v02
+    crops, whose records described a 1065 x 522 cut while the files on disk were 1071 x 536, the
+    fingerprints of a card geometry that moved twice under them. They were deliberately left
+    wrong rather than blessed with whatever hash the files happened to have, so the sweep was run
+    by hand and never written down. The files are gone now and the sweep passes, so it becomes a
+    test.
+
+    SCOPED, AND THE SCOPE IS THE WEAKNESS: this checks that a recorded hash is true, not that one
+    is recorded. Most entries here carry no `sha256` at all -- the wax seals and their masters are
+    the bulk of it -- and those are unverifiable by this or anything else. Requiring a hash
+    everywhere is a bigger change than this guard, and would be the thing that actually closes the
+    hole.
+    """
+    checked, wrong = 0, []
+    for key, entry in record["files"].items():
+        if entry.get("state", "present") != "present" or "sha256" not in entry:
+            continue
+        path = TREE / key
+        if not path.is_file():
+            continue                      # the entry-for-a-deleted-file case has its own guard
+        checked += 1
+        actual = hashlib.sha256(path.read_bytes()).hexdigest()
+        if actual != entry["sha256"]:
+            wrong.append("%s\n    recorded %s\n    actual   %s" % (key, entry["sha256"], actual))
+    assert checked, "no entry under ui/board_v2/ records a sha256 -- has the field been renamed?"
+    assert not wrong, (
+        "%d of %d recorded sha256 values do not match the file:\n  %s"
+        % (len(wrong), checked, "\n  ".join(wrong)))

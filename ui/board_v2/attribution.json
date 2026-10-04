@@ -1006,20 +1006,6 @@
       "bytes": 3543706,
       "sha256": "df109933cb49b24f253f0cc44afe7f0be42a87d66fa7b9070589620aa82bc313"
     },
-    "duty_actions/ordination/ordain/ordination_ordain_left_v02.png": {
-      "creator": "Generated with ChatGPT (OpenAI)",
-      "collection": "Pilgrim board_v2 duty action art",
-      "licence": "openai-generated",
-      "state": "present",
-      "title": "Ordination, ordain",
-      "source": "cut from duty_actions/ordination/masters/ordination_master_v02.png; the picture is model output, the cut is deterministic",
-      "slot": "left",
-      "role": "the LEFT action image, 1065 x 522, showing Ordain: a bishop laying his hand on a kneeling man on the church steps, a cross-bearer and candle-bearers behind him in the doorway. Ratio 2.0402 against the slot's 2.0380, so `fit: cover` clips 0.4 of a slot pixel.",
-      "modifications": "cut at (0, 101, 1065, 623) by tools/duty_art/crop_duty_master.py --y 101. ADJACENT, NOT OVERLAPPING: the master is cropped once to the band's aspect and split at the gap, so the left window ends at x 1065 and the right begins at x 1107. The 42 px between them is what the board's 15 px gap covers; nothing is shared and nothing is drawn twice. TINT MATCHED to duty_actions/clerical/masters/clerical_master_v03.png at full strength (--match, sha256 a4aed83fe176a67d1f2b561979f269c73bd28b99c5bf566ebe144ee9fdaec82e), so the two duties on the board agree. The transform matches the mean and spread of the two CIELAB chroma channels of the reference's BAND and leaves L* alone: a* +1.61/1.50 -> +2.45/2.22, b* +5.28/2.68 -> +7.80/4.37. Median saturation went 0.176 to 0.247 against the reference's 0.239 while L mean held at 65.2 and its spread at 37.6 -> 37.5. NOT DONE IN THE BRIEF, and that is the finding rather than a shortcut: eleven masters across four briefs came back between 0.15 and 0.27, the scatter inside a single brief being wider than the distance from the greyest to the warmest, so wording steers the average and cannot set the value. No pixel moves, so registration is untouched, and the master is stored unmatched so any crop can be cut again against a different reference.",
-      "bytes": 1234899,
-      "sha256": "ec0095e39090e02324b61e2b6ef8cf48916788432b8b2049d84c340f9811d401",
-      "notes": "Cut from ordination_master_v02.png with tools/duty_art/crop_duty_master.py at --y 101 and --match clerical_master_v03.png. The cut takes the card size and the gap from ui/board_v2/action_board/geometry.py, so it cannot drift from the box it lands in; it read the layout lab's saved state until that state turned out to describe a 375 x 184 card the board does not have, and these were re-cut."
-    },
     "duty_actions/ordination/seals/masters/ordination_actionA_seal_master_v01.png": {
       "state": "present",
       "creator": "Generated with ChatGPT (OpenAI)",
@@ -1111,20 +1097,6 @@
       "role": "a red wax seal for Ordination's RIGHT action, drawn in the duty tile",
       "reproducibleBy": "duty_art_lab/prompts/seals/22-ordination-mission-red-border.md",
       "notes": "scaled x0.9719 about its own centre, from 0.932 of its square to the board's 0.906; re-encoded as WebP at quality 90 from ordination_actionB_seal_master_v02.png, the drawing unchanged"
-    },
-    "duty_actions/ordination/send_on_mission/ordination_send_on_mission_right_v02.png": {
-      "creator": "Generated with ChatGPT (OpenAI)",
-      "collection": "Pilgrim board_v2 duty action art",
-      "licence": "openai-generated",
-      "state": "present",
-      "title": "Ordination, send on mission",
-      "source": "cut from duty_actions/ordination/masters/ordination_master_v02.png; the picture is model output, the cut is deterministic",
-      "slot": "right",
-      "role": "the RIGHT action image, 1065 x 522, showing Mission: two friars come down the road from that church, preaching at the door of a turf-and-wattle hovel. Ratio 2.0402 against the slot's 2.0380, so `fit: cover` clips 0.4 of a slot pixel.",
-      "modifications": "cut at (1107, 101, 2172, 623) by tools/duty_art/crop_duty_master.py --y 101. ADJACENT, NOT OVERLAPPING: the master is cropped once to the band's aspect and split at the gap, so the left window ends at x 1065 and the right begins at x 1107. The 42 px between them is what the board's 15 px gap covers; nothing is shared and nothing is drawn twice. TINT MATCHED to duty_actions/clerical/masters/clerical_master_v03.png at full strength (--match, sha256 a4aed83fe176a67d1f2b561979f269c73bd28b99c5bf566ebe144ee9fdaec82e), so the two duties on the board agree. The transform matches the mean and spread of the two CIELAB chroma channels of the reference's BAND and leaves L* alone: a* +1.61/1.50 -> +2.45/2.22, b* +5.28/2.68 -> +7.80/4.37. Median saturation went 0.176 to 0.247 against the reference's 0.239 while L mean held at 65.2 and its spread at 37.6 -> 37.5. NOT DONE IN THE BRIEF, and that is the finding rather than a shortcut: eleven masters across four briefs came back between 0.15 and 0.27, the scatter inside a single brief being wider than the distance from the greyest to the warmest, so wording steers the average and cannot set the value. No pixel moves, so registration is untouched, and the master is stored unmatched so any crop can be cut again against a different reference.",
-      "notes": "Cut from ordination_master_v02.png with tools/duty_art/crop_duty_master.py at --y 101 and --match clerical_master_v03.png. The cut takes the card size and the gap from ui/board_v2/action_board/geometry.py, so it cannot drift from the box it lands in; it read the layout lab's saved state until that state turned out to describe a 375 x 184 card the board does not have, and these were re-cut.",
-      "bytes": 1223404,
-      "sha256": "813fedbd8c78d688846bf2f1dc61046a23b3c83ba030e8813ed42cbe61e7c17f"
     },
     "duty_actions/produce/icons/masters/produce_actionA_icon_master_v01.png": {
       "state": "present",
