@@ -97,25 +97,63 @@ TILE_NAME_TOP = INSET                           # the same inset the card's own 
 TILE_NAME_BOTTOM = TILE_NAME_TOP + round(TILE_NAME_SIZE * TILE_NAME_LH)   # 22
 
 # ---- the seals in the tile ---------------------------------------------------------------------
-# THE SEALS SIT DIAGONALLY, AND THAT IS WHAT MAKES 78 POSSIBLE. Side by side, two seals and a gap
-# need 2*78 + 16 = 172 inside a tile 154 wide; there is no arrangement in a row that fits. On the
-# diagonal -- first under the name at the top left, second at the bottom right -- the pair overlaps
-# only at one corner and both discs stay whole and readable.
+# SEAL IS 100, AND THE BOARD HAS NOT CAUGHT UP WITH IT YET. Everything from the rule below down
+# to the end of this block is the history of 78, which was the largest size the DIAGONAL
+# arrangement could hold. It is kept rather than deleted because it records a measurement worth
+# keeping and because it is exactly what 100 breaks.
 #
-# WHAT ACTUALLY HAS TO CLEAR IS THE DISCS, NOT THE BOXES. Each seal fills SOLID_FRACTION of its
-# square, so two boxes overlapping at a corner can still leave the drawn discs apart -- and at the
-# first arrangement they did not, quite: their centres were 70.0 apart against a sum of radii of
-# 70.7, so the two wax discs were touching by seven tenths of a pixel. The box arithmetic said
+# AT 100 THE DIAGONAL IS GONE. check() says so in two complaints, and they are the whole of the
+# damage:
+#   - the two marks' centres are 43.1 apart while their discs meet at 90.6, so the pair OVERLAPS
+#     by 47.5px. At 78 they cleared by 8.1. This is no longer a corner touching a corner; it is
+#     one mark sitting across the other.
+#   - TOKEN = SEAL, so the Tithe column's three resources grew too: three of 100 and a label in a
+#     box 293 tall leave -21 between them, which is not a column.
+#
+# THE ANSWER IS TO EXTEND THE TILES SO THE MARKS FIT, AND IT IS NOT THIS CHANGE. That is the
+# next one: generate_action_board.py and RIBBON_H move together, the two marks stack in a column
+# instead of sitting on the diagonal, and these five guards go green again.
+#
+# WHAT IT WILL COST, SO NOBODY HAS TO REDISCOVER IT. Two marks of 100 stacked want a tile about
+# 260 tall against today's 152, and that growth is not free. ART_Y is RIBBON_Y + RIBBON_H + GAP
+# and everything below follows down, so nothing under the ribbon shrinks -- it moves. The wheel is
+# the one elastic thing, because WHEEL_H is whatever the canvas has left, so the wheel pays every
+# pixel the ribbon gains, and it keeps its asset's aspect, so it narrows by about twice what it
+# loses in height. icon_lab/generate_tile_column.py draws that board and prices it in the wheel's
+# own width and height.
+#
+# SO FIVE GUARDS IN tests/action_board/ ARE RED, ON PURPOSE AND BY NAME:
+#   test_the_two_wax_discs_clear_each_other_and_not_merely_their_boxes   (the overlap, directly)
+#   test_every_gap_on_the_board_is_sixteen_or_thirty_two                 )
+#   test_a_seal_stays_inside_its_tile_and_clear_of_the_duty_name         ) these four assert
+#   test_three_tithe_seals_and_their_label_fit_the_box_they_are_in       ) check() is empty, so
+#   test_the_city_grid_is_margined_evenly_inside_its_own_border          ) all four report both
+# They are left FAILING rather than xfailed or skipped. A board that does not fit its own
+# arithmetic should say so every time it is built, and a green suite over a broken board is worse
+# than a red one -- the red is the reminder that this is half a change.
+#
+# ---- below here is why 78 was 78, and it is history ------------------------------------------
+# THE SEALS SAT DIAGONALLY, AND THAT WAS WHAT MADE 78 POSSIBLE. Side by side, two seals and a gap
+# needed 2*78 + 16 = 172 inside a tile 154 wide, and there was no arrangement in a row that fit.
+# On the diagonal -- first under the name at the top left, second at the bottom right -- the pair
+# overlapped only at one corner and both discs stayed whole and readable.
+#
+# WHAT ACTUALLY HAS TO CLEAR IS THE DISCS, NOT THE BOXES, and that is still true at any size.
+# Each seal fills SOLID_FRACTION of its square, so two boxes overlapping at a corner can still
+# leave the drawn discs apart -- and at the first arrangement they did not, quite: their centres
+# were 70.0 apart against a sum of radii of 70.7, so the two wax discs were touching by seven
+# tenths of a pixel. The box arithmetic said
 # "corner overlap 18 x 42" and looked comfortable; the thing on screen was not.
 #
-# Two changes open it up, and neither costs the wheel anything. The name moved to INSET, which
-# lifts the first seal with it; and the seals took the same INSET as everything else instead of
-# half the gap. Centres are 78.8 apart now and the discs clear each other by 8.1px.
+# Two changes opened it up, and neither cost the wheel anything. The name moved to INSET, which
+# lifted the first seal with it; and the seals took the same INSET as everything else instead of
+# half the gap. At 78 the centres were 78.8 apart and the discs cleared by 8.1px.
 #
-# THE RIBBON'S HEIGHT IS STILL WHAT BUYS VERTICAL SEPARATION -- dy is RIBBON_H - INSET - SEAL -
-# TILE_NAME_BOTTOM, so every pixel of ribbon goes straight into it -- but dx comes from the tile's
-# width alone and only the inset can move it. check() asserts the discs clear.
-SEAL = 78
+# THE RIBBON'S HEIGHT WAS WHAT BOUGHT VERTICAL SEPARATION -- dy is RIBBON_H - INSET - SEAL -
+# TILE_NAME_BOTTOM, so every pixel of ribbon went straight into it -- but dx comes from the tile's
+# width alone and only the inset can move it. That is why the diagonal runs out: at 100 there is
+# no ribbon height that fixes dx. check() asserts the discs clear, and today it fails.
+SEAL = 100
 SEAL_INSET = INSET
 
 # EVERY DISC ON THIS BOARD FILLS THIS MUCH OF ITS OWN SQUARE, and the number lives here rather

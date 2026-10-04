@@ -11,6 +11,7 @@ than the filename lands on the wrong picture the moment a new master arrives.
 import importlib.util
 import json
 import pathlib
+import re
 import sys
 
 import pytest
@@ -419,3 +420,408 @@ def test_a_cut_ships_lossy_and_a_master_stays_lossless(gen, rec):
     # AND THE FRAMING CARRIES NO NAME THAT GOES STALE. `out` is the next free version at the
     # moment of saving: wrong as soon as you use it, and wrong twice over once the format moved.
     assert "out: ic.out" not in page, "framing.json is being written with a name that goes stale"
+
+
+# =================================================================================================
+# THE SIZE CHECK, the lab's other page. The sizer decides a mark's CROP; this one decides how big
+# that mark is DRAWN, and its output is a number for geometry.py rather than a file.
+
+SIZE_TMPL = LAB / "size_check.html.tmpl"
+
+
+def _code(path):
+    """A template with its prose taken out.
+
+    COMMENTS ARE PROSE, NOT CODE, and the comments on these pages quite reasonably say things
+    like "1400 x 1200" and "a canvas" while explaining why neither is typed in. The action board's
+    guards strip them for the same reason; a test about the code should not be a test about the
+    writing.
+    """
+    s = path.read_text(encoding="utf-8")
+    s = re.sub(r"/\*.*?\*/", " ", s, flags=re.S)
+    s = re.sub(r"<!--.*?-->", " ", s, flags=re.S)
+    s = re.sub(r"(?m)^\s*//.*$", " ", s)
+    return s
+
+
+@pytest.fixture(scope="module")
+def size():
+    spec = importlib.util.spec_from_file_location(
+        "generate_size_check", LAB / "generate_size_check.py")
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+def test_the_size_check_shows_the_mark_the_board_would_draw(size, rec):
+    """Falsified by looking only in icons/, which is what it did first.
+
+    That is right while every slot has an icon and silently wrong the first time one falls back
+    to its wax seal: the page would show thirteen marks and say nothing about the fourteenth, so
+    a size chosen on it would have been chosen without looking at the mark it most affects.
+    """
+    import sys as _sys
+    _sys.argv = ["generate_size_check.py"]
+    assert size.main() == 0
+    page = size.OUT.read_text(encoding="utf-8")
+    drawn = [p for p, e in rec.items()
+             if p.startswith("duty_actions/") and e.get("slot") in ("left", "right")
+             and "/masters/" not in p]
+    # Every slot the record places has a mark on the page, named by its action.
+    names = set()
+    for slug, said in json.loads((BOARD / "duty_text.json").read_text(encoding="utf-8"))[
+            "duties"].items():
+        for slot in ("actionA", "actionB"):
+            if said.get(slot):
+                names.add(said[slot]["name"])
+    missing = [n for n in names if '"name": "%s"' % n not in page]
+    assert not missing, "not on the size check page: %s" % ", ".join(sorted(missing))
+    assert drawn, "the record places no marks at all"
+
+
+def test_the_size_check_takes_the_canvas_from_geometry(size):
+    """Falsified by typing the canvas back into the template.
+
+    The page works out the board's own fit for the window it is open in, which needs the canvas
+    the board scales to. That was 1400 x 1200 typed into the template for an hour -- correct on
+    the day, wrong the moment the canvas moves, and nothing would have noticed. Every other
+    number on the page already came from the build; this was the only exception.
+    """
+    tmpl = _code(SIZE_TMPL)
+    assert "__CANVAS__" in tmpl, "the canvas is no longer filled in at build time"
+    canvas = size.G.as_dict()["canvas"]
+    for n in (canvas["width"], canvas["height"]):
+        assert str(n) not in tmpl, "%d is typed into the template and it is geometry.py's" % n
+    import sys as _sys
+    _sys.argv = ["generate_size_check.py"]
+    assert size.main() == 0
+    page = size.OUT.read_text(encoding="utf-8")
+    want = json.dumps(size.G.as_dict()["canvas"])
+    assert "var CANVAS = " + want in page, "the page and geometry.py disagree about the canvas"
+
+
+def test_the_size_check_does_not_export_baked_marks(size):
+    """A VIEWER THAT BECAME A SOURCE WOULD UNDO FOUR THINGS, so it is held to being a viewer.
+
+    Baking the drawn size into a file takes it from geometry.py, so changing SEAL would stop
+    restyling the marks and start needing every one re-cut. Baking the ground takes it from the
+    record's `ground` field and the single CSS rule that owns the colour -- the thing the board
+    only just stopped guessing from pixels. Baking a border turns a style into art. And a file at
+    exactly its drawn size is soft on a retina screen, which is why the board inlines at SEAL * 2.
+
+    This test is the decision written down. Falsified by adding an export: if that is ever wanted
+    for a rules sheet or print-and-play, it needs its own page and this test should be the thing
+    that makes you say so out loud.
+    """
+    tmpl = _code(SIZE_TMPL)
+    for sign in ("toBlob", "download", "URL.createObjectURL", "createElement('canvas')"):
+        assert sign not in tmpl, "the size check looks like it has grown an export (%r)" % sign
+    src = (LAB / "generate_size_check.py").read_text(encoding="utf-8")
+    assert "Image.new" not in src and ".save(" not in src, \
+        "the size check builder is writing image files"
+
+
+def test_the_size_check_falls_back_to_a_seal_when_a_slot_has_no_icon(size, monkeypatch):
+    """Falsified by narrowing the walk back to icons/ alone.
+
+    On this tree both rules give the same answer, because every slot has an icon -- so a test
+    that only read this tree could not tell them apart, and the first version of it could not.
+    A slot holding nothing but a wax seal is the case that separates them.
+    """
+    monkeypatch.setattr(size, "FOLDERS", ["seals", "icons"])
+    monkeypatch.setattr(size, "REC", {
+        "duty_actions/clerical/seals/clerical_actionA_seal_v02.webp": {"slot": "left"},
+        "duty_actions/clerical/icons/clerical_actionA_icon_v01.webp": {"slot": "left"},
+        # Produce's left action never got an icon, so its seal is what the board draws.
+        "duty_actions/produce/seals/produce_actionA_seal_v03.webp": {"slot": "left"},
+    })
+    got = {k: v[1].rsplit("/", 1)[-1] for k, v in size.marks().items()}
+    assert got[("clerical", "actionA")] == "clerical_actionA_icon_v01.webp", got
+    assert got[("produce", "actionA")] == "produce_actionA_seal_v03.webp", \
+        "a slot with only a seal fell off the page entirely: %s" % got
+
+
+# =================================================================================================
+# THE TILE COLUMN, the lab's third page: where a duty's two marks sit.
+
+COL_TMPL = LAB / "tile_column.html.tmpl"
+
+
+@pytest.fixture(scope="module")
+def column():
+    spec = importlib.util.spec_from_file_location(
+        "generate_tile_column", LAB / "generate_tile_column.py")
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+def test_the_tile_column_takes_the_marks_size_from_geometry(column):
+    """Falsified by going back to deriving the size from whatever the gap leaves over.
+
+    That derivation answered "how big could they be", which was the right question while nobody
+    had decided. SEAL is decided, so the page has to draw what the board draws -- otherwise it is
+    a sketch of a board that does not exist, and the one thing it cannot then tell you is whether
+    the real one fits.
+    """
+    tmpl = _code(COL_TMPL)
+    assert "var size = GEO.seal;" in tmpl, "the page is inventing a mark size again"
+    assert "Math.floor((avail - gap) / 2)" in tmpl, \
+        "the page no longer says what size WOULD fit, which is the useful half of a refusal"
+    assert "__GEO__" in tmpl, "the geometry is no longer filled in at build time"
+    geo = column.GEO
+    assert geo["seal"] == column.G.SEAL, "the page's geometry and geometry.py disagree"
+
+
+def test_the_tile_column_says_when_a_column_does_not_fit(column, capsys, monkeypatch, tmp_path):
+    """Both on the page and on the build, because either alone can be missed.
+
+    At SEAL 100 two marks need 208 px against the 116 the tile has under its name. A build that
+    printed nothing while that was true would be a build that looked fine, and a page that only
+    said it in a readout is a page you scroll past while the marks hang out of their tiles.
+    """
+    tmpl = _code(COL_TMPL)
+    assert "DOES NOT FIT" in tmpl, "the page no longer refuses out loud"
+    assert "classList.toggle('over'" in tmpl, "nothing marks the overflow in the picture"
+    page = COL_TMPL.read_text(encoding="utf-8")
+    assert "body.over .tile{outline" in page, "there is no style for the refusal"
+    # AND THE MARKS HAVE TO BE ABLE TO SPILL. The tile clips, as the board does, and a clipped
+    # mark reads as one drawn smaller rather than one that did not fit.
+    assert "body.over .tile{overflow:visible}" in page, \
+        "the overflow is clipped, so the refusal is a red outline round a tidy picture"
+
+    import sys as _sys
+    monkeypatch.setattr(column, "OUT", tmp_path / "generated" / "tile_column.html")
+    monkeypatch.setattr(_sys, "argv", ["generate_tile_column.py"])
+    assert column.main() == 0
+    out = capsys.readouterr().out
+    g = column.GEO
+    avail = g["innerH"] - (g["nameTop"] + round(g["nameSize"] * g["nameLh"]) + g["sealInset"]) \
+        - g["sealInset"]
+    if 2 * column.G.SEAL > avail:
+        assert "need" in out and "RIBBON_H" in out, \
+            "two marks do not fit and the build said nothing:\n%s" % out
+    else:
+        assert "RIBBON_H" not in out, "the build warned about a column that fits:\n%s" % out
+
+
+def test_the_tile_column_opens_on_a_proposal_and_says_so(column, monkeypatch, tmp_path):
+    """Falsified by a page that opens at a height nobody has agreed to without naming the real one.
+
+    The slider used to start at RIBBON_H, so the first thing on screen was the board you have.
+    The board you have does not fit a column -- that is the whole finding -- so starting there
+    meant opening on the problem and dragging to the answer before you could look at anything.
+    It now opens at START_H, which is a proposal, and a proposal is a fine thing to open on
+    PROVIDED the page never lets you mistake it for the board: the readout prints RIBBON_H beside
+    it and says what the difference costs the wheel. Drop that and the page becomes a picture of a
+    board that does not exist, which is the one thing it was built not to be.
+    """
+    page = COL_TMPL.read_text(encoding="utf-8")
+    assert re.search(r'id=tall[^>]*value="__START_H__"', page), \
+        "the height slider's starting value is typed into the template"
+    # THE REAL NUMBER STAYS ON SCREEN BESIDE THE PROPOSED ONE.
+    assert "RIBBON_H is ' + GEO.height" in _code(COL_TMPL), \
+        "the readout no longer names the board's own ribbon, so the proposal reads as the board"
+
+    import sys as _sys
+    out_file = tmp_path / "generated" / "tile_column.html"
+    monkeypatch.setattr(column, "OUT", out_file)
+    monkeypatch.setattr(_sys, "argv", ["generate_tile_column.py"])
+    assert column.main() == 0
+    built = out_file.read_text(encoding="utf-8")
+    assert "__START_H__" not in built, "the token survived the build"
+    assert 'id=tall type=range min="120" max="320" value="%d"' % column.START_H in built, \
+        "the built page opens at some height other than START_H"
+
+    # AND THE SLIDER HAS TO REACH BOTH ENDS OF THE ARGUMENT: the height it opens on, and the
+    # board's own, which is what you drag back to when you want to see what you are giving up.
+    lo, hi = 120, 320
+    for name, v in (("START_H", column.START_H), ("RIBBON_H", column.G.RIBBON_H)):
+        assert lo <= v <= hi, "the slider cannot reach %s (%d), which is outside %d..%d" % (
+            name, v, lo, hi)
+
+    # THE PROPOSAL HAS TO BE ONE. A START_H that does not fit the column it exists to show is
+    # worse than opening on the board, because it looks like the answer and is not.
+    geo = column.GEO
+    top = geo["nameTop"] + round(geo["nameSize"] * geo["nameLh"]) + column.GAP
+    avail = (column.START_H - 2 * column.G.BORDER) - top - geo["sealInset"]
+    assert 2 * column.G.SEAL + column.GAP <= avail, \
+        "the page opens on a height where the column still does not fit: needs %d, has %d" % (
+            2 * column.G.SEAL + column.GAP, avail)
+
+    # LAST, BECAUSE IT MOVES THE NUMBER EVERYTHING ABOVE READS. str(START_H) and a typed "265" are
+    # the same bytes while START_H is 265, so the only way to tell them apart is to change it --
+    # and doing that any earlier quietly points every assertion above at the height this check
+    # invented rather than the one the page ships with. It did, for one run.
+    monkeypatch.setattr(column, "START_H", 300)
+    assert column.main() == 0
+    assert 'id=tall type=range min="120" max="320" value="300"' in \
+        out_file.read_text(encoding="utf-8"), "the slider did not follow START_H"
+
+
+def test_the_tile_column_says_who_pays_for_a_taller_tile(column, capsys, monkeypatch, tmp_path):
+    """Falsified by a height slider that moves the tile and reports only how far it moved.
+
+    Nothing below the ribbon shrinks when it grows: ART_Y is RIBBON_Y + RIBBON_H + GAP and the
+    rest of the board follows down from there. The wheel is the one elastic thing, because WHEEL_H
+    is whatever the canvas has left over -- so the wheel pays every pixel, and it keeps its asset's
+    aspect, so it narrows by about twice what it loses. "Grown 92 px" is the one number in that
+    sentence nobody can hold an opinion about; 1106 x 586 becoming 932 x 494 is not.
+    """
+    G, geo = column.G, column.GEO
+    assert (geo["wheelH"], geo["wheelW"]) == (G.WHEEL_H, G.WHEEL_W), \
+        "the page is not handed the wheel, so it cannot price a height"
+    assert geo["wheelRatio"] == G.WHEEL_RATIO, "the page cannot narrow the wheel as it shortens"
+    assert geo["border"] == G.BORDER, "the tile's inner height is guessed rather than derived"
+
+    tmpl = _code(COL_TMPL)
+    assert "GEO.wheelH - grew" in tmpl, "the page does not take the growth off the wheel"
+    assert "wheelH / GEO.wheelRatio" in tmpl, "the wheel keeps its width as it loses height"
+
+    # EVERY BRANCH, NOT SOMEWHERE IN THE FILE. "GEO.wheelW appears and so does c.wheelW" passed a
+    # mutant that reported bare growth for a taller tile and named both wheels only in the two
+    # branches nobody looks at -- shorter, and exactly as the board is. The branch that matters is
+    # the one you reach by dragging the slider the way it is meant to be dragged, so each return
+    # out of cost() has to name the wheel it was and the wheel it becomes.
+    body = re.search(r"function cost\(c\)\{(.*?)\n\}", tmpl, re.S)
+    assert body, "cost() is gone, so nothing turns a height into the wheel's numbers"
+    rets = [r.strip() for r in re.findall(r"return (.*?);", body.group(1), re.S)]
+    assert len(rets) == 3, "cost() no longer answers all three of taller, shorter and unchanged"
+    for r in rets:
+        assert re.search(r"GEO\.wheelW|\bwas\b", r), \
+            "a branch of cost() reports a height without naming the wheel:\n%s" % r
+    # THE LAST ONE IS THE ONE THAT MATTERS. cost() returns early for a tile at the board's own
+    # height, where the wheel is unchanged and naming it twice would be silly, and for a shorter
+    # one; what is left is the taller tile, which is the only reason anyone drags the slider, and
+    # it has to name the wheel it was and the wheel it becomes.
+    assert re.search(r"c\.wheelW|\bnow\b", rets[-1]) and re.search(r"GEO\.wheelW|\bwas\b",
+                                                                    rets[-1]), \
+        "a taller tile is reported without saying what the wheel becomes:\n%s" % rets[-1]
+
+    # AND THE BUILD SAYS IT TOO, in numbers this test can check rather than words it can match.
+    import sys as _sys
+    monkeypatch.setattr(column, "OUT", tmp_path / "generated" / "tile_column.html")
+    monkeypatch.setattr(_sys, "argv", ["generate_tile_column.py"])
+    assert column.main() == 0
+    out = capsys.readouterr().out
+    avail = geo["innerH"] - (geo["nameTop"] + round(geo["nameSize"] * geo["nameLh"])
+                             + geo["sealInset"]) - geo["sealInset"]
+    if 2 * G.SEAL <= avail:
+        pytest.skip("a column already fits, so there is no height to price")
+    want = (geo["nameTop"] + round(geo["nameSize"] * geo["nameLh"]) + column.GAP
+            + 2 * G.SEAL + column.GAP + geo["sealInset"] + 2 * G.BORDER)
+    tall = G.WHEEL_H - (want - G.RIBBON_H)
+    assert "%d x %d becomes %d x %d" % (G.WHEEL_W, G.WHEEL_H,
+                                        round(tall / G.WHEEL_RATIO), tall) in out, \
+        "the build asks for a taller ribbon without saying what it costs:\n%s" % out
+
+
+def test_the_height_slider_actually_moves_the_tiles(column):
+    """Falsified by leaving the tiles at geometry's RIBBON_H while the readout reports the slider.
+
+    This is the whole of the feature and it was the mutant that survived first time round: pinning
+    the tile's height back to GEO.height left every number on the page right and every tile on the
+    page wrong, and twenty-three assertions sailed past it. The readout is the easy half to get
+    right and the useless half to get right alone.
+
+    IT IS A SHAPE CHECK, NOT A RENDERING CHECK. The lab lane installs no browser on purpose -- it
+    is the lane you run when you add a duty's pair, and it takes seconds -- so this reads the
+    template rather than driving it: every assignment to a tile's height has to come from the
+    column, which reads the slider, and none may read RIBBON_H. The picture itself was checked by
+    driving the page headless, which is a thing done by hand and not in CI.
+    """
+    tmpl = _code(COL_TMPL)
+    # IN COLUMN(), NOT ANYWHERE IN THE FILE. "V('tall') appears" passed a mutant that pinned the
+    # column to GEO.height, because the slider's own label still read its value to print it: the
+    # number beside the slider moved and nothing else did.
+    col = re.search(r"function column\(\)\{(.*?)\n\}", tmpl, re.S)
+    assert col, "column() is gone"
+    assert "V('tall')" in col.group(1), \
+        "the column no longer reads the height slider, so only its label moves"
+
+    sets = re.findall(r"tile\.style\.height = ([^;]+);", tmpl)
+    assert len(sets) >= 2, \
+        "the tile's height is set in fewer places than it is drawn, so one of build() and " \
+        "place() leaves it behind: %s" % sets
+    for rhs in sets:
+        assert "c.h" in rhs, \
+            "a tile takes its height from something other than the column: %s" % rhs.strip()
+        assert "GEO.height" not in rhs, \
+            "a tile is pinned to RIBBON_H, so the slider moves a number and not a tile"
+
+    # AND THE PAGE HAS TO GROW WITH THEM, or taller tiles slide under the note below.
+    assert re.search(r"scroll'\)\.style\.height = \(c\.h \* s", tmpl), \
+        "the scroller still reserves geometry's height, so the tiles overflow the page"
+
+    # AND A PRICE WORTH NOTICING IS MARKED. Not an error -- nothing is broken by a smaller wheel --
+    # but a cost rendered in the same grey as everything else is a cost you read past, which is
+    # the failure this whole readout exists to avoid.
+    # AND THE SLIDER HAS TO REDRAW. A handler that moves its own label and nothing else leaves
+    # the number under your thumb telling the truth about a picture that has not changed.
+    h = re.search(r"getElementById\('tall'\)\.addEventListener\('input', function\(\)\{(.*?)\}\);",
+                  tmpl, re.S)
+    assert h, "the height slider has no handler, so it does nothing at all"
+    assert "place()" in h.group(1), \
+        "the height slider updates its label and leaves the tiles where they were"
+
+    mark = re.search(r"classList\.toggle\('([a-z]+)', c\.grew > 0", tmpl)
+    assert mark, "nothing marks a height whose cost is worth looking at"
+    assert "body.%s #read" % mark.group(1) in COL_TMPL.read_text(encoding="utf-8"), \
+        "the mark is set and never styled, so it says nothing"
+
+
+def test_one_gap_does_both_jobs_and_every_first_mark_shares_a_line(column, capsys, monkeypatch,
+                                                                    tmp_path):
+    """Falsified by hanging the column from SEAL_INSET, or by centring it in what is left over.
+
+    Two separate failures with one cause, which is why they are one test. The space under the duty
+    name used to be SEAL_INSET while the space between the two marks was the slider's, so the two
+    went visibly out of step the moment you touched the slider -- a tile with a tight title and a
+    loose middle, or the reverse, and never a rhythm. And the marks were then centred in whatever
+    was left, which is fine while every tile holds two: Taxation and Allocation hold one each, so
+    theirs sat half a mark lower than the top mark of every tile beside them. On a ribbon of eight
+    that reads as two tiles done wrong rather than as two tiles that are different.
+
+    Both go away by hanging the column from the name at the gap and letting it fall from there:
+    where a mark sits stops depending on how many the tile has.
+    """
+    tmpl = _code(COL_TMPL)
+    col = re.search(r"function column\(\)\{(.*?)\n\}", tmpl, re.S).group(1)
+    assert re.search(r"top = GEO\.nameTop \+ nameH \+ gap", col), \
+        "the space under the name is not the gap, so the two spacings can drift apart again"
+    assert "sealInset" not in col.split("var top")[0], \
+        "something above the name's own inset is deciding where the column starts"
+
+    place = re.search(r"function place\(\)\{(.*?)\n\}", tmpl, re.S).group(1)
+    assert ".length" not in place, \
+        "where a mark sits depends on how many the tile has, so the single-action tiles drop " \
+        "off the line their neighbours sit on"
+    assert re.search(r"style\.top = \(c\.top \+ i \* \(c\.size \+ c\.gap\)\)", place), \
+        "the column no longer hangs from the name at the gap"
+
+    # THE SLIDER AND THE BUILD'S ARITHMETIC START FROM THE SAME NUMBER, or the build reports on a
+    # page nobody is looking at.
+    import sys as _sys
+    out_file = tmp_path / "generated" / "tile_column.html"
+    monkeypatch.setattr(column, "OUT", out_file)
+    monkeypatch.setattr(_sys, "argv", ["generate_tile_column.py"])
+    assert column.main() == 0
+    built = out_file.read_text(encoding="utf-8")
+    assert "__GAP__" not in built, "the token survived the build"
+    assert 'id=gap type=range min="0" max="40" value="%d"' % column.GAP in built, \
+        "the gap slider opens on a number the build does not use"
+
+    # MOVE THE ONE NUMBER AND WATCH BOTH FOLLOW. Asserting the arithmetic matches GAP is no test
+    # while GAP is 8 and the old literal was 8 too -- the two are indistinguishable until the
+    # number changes. So change it, and require the slider and the height the build asks for to
+    # move together.
+    G, geo = column.G, column.GEO
+    monkeypatch.setattr(column, "GAP", 20)
+    assert column.main() == 0
+    built = out_file.read_text(encoding="utf-8")
+    assert 'id=gap type=range min="0" max="40" value="20"' in built, \
+        "the slider did not follow the gap"
+    want = (geo["nameTop"] + round(geo["nameSize"] * geo["nameLh"]) + 20
+            + 2 * G.SEAL + 20 + geo["sealInset"] + 2 * G.BORDER)
+    assert "RIBBON_H of about %d" % want in capsys.readouterr().out, \
+        "the build's arithmetic kept a gap of its own, so it reports on a page nobody is looking at"

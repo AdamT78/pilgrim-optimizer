@@ -1,0 +1,129 @@
+<!doctype html><meta charset=utf-8>
+<title>The cut icons at size</title>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<style>
+:root{--ink:#e2d7bc;--dim:#968e7c;--line:#c9b27a;--edge:#211e1a;
+  --plate:#1E1935;--plate-lit:#3B3160}
+*{box-sizing:border-box}
+body{margin:0;padding:22px 20px 70px;background:#07070a;color:var(--ink);
+  font:13px/1.55 ui-sans-serif,system-ui,sans-serif}
+h1{font:600 19px/1.3 Georgia,serif;margin:0 0 4px;color:#f0e6cd}
+.sub{color:var(--dim);max-width:84ch;margin:0 0 18px}
+.bar{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin:0 0 6px}
+label.r{display:flex;align-items:center;gap:8px;color:var(--dim);
+  font:600 11px/1 ui-sans-serif,sans-serif;letter-spacing:.09em;text-transform:uppercase}
+label.r input[type=range]{width:220px;accent-color:#c9b27a}
+label.r b{color:var(--ink);min-width:44px;font:700 12px/1 ui-monospace,monospace}
+button{background:#1b1915;color:var(--ink);border:1px solid #3c372e;border-radius:3px;
+  padding:5px 11px;font:600 11px/1.4 ui-sans-serif,sans-serif;letter-spacing:.09em;
+  text-transform:uppercase;cursor:pointer}
+button:hover{border-color:#6a6050}
+button[aria-pressed=true]{background:#2e2718;border-color:var(--line);color:#f0e6cd}
+#read{margin:8px 0 0;color:var(--dim);font:12px/1.7 ui-monospace,Menlo,monospace;white-space:pre}
+#read b{color:var(--ink);font-weight:700}
+
+/* NO ZOOM ANYWHERE ON THIS PAGE. The whole question is what a mark looks like at a given number
+   of pixels, so the number is CSS pixels and nothing scales it. A view slider here would make
+   every answer a lie. */
+#grid{display:flex;flex-wrap:wrap;gap:26px 22px;margin:24px 0 0;align-items:flex-start}
+figure{margin:0;display:flex;flex-direction:column;align-items:center;gap:7px}
+.box{background:var(--plate);border-radius:4px;display:grid;place-items:center}
+.box img{width:100%;height:100%;object-fit:contain;display:block}
+body.edged .box{border:1px solid var(--plate-lit)}
+figcaption{font:11px/1.3 ui-sans-serif,sans-serif;color:var(--dim);text-align:center;
+  max-width:140px}
+figcaption i{display:block;font-style:normal;color:#6f6858;font-family:ui-monospace,monospace;
+  font-size:10px;margin-top:2px}
+body.bare .box{background:none}
+body.bare.edged .box{border-color:#2a2721}
+.note{margin-top:32px;max-width:84ch;color:#8d8471;font-size:12.5px;
+  border-top:1px solid var(--edge);padding-top:14px}
+.note b{color:#b2a37c;font-weight:700}
+</style>
+
+<h1>The cut icons at size</h1>
+<p class=sub>The fourteen cuts as the icon sizer made them, drawn at whatever the slider says.
+Nothing on this page is zoomed: the number is CSS pixels, so what you see is the size.</p>
+
+<div class=bar>
+  <label class=r>size <input id=size type=range min="80" max="130" value="110"><b id=sizev>110</b></label>
+  <button id=edge>icon border</button>
+  <button id=bare>no ground</button>
+  <button id=laptop>at board scale</button>
+</div>
+<pre id=read></pre>
+
+<div id=grid></div>
+
+<p class=note>Each file is bigger than the box it is drawn in &mdash; 814 to 1204 pixels square
+against a box of about 110 &mdash; so the browser is downsampling, which is what the board does
+too. <b>at board scale</b> applies the board's own fit for <i>this window</i>, measured rather than
+assumed: the board shrinks itself to whatever it is opened in, so the factor belongs to the window
+and not to the machine. Resize and the number moves. The slider starts at 80 because the board
+draws its marks at 78 today, so the bottom of the range is roughly what is already on screen.</p>
+
+<script>
+var ICONS = __ICONS__;
+// THE CANVAS IS GEOMETRY.PY'S and arrives at build time. It was typed in here for an hour --
+// 1400 x 1200, correct on the day and wrong the moment the board's canvas moves, with nothing to
+// notice. Every other number on this page already came from the build; this one was the only
+// exception and there was no reason for it.
+var CANVAS = __CANVAS__;
+var small = false;
+
+// THE BOARD'S OWN FIT, MEASURED ON THIS WINDOW rather than quoted for somebody else's screen.
+// The board scales itself with min(1, availW/canvasW, availH/canvasH), so the factor is a
+// property of the WINDOW and not of the machine: full screen on a 13-inch it lands near 0.69,
+// on a 16-inch near 0.87, and on an external display it stops at 1 and does not shrink at all.
+// This page can only estimate the chrome the board keeps above and below, so the number is close
+// rather than exact -- but it is this window's number, which a fixed 0.693 never was.
+function boardScale(){
+  var chrome = 86, pad = 40;
+  return Math.min(1, (window.innerWidth - pad) / CANVAS.width,
+                     (window.innerHeight - chrome - pad) / CANVAS.height);
+}
+
+function V(id){ return +document.getElementById(id).value; }
+function drawn(){ return small ? Math.round(V('size') * boardScale()) : V('size'); }
+
+var BOXES = [];
+function build(){
+  var g = document.getElementById('grid');
+  ICONS.forEach(function(ic){
+    var f = document.createElement('figure');
+    var b = document.createElement('div'); b.className = 'box';
+    var im = document.createElement('img'); im.src = ic.src; im.alt = ic.name;
+    b.appendChild(im); f.appendChild(b);
+    var c = document.createElement('figcaption');
+    c.textContent = ic.name;
+    var i = document.createElement('i'); i.textContent = ic.px + ' px file';
+    c.appendChild(i); f.appendChild(c);
+    g.appendChild(f);
+    BOXES.push(b);
+  });
+}
+
+function place(){
+  var px = drawn();
+  BOXES.forEach(function(b){ b.style.width = px + 'px'; b.style.height = px + 'px'; });
+  var s = V('size'), f = boardScale();
+  document.getElementById('read').innerHTML =
+    'size  <b>' + s + '</b> px' + (small ? '   shown at <b>' + px + '</b> px' : '') +
+    '\nthis window scales the board by <b>' + f.toFixed(3) + '</b>, so ' + s +
+      ' would be seen at <b>' + Math.round(s * f) + '</b> px' +
+    '\nfull screen that is about 0.69 on a 13\u2033, 0.87 on a 16\u2033, 1.0 on an external display' +
+    '\nthe board draws its marks at <b>78</b> today, and inlines them at <b>156</b> for retina';
+}
+
+document.getElementById('size').addEventListener('input', function(){
+  document.getElementById('sizev').textContent = V('size'); place(); });
+document.getElementById('edge').onclick = function(){
+  this.setAttribute('aria-pressed', String(document.body.classList.toggle('edged'))); };
+document.getElementById('bare').onclick = function(){
+  this.setAttribute('aria-pressed', String(document.body.classList.toggle('bare'))); };
+document.getElementById('laptop').onclick = function(){
+  small = !small; this.setAttribute('aria-pressed', String(small)); place(); };
+
+window.addEventListener('resize', place);
+build(); place();
+</script>
