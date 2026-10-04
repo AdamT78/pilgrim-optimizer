@@ -1649,6 +1649,34 @@
       "reproducibleBy": "nothing in this repository -- the picture is model output and there is no crop step to re-run",
       "notes": "Replaces v03, which was cut from clerical_master_v03.png. gain_piety is actionA and gain_coins actionB, which alphabetically is backwards -- `slot` is declared rather than inferred for that reason. The generator takes the highest version per slot, so these win over v03 by name alone.",
       "sha256": "094f12e286e501b42404d83c6ab6645596c677525379b882ce190759a6503b55"
+    },
+    "duty_actions/taxation/action_a/taxation_action_a_left_v01.png": {
+      "state": "present",
+      "title": "Taxation, first generation",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action art",
+      "source": "generated directly at the card's own 2:1, one image for the duty's single action -- NOT cut from a shared master",
+      "licence": "openai-generated",
+      "slot": "left",
+      "role": "the LEFT action image, 1774 x 887, showing a lord taking the tithe against a tally stick, with ledger, scales and the grain being handed over. Ratio 2.0000 against the slot's 2.0000, so `fit: cover` crops nothing; at 3.59 times the 494 x 247 slot it is comfortably above the 2x a retina screen asks for. THE ONLY ACTION THIS DUTY HAS -- duty_text.json gives Taxation no actionB, so there is no right-hand card and `left` is not one of a pair.",
+      "modifications": "NONE. Did not go through tools/duty_art/crop_duty_master.py: that script splits one wide master into a duty's two cards, and this duty has one. Generated at 2:1 and used whole. Nothing derives its shape from geometry.py, so if the slot's ratio ever moves off 2:1 this begins cropping and no script will notice.",
+      "reproducibleBy": "nothing in this repository -- the picture is model output and there is no crop step to re-run",
+      "notes": "The first card art this duty has had; the folder held only a .gitkeep, so the board drew an empty slot for it. `slot` is what makes the image usable at all -- one with no entry is dropped with \"no slot recorded, left out\".",
+      "sha256": "cbddb5811157b86ddcb5bf9a20986e54fd63f268b42fc88d4dceac559e1a5b21"
+    },
+    "duty_actions/allocation/relocate_acolytes/allocation_relocate_acolytes_left_v01.png": {
+      "state": "present",
+      "title": "Allocation, first generation",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action art",
+      "source": "generated directly at the card's own 2:1, one image for the duty's single action -- NOT cut from a shared master",
+      "licence": "openai-generated",
+      "slot": "left",
+      "role": "the LEFT action image, 1774 x 887, showing keys passed to hooded acolytes, the duty being assigned. Ratio 2.0000 against the slot's 2.0000, so `fit: cover` crops nothing; at 3.59 times the 494 x 247 slot it is comfortably above the 2x a retina screen asks for. THE ONLY ACTION THIS DUTY HAS -- duty_text.json gives Allocation no actionB, so there is no right-hand card and `left` is not one of a pair.",
+      "modifications": "NONE. Did not go through tools/duty_art/crop_duty_master.py: that script splits one wide master into a duty's two cards, and this duty has one. Generated at 2:1 and used whole. Nothing derives its shape from geometry.py, so if the slot's ratio ever moves off 2:1 this begins cropping and no script will notice.",
+      "reproducibleBy": "nothing in this repository -- the picture is model output and there is no crop step to re-run",
+      "notes": "The first card art this duty has had; the folder held only a .gitkeep, so the board drew an empty slot for it. `slot` is what makes the image usable at all -- one with no entry is dropped with \"no slot recorded, left out\".",
+      "sha256": "9b4d38cf0516962d7cc04b96a327726a9cd1795c4c5d56311776fa15e4fa2227"
     }
   },
   "assetDirs": [
