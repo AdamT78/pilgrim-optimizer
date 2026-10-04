@@ -1,0 +1,642 @@
+<!doctype html><meta charset=utf-8>
+<title>Icon Sizer</title>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<style>
+:root{--ink:#e2d7bc;--dim:#968e7c;--line:#c9b27a;--edge:#211e1a}
+*{box-sizing:border-box}
+body{margin:0;padding:22px 20px 80px;background:#07070a;color:var(--ink);
+  font:13px/1.55 ui-sans-serif,system-ui,sans-serif}
+h1{font:600 19px/1.3 Georgia,serif;margin:0 0 4px;color:#f0e6cd}
+.sub{color:var(--dim);max-width:84ch;margin:0 0 18px}
+.bar{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin:0 0 10px}
+label.r{display:flex;align-items:center;gap:7px;color:var(--dim);
+  font:600 11px/1 ui-sans-serif,sans-serif;letter-spacing:.09em;text-transform:uppercase}
+label.r input[type=range]{width:170px;accent-color:#c9b27a}
+label.r b{color:var(--ink);min-width:44px;font:700 12px/1 ui-monospace,monospace}
+button{background:#1b1915;color:var(--ink);border:1px solid #3c372e;border-radius:3px;
+  padding:5px 11px;font:600 11px/1.4 ui-sans-serif,sans-serif;letter-spacing:.09em;
+  text-transform:uppercase;cursor:pointer}
+button:hover{border-color:#6a6050}
+button[aria-pressed=true]{background:#2e2718;border-color:var(--line);color:#f0e6cd}
+button.go{border-color:#5d5340;color:#f0e6cd}
+
+#grid{display:flex;flex-wrap:wrap;gap:18px;margin:18px 0 0;align-items:flex-start}
+/* THE CARD HUGS ITS CONTENTS. It used to be given a width of box + 28, a typed allowance for its
+   own padding -- which went stale the moment the pit's padding changed from 10 to 22 and the icons
+   started hanging out of their boxes. Nothing here now has to know what anything else is padded by. */
+.card{border:1px solid var(--edge);border-radius:6px;background:#0d0c0a;padding:14px;
+  width:max-content;min-width:238px}
+/* No max-width: the box is 'icon size' x 'view', which at the top of both sliders is 880px, and a
+   cap would clip exactly the case the view slider exists for. The grid wraps and the page scrolls
+   instead. */
+.card h2{margin:0 0 10px;font:600 13px/1.3 Georgia,serif;color:#f0e6cd;
+  display:flex;justify-content:space-between;align-items:baseline;gap:14px}
+.card h2 em{font:600 10px/1 ui-sans-serif,sans-serif;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--dim);font-style:normal;cursor:pointer}
+.card h2 em:hover{color:var(--ink)}
+.card h2 em.dl{color:#b2a37c}
+.card h2 em.dl:hover{color:#f0e6cd}
+/* THE GROUND GOES AROUND THE ICON, NOT ONLY BEHIND IT.
+   Behind it alone did nothing visible: these plates are opaque and fill their box edge to edge, so
+   the box's own colour was always covered and the three buttons appeared dead. What the ground is
+   actually for is seeing the icon AGAINST the surface it will sit on, so the surround carries it --
+   and the box keeps it too, for the day an icon arrives with transparency. */
+.pit{display:grid;place-items:center;padding:22px;border:1px dashed #2a2721;border-radius:4px;
+  transition:background .12s ease}
+/* THE BOX IS THE SLOT. It clips, so dragging the picture inside it chooses what is shown rather
+   than moving a picture around on a card. */
+.box{position:relative;overflow:hidden;cursor:grab;touch-action:none;border-radius:4px}
+.box.drag{cursor:grabbing}
+.box img{position:absolute;display:block;user-select:none;-webkit-user-drag:none}
+body.ground-tile .pit,body.ground-tile .box{background:#0b0a09}
+/* THE CARD PURPLE IS THE PLATES' PURPLE. Anything else and the plate shows as a lighter or
+   darker square sitting on the card, which is exactly what it looked like before. */
+body.ground-purple .pit,body.ground-purple .box{background:#1E1935}
+body.ground-none .pit{background:repeating-conic-gradient(#1a1917 0% 25%,#121110 0% 50%) 0 0/14px 14px}
+body.ground-none .box{background:transparent;outline:1px solid #2a2721}
+.row{display:flex;align-items:center;gap:8px;margin:10px 0 2px}
+.row input[type=range]{flex:1;accent-color:#c9b27a}
+.row b{min-width:46px;text-align:right;font:700 12px/1 ui-monospace,monospace;color:var(--ink)}
+.stat{color:var(--dim);font:11.5px/1.7 ui-monospace,Menlo,monospace;white-space:pre}
+.stat b{color:var(--ink);font-weight:700}
+
+#drop{margin:22px 0 0;border:1px dashed #3a352c;border-radius:6px;padding:26px;text-align:center;
+  color:var(--dim)}
+#drop.over{border-color:var(--line);color:var(--ink);background:#141210}
+#drop input{display:none}
+#out{margin:18px 0 0;background:#0e0d0b;border:1px solid var(--edge);border-radius:4px;
+  padding:12px 14px;color:#d8cdb2;font:12.5px/1.7 ui-monospace,Menlo,monospace;white-space:pre-wrap}
+.note{margin-top:26px;max-width:84ch;color:#8d8471;font-size:12.5px;border-top:1px solid var(--edge);
+  padding-top:14px}
+.note b{color:#b2a37c;font-weight:700}
+/* WHICH MEMORY IS SPEAKING, said on the page rather than guessed at. There are two places a
+   framing can come from and the page will not quietly prefer one of them. */
+.where{margin:10px 0 0;font:12px/1.6 ui-monospace,Menlo,monospace;color:var(--dim)}
+.where b{color:#b2a37c;font-weight:700}
+.where.stale{color:#c9b27a}
+.where button{margin-left:10px;padding:3px 8px;font-size:10px}
+</style>
+
+<h1>Icon sizer</h1>
+<p class=sub>One slider sets how big every icon is. Each icon then has its own scale, and you drag
+the picture inside its box to choose what is shown. The box clips, so what you see is what the board
+would draw. The three ground buttons put the icons on the surfaces they would sit on &mdash; the duty
+tile's black, the Build Roads card's purple, or a checker for nothing &mdash; which is how you tell
+whether a plate's own background fights the board's.</p>
+
+<div class=bar>
+  <label class=r>icon size <input id=box type=range min="40" max="220" value="115"><b id=boxv>115</b></label>
+  <label class=r>view <input id=zoom type=range min="100" max="400" value="200"><b id=zoomv>2.0&times;</b></label>
+  <button id=g0 aria-pressed="true">on tile black</button>
+  <button id=g1>on card purple</button>
+  <button id=g2>on nothing</button>
+  <button id=reset>fit all to the slot</button>
+  <button id=save class=go>save settings</button>
+  <button id=all class=go>download everything</button>
+</div>
+
+<p id=where class=where></p>
+
+<div id=grid></div>
+
+<div id=drop>
+  <b>Drop icon PNGs here</b> &mdash; or <button id=pick type=button>choose files</button>
+  <input id=file type=file accept="image/*" multiple>
+</div>
+
+<pre id=out></pre>
+
+<p class=note>Scale is held per icon and the position with it, both as fractions rather than pixels,
+so changing the icon size or the view keeps every framing where you put it. At 100% the picture
+exactly fills the box and there is nothing to drag; above that it overflows and dragging chooses
+the part on show. The crop line in each readout is in the source file's own pixels, ready to cut.
+<br><br><b>raw</b> hands back the source file exactly as it was loaded &mdash; nothing is decoded and
+re-encoded, so what you save is byte for byte what you dropped in. <b>cut</b> hands back the square
+you have framed, taken out of that same source at its own resolution: whole source pixels, no
+resampling and no ground painted in, because the ground is the board's to supply. It comes back as
+WebP at quality 90, which is what this tree ships; the master stays the lossless archive. Where the crop
+runs off the edge of the file it stays clear, which is what the board will draw there too. The one
+thing a cut is not is byte-exact, and it is worth knowing why: a canvas keeps colour multiplied by
+alpha, so the trip out through one rounds the colour of every part-transparent pixel. Measured on
+these two emblems that is &plusmn;1 of 255 on about a twentieth of the soft edge, nothing at all on
+the alpha channel, and nothing at all on any pixel that is fully opaque. Under the pixels that are
+fully clear the colour is lost outright &mdash; which costs nothing, since nothing draws it.
+<b>download everything</b> hands back a cut of every icon plus <code>framing.json</code>, which
+carries every number on this page, so a cut can be made again from the raw without this page open.
+It does not hand back the raws of the seeded icons: those came out of the repository and are still
+there unchanged. A file you dropped in yourself does come back, because this page is the only place
+it exists.
+<br><br><b>save settings</b> keeps your framings in this browser, so reopening the page shows them
+again, and hands you the same <code>framing.json</code>. Those two are not the same thing and the
+line under the buttons says which one you are looking at: the browser forgets when its data is
+cleared and nobody else can see it, while the file is the copy you can read, diff and commit. To
+make a framing the one the repository knows, drop that download into
+<code>ui/board_v2/icon_lab/</code> beside the template and rebuild the page.</p>
+
+<script>
+var SEED = __SEED__;
+
+// =================================================================================================
+// WHERE A FRAMING IS KEPT, AND WHY IT IS KEPT TWICE.
+//
+// `framing.json` beside this page's template is the record: readable, diffable, committable, and
+// the thing the next person inherits. The browser store is a convenience, so that reopening the
+// page simply shows what you last did without first moving a file out of Downloads.
+//
+// TWO PLACES FOR ONE FACT IS THE MISTAKE THIS PROJECT KEEPS NOT MAKING, so the second one is not
+// allowed to be silent: whenever they differ the page says which it is showing, how old the other
+// is, and gives you one click to take the other. A hidden preference is what turns a convenience
+// into a second owner.
+var SAVED = __FRAMING__;                       // framing.json, as it stood when this was built
+var STORE = "pilgrim.icon_sizer.framing";
+
+// WHAT A CUT IS SAVED AS, in one place. The name and the encoder were two places for an hour and
+// they disagreed at once: a file dragged onto the page was offered as `_cut.png` while the canvas
+// handed back WebP, so the saved file's extension lied about its own bytes.
+var PRINT = {suffix: ".webp", type: "image/webp", quality: 0.9};
+
+// ONE NODE PER ICON, BUILT ONCE.
+//
+// The first version rebuilt the whole grid on every slider event. The slider lives inside the card
+// it rebuilds, so the element being dragged was torn out of the document after its first input and
+// never saw a second one -- the control moved one step and died. Nothing is rebuilt now except when
+// an icon is added or removed; everything else writes to the nodes that are already there.
+var ICONS = [];   // {name, file, out, src, im, nat, k, ox, oy, node:{...}}
+
+function el(t, cls, parent){ var e = document.createElement(t); if (cls) e.className = cls;
+  if (parent) parent.appendChild(e); return e; }
+function V(id){ return +document.getElementById(id).value; }
+function boxPx(){ return V('box') * V('zoom') / 100; }
+
+// A PLATE MUST COVER THE BOX; A CUT-OUT MUST NOT HAVE TO.
+// The old rule pinned the file's edges to the box, which is right for a painted ground -- let it
+// slide and you expose the card behind. A cut-out has no ground to expose and its mark sits inside
+// a transparent margin, so pinning the FILE would stop the MARK ever reaching the edges. Cut-outs
+// are therefore free to roam, within a stop that keeps them from being dragged out of sight.
+function clamp(ic){
+  if (ic.gnd === null){
+    var far = 1 + ic.k;
+    ic.ox = Math.max(-far, Math.min(far, ic.ox));
+    ic.oy = Math.max(-far, Math.min(far, ic.oy));
+    return;
+  }
+  var lo = Math.min(0, 1 - ic.k);
+  ic.ox = Math.max(lo, Math.min(0, ic.ox));
+  ic.oy = Math.max(lo, Math.min(0, ic.oy));
+}
+
+// THE CROP IS WORKED OUT IN ONE PLACE. The readout, the summary, framing.json and the file that
+// comes out of `cut` all used to be free to compute it their own way, and three of them rounded
+// where the fourth did not. They now all ask here, so a number you read off this page is the
+// number that was cut -- whole source pixels, because a crop that lands between two of them is a
+// resample wearing a crop's clothes.
+function crop(ic){
+  var span = ic.nat / ic.k;
+  return {x: Math.round(-ic.ox * span), y: Math.round(-ic.oy * span), w: Math.round(span)};
+}
+
+function apply(ic){
+  var px = boxPx(), n = ic.node;
+  clamp(ic);
+  n.box.style.width = n.box.style.height = px + 'px';
+  n.img.style.width = n.img.style.height = (px * ic.k) + 'px';
+  n.img.style.left = (ic.ox * px) + 'px';
+  n.img.style.top  = (ic.oy * px) + 'px';
+  n.val.textContent = Math.round(ic.k * 100) + '%';
+  if (+n.slider.value !== Math.round(ic.k * 100)) n.slider.value = Math.round(ic.k * 100);
+
+  var S = V('box'), r = crop(ic);
+  n.stat.innerHTML =
+    'scale  <b>' + Math.round(ic.k*100) + '%</b>   the mark fills <b>' +
+      Math.round(100*Math.max(ic.ext.w, ic.ext.h)*ic.k) + '%</b> of the slot\n' +
+    'crop   x <b>' + r.x + '</b>  y <b>' + r.y + '</b>  w <b>' + r.w + '</b>\n' +
+    'drawn  <b>' + S + '</b> px   on a 13″ <b>' + (S*0.693).toFixed(0) + '</b> px' +
+    (ic.gnd ? '\nground <b>' + ic.gnd.hex + '</b>  ' + ic.gnd.share +
+              '% of the plate,  mottle ±<b>' + ic.gnd.mottle + '</b>'
+            : '\nground <b>cut out</b>  — set by the page, not baked into the file');
+  summary();
+}
+function applyAll(){ ICONS.forEach(apply); }
+
+function summary(){
+  var S = V('box');
+  // THE COLUMN IS AS WIDE AS THE WIDEST NAME, not as wide as a number somebody typed. 16 was
+  // enough until Construct's two actions were given the names that tell them apart, and then
+  // `Construct Building` ran straight into the word `scale` with no space between them.
+  var w = ICONS.reduce(function(m, ic){ return Math.max(m, ic.name.length); }, 0) + 2;
+  document.getElementById('out').textContent = ICONS.length
+    ? 'icon size ' + S + ' px\n\n' + ICONS.map(function(ic){
+        var r = crop(ic);
+        return ic.name.padEnd(w) + 'scale ' + String(Math.round(ic.k*100)).padStart(4) + '%' +
+               '   crop x ' + String(r.x).padStart(4) +
+               '  y ' + String(r.y).padStart(4) +
+               '  w ' + String(r.w).padStart(5) + '   → ' + ic.out;
+      }).join('\n')
+    : 'no icons loaded';
+}
+
+// =================================================================================================
+// HANDING A FILE BACK.
+//
+// Two different things are on offer and the difference matters. `raw` is the source as it arrived,
+// not re-encoded: a master is the one file in this tree where byte-exactness is the point, and a
+// decode-and-re-encode round trip through a canvas would quietly drop the generator's own metadata
+// and re-compress the pixels. `cut` is a crop of that same source -- whole source pixels drawn
+// 1:1, so no filter of this page's sits between the generator's pixels and the board's.
+//
+// NO GROUND IS PAINTED IN, deliberately. The board decides whether a mark gets a ground, from what
+// attribution.json records about it; baking one here would make this page a second owner of that,
+// and the first thing a second owner does is disagree.
+function save(href, name){
+  var a = document.createElement('a');
+  a.href = href; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+// WEBP AT 90, WHICH IS WHAT THIS TREE SHIPS. attribution.json's imageSuffixesNote settled this
+// before icons existed: the prints are WebP at quality 90 and the masters stay PNG, because a
+// lossy archive is not one. Sixteen cuts were 22 MB of PNG and are 2 MB of WebP, and measured
+// over the plate at the 156px the board actually inlines the worst pixel moves 6 of 255 --
+// against the 12 of 255 already accepted for the wax seals. The alpha channel comes through
+// untouched, which matters more here than anywhere: on a cut-out the alpha IS the edge.
+//
+// THE PAGE ENCODES IT RATHER THAN A STEP AFTERWARDS. A cut that arrives as PNG and is converted
+// when somebody files it is a conversion somebody can forget, and the first one forgotten is a
+// 1.5 MB file in a tree that thinks it ships 100 KB ones. Chrome's encoder was measured against
+// libwebp rather than assumed: same worst pixel, same mean to a hundredth, 6% larger.
+function saveCut(canvas, name){
+  canvas.toBlob(function(b){
+    var u = URL.createObjectURL(b);
+    save(u, name);
+    setTimeout(function(){ URL.revokeObjectURL(u); }, 20000);
+  }, PRINT.type, PRINT.quality);
+}
+// A CANVAS IS NOT A LOSSLESS PIPE, and claiming otherwise would be the easy lie to tell here.
+// It stores colour premultiplied by alpha, so reading a part-transparent pixel back divides by an
+// alpha it had already multiplied by and rounds. Measured against the same crop taken in Pillow:
+// the alpha channel comes through exactly, every fully opaque pixel comes through exactly, the
+// soft edge moves by at most 1 of 255 on about 4% of its pixels, and the colour beneath fully
+// clear pixels is gone -- which is free, because nothing composites it. What is NOT happening is
+// resampling: the crop is whole source pixels drawn 1:1, so no geometry is invented.
+function bake(ic){
+  var r = crop(ic), c = document.createElement('canvas');
+  c.width = c.height = r.w;
+  var x = c.getContext('2d');
+  // Nothing should be smoothed, because nothing should be scaled. If this ever starts mattering,
+  // the crop stopped being whole pixels and that is the bug, not the filter.
+  x.imageSmoothingEnabled = false;
+  x.drawImage(ic.im, r.x, r.y, r.w, r.w, 0, 0, r.w, r.w);
+  return c;
+}
+// THREE NUMBERS ARE THE FRAMING AND THE REST IS ARITHMETIC. `scale`, `ox` and `oy` are what you
+// chose; the crop, the fill and the rest are worked out from them and are written down for the
+// reader, not for the page -- on load they are ignored and recomputed, so an edited file cannot
+// end up describing one framing and carrying another.
+//
+// KEYED BY FILENAME, not by position. The seed order changes the moment a sixth master lands in
+// the tree, and a framing restored by index would then be applied to somebody else's picture.
+function framing(){
+  var icons = {};
+  ICONS.forEach(function(ic){
+    var r = crop(ic);
+    icons[ic.file] = {
+      // `out` is deliberately not written down: it is the next free version at the moment of
+      // saving, so it is wrong as soon as you use it, and after the move to WebP the committed
+      // file was wrong twice over -- v02 where v01 had just been written, and .png where the
+      // file is .webp. The crop stays: it describes what WAS cut and remains true, and the
+      // build reads it to say whether the board is behind the framing.
+      name: ic.name, source: ic.nat,
+      scale: Math.round(ic.k * 1e5) / 1e5,
+      ox: Math.round(ic.ox * 1e5) / 1e5,
+      oy: Math.round(ic.oy * 1e5) / 1e5,
+      crop: r,
+      markFillsSlot: Math.round(100 * Math.max(ic.ext.w, ic.ext.h) * ic.k) / 100,
+      ground: ic.gnd ? ic.gnd.hex : null
+    };
+  });
+  return {
+    savedAt: new Date().toISOString(),
+    iconSize: V('box'),
+    note: "scale, ox and oy are the framing; everything else is worked out from them and is " +
+          "here to be read. Offsets are fractions of the box, so they survive a change of icon " +
+          "size. A cut is the square (x, y, w) taken out of `file` at its own resolution, with " +
+          "no resampling and no ground; where it runs off the edge of the file it is clear.",
+    icons: icons
+  };
+}
+
+function remembered(){
+  try { var raw = localStorage.getItem(STORE); return raw ? JSON.parse(raw) : null; }
+  catch (e){ return null; }      // a browser that refuses this is not a broken page, only a quiet one
+}
+function storable(){
+  try { localStorage.setItem(STORE + '.probe', '1'); localStorage.removeItem(STORE + '.probe');
+        return true; } catch (e){ return false; }
+}
+// THE NEWER ONE WINS AND THE PAGE SAYS SO. Picking the file always would throw away the work you
+// just did; picking the browser always would mean a framing somebody committed never reaches you.
+var SOURCE = (function(){
+  var b = remembered();
+  var fileHas = SAVED && SAVED.icons && Object.keys(SAVED.icons).length;
+  if (b && b.icons && (!fileHas || !SAVED.savedAt || (b.savedAt || '') > SAVED.savedAt))
+    return {from: 'browser', doc: b, other: fileHas ? SAVED : null};
+  if (fileHas) return {from: 'file', doc: SAVED, other: b && b.icons ? b : null};
+  return {from: 'none', doc: {}, other: null};
+})();
+
+function ago(iso){
+  if (!iso) return 'at an unrecorded time';
+  var s = (Date.now() - Date.parse(iso)) / 1000;
+  if (!isFinite(s)) return 'at ' + iso;
+  if (s < 90) return 'just now';
+  if (s < 5400) return Math.round(s / 60) + ' minutes ago';
+  if (s < 172800) return Math.round(s / 3600) + ' hours ago';
+  return Math.round(s / 86400) + ' days ago';
+}
+function tellSource(){
+  var w = document.getElementById('where');
+  w.className = 'where';
+  w.textContent = '';
+  function say(html){ var s = document.createElement('span'); s.innerHTML = html; w.appendChild(s); }
+  function act(label, fn){ var b = document.createElement('button'); b.textContent = label;
+    b.onclick = fn; w.appendChild(b); }
+
+  if (SOURCE.from === 'none'){
+    say(storable()
+      ? 'no framing saved yet — every card is fitted to its own mark. <b>save settings</b> ' +
+        'keeps it in this browser and hands you a framing.json for the lab folder.'
+      : 'no framing saved yet, and this browser will not let the page remember one — ' +
+        '<b>save settings</b> still hands you a framing.json, which is the copy that lasts.');
+    return;
+  }
+  if (SOURCE.from === 'file'){
+    say('showing the framing from <b>framing.json</b>, saved ' + ago(SOURCE.doc.savedAt) + '.');
+    if (SOURCE.other) say(' This browser also remembers one, from ' + ago(SOURCE.other.savedAt) +
+                          ', which is older.');
+    return;
+  }
+  w.className = 'where stale';
+  say('showing the framing <b>remembered in this browser</b>, saved ' + ago(SOURCE.doc.savedAt) +
+      '. ' + (SOURCE.other
+        ? 'The framing.json in the lab folder is older (' + ago(SOURCE.other.savedAt) + ') — ' +
+          'download and move it in to make this the committed one.'
+        : 'Nothing has been written into the lab folder yet — download a framing.json to keep ' +
+          'this where the repository can see it.'));
+  act('use the file instead', function(){
+    try { localStorage.removeItem(STORE); } catch (e){}
+    location.reload();
+  });
+}
+
+function saveSettings(){
+  var doc = framing();
+  var kept = false;
+  try { localStorage.setItem(STORE, JSON.stringify(doc)); kept = true; } catch (e){ kept = false; }
+  SOURCE = {from: 'browser', doc: doc, other: SAVED && SAVED.icons ? SAVED : null};
+  var b = new Blob([JSON.stringify(doc, null, 2) + '\n'], {type: 'application/json'});
+  var u = URL.createObjectURL(b);
+  save(u, 'framing.json');
+  setTimeout(function(){ URL.revokeObjectURL(u); }, 20000);
+  tellSource();
+  if (!kept){
+    var w = document.getElementById('where');
+    var s = document.createElement('span');
+    s.innerHTML = ' This browser would not keep a copy, so the downloaded file is the only one.';
+    w.appendChild(s);
+  }
+}
+// ONLY WHAT THIS PAGE MADE. The raw of a seeded icon came OUT of the repository and is still
+// sitting there unchanged, so handing it back is eighteen megabytes of files you already have --
+// which was useful exactly once, before the masters were filed. A dropped file is different: the
+// page is the only place it exists, so losing it would lose it. The `raw` button on each card
+// still hands back any of them, one at a time, for when that is what you want.
+//
+// The browser throttles a burst of downloads from one gesture, so they are spaced out. A click
+// that silently delivers four of six files is worse than a slow one that delivers six.
+function saveAll(){
+  var jobs = [];
+  ICONS.forEach(function(ic){
+    if (!ic.seeded) jobs.push(function(){ save(ic.src, ic.file); });
+    jobs.push(function(){ saveCut(bake(ic), ic.out); });
+  });
+  jobs.push(function(){
+    var b = new Blob([JSON.stringify(framing(), null, 2) + '\n'], {type: 'application/json'});
+    var u = URL.createObjectURL(b);
+    save(u, 'framing.json');
+    setTimeout(function(){ URL.revokeObjectURL(u); }, 20000);
+  });
+  jobs.forEach(function(j, i){ setTimeout(j, i * 350); });
+}
+
+function makeCard(ic){
+  var card = el('div','card');
+  var h = el('h2','',card);
+  h.appendChild(document.createTextNode(ic.name));
+  var acts = el('span','',h);
+  function act(label, cls, fn){
+    var e = el('em', cls, acts); e.textContent = label; e.onclick = fn;
+    acts.appendChild(document.createTextNode('  '));
+    return e;
+  }
+  act('fit', '', function(){ fit(ic); apply(ic); });
+  act('centre', '', function(){ ic.ox = 0.5 - 0.5*ic.k; ic.oy = 0.5 - 0.5*ic.k; apply(ic); });
+  act('raw', 'dl', function(){ save(ic.src, ic.file); });
+  act('cut', 'dl', function(){ saveCut(bake(ic), ic.out); });
+  act('remove', '', function(){
+    ICONS.splice(ICONS.indexOf(ic), 1); card.remove(); summary(); });
+
+  var pit = el('div','pit',card);
+  var box = el('div','box',pit);
+  var img = el('img','',box); img.src = ic.src;
+
+  var row = el('div','row',card);
+  var sl = el('input','',row); sl.type = 'range'; sl.min = 40; sl.max = 300;
+  sl.value = Math.round(ic.k * 100);
+  var val = el('b','',row); val.textContent = Math.round(ic.k * 100) + '%';
+  sl.addEventListener('input', function(){
+    var nk = +this.value / 100;
+    // Grow about the centre of what is on show, so the framing does not run away under the slider.
+    ic.ox = 0.5 - (0.5 - ic.ox) * nk / ic.k;
+    ic.oy = 0.5 - (0.5 - ic.oy) * nk / ic.k;
+    ic.k = nk; apply(ic);
+  });
+
+  var stat = el('div','stat',card);
+  ic.node = {card:card, box:box, img:img, slider:sl, val:val, stat:stat};
+
+  var dragging = false, lx = 0, ly = 0;
+  box.addEventListener('pointerdown', function(e){
+    dragging = true; lx = e.clientX; ly = e.clientY;
+    box.classList.add('drag'); box.setPointerCapture(e.pointerId); });
+  box.addEventListener('pointermove', function(e){
+    if (!dragging) return;
+    var px = boxPx();
+    ic.ox += (e.clientX - lx) / px; ic.oy += (e.clientY - ly) / px;
+    lx = e.clientX; ly = e.clientY; apply(ic); });
+  ['pointerup','pointercancel'].forEach(function(t){
+    box.addEventListener(t, function(){ dragging = false; box.classList.remove('drag'); }); });
+  box.addEventListener('wheel', function(e){
+    e.preventDefault();
+    var px = boxPx(), r = box.getBoundingClientRect();
+    var mx = (e.clientX - r.left) / px, my = (e.clientY - r.top) / px;
+    var nk = Math.min(3, Math.max(1, ic.k * (e.deltaY > 0 ? 0.94 : 1.064)));
+    ic.ox = mx - (mx - ic.ox) * nk / ic.k;
+    ic.oy = my - (my - ic.oy) * nk / ic.k;
+    ic.k = nk; apply(ic); }, {passive:false});
+
+  return card;
+}
+
+// WHAT COLOUR IS THIS PLATE'S GROUND, AND HOW EVEN IS IT.
+// Two plates from the same generator came back on different purples -- 30,25,53 against 28,20,47 --
+// and with very different evenness, the second mottling about twice as much. Neither shows until
+// they are side by side, so each icon measures its own ground and says so.
+function ground(img){
+  var N = 160, c = document.createElement('canvas');
+  c.width = c.height = N;
+  var x = c.getContext('2d', {willReadFrequently:true});
+  x.drawImage(img, 0, 0, N, N);
+  var d = x.getImageData(0, 0, N, N).data, R = [], G = [], B = [];
+  // ALPHA DECIDES FIRST. On a cut-out the clear area composites to black and drops out of the
+  // colour test, but the dark ink carries enough tint to pass it -- so the function happily
+  // reported the ink as a 6% ground. If the file has real transparency it has no ground at all.
+  var clear = 0;
+  for (var j = 3; j < d.length; j += 4) if (d[j] < 250) clear++;
+  if (clear > 0.02 * N * N) return null;
+  for (var i = 0; i < N*N; i++){
+    var o = i*4, r = d[o], g = d[o+1], b = d[o+2];
+    var mx = Math.max(r,g,b), mn = Math.min(r,g,b);
+    var sat = mx ? (mx-mn)/mx : 0;
+    var L = 0.2126*r + 0.7152*g + 0.0722*b;
+    if (sat > 0.33 && L < 90){ R.push(r); G.push(g); B.push(b); }
+  }
+  if (R.length < 200) return null;                 // cut out: the page sets the ground, not the file
+  function med(a){ a = a.slice().sort(function(p,q){ return p-q; }); return a[a.length>>1]; }
+  function sd(a){ var m = a.reduce(function(s,v){ return s+v; },0)/a.length;
+    return Math.sqrt(a.reduce(function(s,v){ return s+(v-m)*(v-m); },0)/a.length); }
+  var hex = [med(R), med(G), med(B)].map(function(v){
+    return ('0' + Math.round(v).toString(16)).slice(-2); }).join('');
+  return {hex:'#' + hex.toUpperCase(), mottle:sd(B).toFixed(1),
+          share:(100*R.length/(N*N)).toFixed(0)};
+}
+
+// WHERE THE MARK ACTUALLY IS, as fractions of the file. Alpha answers it for a cut-out; a plate
+// with a painted ground is read by tone, taking whichever of the light and dark tails is the
+// minority -- the cream here, the ink on a line drawing.
+function extent(img){
+  var N = 200, c = document.createElement('canvas');
+  c.width = c.height = N;
+  var x = c.getContext('2d', {willReadFrequently:true});
+  x.drawImage(img, 0, 0, N, N);
+  var d = x.getImageData(0, 0, N, N).data, n = N*N;
+  var alpha = false;
+  for (var j = 3; j < d.length; j += 4) if (d[j] < 250){ alpha = true; break; }
+  function bbox(test){
+    var x0=N, y0=N, x1=-1, y1=-1, c2=0;
+    for (var yy=0; yy<N; yy++) for (var xx=0; xx<N; xx++){
+      if (test(yy*N+xx)){ c2++;
+        if (xx<x0) x0=xx; if (xx>x1) x1=xx; if (yy<y0) y0=yy; if (yy>y1) y1=yy; } }
+    return x1<0 ? null : {x:x0/N, y:y0/N, w:(x1-x0+1)/N, h:(y1-y0+1)/N, area:c2/n};
+  }
+  if (alpha) return bbox(function(i){ return d[i*4+3] > 40; }) || {x:0,y:0,w:1,h:1};
+  var L = new Float32Array(n);
+  for (var i = 0; i < n; i++){ var o=i*4; L[i] = 0.2126*d[o] + 0.7152*d[o+1] + 0.0722*d[o+2]; }
+  var sorted = Array.prototype.slice.call(L).sort(function(a2,b2){ return a2-b2; });
+  function q(f){ return sorted[Math.min(n-1, Math.floor(f*n))]; }
+  var mid = q(0.5), hi = mid + 0.45*(q(0.995)-mid), lo = mid - 0.45*(mid-q(0.005));
+  var bh = bbox(function(i){ return L[i] > hi; }), bl = bbox(function(i){ return L[i] < lo; });
+  var F = 0.02;
+  if (bh && bh.area >= F && (!bl || bl.area < F || bh.area <= bl.area)) return bh;
+  if (bl && bl.area >= F) return bl;
+  return bh || bl || {x:0,y:0,w:1,h:1};
+}
+
+// FILL THE SLOT BY DEFAULT. The mark is what should fill it, not the file: a cut-out that draws a
+// small subject in a big empty square would otherwise arrive at a quarter of the size of one that
+// fills its own edges, and the first thing you would do is drag both sliders to fix it.
+function fit(ic){
+  var e = ic.ext, span = Math.max(e.w, e.h);
+  ic.k = span > 0 ? 1 / span : 1;
+  ic.ox = 0.5 - (e.x + e.w/2) * ic.k;
+  ic.oy = 0.5 - (e.y + e.h/2) * ic.k;
+}
+
+// A SAVED FRAMING IF THERE IS ONE, THE DEFAULT FIT IF THERE IS NOT, per icon rather than per page.
+// A sixth master landing in the tree must not throw away the framings already chosen for the other
+// five, so each card asks for itself by filename and falls back on its own.
+function restore(ic){
+  var s = SOURCE.doc.icons && SOURCE.doc.icons[ic.file];
+  if (!s || typeof s.scale !== 'number' || typeof s.ox !== 'number' || typeof s.oy !== 'number')
+    return false;
+  ic.k = s.scale; ic.ox = s.ox; ic.oy = s.oy;
+  return true;
+}
+
+function add(name, src, file, out, seeded){
+  var img = new Image();
+  img.onload = function(){
+    var ic = {name:name, src:src, file:file, out:out, im:img, seeded:!!seeded,
+              nat:img.naturalWidth, k:1, ox:0, oy:0,
+              gnd:ground(img), ext:extent(img)};
+    fit(ic);
+    restore(ic);
+    ICONS.push(ic);
+    document.getElementById('grid').appendChild(makeCard(ic));
+    apply(ic);
+  };
+  img.src = src;
+}
+
+['box','zoom'].forEach(function(id){
+  document.getElementById(id).addEventListener('input', function(){
+    document.getElementById('boxv').textContent = V('box');
+    document.getElementById('zoomv').textContent = (V('zoom')/100).toFixed(1) + '×';
+    applyAll();
+  }); });
+document.getElementById('reset').onclick = function(){
+  ICONS.forEach(fit); applyAll(); };
+document.getElementById('all').onclick = saveAll;
+document.getElementById('save').onclick = saveSettings;
+
+var drop = document.getElementById('drop'), file = document.getElementById('file');
+document.getElementById('pick').onclick = function(){ file.click(); };
+file.onchange = function(){ take(this.files); this.value = ''; };
+['dragenter','dragover'].forEach(function(t){
+  drop.addEventListener(t, function(e){ e.preventDefault(); drop.classList.add('over'); }); });
+['dragleave','drop'].forEach(function(t){
+  drop.addEventListener(t, function(e){ e.preventDefault(); drop.classList.remove('over'); }); });
+drop.addEventListener('drop', function(e){ take(e.dataTransfer.files); });
+function take(files){
+  Array.prototype.forEach.call(files, function(f){
+    if (!/^image\//.test(f.type)) return;
+    var r = new FileReader();
+    r.onload = function(){
+      var stem = f.name.replace(/\.[^.]+$/, '');
+      // A DROPPED FILE GETS `_cut`, A SEEDED ONE GETS ITS NEXT VERSION. The seeds know what they
+      // are and what the tree would call the next cut of them; a file dragged in from anywhere
+      // does not, and inventing a version number for it would be inventing a place in a history
+      // it is not part of.
+      add(stem, r.result, f.name, stem + '_cut' + PRINT.suffix);
+    };
+    r.readAsDataURL(f); });
+}
+
+['g0','g1','g2'].forEach(function(id, i){
+  document.getElementById(id).onclick = function(){
+    document.body.className = 'ground-' + ['tile','purple','none'][i];
+    ['g0','g1','g2'].forEach(function(j){
+      document.getElementById(j).setAttribute('aria-pressed', String(j === id)); }); }; });
+document.body.className = 'ground-tile';
+
+// THE ICON SIZE IS PART OF THE FRAMING AND IS SET BEFORE ANYTHING IS DRAWN. It is page-wide
+// rather than per-icon, and the offsets are fractions of the box, so restoring it after the cards
+// existed would redraw every one of them at a size their framing was not chosen against.
+if (typeof SOURCE.doc.iconSize === 'number'){
+  var bx = document.getElementById('box');
+  bx.value = SOURCE.doc.iconSize;
+  document.getElementById('boxv').textContent = V('box');
+}
+tellSource();
+summary();
+
+SEED.forEach(function(s){ add(s.name, s.src, s.file, s.out, true); });
+</script>

@@ -1,0 +1,217 @@
+{
+  "savedAt": "2026-10-03T22:58:58.415Z",
+  "iconSize": 115,
+  "note": "scale, ox and oy are the framing; everything else is worked out from them and is here to be read. Offsets are fractions of the box, so they survive a change of icon size. A cut is the square (x, y, w) taken out of `file` at its own resolution, with no resampling and no ground; where it runs off the edge of the file it is clear.",
+  "icons": {
+    "allocation_actionA_icon_master_v01.png": {
+      "name": "Allocation",
+      "out": "allocation_actionA_icon_v02.png",
+      "source": 1254,
+      "scale": 1.45,
+      "ox": -0.22114,
+      "oy": -0.18494,
+      "crop": {
+        "x": 191,
+        "y": 160,
+        "w": 865
+      },
+      "markFillsSlot": 1.37,
+      "ground": null
+    },
+    "build_roads_actionA_icon_master_v04.png": {
+      "name": "Build Roads",
+      "out": "build_roads_actionA_icon_v06.png",
+      "source": 1254,
+      "scale": 1.46,
+      "ox": -0.14026,
+      "oy": -0.27844,
+      "crop": {
+        "x": 120,
+        "y": 239,
+        "w": 859
+      },
+      "markFillsSlot": 1.13,
+      "ground": null
+    },
+    "build_roads_actionB_icon_master_v04.png": {
+      "name": "Build Shrine",
+      "out": "build_roads_actionB_icon_v06.png",
+      "source": 1254,
+      "scale": 1.48,
+      "ox": -0.12565,
+      "oy": -0.09786,
+      "crop": {
+        "x": 106,
+        "y": 83,
+        "w": 847
+      },
+      "markFillsSlot": 1.37,
+      "ground": null
+    },
+    "clerical_actionA_icon_master_v01.png": {
+      "name": "Devotion",
+      "out": "clerical_actionA_icon_v02.png",
+      "source": 1254,
+      "scale": 1.23,
+      "ox": -0.10712,
+      "oy": -0.06794,
+      "crop": {
+        "x": 109,
+        "y": 69,
+        "w": 1020
+      },
+      "markFillsSlot": 1.13,
+      "ground": null
+    },
+    "clerical_actionB_icon_master_v01.png": {
+      "name": "Silversmith",
+      "out": "clerical_actionB_icon_v02.png",
+      "source": 1254,
+      "scale": 1.44,
+      "ox": -0.20386,
+      "oy": -0.10736,
+      "crop": {
+        "x": 178,
+        "y": 93,
+        "w": 871
+      },
+      "markFillsSlot": 1.36,
+      "ground": null
+    },
+    "construct_actionA_icon_master_v01.png": {
+      "name": "Construct Building",
+      "out": "construct_actionA_icon_v02.png",
+      "source": 1254,
+      "scale": 1.39,
+      "ox": -0.27919,
+      "oy": -0.05438,
+      "crop": {
+        "x": 252,
+        "y": 49,
+        "w": 902
+      },
+      "markFillsSlot": 1.29,
+      "ground": null
+    },
+    "construct_actionB_icon_master_v01.png": {
+      "name": "Construct Road",
+      "out": "construct_actionB_icon_v02.png",
+      "source": 1254,
+      "scale": 1.08696,
+      "ox": -0.05435,
+      "oy": -0.04891,
+      "crop": {
+        "x": 63,
+        "y": 56,
+        "w": 1154
+      },
+      "markFillsSlot": 1,
+      "ground": null
+    },
+    "give_alms_actionA_icon_master_v01.png": {
+      "name": "Alms",
+      "out": "give_alms_actionA_icon_v02.png",
+      "source": 1254,
+      "scale": 1.26,
+      "ox": -0.10902,
+      "oy": -0.05055,
+      "crop": {
+        "x": 109,
+        "y": 50,
+        "w": 995
+      },
+      "markFillsSlot": 1.15,
+      "ground": null
+    },
+    "give_alms_actionB_icon_master_v01.png": {
+      "name": "Donate Building",
+      "out": "give_alms_actionB_icon_v02.png",
+      "source": 1254,
+      "scale": 1.4,
+      "ox": -0.27047,
+      "oy": -0.25255,
+      "crop": {
+        "x": 242,
+        "y": 226,
+        "w": 896
+      },
+      "markFillsSlot": 1.13,
+      "ground": null
+    },
+    "ordination_actionA_icon_master_v01.png": {
+      "name": "Ordain",
+      "out": "ordination_actionA_icon_v02.png",
+      "source": 1254,
+      "scale": 1.31126,
+      "ox": -0.21095,
+      "oy": -0.06474,
+      "crop": {
+        "x": 202,
+        "y": 62,
+        "w": 956
+      },
+      "markFillsSlot": 1.19,
+      "ground": null
+    },
+    "ordination_actionB_icon_master_v01.png": {
+      "name": "Mission",
+      "out": "ordination_actionB_icon_v02.png",
+      "source": 1254,
+      "scale": 1.38,
+      "ox": -0.1902,
+      "oy": -0.04323,
+      "crop": {
+        "x": 173,
+        "y": 39,
+        "w": 909
+      },
+      "markFillsSlot": 1.3,
+      "ground": null
+    },
+    "produce_actionA_icon_master_v01.png": {
+      "name": "Produce Wheat",
+      "out": "produce_actionA_icon_v01.png",
+      "source": 1254,
+      "scale": 1.04167,
+      "ox": -0.02083,
+      "oy": -0.02604,
+      "crop": {
+        "x": 25,
+        "y": 31,
+        "w": 1204
+      },
+      "markFillsSlot": 1,
+      "ground": null
+    },
+    "produce_actionB_icon_master_v01.png": {
+      "name": "Produce Stone",
+      "out": "produce_actionB_icon_v02.png",
+      "source": 1254,
+      "scale": 1.23,
+      "ox": -0.10523,
+      "oy": -0.10979,
+      "crop": {
+        "x": 107,
+        "y": 112,
+        "w": 1020
+      },
+      "markFillsSlot": 1.16,
+      "ground": null
+    },
+    "taxation_actionA_icon_master_v01.png": {
+      "name": "Taxation",
+      "out": "taxation_actionA_icon_v02.png",
+      "source": 1254,
+      "scale": 1.54,
+      "ox": -0.25962,
+      "oy": -0.20105,
+      "crop": {
+        "x": 211,
+        "y": 164,
+        "w": 814
+      },
+      "markFillsSlot": 1.46,
+      "ground": null
+    }
+  }
+}

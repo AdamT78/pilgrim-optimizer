@@ -215,6 +215,22 @@ def non_slot_folders(attrib_file) -> tuple:
     return tuple(got) if got else ("masters", "seals")
 
 
+def mark_folders(attrib_file) -> tuple:
+    """The folders a duty's tile mark may live in, per attribution.json.
+
+    The same list the action board reads, from the same place, for the same reason that
+    nonSlotFolders is not three copies of the word "masters". This lab shows every version of a
+    duty's mark beside the board's choice, so a lab that knew about `seals` and not `icons` would
+    show Build Roads as having no marks at all while the board drew two.
+    """
+    try:
+        import json as _json
+        got = _json.loads(attrib_file.read_text(encoding="utf-8")).get("markFolders")
+    except Exception:
+        got = None
+    return tuple(got) if got else ("seals",)
+
+
 def image_suffixes(attrib_file) -> tuple:
     """Extensions an image in this tree may carry, per attribution.json.
 
@@ -359,29 +375,50 @@ def unfiled_briefs() -> list:
             for b in seal_prompts() if not b.get("produces")]
 
 
+def version_of(path) -> int:
+    """The _vNN on the end of a name, or -1 for a file that carries none."""
+    import re as _re
+    m = _re.search(r"_v(\d+)$", path.stem)
+    return int(m.group(1)) if m else -1
+
+
 def seals_for(duty: str, placed: dict, size: int, briefs: dict) -> dict:
     """Every version of this duty's seals, newest first, by the slot they are recorded in.
 
-    NEWEST FIRST BECAUSE NEWEST IS WHAT DRAWS. The action board picks a duty seal by sorting
-    the folder and taking the last, so the first entry here IS the one on the board and the
-    rest are what it superseded. The page says which, rather than leaving the reader to work
-    out that a filename sorts."""
+    NEWEST FIRST BECAUSE NEWEST IS WHAT DRAWS. The action board picks a duty's mark by the
+    highest _vNN across every mark folder, so the first entry here IS the one on the board and the
+    rest are what it superseded. The page says which, rather than leaving the reader to work out
+    that a filename sorts.
+
+    BY VERSION AND NOT BY NAME, which is a correction rather than a refinement. This used to walk
+    one folder and reverse it, and a name sorts the same way a version does only while there is
+    one folder: with `icons` beside `seals`, `..._icon_v04` sorts before `..._seal_v03`, and this
+    page would have shown the superseded wax disc at the head of the row with the icon behind it,
+    disagreeing with the board about which mark is in play."""
     out = {"left": [], "right": []}
-    folder = ART / duty / "seals"
-    if not folder.is_dir():
-        return out
-    for f in sorted(folder.glob("*")):
-        if not f.is_file() or f.suffix.lower() not in set(image_suffixes(ATTRIB)):
+    found = {"left": [], "right": []}
+    order = {name: i for i, name in enumerate(mark_folders(ATTRIB))}
+    for sub_dir in mark_folders(ATTRIB):
+        folder = ART / duty / sub_dir
+        if not folder.is_dir():
             continue
-        info = placed.get(f.relative_to(ART).as_posix())
-        slot = info["slot"] if info else None
-        if slot not in out:
-            continue
-        out[slot].append({"file": f.name, "src": disc_thumb(f, size * 2),
-                          "recorded": info is not None,
-                          "brief": briefs.get(f.relative_to(ART.parent).as_posix())})
-    for v in out.values():
-        v.reverse()
+        for f in sorted(folder.glob("*")):
+            if not f.is_file() or f.suffix.lower() not in set(image_suffixes(ATTRIB)):
+                continue
+            info = placed.get(f.relative_to(ART).as_posix())
+            slot = info["slot"] if info else None
+            if slot not in out:
+                continue
+            found[slot].append(f)
+    # THE BOARD'S OWN ORDER: the later kind first, then the higher version inside it. Sorting by
+    # version alone put a wax disc's v02 ahead of an icon's v01 and disagreed with the board about
+    # which mark is in play -- the same mistake the board itself made for one build.
+    for slot, files in found.items():
+        for f in sorted(files, key=lambda p: (-order.get(p.parent.name, -1), -version_of(p), p.name)):
+            info = placed.get(f.relative_to(ART).as_posix())
+            out[slot].append({"file": f.name, "src": disc_thumb(f, size * 2),
+                              "recorded": info is not None,
+                              "brief": briefs.get(f.relative_to(ART.parent).as_posix())})
     return out
 
 
