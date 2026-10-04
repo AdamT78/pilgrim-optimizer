@@ -75,8 +75,14 @@ def test_the_card_is_exactly_two_to_one(geo):
     600 x 320 box took 6.25% of the width. Falsified by changing ART_W or ART_H alone.
     """
     assert geo.ART_W / geo.ART_H == pytest.approx(2.0, abs=1e-9)
-    assert geo.ART_W * 2 + geo.ART_GAP + geo.GAP + geo.SIDE_W == geo.WORK_W, (
-        "the two cards, their gap, the column and its gap do not fill the working width")
+    # THE BOX BESIDE THE CARDS IS THE TITHE. It used to be the side column, which was the same
+    # thing while the column ran the full height of this row; the Tithe spans two tiles now and
+    # the column below it spans one, so the row is cards, gap, cards, gap, TITHE_W.
+    assert geo.ART_W * 2 + geo.ART_GAP + geo.GAP + geo.TITHE_W == geo.WORK_W, (
+        "the two cards, their gaps and the Tithe do not fill the working width")
+    # AND THE CARD IS MEASURED OFF THE RIBBON, which is what makes its edges land on tile edges.
+    assert geo.ART_W == 3 * geo.TILE_W + 2 * geo.TILE_GAP, (
+        "a card is %d wide, which is not three duty tiles and their two gaps" % geo.ART_W)
 
 
 def test_the_wheel_takes_its_shape_from_the_asset_and_not_from_here(geo):
@@ -350,22 +356,28 @@ def test_a_slot_with_no_record_is_asked_which_folder_rather_than_guessed(gen, tm
 # =================================================================================================
 # THE SEALS IN THE TILE
 #
-# Two 78px seals do not fit side by side in a tile 154 wide -- 78 + 16 + 78 is 172 -- so they sit
-# diagonally, first under the duty's name at the top left and second at the bottom right, and the
-# ribbon's height is what buys the separation between them. Every one of those numbers derives
-# from the others, and a seal nudged by hand would break the derivation silently: the picture
+# Two marks do not fit side by side in a tile 154 wide, so they stack: centred, each one inset
+# from whatever is above it, and the ribbon's height is what buys the room. It was a diagonal,
+# which took its separation from the tile's WIDTH and so could not go past 78 -- at 100 the pair
+# overlapped by 47.5px and no ribbon height could have helped. Every one of these numbers derives
+# from the others, and a mark nudged by hand would break the derivation silently: the picture
 # would still draw, just in the wrong place, on eight tiles at once.
 
-def test_two_seals_do_not_fit_in_a_row_which_is_why_they_are_diagonal(geo):
-    """The reason for the diagonal, asserted rather than left in a comment.
+def test_two_seals_do_not_fit_in_a_row_which_is_why_they_are_a_column(geo):
+    """The reason for the column, asserted rather than left in a comment.
 
-    Falsified by shrinking SEAL until a row fits -- at which point this test says so and the
-    arrangement should go back to being a row, because a diagonal would then be decoration.
+    It was a diagonal, which bought its separation out of the tile's WIDTH and so had a ceiling
+    the ribbon could not raise: at SEAL 100 the pair overlapped by 47.5px. A column buys it out of
+    the ribbon's HEIGHT, which is a number that can be moved. Falsified by shrinking SEAL until a
+    row fits across the tile -- at which point this test says so and the marks should go back in a
+    row, because stacking would then be costing ribbon height for nothing.
     """
     assert 2 * geo.SEAL + geo.GAP > geo.TILE_INNER_W - 2 * geo.SEAL_INSET, (
-        "two seals and a gap now fit across the tile, so the diagonal is buying nothing")
+        "two marks and a gap now fit across the tile, so the column is buying nothing")
     a, b = geo.seal_slots(2)
-    assert b["x"] > a["x"] and b["y"] > a["y"], "the second seal is not down and to the right"
+    assert b["x"] == a["x"], "the two marks are not in one column"
+    assert b["y"] == a["y"] + geo.SEAL + geo.SEAL_INSET, (
+        "the second mark is not one inset below the first")
 
 
 def test_a_seal_stays_inside_its_tile_and_clear_of_the_duty_name(geo):
@@ -404,9 +416,13 @@ def test_the_top_seal_clears_the_name_as_far_as_the_lower_one_clears_the_edge(ge
     below = geo.TILE_INNER_H - (b["y"] + geo.SEAL)
     assert above == below, "%d above the top seal and %d below the lower one" % (above, below)
     assert above == geo.SEAL_INSET, "the seals use a margin of their own again"
+    # ACROSS, THEY ARE CENTRED, NOT INSET. On the diagonal one mark was pushed to each side and the
+    # side margin WAS the inset; in a column both sit in the middle of the tile and what is left at
+    # the sides is whatever the tile is wider than the mark. Equal is the claim, not equal to six.
     left = a["x"]
     right = geo.TILE_INNER_W - (b["x"] + geo.SEAL)
-    assert left == right == geo.SEAL_INSET, "%d one side and %d the other" % (left, right)
+    assert left == right, "%d one side and %d the other" % (left, right)
+    assert left == (geo.TILE_INNER_W - geo.SEAL) // 2, "the marks are not centred in the tile"
 
 
 # =================================================================================================
@@ -791,16 +807,25 @@ def test_three_tithe_seals_and_their_label_fit_the_box_they_are_in(geo):
     assert geo.check() == [], "\n".join(geo.check())
     # THE LABEL IS ABOVE THE SEALS NOW, so the two ends that can collide have swapped: the label
     # must finish before the column starts, and the column must finish inside the box.
+    # ASK THE SLOTS, NOT A STACK. The three sit on a triangle now -- two below, one centred over --
+    # so there is no TOKEN_Y plus three tokens and two gaps to add up. Reading the slots keeps this
+    # true of whatever the arrangement becomes, which is the mistake the old version made.
     label_end = geo.TITHE_LABEL_TOP + geo.TITHE_LABEL_H
-    end = geo.TOKEN_Y + 3 * geo.TOKEN + 2 * geo.TOKEN_GAP
-    assert geo.TOKEN_Y >= label_end, (
-        "the label ends at %d and the seals start at %d" % (label_end, geo.TOKEN_Y))
+    slots = geo.token_slots()
+    assert len(slots) == 3, "the Tithe no longer offers three resources"
+    top = min(d["y"] for d in slots)
+    end = max(d["y"] + d["size"] for d in slots)
+    assert top >= label_end, (
+        "the label ends at %d and the seals start at %d" % (label_end, top))
     assert end <= geo.TITHE_INNER_H - geo.INSET, (
-        "the seals end at %d and the column's inner edge is at %d"
+        "the seals end at %d and the box's inner edge is at %d"
         % (end, geo.TITHE_INNER_H - geo.INSET))
-    assert geo.TOKEN_GAP > 0, "three seals of %d leave no room between them" % geo.TOKEN
-    assert geo.TOKEN <= geo.SIDE_W - 2 * geo.INSET, "a seal of %d does not fit a column %d wide" \
-        % (geo.TOKEN, geo.SIDE_W)
+    assert geo.TOKEN <= geo.TITHE_W - 2 * geo.INSET, "a seal of %d does not fit a box %d wide" \
+        % (geo.TOKEN, geo.TITHE_W)
+    # AND THEY ARE THE DUTY MARKS' OWN SIZE. The Tithe is the third choice on this row, not a
+    # lesser kind of thing; this is the assertion the old narrow column could not have passed.
+    assert geo.TOKEN == geo.SEAL, (
+        "a Tithe resource is %d and a duty mark is %d" % (geo.TOKEN, geo.SEAL))
 
 
 def test_the_tithe_column_states_no_numbers_of_its_own(gen):
@@ -816,8 +841,14 @@ def test_the_tithe_column_states_no_numbers_of_its_own(gen):
     # regression in the Tithe column, which it is not.
     body = page.split("var t = GEO.tithe;")[1].split("var tc = GEO.confirm.tithe;")[0]
     body = re.sub(r"(?m)^\s*//.*$", " ", body)
-    for key in ("t.tokenY", "t.tokenGap", "t.labelTop", "t.token"):
+    # t.tokenY AND t.tokenGap ARE GONE WITH THE STACK. Where each resource sits is handed over
+    # placed, as the duty tile's marks already were, so the page reads positions rather than
+    # recomputing a layout from a start and a repeat.
+    for key in ("t.slots", "t.labelTop", "t.order"):
         assert key in body, "the Tithe column no longer takes %s from GEO" % key
+    for gone in ("t.tokenY", "t.tokenGap", "t.tokenX"):
+        assert gone not in body, (
+            "%s is back in the template, so the page is laying the Tithe out itself again" % gone)
     # WHICH EDGE IT IS BOUND TO, not merely that the number is read. `bottom: px(t.labelTop)` takes
     # the value from GEO, reads correctly, passes the line above, and hangs Take Tithe back at the
     # foot of its column -- off the row it is supposed to be standing in.
@@ -844,8 +875,8 @@ def test_a_bordered_box_measures_its_children_inside_its_border(geo):
     for name, inner_wh, outer_wh in (
             ("the duty tile", (geo.TILE_INNER_W, geo.TILE_INNER_H), (geo.TILE_W, geo.RIBBON_H)),
             ("the City", (geo.CITY_INNER_W, geo.CITY_INNER_H), (geo.SIDE_W, geo.CITY_H)),
-            ("the Tithe column", (geo.TITHE_INNER_W, geo.TITHE_INNER_H),
-             (geo.SIDE_W, geo.ART_H))):
+            ("the Tithe", (geo.TITHE_INNER_W, geo.TITHE_INNER_H),
+             (geo.TITHE_W, geo.ART_H))):
         assert inner_wh == geo.inner(*outer_wh), (
             "%s works on %s inside a box of %s" % (name, inner_wh, outer_wh))
 
@@ -855,15 +886,24 @@ def test_the_city_grid_is_margined_evenly_inside_its_own_border(geo):
     assert geo.check() == [], "\n".join(geo.check())
     figs = geo.city_figures()
     assert len(figs) == len(geo.PLAYERS), "the grid and the player list disagree"
+    # EVENLY MARGINED IS THE CLAIM, AND IT IS NOT "AT THE INSET". The figures are the acolyte's
+    # own size now rather than whatever dividing the box up left over, so they no longer fill its
+    # width and the side margins are the remainder. They still have to match each other -- that is
+    # the two-pixel lean this test was written for -- but they are not six.
     left = figs[0]["x"]
     right = geo.CITY_INNER_W - (figs[1]["x"] + figs[1]["width"])
-    assert left == right == geo.INSET, "%d on the left and %d on the right" % (left, right)
+    assert left == right, "%d on the left and %d on the right" % (left, right)
     between = figs[1]["x"] - (figs[0]["x"] + figs[0]["width"])
     rows = figs[2]["y"] - (figs[0]["y"] + figs[0]["height"])
     foot = geo.CITY_INNER_H - (figs[-1]["y"] + figs[-1]["height"])
     assert between == rows == foot == geo.INSET, (
         "the City has %d between its columns, %d between its rows and %d at its foot"
         % (between, rows, foot))
+    # AND A CITY FIGURE IS AN ACOLYTE. It was 67 x 130 against the pawn's own 50 x 120 -- the same
+    # drawing stretched 23% wider in one of the two places it appears.
+    assert (figs[0]["width"], figs[0]["height"]) == (geo.ACOLYTE_W, geo.ACOLYTE_H), (
+        "a City figure is %d x %d and an acolyte on the wheel is %d x %d"
+        % (figs[0]["width"], figs[0]["height"], geo.ACOLYTE_W, geo.ACOLYTE_H))
 
 
 def test_take_tithe_sits_on_the_action_captions_line(geo):
@@ -1068,3 +1108,44 @@ def test_the_masters_are_never_the_lossy_copy(gen):
     lossy += sorted(p.relative_to(board).as_posix() for p in board.glob("tokens/masters/*")
                     if p.suffix.lower() not in (".png",))
     assert not lossy, "masters that are not PNG: %s" % ", ".join(lossy)
+
+
+def test_a_single_mark_stands_on_the_same_line_as_everyone_elses_first(geo):
+    """Falsified by centring the one-action tile's mark in the space under its name.
+
+    Taxation and Allocation have one action each. Centring theirs put it half a mark below the
+    top mark of every tile beside them, and on a ribbon of eight that reads as two tiles done
+    wrong rather than as two tiles that are different. The column hangs from the name, so where a
+    mark sits stops depending on how many the tile holds -- and this is the assertion that says
+    so, because every other guard here is satisfied by a mark that is merely inside its tile.
+    """
+    one = geo.seal_slots(1)[0]
+    first_of_two = geo.seal_slots(2)[0]
+    assert one["y"] == first_of_two["y"], (
+        "a single mark sits at y=%d and a first-of-two at y=%d" % (one["y"], first_of_two["y"]))
+    assert one["x"] == first_of_two["x"], (
+        "a single mark sits at x=%d and a first-of-two at x=%d" % (one["x"], first_of_two["x"]))
+
+
+def test_the_tile_carries_the_same_purple_the_marks_are_grounded_on(gen):
+    """Falsified by leaving the tile near-black under a mark that is given a purple ground.
+
+    A cut-out brings no ground, so the board supplies one -- and while the tile was #0b0a09 that
+    ground was a visible purple square sitting behind each mark. The tile carries the colour now,
+    so the square stops being a square and the mark simply sits on the tile. The two have to be
+    the SAME colour, which is why it is a variable rather than a literal written twice: this
+    asserts they cannot drift, not that either is any particular value.
+    """
+    page = TMPL.read_text(encoding="utf-8")
+    assert "--plate:" in page, "the plate's purple is no longer named on :root"
+    import re as _re
+    tile = _re.search(r"^\.tile\{([^}]*)\}", page, _re.M)
+    assert tile, "the tile has no rule of its own"
+    assert "background:var(--plate)" in tile.group(1), (
+        "the duty tile is not drawn on the plate's purple: %s" % tile.group(1))
+    assert ".seal.plate{background:var(--plate)" in page, (
+        "the mark's ground is no longer the same colour the tile is")
+    # AND THE SELECTED TILE TAKES ITS PLATE WITH IT. It lifts to --plate-lit, and a plate left
+    # behind on --plate turns back into the visible square -- on the one tile you are looking at.
+    assert ".tile.sel .seal.plate{background:var(--plate-lit)}" in page, (
+        "the selected tile's plate does not follow it, so the square comes back when you select")

@@ -596,7 +596,11 @@ def test_the_tile_column_says_when_a_column_does_not_fit(column, capsys, monkeyp
     assert column.main() == 0
     out = capsys.readouterr().out
     g = column.GEO
-    avail = g["innerH"] - (g["nameTop"] + round(g["nameSize"] * g["nameLh"]) + g["sealInset"]) \
+    # THE GAP, NOT THE INSET -- the same number the generator uses. The column hangs from the name
+    # at GAP, and this read sealInset: two arithmetics for one layout, which agreed only because
+    # at the old ribbon height both of them said "does not fit". The board got taller and they
+    # stopped agreeing, and the test went red for the page being right.
+    avail = g["innerH"] - (g["nameTop"] + round(g["nameSize"] * g["nameLh"]) + column.GAP) \
         - g["sealInset"]
     if 2 * column.G.SEAL > avail:
         assert "need" in out and "RIBBON_H" in out, \

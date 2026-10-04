@@ -148,9 +148,11 @@ instead. A guard in `tests/icon_lab/` holds it to being a viewer.
 
     python3 ui/board_v2/icon_lab/generate_tile_column.py --open
 
-The board puts them on the diagonal, overlapping: that was designed for round wax discs, where one
+The board put them on the diagonal, overlapping: that was designed for round wax discs, where one
 resting on another reads as depth. The marks have corners now, and a corner cutting into a
-neighbour reads as a mistake. This page stacks them instead. Every number is `geometry.py`'s,
+neighbour reads as a mistake. THIS PAGE IS WHERE THE COLUMN WAS DECIDED, and the board has since
+taken it, so the arrangement here is the one that ships; the levers are for asking what a
+different gap or tile height would cost. Every number is `geometry.py`'s,
 the mark's size included, so what is on screen is the board as it would be rather than a sketch of
 one -- which is what lets the page answer the question worth asking: at the size the board really
 draws, does a column of two fit the ribbon at all, and what would it cost if it does not.
