@@ -1621,6 +1621,34 @@
       "role": "the wheat token the Tithe card draws, 1254 x 1254. The PNG is the COMPLETE token -- rim, disc and motif are painted in -- so the layout draws the image and nothing behind or around it.",
       "modifications": "rescaled x1.070 about its own centre so all three tokens read the same size at one tokenSize. Measured as a fraction of the square, the solid disc went from 0.5547 to 0.6354, matching stone's 0.6365; nothing is clipped at the canvas edge. The correction is made in the artwork rather than by a per-token slider in the layout lab, so production does not have to reproduce a studio adjustment.",
       "notes": "re-encoded as WebP at quality 90 from the PNG beside it in masters/; the drawing is unchanged and the master is the archive"
+    },
+    "duty_actions/clerical/gain_piety/clerical_gain_piety_left_v04.png": {
+      "state": "present",
+      "title": "Clerical devotion, fourth generation",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action art",
+      "source": "generated directly at the card's own 2:1, one image per action -- NOT cut from a shared master",
+      "licence": "openai-generated",
+      "slot": "left",
+      "role": "the LEFT action image, 1774 x 887, showing Devotion. Ratio 2.0000 against the slot's 2.0000, so `fit: cover` crops nothing; at 3.59 times the 494 x 247 slot it is comfortably above the 2x a retina screen asks for.",
+      "modifications": "NONE. This pair did not go through tools/duty_art/crop_duty_master.py, and that is the difference worth recording: every earlier card was half of one wide master, split in proportion to the card, so the two actions shared a scene and a crop. These were generated per action at 2:1 and are used whole. Nothing derives their shape from geometry.py, so if the slot's ratio ever moves away from 2:1 these will start cropping and no script will notice -- the v03 pair would simply have been re-cut.",
+      "reproducibleBy": "nothing in this repository -- the picture is model output and there is no crop step to re-run",
+      "notes": "Replaces v03, which was cut from clerical_master_v03.png. gain_piety is actionA and gain_coins actionB, which alphabetically is backwards -- `slot` is declared rather than inferred for that reason. The generator takes the highest version per slot, so these win over v03 by name alone.",
+      "sha256": "6407c99ebbd6e9eb5e4e4dd8c5d330f85149944bba5e948d502867d8d5a13b31"
+    },
+    "duty_actions/clerical/gain_coins/clerical_gain_coins_right_v04.png": {
+      "state": "present",
+      "title": "Clerical silversmith, fourth generation",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action art",
+      "source": "generated directly at the card's own 2:1, one image per action -- NOT cut from a shared master",
+      "licence": "openai-generated",
+      "slot": "right",
+      "role": "the RIGHT action image, 1774 x 887, showing Silversmith. Ratio 2.0000 against the slot's 2.0000, so `fit: cover` crops nothing; at 3.59 times the 494 x 247 slot it is comfortably above the 2x a retina screen asks for.",
+      "modifications": "NONE. This pair did not go through tools/duty_art/crop_duty_master.py, and that is the difference worth recording: every earlier card was half of one wide master, split in proportion to the card, so the two actions shared a scene and a crop. These were generated per action at 2:1 and are used whole. Nothing derives their shape from geometry.py, so if the slot's ratio ever moves away from 2:1 these will start cropping and no script will notice -- the v03 pair would simply have been re-cut.",
+      "reproducibleBy": "nothing in this repository -- the picture is model output and there is no crop step to re-run",
+      "notes": "Replaces v03, which was cut from clerical_master_v03.png. gain_piety is actionA and gain_coins actionB, which alphabetically is backwards -- `slot` is declared rather than inferred for that reason. The generator takes the highest version per slot, so these win over v03 by name alone.",
+      "sha256": "094f12e286e501b42404d83c6ab6645596c677525379b882ce190759a6503b55"
     }
   },
   "assetDirs": [
