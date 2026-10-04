@@ -1705,6 +1705,34 @@
       "reproducibleBy": "nothing in this repository -- the picture is model output and there is no crop step to re-run",
       "notes": "The first card art this duty has had; both folders held only a .gitkeep. `slot` is declared, not inferred -- the folder names are the wording, not the slot order -- and it is what makes the image usable at all, since one with no entry is dropped with \"no slot recorded, left out\".",
       "sha256": "6089ff11cdd33f97a90e40a028f3fe397e0d5f9a07981adbb43d7ea721395ea0"
+    },
+    "duty_actions/construct/construct_building/construct_construct_building_left_v01.png": {
+      "state": "present",
+      "title": "Construct Building, first generation",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action art",
+      "source": "generated directly at the card's own 2:1, one image per action -- NOT cut from a shared master",
+      "licence": "openai-generated",
+      "slot": "left",
+      "role": "the LEFT action image, 1774 x 887, showing two labourers lowering a carved keystone into the crown of a stone arch on a rope and hook, a hooded overseer and a torch at the scaffold's edge, the half-raised ribs of the works black behind them. Ratio 2.0000 against the slot's 2.0000, so `fit: cover` crops nothing; at 3.59 times the 494 x 247 slot it is comfortably above the 2x a retina screen asks for. duty_text.json calls this action 'Construct Building'; slotFolders puts it in actionA's folder, construct_building.",
+      "modifications": "NONE. Did not go through tools/duty_art/crop_duty_master.py. That script takes one wide master and splits it into a duty's two cards, so the pair shared a scene and a crop; these two are separate pictures of separate actions and are used whole. Nothing derives their shape from geometry.py, so if the slot's ratio ever moves off 2:1 they begin cropping and no script will notice.",
+      "reproducibleBy": "nothing in this repository -- the picture is model output and there is no crop step to re-run",
+      "notes": "The first card art this duty has had; both folders held only a .gitkeep. `slot` is declared, not inferred -- the folder names are the wording, not the slot order -- and it is what makes the image usable at all, since one with no entry is dropped with \"no slot recorded, left out\". Construct is the duty where that declaration carries the most weight: duty_text.json records that DutyTiles.md gives it THREE engine actions for two boxes, and construct_building_and_road_deferred has no box, so it gets no card here -- two pictures for two slots, not for three actions.",
+      "sha256": "92c94b5b2cc74622197c053a9792793f3ca4a8eefa87a75e0b021adf0860a541"
+    },
+    "duty_actions/construct/construct_road/construct_construct_road_right_v01.png": {
+      "state": "present",
+      "title": "Construct Road, first generation",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action art",
+      "source": "generated directly at the card's own 2:1, one image per action -- NOT cut from a shared master",
+      "licence": "openai-generated",
+      "slot": "right",
+      "role": "the RIGHT action image, 1774 x 887, showing a hooded man kneeling in the rain to set a stone into a rutted, flooded track with a hammer, a crate of rubble and a lantern beside him, a thatched cottage lit at the far end. Ratio 2.0000 against the slot's 2.0000, so `fit: cover` crops nothing; at 3.59 times the 494 x 247 slot it is comfortably above the 2x a retina screen asks for. duty_text.json calls this action 'Construct Road'; slotFolders puts it in actionB's folder, construct_road.",
+      "modifications": "NONE. Did not go through tools/duty_art/crop_duty_master.py. That script takes one wide master and splits it into a duty's two cards, so the pair shared a scene and a crop; these two are separate pictures of separate actions and are used whole. Nothing derives their shape from geometry.py, so if the slot's ratio ever moves off 2:1 they begin cropping and no script will notice.",
+      "reproducibleBy": "nothing in this repository -- the picture is model output and there is no crop step to re-run",
+      "notes": "The first card art this duty has had; both folders held only a .gitkeep. `slot` is declared, not inferred -- the folder names are the wording, not the slot order -- and it is what makes the image usable at all, since one with no entry is dropped with \"no slot recorded, left out\". Construct is the duty where that declaration carries the most weight: duty_text.json records that DutyTiles.md gives it THREE engine actions for two boxes, and construct_building_and_road_deferred has no box, so it gets no card here -- two pictures for two slots, not for three actions.",
+      "sha256": "0904f33c00278341a04acb8fcc3d5ee04e6a43d59638887c20f407c01b082c1a"
     }
   },
   "assetDirs": [
