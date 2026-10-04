@@ -43,11 +43,19 @@ jobs:
           # top-level directory is treated as engine work until someone decides otherwise --
           # the failure that costs fifteen minutes is cheaper than the one that ships a bug.
           #
-          # tests/layout_lab/ and tests/action_board/ are design-only despite living under
-          # tests/. They hold board_v2's guards, plus the mutation and browser acceptance suites
-          # left over from the layout lab; pilgrim/ imports nothing from ui/ at all, so no change
-          # in there can reach the engine. Both are listed in the UI condition below as well,
-          # because a path that stops triggering the engine lanes must start triggering something.
+          # tests/layout_lab/, tests/action_board/ and tests/icon_lab/ are design-only despite
+          # living under tests/. They hold board_v2's guards, plus the mutation and browser
+          # acceptance suites left over from the layout lab; pilgrim/ imports nothing from ui/ at
+          # all, so no change in there can reach the engine. All three are listed in the lab
+          # condition below as well, because a path that stops triggering the engine lanes must
+          # start triggering something.
+          #
+          # tests/icon_lab/ WAS MISSING HERE for one PR, and that is what this comment is for.
+          # It was added to the lab condition the day the directory arrived and not to this one,
+          # so every icon-lab change -- the most frequent kind of change this tree gets -- ran the
+          # whole engine suite to prove nothing about a tree the engine cannot import. The two
+          # lists have to agree, and tests/test_ci_router.py now asserts that they do, because
+          # reading them side by side in a shell pipeline is exactly how this was missed.
           #
           # tools/duty_art/ is the same case one directory over: a crop script for the duty
           # action illustrations, importing pillow and nothing from pilgrim/, and already tested
@@ -60,7 +68,7 @@ jobs:
           #
           # .github/ is NOT on this list, on purpose. Changing the router is exactly the moment
           # to make the full suite prove it still works, even when the edit is a comment.
-          if echo "$changed" | grep -qvE '^(ui/|docs/|tests/layout_lab/|tests/action_board/|tools/duty_art/|\.gitignore$)'; then
+          if echo "$changed" | grep -qvE '^(ui/|docs/|tests/layout_lab/|tests/action_board/|tests/icon_lab/|tools/duty_art/|\.gitignore$)'; then
             echo "engine=true" >>"$GITHUB_OUTPUT"
           else
             echo "engine=false" >>"$GITHUB_OUTPUT"
