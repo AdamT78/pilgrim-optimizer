@@ -46,6 +46,16 @@ Claude outputs/
 ui/concept/_reference/
 noun_wagon_7392556.svg
 
+# THE SAME RULE, ONE TREE OVER. duty_art_lab/_reference/ holds the style sheet that was attached to
+# the icon prompt -- somebody else's artwork, used as a reference and never drawn into the game. It
+# is ignored for the reason above and not because it is large; it is 96 KB.
+#
+# Nothing reads it: no generator, no test, no page. It was an input to a conversation with an image
+# model, so a clone without it is complete. What it was, and the sha256 to recognise it by, are in
+# duty_art_lab/prompts/icons/README.md -- the same trick ui/concept/manifest.json uses, so the
+# reference survives without the file.
+ui/board_v2/duty_art_lab/_reference/
+
 # The layout lab's build output. generate_layout_lab.py writes it on demand and the suites in
 # tests/layout_lab/ read it from here; it is a build artefact, not a source file.
 /out/

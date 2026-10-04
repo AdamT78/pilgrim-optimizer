@@ -169,8 +169,15 @@ body.full{background:#000}
 #wheel svg{width:100%;height:100%;display:block}
 #wheel [id="ground"]{display:none}
 #wheel [id="guide"]{display:none}
-#wheel path[data-face]{cursor:default;transition:filter .12s ease}
+#wheel path[data-face]{cursor:pointer;transition:filter .12s ease}
 #wheel path[data-face].lit{filter:brightness(1.45)}
+/* SELECTION IS A SECOND STATE, NOT THE SAME ONE. The tile has carried `sel` since there was a
+   board; the face had nothing, so picking a duty lit its tile and left the wheel saying nothing.
+   It is the hover brightness as asked, plus a gold rim: without the rim a selected face and a
+   hovered face are the same picture, and while you hover one face with another selected the
+   board would be showing two identical highlights and no way to tell which is which. */
+#wheel path[data-face].sel{filter:brightness(1.45);stroke:var(--line);stroke-width:2;
+  stroke-linejoin:round;paint-order:stroke}
 .fig{position:absolute;pointer-events:none}
 .fig svg{width:100%;height:100%;display:block;overflow:visible}
 
@@ -371,10 +378,19 @@ function drawArt(){
                                                             display: "none"}));
     b.id = "confirm-" + slot;
     b.textContent = "Confirm";
-    // Right-aligned to the card it confirms: the button sits where the thing it acts on ends.
-    b.style.left = ""; b.style.right = px(GEO.canvas.width - (c.x + c.width));
-    b.style.width = "auto"; b.style.padding = "0 22px";
+    fitConfirm(b, c);
   });
+}
+
+// ONE RULE FOR EVERY CONFIRM BUTTON. All three say the same word and do the same kind of thing,
+// so they are the same button: as wide as that word plus the board's padding, sitting at the
+// right-hand end of whatever it confirms. It was written inline for the two action cards and not
+// for the Tithe, so the Tithe's took its box at face value and came out the full width of the
+// panel -- three buttons, one job, two sizes. The padding was a 22 typed here; it is
+// CONFIRM_PAD_X now, because a number the drawing depends on belongs with the other ones.
+function fitConfirm(b, at){
+  b.style.left = ""; b.style.right = px(GEO.canvas.width - (at.x + at.width));
+  b.style.width = "auto"; b.style.padding = "0 " + px(GEO.confirm.padX);
 }
 
 function drawSide(){
@@ -410,6 +426,7 @@ function drawSide(){
   var b = el("div", "btn primary", Object.assign(box(tc), {fontSize: px(GEO.confirm.size),
                                                            display: "none"}));
   b.id = "confirm-tithe"; b.textContent = "Confirm";
+  fitConfirm(b, tc);
 
   [["showMap", "Show Map"], ["hire", "Hire Building"]].forEach(function(pair){
     var o = GEO[pair[0]];
@@ -463,6 +480,12 @@ function drawWheel(){
     face.setAttribute("data-face", d.face);
     face.setAttribute("data-hover-duty", d.slug);
     face.style.pointerEvents = "auto";
+    // THE SAME ENTRY POINT THE TILE USES. A face and its tile are two handles on one duty, so
+    // they go through pickDuty and the selection, the action cards and the wheel all follow from
+    // the one piece of state rather than from whichever was clicked.
+    face.addEventListener("click", function(slug){
+      return function(){ pickDuty(slug); };
+    }(d.slug));
   });
   drawFigures();
 }
@@ -515,6 +538,10 @@ function render(){
   GEO.duties.forEach(function(d){
     var tile = document.getElementById("tile-" + d.slug);
     if (tile) tile.classList.toggle("sel", d.slug === S.duty);
+    // AND THE WHEEL, FROM THE SAME LINE. Two loops would be two answers the first time one of
+    // them was edited; this is the rule lightFace() already states for the hover pair.
+    var face = document.querySelector('#wheel [data-face="' + d.face + '"]');
+    if (face) face.classList.toggle("sel", d.slug === S.duty);
   });
   var info = dutyOf(S.duty);
   ["actionA","actionB"].forEach(function(slot){

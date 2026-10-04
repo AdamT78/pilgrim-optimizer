@@ -60,6 +60,7 @@
       "slot": "master",
       "role": "the drawing as it came out of the generator, 1254 square on transparency. Allocation has one action, so this is it: 'Allocation', 'Relocate X acolytes between Abbey and Special Activities', whose pictures live under 'relocate_acolytes'.",
       "notes": "master, not shipped, and nothing is cut from it yet: how much of the square the board draws is still to be chosen in ui/board_v2/icon_lab/, and until it is there is no allocation_actionA_icon_v01.png for this to be the original of. Downloaded as allocation_relocation.png, which names the action after what it does rather than what it is called and copied in unchanged -- same machine, no bridge, so byte-identical to the generator's own file.",
+      "reproducibleBy": "duty_art_lab/prompts/icons/01-icons-from-seal-motifs.md -- one prompt made every icon master in this tree, and the brief is it, word for word. What changed between runs was the SECOND attached image, never the text: the first attachment was the style sheet (_reference/icon_style_sheet__e.jpg, not committed -- the brief's README says what it was and the sha256 to know it by), the second was this action's own wax seal, so an icon is its seal's motif redrawn in the sheet's style. Which seal VERSION was attached is not recorded and cannot be recovered. It does not reproduce these pixels either: the prompt asked for five versions and one was chosen, and the same prompt does not produce the same picture twice.",
       "sha256": "724f160e27393d95a5e907624787cb7c819e55d5977e61baf830ae9ed4eba167"
     },
     "duty_actions/allocation/seals/allocation_actionA_seal_v01.webp": {
@@ -211,6 +212,7 @@
       "slot": "master",
       "role": "the drawing as it came out of the generator, 1254 square on transparency, before the trim",
       "notes": "master, not shipped; the original of build_roads_actionA_icon_v04.png. The untouched download, kept because the same prompt does not produce the same picture twice. Unlike every other master in this tree it is byte-identical to the file that came out of the generator: the others each carry a C2PA `caBX` chunk minted when they were written to this machine, which this one avoided by travelling inside a tar. The pixels were never in question either way -- the chunk is ancillary and no decoder reads it -- but a master is the one file where byte-exactness is the point.",
+      "reproducibleBy": "duty_art_lab/prompts/icons/01-icons-from-seal-motifs.md -- one prompt made every icon master in this tree, and the brief is it, word for word. What changed between runs was the SECOND attached image, never the text: the first attachment was the style sheet (_reference/icon_style_sheet__e.jpg, not committed -- the brief's README says what it was and the sha256 to know it by), the second was this action's own wax seal, so an icon is its seal's motif redrawn in the sheet's style. Which seal VERSION was attached is not recorded and cannot be recovered. It does not reproduce these pixels either: the prompt asked for five versions and one was chosen, and the same prompt does not produce the same picture twice.",
       "sha256": "bf3b9ae12444199853aa0c0aa4e4b2e2ff9e6a7395c84f3f590d7dafadb33bae"
     },
     "duty_actions/build_roads/icons/masters/build_roads_actionB_icon_master_v04.png": {
@@ -223,6 +225,7 @@
       "slot": "master",
       "role": "the drawing as it came out of the generator, 1254 square on transparency, before the trim",
       "notes": "master, not shipped; the original of build_roads_actionB_icon_v04.png. The untouched download, kept because the same prompt does not produce the same picture twice. Unlike every other master in this tree it is byte-identical to the file that came out of the generator: the others each carry a C2PA `caBX` chunk minted when they were written to this machine, which this one avoided by travelling inside a tar. The pixels were never in question either way -- the chunk is ancillary and no decoder reads it -- but a master is the one file where byte-exactness is the point.",
+      "reproducibleBy": "duty_art_lab/prompts/icons/01-icons-from-seal-motifs.md -- one prompt made every icon master in this tree, and the brief is it, word for word. What changed between runs was the SECOND attached image, never the text: the first attachment was the style sheet (_reference/icon_style_sheet__e.jpg, not committed -- the brief's README says what it was and the sha256 to know it by), the second was this action's own wax seal, so an icon is its seal's motif redrawn in the sheet's style. Which seal VERSION was attached is not recorded and cannot be recovered. It does not reproduce these pixels either: the prompt asked for five versions and one was chosen, and the same prompt does not produce the same picture twice.",
       "sha256": "49782882218e9ce86cf9b1e1c483330adbf4defb0ac718b1d228cb8a97efb7af"
     },
     "duty_actions/build_roads/seals/build_roads_actionA_seal_v01.webp": {
@@ -441,6 +444,7 @@
       "slot": "master",
       "role": "the drawing as it came out of the generator, 1254 square on transparency. The first of Clerical's two actions -- the filename's actionA/actionB is what says which, as it does for every mark in this tree.",
       "notes": "master, not shipped, and nothing is cut from it yet: how much of the square the board draws is still to be chosen in ui/board_v2/icon_lab/, and until it is there is no clerical_actionA_icon_v01.png for this to be the original of. Downloaded as clerical_devotion.png and copied in unchanged -- same machine, no bridge, so byte-identical to the generator's own file.",
+      "reproducibleBy": "duty_art_lab/prompts/icons/01-icons-from-seal-motifs.md -- one prompt made every icon master in this tree, and the brief is it, word for word. What changed between runs was the SECOND attached image, never the text: the first attachment was the style sheet (_reference/icon_style_sheet__e.jpg, not committed -- the brief's README says what it was and the sha256 to know it by), the second was this action's own wax seal, so an icon is its seal's motif redrawn in the sheet's style. Which seal VERSION was attached is not recorded and cannot be recovered. It does not reproduce these pixels either: the prompt asked for five versions and one was chosen, and the same prompt does not produce the same picture twice.",
       "sha256": "edaa82c60bdf40f5a3d745bd76da78f28a8c69591c7fab3c9e14d536c540d4da"
     },
     "duty_actions/clerical/icons/masters/clerical_actionB_icon_master_v01.png": {
@@ -453,6 +457,7 @@
       "slot": "master",
       "role": "the drawing as it came out of the generator, 1254 square on transparency. Clerical's second action, which duty_text.json calls 'Silversmith' and whose pictures live under 'gain_coins' -- the filename's actionA/actionB is what says which, as it does for every mark in this tree.",
       "notes": "master, not shipped, and nothing is cut from it yet: how much of the square the board draws is still to be chosen in ui/board_v2/icon_lab/, and until it is there is no clerical_actionB_icon_v01.png for this to be the original of. Downloaded as clerical_silversmith.png and copied in unchanged -- same machine, no bridge, so byte-identical to the generator's own file.",
+      "reproducibleBy": "duty_art_lab/prompts/icons/01-icons-from-seal-motifs.md -- one prompt made every icon master in this tree, and the brief is it, word for word. What changed between runs was the SECOND attached image, never the text: the first attachment was the style sheet (_reference/icon_style_sheet__e.jpg, not committed -- the brief's README says what it was and the sha256 to know it by), the second was this action's own wax seal, so an icon is its seal's motif redrawn in the sheet's style. Which seal VERSION was attached is not recorded and cannot be recovered. It does not reproduce these pixels either: the prompt asked for five versions and one was chosen, and the same prompt does not produce the same picture twice.",
       "sha256": "ffe2d1b453397abbad863a843f0bda9d738094f25117d743008040498b882a93"
     },
     "duty_actions/clerical/masters/clerical_master_v01.png": {
@@ -643,6 +648,7 @@
       "slot": "master",
       "role": "the drawing as it came out of the generator, 1254 square on transparency. Construct's first action, 'Construct Building', whose pictures live under 'construct_building' -- the filename's actionA/actionB is what says which, as it does for every mark in this tree. When this was filed duty_text.json called BOTH of Construct's actions 'Construct', so the slot was settled by the folder; the wording has since been corrected and a test now refuses a duty that names its two actions alike.",
       "notes": "master, not shipped, and nothing is cut from it yet: how much of the square the board draws is still to be chosen in ui/board_v2/icon_lab/, and until it is there is no construct_actionA_icon_v01.png for this to be the original of. Downloaded as construct_construct_building.png and copied in unchanged -- same machine, no bridge, so byte-identical to the generator's own file.",
+      "reproducibleBy": "duty_art_lab/prompts/icons/01-icons-from-seal-motifs.md -- one prompt made every icon master in this tree, and the brief is it, word for word. What changed between runs was the SECOND attached image, never the text: the first attachment was the style sheet (_reference/icon_style_sheet__e.jpg, not committed -- the brief's README says what it was and the sha256 to know it by), the second was this action's own wax seal, so an icon is its seal's motif redrawn in the sheet's style. Which seal VERSION was attached is not recorded and cannot be recovered. It does not reproduce these pixels either: the prompt asked for five versions and one was chosen, and the same prompt does not produce the same picture twice.",
       "sha256": "e8ca83acd05b5093d7b9fa4ff7d9c2d0d3317660dd2c4e9152d2c484a912174b"
     },
     "duty_actions/construct/icons/masters/construct_actionB_icon_master_v01.png": {
@@ -655,6 +661,7 @@
       "slot": "master",
       "role": "the drawing as it came out of the generator, 1254 square on transparency. Construct's second action, 'Construct Road', whose pictures live under 'construct_road' -- the filename's actionA/actionB is what says which, as it does for every mark in this tree. When this was filed duty_text.json called BOTH of Construct's actions 'Construct', so the slot was settled by the folder; the wording has since been corrected and a test now refuses a duty that names its two actions alike.",
       "notes": "master, not shipped, and nothing is cut from it yet: how much of the square the board draws is still to be chosen in ui/board_v2/icon_lab/, and until it is there is no construct_actionB_icon_v01.png for this to be the original of. Downloaded as construct_construct_road.png and copied in unchanged -- same machine, no bridge, so byte-identical to the generator's own file.",
+      "reproducibleBy": "duty_art_lab/prompts/icons/01-icons-from-seal-motifs.md -- one prompt made every icon master in this tree, and the brief is it, word for word. What changed between runs was the SECOND attached image, never the text: the first attachment was the style sheet (_reference/icon_style_sheet__e.jpg, not committed -- the brief's README says what it was and the sha256 to know it by), the second was this action's own wax seal, so an icon is its seal's motif redrawn in the sheet's style. Which seal VERSION was attached is not recorded and cannot be recovered. It does not reproduce these pixels either: the prompt asked for five versions and one was chosen, and the same prompt does not produce the same picture twice.",
       "sha256": "8b374b73b5905c30286141e2633b57690340e5a9a1adceceb38bdc31c224c74a"
     },
     "duty_actions/construct/seals/construct_actionA_seal_v01.webp": {
@@ -799,6 +806,7 @@
       "slot": "master",
       "role": "the drawing as it came out of the generator, 1254 square on transparency. The first of Give Alms's two actions -- the filename's actionA/actionB is what says which, as it does for every mark in this tree.",
       "notes": "master, not shipped, and nothing is cut from it yet: how much of the square the board draws is still to be chosen in ui/board_v2/icon_lab/, and until it is there is no give_alms_actionA_icon_v01.png for this to be the original of. Downloaded as give_alms_alms.png and copied in unchanged -- same machine, no bridge, so byte-identical to the generator's own file.",
+      "reproducibleBy": "duty_art_lab/prompts/icons/01-icons-from-seal-motifs.md -- one prompt made every icon master in this tree, and the brief is it, word for word. What changed between runs was the SECOND attached image, never the text: the first attachment was the style sheet (_reference/icon_style_sheet__e.jpg, not committed -- the brief's README says what it was and the sha256 to know it by), the second was this action's own wax seal, so an icon is its seal's motif redrawn in the sheet's style. Which seal VERSION was attached is not recorded and cannot be recovered. It does not reproduce these pixels either: the prompt asked for five versions and one was chosen, and the same prompt does not produce the same picture twice.",
       "sha256": "1dc960a5dde1829933963d82d01c4009b9cf0cc8fc58d7a0e4c96f7dd52523d0"
     },
     "duty_actions/give_alms/icons/masters/give_alms_actionB_icon_master_v01.png": {
@@ -811,6 +819,7 @@
       "slot": "master",
       "role": "the drawing as it came out of the generator, 1254 square on transparency. The second of Give Alms's two actions -- the filename's actionA/actionB is what says which, as it does for every mark in this tree.",
       "notes": "master, not shipped, and nothing is cut from it yet: how much of the square the board draws is still to be chosen in ui/board_v2/icon_lab/, and until it is there is no give_alms_actionB_icon_v01.png for this to be the original of. Downloaded as give_alms_donate_building.png and copied in unchanged -- same machine, no bridge, so byte-identical to the generator's own file.",
+      "reproducibleBy": "duty_art_lab/prompts/icons/01-icons-from-seal-motifs.md -- one prompt made every icon master in this tree, and the brief is it, word for word. What changed between runs was the SECOND attached image, never the text: the first attachment was the style sheet (_reference/icon_style_sheet__e.jpg, not committed -- the brief's README says what it was and the sha256 to know it by), the second was this action's own wax seal, so an icon is its seal's motif redrawn in the sheet's style. Which seal VERSION was attached is not recorded and cannot be recovered. It does not reproduce these pixels either: the prompt asked for five versions and one was chosen, and the same prompt does not produce the same picture twice.",
       "sha256": "a6e479b51dd70c7b053b9cf6e5437d8417021e4aa2cfd1674c757872f0df72e4"
     },
     "duty_actions/give_alms/seals/give_alms_actionA_seal_v01.webp": {
@@ -915,6 +924,7 @@
       "slot": "master",
       "role": "the drawing as it came out of the generator, 1254 square on transparency. The first of Ordination's two actions -- the filename's actionA/actionB is what says which, as it does for every mark in this tree.",
       "notes": "master, not shipped, and nothing is cut from it yet: how much of the square the board draws is still to be chosen in ui/board_v2/icon_lab/, and until it is there is no ordination_actionA_icon_v01.png for this to be the original of. Downloaded as ordination_ordain.png and copied in unchanged -- same machine, no bridge, so byte-identical to the generator's own file.",
+      "reproducibleBy": "duty_art_lab/prompts/icons/01-icons-from-seal-motifs.md -- one prompt made every icon master in this tree, and the brief is it, word for word. What changed between runs was the SECOND attached image, never the text: the first attachment was the style sheet (_reference/icon_style_sheet__e.jpg, not committed -- the brief's README says what it was and the sha256 to know it by), the second was this action's own wax seal, so an icon is its seal's motif redrawn in the sheet's style. Which seal VERSION was attached is not recorded and cannot be recovered. It does not reproduce these pixels either: the prompt asked for five versions and one was chosen, and the same prompt does not produce the same picture twice.",
       "sha256": "936473608d8671c3698571b5ba082ae5ca7077d6d78806886d6a922ca1d3989e"
     },
     "duty_actions/ordination/icons/masters/ordination_actionB_icon_master_v01.png": {
@@ -927,6 +937,7 @@
       "slot": "master",
       "role": "the drawing as it came out of the generator, 1254 square on transparency. The second of Ordination's two actions -- the filename's actionA/actionB is what says which, as it does for every mark in this tree.",
       "notes": "master, not shipped, and nothing is cut from it yet: how much of the square the board draws is still to be chosen in ui/board_v2/icon_lab/, and until it is there is no ordination_actionB_icon_v01.png for this to be the original of. Downloaded as ordination_mission.png and copied in unchanged -- same machine, no bridge, so byte-identical to the generator's own file.",
+      "reproducibleBy": "duty_art_lab/prompts/icons/01-icons-from-seal-motifs.md -- one prompt made every icon master in this tree, and the brief is it, word for word. What changed between runs was the SECOND attached image, never the text: the first attachment was the style sheet (_reference/icon_style_sheet__e.jpg, not committed -- the brief's README says what it was and the sha256 to know it by), the second was this action's own wax seal, so an icon is its seal's motif redrawn in the sheet's style. Which seal VERSION was attached is not recorded and cannot be recovered. It does not reproduce these pixels either: the prompt asked for five versions and one was chosen, and the same prompt does not produce the same picture twice.",
       "sha256": "3f1dd9b814a2e7d0db6be4df4ae3583d7bcdef82b98c0462b29ade7f5c1b87c2"
     },
     "duty_actions/ordination/icons/ordination_actionA_icon_v01.webp": {
@@ -994,20 +1005,6 @@
       "notes": "master, not shipped. NO DIVIDER. v01 hid the cut behind a masonry pier down the centre line, which worked and read as a contrivance. This one hides it in distance instead: an open churchyard road occupies the middle, and the seam falls in mud and puddles where there is no structure to misalign. Measured, with the caveats that matter. The seam mismatch is 35.0 at the 46th percentile of its own image, which looks poor beside v01's 28.8 at the 8th and is not comparable: that statistic ranks a cut against the quietest place available, and in an open road nowhere is quiet. Inspected at full height instead, the join is not visible. A vertical-alignment check reported a 14 px step; injecting known 4 px and 8 px steps showed the check recovers them on architecture and wanders on bare texture, so that reading is noise and nothing continuous crosses the seam here to step. Chosen on the picture over a sibling generated a minute later, which measured greyer still at 0.149. What is NOT resolved: both groups sit further out towards the edges than the brief asks, so each card carries more open ground on its inner side than v01 did. That was judged by eye; two attempts to measure it failed, edge density being a poor proxy for compositional weight in an engraving where mud hatches as densely as a face.",
       "bytes": 3543706,
       "sha256": "df109933cb49b24f253f0cc44afe7f0be42a87d66fa7b9070589620aa82bc313"
-    },
-    "duty_actions/ordination/ordain/ordination_ordain_left_v02.png": {
-      "creator": "Generated with ChatGPT (OpenAI)",
-      "collection": "Pilgrim board_v2 duty action art",
-      "licence": "openai-generated",
-      "state": "present",
-      "title": "Ordination, ordain",
-      "source": "cut from duty_actions/ordination/masters/ordination_master_v02.png; the picture is model output, the cut is deterministic",
-      "slot": "left",
-      "role": "the LEFT action image, 1065 x 522, showing Ordain: a bishop laying his hand on a kneeling man on the church steps, a cross-bearer and candle-bearers behind him in the doorway. Ratio 2.0402 against the slot's 2.0380, so `fit: cover` clips 0.4 of a slot pixel.",
-      "modifications": "cut at (0, 101, 1065, 623) by tools/duty_art/crop_duty_master.py --y 101. ADJACENT, NOT OVERLAPPING: the master is cropped once to the band's aspect and split at the gap, so the left window ends at x 1065 and the right begins at x 1107. The 42 px between them is what the board's 15 px gap covers; nothing is shared and nothing is drawn twice. TINT MATCHED to duty_actions/clerical/masters/clerical_master_v03.png at full strength (--match, sha256 a4aed83fe176a67d1f2b561979f269c73bd28b99c5bf566ebe144ee9fdaec82e), so the two duties on the board agree. The transform matches the mean and spread of the two CIELAB chroma channels of the reference's BAND and leaves L* alone: a* +1.61/1.50 -> +2.45/2.22, b* +5.28/2.68 -> +7.80/4.37. Median saturation went 0.176 to 0.247 against the reference's 0.239 while L mean held at 65.2 and its spread at 37.6 -> 37.5. NOT DONE IN THE BRIEF, and that is the finding rather than a shortcut: eleven masters across four briefs came back between 0.15 and 0.27, the scatter inside a single brief being wider than the distance from the greyest to the warmest, so wording steers the average and cannot set the value. No pixel moves, so registration is untouched, and the master is stored unmatched so any crop can be cut again against a different reference.",
-      "bytes": 1234899,
-      "sha256": "ec0095e39090e02324b61e2b6ef8cf48916788432b8b2049d84c340f9811d401",
-      "notes": "Cut from ordination_master_v02.png with tools/duty_art/crop_duty_master.py at --y 101 and --match clerical_master_v03.png. The cut takes the card size and the gap from ui/board_v2/action_board/geometry.py, so it cannot drift from the box it lands in; it read the layout lab's saved state until that state turned out to describe a 375 x 184 card the board does not have, and these were re-cut."
     },
     "duty_actions/ordination/seals/masters/ordination_actionA_seal_master_v01.png": {
       "state": "present",
@@ -1101,20 +1098,6 @@
       "reproducibleBy": "duty_art_lab/prompts/seals/22-ordination-mission-red-border.md",
       "notes": "scaled x0.9719 about its own centre, from 0.932 of its square to the board's 0.906; re-encoded as WebP at quality 90 from ordination_actionB_seal_master_v02.png, the drawing unchanged"
     },
-    "duty_actions/ordination/send_on_mission/ordination_send_on_mission_right_v02.png": {
-      "creator": "Generated with ChatGPT (OpenAI)",
-      "collection": "Pilgrim board_v2 duty action art",
-      "licence": "openai-generated",
-      "state": "present",
-      "title": "Ordination, send on mission",
-      "source": "cut from duty_actions/ordination/masters/ordination_master_v02.png; the picture is model output, the cut is deterministic",
-      "slot": "right",
-      "role": "the RIGHT action image, 1065 x 522, showing Mission: two friars come down the road from that church, preaching at the door of a turf-and-wattle hovel. Ratio 2.0402 against the slot's 2.0380, so `fit: cover` clips 0.4 of a slot pixel.",
-      "modifications": "cut at (1107, 101, 2172, 623) by tools/duty_art/crop_duty_master.py --y 101. ADJACENT, NOT OVERLAPPING: the master is cropped once to the band's aspect and split at the gap, so the left window ends at x 1065 and the right begins at x 1107. The 42 px between them is what the board's 15 px gap covers; nothing is shared and nothing is drawn twice. TINT MATCHED to duty_actions/clerical/masters/clerical_master_v03.png at full strength (--match, sha256 a4aed83fe176a67d1f2b561979f269c73bd28b99c5bf566ebe144ee9fdaec82e), so the two duties on the board agree. The transform matches the mean and spread of the two CIELAB chroma channels of the reference's BAND and leaves L* alone: a* +1.61/1.50 -> +2.45/2.22, b* +5.28/2.68 -> +7.80/4.37. Median saturation went 0.176 to 0.247 against the reference's 0.239 while L mean held at 65.2 and its spread at 37.6 -> 37.5. NOT DONE IN THE BRIEF, and that is the finding rather than a shortcut: eleven masters across four briefs came back between 0.15 and 0.27, the scatter inside a single brief being wider than the distance from the greyest to the warmest, so wording steers the average and cannot set the value. No pixel moves, so registration is untouched, and the master is stored unmatched so any crop can be cut again against a different reference.",
-      "notes": "Cut from ordination_master_v02.png with tools/duty_art/crop_duty_master.py at --y 101 and --match clerical_master_v03.png. The cut takes the card size and the gap from ui/board_v2/action_board/geometry.py, so it cannot drift from the box it lands in; it read the layout lab's saved state until that state turned out to describe a 375 x 184 card the board does not have, and these were re-cut.",
-      "bytes": 1223404,
-      "sha256": "813fedbd8c78d688846bf2f1dc61046a23b3c83ba030e8813ed42cbe61e7c17f"
-    },
     "duty_actions/produce/icons/masters/produce_actionA_icon_master_v01.png": {
       "state": "present",
       "creator": "Generated with ChatGPT (OpenAI)",
@@ -1125,6 +1108,7 @@
       "slot": "master",
       "role": "the drawing as it came out of the generator, 1254 square on transparency. Produce's first action: 'Produce Wheat', 'Gain X wheat', whose pictures live under 'gain_wheat'.",
       "notes": "master, not shipped, and nothing is cut from it yet: how much of the square the board draws is still to be chosen in ui/board_v2/icon_lab/, and until it is there is no produce_actionA_icon_v01.png for this to be the original of. Downloaded as produce_wheat.png and copied in unchanged -- same machine, no bridge, so byte-identical to the generator's own file.",
+      "reproducibleBy": "duty_art_lab/prompts/icons/01-icons-from-seal-motifs.md -- one prompt made every icon master in this tree, and the brief is it, word for word. What changed between runs was the SECOND attached image, never the text: the first attachment was the style sheet (_reference/icon_style_sheet__e.jpg, not committed -- the brief's README says what it was and the sha256 to know it by), the second was this action's own wax seal, so an icon is its seal's motif redrawn in the sheet's style. Which seal VERSION was attached is not recorded and cannot be recovered. It does not reproduce these pixels either: the prompt asked for five versions and one was chosen, and the same prompt does not produce the same picture twice.",
       "sha256": "b034d90ce650c4bfe1ad0f1ccc5b081444485d33060adc6714d0058491308ca5"
     },
     "duty_actions/produce/icons/masters/produce_actionB_icon_master_v01.png": {
@@ -1137,6 +1121,7 @@
       "slot": "master",
       "role": "the drawing as it came out of the generator, 1254 square on transparency. Produce's second action, which duty_text.json calls 'Produce Stone' and whose pictures live under 'gain_stone' -- the filename's actionA/actionB is what says which, as it does for every mark in this tree.",
       "notes": "master, not shipped, and nothing is cut from it yet: how much of the square the board draws is still to be chosen in ui/board_v2/icon_lab/, and until it is there is no produce_actionB_icon_v01.png for this to be the original of. Downloaded as produce_stone.png and copied in unchanged -- same machine, no bridge, so byte-identical to the generator's own file.",
+      "reproducibleBy": "duty_art_lab/prompts/icons/01-icons-from-seal-motifs.md -- one prompt made every icon master in this tree, and the brief is it, word for word. What changed between runs was the SECOND attached image, never the text: the first attachment was the style sheet (_reference/icon_style_sheet__e.jpg, not committed -- the brief's README says what it was and the sha256 to know it by), the second was this action's own wax seal, so an icon is its seal's motif redrawn in the sheet's style. Which seal VERSION was attached is not recorded and cannot be recovered. It does not reproduce these pixels either: the prompt asked for five versions and one was chosen, and the same prompt does not produce the same picture twice.",
       "sha256": "1e87271a7233da38eafc9bf895c521c293f9080f3d134e6e01a98c0a9f178f89"
     },
     "duty_actions/produce/icons/produce_actionA_icon_v01.webp": {
@@ -1328,6 +1313,7 @@
       "slot": "master",
       "role": "the drawing as it came out of the generator, 1254 square on transparency. Taxation has one action, so this is it: 'Taxation', 'Gain X resources', whose pictures live under 'action_a'.",
       "notes": "master, not shipped, and nothing is cut from it yet: how much of the square the board draws is still to be chosen in ui/board_v2/icon_lab/, and until it is there is no taxation_actionA_icon_v01.png for this to be the original of. Downloaded as taxation.png and copied in unchanged -- same machine, no bridge, so byte-identical to the generator's own file.",
+      "reproducibleBy": "duty_art_lab/prompts/icons/01-icons-from-seal-motifs.md -- one prompt made every icon master in this tree, and the brief is it, word for word. What changed between runs was the SECOND attached image, never the text: the first attachment was the style sheet (_reference/icon_style_sheet__e.jpg, not committed -- the brief's README says what it was and the sha256 to know it by), the second was this action's own wax seal, so an icon is its seal's motif redrawn in the sheet's style. Which seal VERSION was attached is not recorded and cannot be recovered. It does not reproduce these pixels either: the prompt asked for five versions and one was chosen, and the same prompt does not produce the same picture twice.",
       "sha256": "abab6eb4a122f8cc8d537672f01a62fde6cca98fb5524026bfb395e5317fa232"
     },
     "duty_actions/taxation/icons/taxation_actionA_icon_v01.webp": {
@@ -1621,6 +1607,202 @@
       "role": "the wheat token the Tithe card draws, 1254 x 1254. The PNG is the COMPLETE token -- rim, disc and motif are painted in -- so the layout draws the image and nothing behind or around it.",
       "modifications": "rescaled x1.070 about its own centre so all three tokens read the same size at one tokenSize. Measured as a fraction of the square, the solid disc went from 0.5547 to 0.6354, matching stone's 0.6365; nothing is clipped at the canvas edge. The correction is made in the artwork rather than by a per-token slider in the layout lab, so production does not have to reproduce a studio adjustment.",
       "notes": "re-encoded as WebP at quality 90 from the PNG beside it in masters/; the drawing is unchanged and the master is the archive"
+    },
+    "duty_actions/clerical/gain_piety/clerical_gain_piety_left_v04.png": {
+      "state": "present",
+      "title": "Clerical devotion, fourth generation",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action art",
+      "source": "generated directly at the card's own 2:1, one image per action -- NOT cut from a shared master",
+      "licence": "openai-generated",
+      "slot": "left",
+      "role": "the LEFT action image, 1774 x 887, showing Devotion. Ratio 2.0000 against the slot's 2.0000, so `fit: cover` crops nothing; at 3.59 times the 494 x 247 slot it is comfortably above the 2x a retina screen asks for.",
+      "modifications": "NONE. This pair did not go through tools/duty_art/crop_duty_master.py, and that is the difference worth recording: every earlier card was half of one wide master, split in proportion to the card, so the two actions shared a scene and a crop. These were generated per action at 2:1 and are used whole. Nothing derives their shape from geometry.py, so if the slot's ratio ever moves away from 2:1 these will start cropping and no script will notice -- the v03 pair would simply have been re-cut.",
+      "reproducibleBy": "duty_art_lab/prompts/panels/03-clerical-devotion.md -- the prompt as it was sent. It does not reproduce these pixels: the same prompt does not produce the same picture twice, which is why the picture is committed and not just the recipe. The brief is the intent, the file is the artefact.",
+      "notes": "Replaces v03, which was cut from clerical_master_v03.png. gain_piety is actionA and gain_coins actionB, which alphabetically is backwards -- `slot` is declared rather than inferred for that reason. The generator takes the highest version per slot, so these win over v03 by name alone.",
+      "sha256": "6407c99ebbd6e9eb5e4e4dd8c5d330f85149944bba5e948d502867d8d5a13b31"
+    },
+    "duty_actions/clerical/gain_coins/clerical_gain_coins_right_v04.png": {
+      "state": "present",
+      "title": "Clerical silversmith, fourth generation",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action art",
+      "source": "generated directly at the card's own 2:1, one image per action -- NOT cut from a shared master",
+      "licence": "openai-generated",
+      "slot": "right",
+      "role": "the RIGHT action image, 1774 x 887, showing Silversmith. Ratio 2.0000 against the slot's 2.0000, so `fit: cover` crops nothing; at 3.59 times the 494 x 247 slot it is comfortably above the 2x a retina screen asks for.",
+      "modifications": "NONE. This pair did not go through tools/duty_art/crop_duty_master.py, and that is the difference worth recording: every earlier card was half of one wide master, split in proportion to the card, so the two actions shared a scene and a crop. These were generated per action at 2:1 and are used whole. Nothing derives their shape from geometry.py, so if the slot's ratio ever moves away from 2:1 these will start cropping and no script will notice -- the v03 pair would simply have been re-cut.",
+      "reproducibleBy": "duty_art_lab/prompts/panels/04-clerical-silversmith.md -- the prompt as it was sent. It does not reproduce these pixels: the same prompt does not produce the same picture twice, which is why the picture is committed and not just the recipe. The brief is the intent, the file is the artefact.",
+      "notes": "Replaces v03, which was cut from clerical_master_v03.png. gain_piety is actionA and gain_coins actionB, which alphabetically is backwards -- `slot` is declared rather than inferred for that reason. The generator takes the highest version per slot, so these win over v03 by name alone.",
+      "sha256": "094f12e286e501b42404d83c6ab6645596c677525379b882ce190759a6503b55"
+    },
+    "duty_actions/taxation/action_a/taxation_action_a_left_v01.png": {
+      "state": "present",
+      "title": "Taxation, first generation",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action art",
+      "source": "generated directly at the card's own 2:1, one image for the duty's single action -- NOT cut from a shared master",
+      "licence": "openai-generated",
+      "slot": "left",
+      "role": "the LEFT action image, 1774 x 887, showing a lord taking the tithe against a tally stick, with ledger, scales and the grain being handed over. Ratio 2.0000 against the slot's 2.0000, so `fit: cover` crops nothing; at 3.59 times the 494 x 247 slot it is comfortably above the 2x a retina screen asks for. THE ONLY ACTION THIS DUTY HAS -- duty_text.json gives Taxation no actionB, so there is no right-hand card and `left` is not one of a pair.",
+      "modifications": "NONE. Did not go through tools/duty_art/crop_duty_master.py: that script splits one wide master into a duty's two cards, and this duty has one. Generated at 2:1 and used whole. Nothing derives its shape from geometry.py, so if the slot's ratio ever moves off 2:1 this begins cropping and no script will notice.",
+      "reproducibleBy": "duty_art_lab/prompts/panels/10-taxation-taxation.md -- the prompt as it was sent. It does not reproduce these pixels: the same prompt does not produce the same picture twice, which is why the picture is committed and not just the recipe. The brief is the intent, the file is the artefact.",
+      "notes": "The first card art this duty has had; the folder held only a .gitkeep, so the board drew an empty slot for it. `slot` is what makes the image usable at all -- one with no entry is dropped with \"no slot recorded, left out\".",
+      "sha256": "cbddb5811157b86ddcb5bf9a20986e54fd63f268b42fc88d4dceac559e1a5b21"
+    },
+    "duty_actions/allocation/relocate_acolytes/allocation_relocate_acolytes_left_v01.png": {
+      "state": "present",
+      "title": "Allocation, first generation",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action art",
+      "source": "generated directly at the card's own 2:1, one image for the duty's single action -- NOT cut from a shared master",
+      "licence": "openai-generated",
+      "slot": "left",
+      "role": "the LEFT action image, 1774 x 887, showing keys passed to hooded acolytes, the duty being assigned. Ratio 2.0000 against the slot's 2.0000, so `fit: cover` crops nothing; at 3.59 times the 494 x 247 slot it is comfortably above the 2x a retina screen asks for. THE ONLY ACTION THIS DUTY HAS -- duty_text.json gives Allocation no actionB, so there is no right-hand card and `left` is not one of a pair.",
+      "modifications": "NONE. Did not go through tools/duty_art/crop_duty_master.py: that script splits one wide master into a duty's two cards, and this duty has one. Generated at 2:1 and used whole. Nothing derives its shape from geometry.py, so if the slot's ratio ever moves off 2:1 this begins cropping and no script will notice.",
+      "reproducibleBy": "duty_art_lab/prompts/panels/09-allocation-allocation.md -- the prompt as it was sent. It does not reproduce these pixels: the same prompt does not produce the same picture twice, which is why the picture is committed and not just the recipe. The brief is the intent, the file is the artefact.",
+      "notes": "The first card art this duty has had; the folder held only a .gitkeep, so the board drew an empty slot for it. `slot` is what makes the image usable at all -- one with no entry is dropped with \"no slot recorded, left out\".",
+      "sha256": "9b4d38cf0516962d7cc04b96a327726a9cd1795c4c5d56311776fa15e4fa2227"
+    },
+    "duty_actions/give_alms/give_alms/give_alms_give_alms_left_v01.png": {
+      "state": "present",
+      "title": "Alms, first generation",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action art",
+      "source": "generated directly at the card's own 2:1, one image per action -- NOT cut from a shared master",
+      "licence": "openai-generated",
+      "slot": "left",
+      "role": "the LEFT action image, 1774 x 887, showing a coin and bread given into a beggar's bowl in the rain, a queue of the poor behind. Ratio 2.0000 against the slot's 2.0000, so `fit: cover` crops nothing; at 3.59 times the 494 x 247 slot it is comfortably above the 2x a retina screen asks for. duty_text.json calls this action 'Alms'.",
+      "modifications": "NONE. Did not go through tools/duty_art/crop_duty_master.py. That script takes one wide master and splits it into a duty's two cards, so the pair shared a scene and a crop; these two are separate pictures of separate actions and are used whole. Nothing derives their shape from geometry.py, so if the slot's ratio ever moves off 2:1 they begin cropping and no script will notice.",
+      "reproducibleBy": "duty_art_lab/prompts/panels/05-give-alms-alms.md -- the prompt as it was sent. It does not reproduce these pixels: the same prompt does not produce the same picture twice, which is why the picture is committed and not just the recipe. The brief is the intent, the file is the artefact.",
+      "notes": "The first card art this duty has had; both folders held only a .gitkeep. `slot` is declared, not inferred -- the folder names are the wording, not the slot order -- and it is what makes the image usable at all, since one with no entry is dropped with \"no slot recorded, left out\".",
+      "sha256": "458160048d86a7f52b1e01c2be70616dfee5d0070e777027db763a786d260612"
+    },
+    "duty_actions/give_alms/donate_building/give_alms_donate_building_right_v01.png": {
+      "state": "present",
+      "title": "Donate Building, first generation",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action art",
+      "source": "generated directly at the card's own 2:1, one image per action -- NOT cut from a shared master",
+      "licence": "openai-generated",
+      "slot": "right",
+      "role": "the RIGHT action image, 1774 x 887, showing a monk opening a door onto a fire, the ragged waiting in the snow outside. Ratio 2.0000 against the slot's 2.0000, so `fit: cover` crops nothing; at 3.59 times the 494 x 247 slot it is comfortably above the 2x a retina screen asks for. duty_text.json calls this action 'Donate Building'.",
+      "modifications": "NONE. Did not go through tools/duty_art/crop_duty_master.py. That script takes one wide master and splits it into a duty's two cards, so the pair shared a scene and a crop; these two are separate pictures of separate actions and are used whole. Nothing derives their shape from geometry.py, so if the slot's ratio ever moves off 2:1 they begin cropping and no script will notice.",
+      "reproducibleBy": "duty_art_lab/prompts/panels/06-give-alms-donate-building.md -- the prompt as it was sent. It does not reproduce these pixels: the same prompt does not produce the same picture twice, which is why the picture is committed and not just the recipe. The brief is the intent, the file is the artefact.",
+      "notes": "The first card art this duty has had; both folders held only a .gitkeep. `slot` is declared, not inferred -- the folder names are the wording, not the slot order -- and it is what makes the image usable at all, since one with no entry is dropped with \"no slot recorded, left out\".",
+      "sha256": "6089ff11cdd33f97a90e40a028f3fe397e0d5f9a07981adbb43d7ea721395ea0"
+    },
+    "duty_actions/construct/construct_building/construct_construct_building_left_v01.png": {
+      "state": "present",
+      "title": "Construct Building, first generation",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action art",
+      "source": "generated directly at the card's own 2:1, one image per action -- NOT cut from a shared master",
+      "licence": "openai-generated",
+      "slot": "left",
+      "role": "the LEFT action image, 1774 x 887, showing two labourers lowering a carved keystone into the crown of a stone arch on a rope and hook, a hooded overseer and a torch at the scaffold's edge, the half-raised ribs of the works black behind them. Ratio 2.0000 against the slot's 2.0000, so `fit: cover` crops nothing; at 3.59 times the 494 x 247 slot it is comfortably above the 2x a retina screen asks for. duty_text.json calls this action 'Construct Building'; slotFolders puts it in actionA's folder, construct_building.",
+      "modifications": "NONE. Did not go through tools/duty_art/crop_duty_master.py. That script takes one wide master and splits it into a duty's two cards, so the pair shared a scene and a crop; these two are separate pictures of separate actions and are used whole. Nothing derives their shape from geometry.py, so if the slot's ratio ever moves off 2:1 they begin cropping and no script will notice.",
+      "reproducibleBy": "duty_art_lab/prompts/panels/11-construct-construct-building.md -- the prompt as it was sent. It does not reproduce these pixels: the same prompt does not produce the same picture twice, which is why the picture is committed and not just the recipe. The brief is the intent, the file is the artefact.",
+      "notes": "The first card art this duty has had; both folders held only a .gitkeep. `slot` is declared, not inferred -- the folder names are the wording, not the slot order -- and it is what makes the image usable at all, since one with no entry is dropped with \"no slot recorded, left out\". Construct is the duty where that declaration carries the most weight: duty_text.json records that DutyTiles.md gives it THREE engine actions for two boxes, and construct_building_and_road_deferred has no box, so it gets no card here -- two pictures for two slots, not for three actions.",
+      "sha256": "92c94b5b2cc74622197c053a9792793f3ca4a8eefa87a75e0b021adf0860a541"
+    },
+    "duty_actions/construct/construct_road/construct_construct_road_right_v01.png": {
+      "state": "present",
+      "title": "Construct Road, first generation",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action art",
+      "source": "generated directly at the card's own 2:1, one image per action -- NOT cut from a shared master",
+      "licence": "openai-generated",
+      "slot": "right",
+      "role": "the RIGHT action image, 1774 x 887, showing a hooded man kneeling in the rain to set a stone into a rutted, flooded track with a hammer, a crate of rubble and a lantern beside him, a thatched cottage lit at the far end. Ratio 2.0000 against the slot's 2.0000, so `fit: cover` crops nothing; at 3.59 times the 494 x 247 slot it is comfortably above the 2x a retina screen asks for. duty_text.json calls this action 'Construct Road'; slotFolders puts it in actionB's folder, construct_road.",
+      "modifications": "NONE. Did not go through tools/duty_art/crop_duty_master.py. That script takes one wide master and splits it into a duty's two cards, so the pair shared a scene and a crop; these two are separate pictures of separate actions and are used whole. Nothing derives their shape from geometry.py, so if the slot's ratio ever moves off 2:1 they begin cropping and no script will notice.",
+      "reproducibleBy": "duty_art_lab/prompts/panels/12-construct-construct-road.md -- the prompt as it was sent. It does not reproduce these pixels: the same prompt does not produce the same picture twice, which is why the picture is committed and not just the recipe. The brief is the intent, the file is the artefact.",
+      "notes": "The first card art this duty has had; both folders held only a .gitkeep. `slot` is declared, not inferred -- the folder names are the wording, not the slot order -- and it is what makes the image usable at all, since one with no entry is dropped with \"no slot recorded, left out\". Construct is the duty where that declaration carries the most weight: duty_text.json records that DutyTiles.md gives it THREE engine actions for two boxes, and construct_building_and_road_deferred has no box, so it gets no card here -- two pictures for two slots, not for three actions.",
+      "sha256": "0904f33c00278341a04acb8fcc3d5ee04e6a43d59638887c20f407c01b082c1a"
+    },
+    "duty_actions/build_roads/build_road/build_roads_build_road_left_v01.png": {
+      "state": "present",
+      "title": "Build Roads, first generation",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action art",
+      "source": "generated directly at the card's own 2:1, one image per action -- NOT cut from a shared master",
+      "licence": "openai-generated",
+      "slot": "left",
+      "role": "the LEFT action image, 1774 x 887, showing a line of hooded labourers tamping a cobbled causeway with mauls under a lantern hung on a cross-carved waymarker, ox carts of stone drawn up on the left, timber bridgeworks and a treadwheel crane on the far bank and a castle on the skyline. Ratio 2.0000 against the slot's 2.0000, so `fit: cover` crops nothing; at 3.59 times the 494 x 247 slot it is comfortably above the 2x a retina screen asks for. duty_text.json calls this action 'Build Roads'; slotFolders puts it in actionA's folder, build_road.",
+      "modifications": "NONE. Did not go through tools/duty_art/crop_duty_master.py. That script takes one wide master and splits it into a duty's two cards, so the pair shared a scene and a crop; these two are separate pictures of separate actions and are used whole. Nothing derives their shape from geometry.py, so if the slot's ratio ever moves off 2:1 they begin cropping and no script will notice.",
+      "reproducibleBy": "duty_art_lab/prompts/panels/13-build-roads-build-roads.md -- the prompt as it was sent. It does not reproduce these pixels: the same prompt does not produce the same picture twice, which is why the picture is committed and not just the recipe. The brief is the intent, the file is the artefact.",
+      "notes": "The first card art this duty has had; both folders held only a .gitkeep. `slot` is declared, not inferred -- the folder names are the wording, not the slot order -- and it is what makes the image usable at all, since one with no entry is dropped with \"no slot recorded, left out\". This pair runs ahead of the engine: duty_text.json gives BOTH of this duty's actions a null engineAction and records that the engine has only build_roads_deferred, a scaffold with no spatial placement, so neither box has an id to point at yet. The picture is the box's, not the action's, and does not wait on that.",
+      "sha256": "a6a11016b47f17d568b1f0e81f58478108182732eb580adb89794e5fddb4d131"
+    },
+    "duty_actions/build_roads/build_shrine/build_roads_build_shrine_right_v01.png": {
+      "state": "present",
+      "title": "Build Shrine, first generation",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action art",
+      "source": "generated directly at the card's own 2:1, one image per action -- NOT cut from a shared master",
+      "licence": "openai-generated",
+      "slot": "right",
+      "role": "the RIGHT action image, 1774 x 887, showing a monk setting a lit candle into the niche of a stone wayside shrine, a Madonna carved inside and a cross on its gable, at a rutted crossroads with a fingerpost on one side and a gibbet on the other. Ratio 2.0000 against the slot's 2.0000, so `fit: cover` crops nothing; at 3.59 times the 494 x 247 slot it is comfortably above the 2x a retina screen asks for. duty_text.json calls this action 'Build Shrine'; slotFolders puts it in actionB's folder, build_shrine.",
+      "modifications": "NONE. Did not go through tools/duty_art/crop_duty_master.py. That script takes one wide master and splits it into a duty's two cards, so the pair shared a scene and a crop; these two are separate pictures of separate actions and are used whole. Nothing derives their shape from geometry.py, so if the slot's ratio ever moves off 2:1 they begin cropping and no script will notice.",
+      "reproducibleBy": "duty_art_lab/prompts/panels/14-build-roads-build-shrine.md -- the prompt as it was sent. It does not reproduce these pixels: the same prompt does not produce the same picture twice, which is why the picture is committed and not just the recipe. The brief is the intent, the file is the artefact.",
+      "notes": "The first card art this duty has had; both folders held only a .gitkeep. `slot` is declared, not inferred -- the folder names are the wording, not the slot order -- and it is what makes the image usable at all, since one with no entry is dropped with \"no slot recorded, left out\". This pair runs ahead of the engine: duty_text.json gives BOTH of this duty's actions a null engineAction and records that the engine has only build_roads_deferred, a scaffold with no spatial placement, so neither box has an id to point at yet. The picture is the box's, not the action's, and does not wait on that.",
+      "sha256": "7fd139341edec8544733140e990242b40b998b358b2c4da90d46513d9fae3dc2"
+    },
+    "duty_actions/produce/gain_wheat/produce_gain_wheat_left_v01.png": {
+      "state": "present",
+      "title": "Produce Wheat, first generation",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action art",
+      "source": "generated directly at the card's own 2:1, one image per action -- NOT cut from a shared master",
+      "licence": "openai-generated",
+      "slot": "left",
+      "role": "the LEFT action image, 1774 x 887, showing a reaper kneeling in cut stubble to bind a sheaf by hand, the sickle laid down beside her, a line of harvesters stooping behind, a hooded figure with a cross-staff and a crow on the fence at the right and an abbey on the skyline. Ratio 2.0000 against the slot's 2.0000, so `fit: cover` crops nothing; at 3.59 times the 494 x 247 slot it is comfortably above the 2x a retina screen asks for. duty_text.json calls this action 'Produce Wheat'; slotFolders puts it in actionA's folder, gain_wheat.",
+      "modifications": "NONE. Did not go through tools/duty_art/crop_duty_master.py. That script takes one wide master and splits it into a duty's two cards, so the pair shared a scene and a crop; these two are separate pictures of separate actions and are used whole. Nothing derives their shape from geometry.py, so if the slot's ratio ever moves off 2:1 they begin cropping and no script will notice.",
+      "reproducibleBy": "duty_art_lab/prompts/panels/01-produce-produce-wheat.md -- the prompt as it was sent. It does not reproduce these pixels: the same prompt does not produce the same picture twice, which is why the picture is committed and not just the recipe. The brief is the intent, the file is the artefact.",
+      "notes": "The first card art this duty has had; both folders held only a .gitkeep. `slot` is declared, not inferred -- the folder names are the wording, not the slot order -- and it is what makes the image usable at all, since one with no entry is dropped with \"no slot recorded, left out\". Produce is the duty slotFoldersNote cites as proof the folder cannot be derived: its actionA is `gain_wheat` and its actionB `gain_stone`, where Clerical's are `gain_piety` and `gain_coins`, so neither alphabetical order nor the action's own name in duty_text.json would have given the answer. With this pair every duty on the ribbon has card art.",
+      "sha256": "828432eb49d6e0f1987862229b2e87e3416c1bbdbc69500153c6d0e6f743ad89"
+    },
+    "duty_actions/produce/gain_stone/produce_gain_stone_right_v01.png": {
+      "state": "present",
+      "title": "Produce Stone, first generation",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action art",
+      "source": "generated directly at the card's own 2:1, one image per action -- NOT cut from a shared master",
+      "licence": "openai-generated",
+      "slot": "right",
+      "role": "the RIGHT action image, 1774 x 887, showing a mason splitting a block open with a hammer in a quarry, chips flying, a lantern and a pick coiled round with rope on the ledge beside him, labourers dragging a sledge of cut blocks through the mud behind and a hooded overseer on the rim under three crosses. Ratio 2.0000 against the slot's 2.0000, so `fit: cover` crops nothing; at 3.59 times the 494 x 247 slot it is comfortably above the 2x a retina screen asks for. duty_text.json calls this action 'Produce Stone'; slotFolders puts it in actionB's folder, gain_stone.",
+      "modifications": "NONE. Did not go through tools/duty_art/crop_duty_master.py. That script takes one wide master and splits it into a duty's two cards, so the pair shared a scene and a crop; these two are separate pictures of separate actions and are used whole. Nothing derives their shape from geometry.py, so if the slot's ratio ever moves off 2:1 they begin cropping and no script will notice.",
+      "reproducibleBy": "duty_art_lab/prompts/panels/02-produce-produce-stone.md -- the prompt as it was sent. It does not reproduce these pixels: the same prompt does not produce the same picture twice, which is why the picture is committed and not just the recipe. The brief is the intent, the file is the artefact.",
+      "notes": "The first card art this duty has had; both folders held only a .gitkeep. `slot` is declared, not inferred -- the folder names are the wording, not the slot order -- and it is what makes the image usable at all, since one with no entry is dropped with \"no slot recorded, left out\". Produce is the duty slotFoldersNote cites as proof the folder cannot be derived: its actionA is `gain_wheat` and its actionB `gain_stone`, where Clerical's are `gain_piety` and `gain_coins`, so neither alphabetical order nor the action's own name in duty_text.json would have given the answer. With this pair every duty on the ribbon has card art.",
+      "sha256": "af30c8de6a1d47fa990493406d89e3f25a483e30eeeb4e1a9f6c7f0a32dff5f2"
+    },
+    "duty_actions/ordination/ordain/ordination_ordain_left_v03.png": {
+      "state": "present",
+      "title": "Ordain, third generation and the first not cut from a master",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action art",
+      "source": "generated directly at the card's own 2:1, one image per action -- NOT cut from a shared master",
+      "licence": "openai-generated",
+      "slot": "left",
+      "role": "the LEFT action image, 1774 x 887, showing a tonsuring: a cleric in a ringed hand shearing the crown of a kneeling man's hair, the cut hair fallen on the step, a folded habit, a coil of rope and a purse laid out beside a burning brazier, ranks of hooded monks and carved saints in the nave behind. Ratio 2.0000 against the slot's 2.0000, so `fit: cover` crops nothing; at 3.59 times the 494 x 247 slot it is comfortably above the 2x a retina screen asks for. duty_text.json calls this action 'Ordain'; slotFolders puts it in actionA's folder, ordain.",
+      "modifications": "NONE. Did not go through tools/duty_art/crop_duty_master.py. That script takes one wide master and splits it into a duty's two cards, so the pair shared a scene and a crop; these two are separate pictures of separate actions and are used whole. Nothing derives their shape from geometry.py, so if the slot's ratio ever moves off 2:1 they begin cropping and no script will notice.",
+      "reproducibleBy": "duty_art_lab/prompts/panels/07-ordination-ordain.md -- the prompt as it was sent. It does not reproduce these pixels: the same prompt does not produce the same picture twice, which is why the picture is committed and not just the recipe. The brief is the intent, the file is the artefact.",
+      "notes": "REPLACES THE v02 CUT, and that is the point of this pair rather than a change of subject. Ordination was the last duty whose cards came out of tools/duty_art/crop_duty_master.py, and its v02 records are the two in this file that fail their own sha256: they describe a 1065 x 522 cut at ratio 2.0402, fitted to a card of 2.0380, while the files on disk are 1071 x 536 and do not come back out of ordination_master_v02.png at any --y. The card has been exactly 2.0000 since it went to three tiles wide, so that geometry no longer exists either. The v02 files and records are left in place, as clerical v03 was when v04 replaced it; the board takes the newest, so nothing on it is cut from a master any more. `slot` is declared, not inferred.",
+      "sha256": "c8eee1a6fd26423ed5317f4bb8c9151f5b65bd3da052cd3e27617d91f036f7f3"
+    },
+    "duty_actions/ordination/send_on_mission/ordination_send_on_mission_right_v03.png": {
+      "state": "present",
+      "title": "Send on Mission, third generation and the first not cut from a master",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action art",
+      "source": "generated directly at the card's own 2:1, one image per action -- NOT cut from a shared master",
+      "licence": "openai-generated",
+      "slot": "right",
+      "role": "the RIGHT action image, 1774 x 887, showing a monk stepping out through a studded gate onto a rutted road toward a walled city, staff in hand, satchel and pectoral cross at his side, a lantern burning on the wall and a second hooded figure watching from the doorway behind him. Ratio 2.0000 against the slot's 2.0000, so `fit: cover` crops nothing; at 3.59 times the 494 x 247 slot it is comfortably above the 2x a retina screen asks for. duty_text.json calls this action 'Send on Mission'; slotFolders puts it in actionB's folder, send_on_mission.",
+      "modifications": "NONE. Did not go through tools/duty_art/crop_duty_master.py. That script takes one wide master and splits it into a duty's two cards, so the pair shared a scene and a crop; these two are separate pictures of separate actions and are used whole. Nothing derives their shape from geometry.py, so if the slot's ratio ever moves off 2:1 they begin cropping and no script will notice.",
+      "reproducibleBy": "duty_art_lab/prompts/panels/08-ordination-mission.md -- the prompt as it was sent. It does not reproduce these pixels: the same prompt does not produce the same picture twice, which is why the picture is committed and not just the recipe. The brief is the intent, the file is the artefact.",
+      "notes": "REPLACES THE v02 CUT, and that is the point of this pair rather than a change of subject. Ordination was the last duty whose cards came out of tools/duty_art/crop_duty_master.py, and its v02 records are the two in this file that fail their own sha256: they describe a 1065 x 522 cut at ratio 2.0402, fitted to a card of 2.0380, while the files on disk are 1071 x 536 and do not come back out of ordination_master_v02.png at any --y. The card has been exactly 2.0000 since it went to three tiles wide, so that geometry no longer exists either. The v02 files and records are left in place, as clerical v03 was when v04 replaced it; the board takes the newest, so nothing on it is cut from a master any more. `slot` is declared, not inferred.",
+      "sha256": "ec1500f0aa02b77fc6483b1bcb7676c9adc63560a532d272ee1dca23cf94359b"
     }
   },
   "assetDirs": [

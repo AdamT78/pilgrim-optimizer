@@ -1149,3 +1149,75 @@ def test_the_tile_carries_the_same_purple_the_marks_are_grounded_on(gen):
     # behind on --plate turns back into the visible square -- on the one tile you are looking at.
     assert ".tile.sel .seal.plate{background:var(--plate-lit)}" in page, (
         "the selected tile's plate does not follow it, so the square comes back when you select")
+
+
+def test_a_duty_can_be_picked_from_the_wheel_as_well_as_the_ribbon(gen):
+    """Falsified by wiring the face to anything but pickDuty, or by leaving it unclickable.
+
+    A duty tile and a wheel face are two handles on ONE duty. The tile could already be clicked
+    and the face could not -- it carried a hover highlight and `cursor: default`, which is a thing
+    that lights up under the pointer and then refuses to be pressed. Both go through pickDuty, so
+    the selection, the action cards and the wheel all follow from one piece of state rather than
+    from whichever handle was used.
+    """
+    page = TMPL.read_text(encoding="utf-8")
+    assert "#wheel path[data-face]{cursor:pointer" in page, (
+        "the wheel's faces are not offered as clickable")
+    wheel = page.split("function drawWheel()")[1].split("function drawFigures()")[0]
+    assert "pickDuty(slug)" in wheel, (
+        "a wheel face does not go through pickDuty, so the two handles can disagree")
+
+
+def test_picking_a_duty_lights_it_on_the_wheel_and_in_the_ribbon(gen):
+    """Falsified by painting the tile's selection and not the wheel's, which is where it started.
+
+    `sel` on the tile has existed since there was a board; the face had no selected state at all,
+    so picking a duty lit the ribbon and left the wheel saying nothing. Both are now set from the
+    SAME loop -- two loops would be two answers the first time one of them was edited, which is
+    the rule lightFace() already states for the hover pair.
+    """
+    page = TMPL.read_text(encoding="utf-8")
+    assert '#wheel path[data-face].sel{' in page, "the wheel face has no selected state"
+    # SELECTION AND HOVER HAVE TO BE TELLABLE APART. Both light the face; while you hover one face
+    # with another selected, identical highlights would leave the board showing two and saying
+    # which is which nowhere.
+    sel = page.split('#wheel path[data-face].sel{')[1].split('}')[0]
+    assert "stroke:" in sel, (
+        "a selected face is only brightened, so it is the same picture as a hovered one")
+    # ONE LOOP, BOTH PAINTED.
+    i = page.index('tile.classList.toggle("sel", d.slug === S.duty)')
+    nearby = page[i:i + 600]
+    assert 'face.classList.toggle("sel", d.slug === S.duty)' in nearby, (
+        "the wheel's selection is not painted beside the tile's, so they can drift apart")
+
+
+def test_every_confirm_button_is_the_same_button(geo, gen):
+    """Falsified by sizing one of the three from its box instead of from its word.
+
+    All three say Confirm and do the same kind of thing, so they are one button in three places.
+    confirm_for() hands over the whole card's width, which is the span the button is aligned
+    WITHIN rather than the width it takes -- it sits at the right-hand end, where the thing it
+    acts on finishes. The Tithe's took its box at face value and came out the full width of the
+    panel: three buttons, one job, two sizes.
+
+    The rule has to be written ONCE. It was inline in the loop that draws the two action cards,
+    so the Tithe could not have it, and the padding was a 22 typed into the template where no
+    other number on this board lives.
+    """
+    page = TMPL.read_text(encoding="utf-8")
+    assert "function fitConfirm(" in page, "the confirm buttons no longer share a rule"
+    # EVERY ONE OF THEM GOES THROUGH IT -- the Tithe's is the one that did not.
+    for which in ("fitConfirm(b, c)", "fitConfirm(b, tc)"):
+        assert which in page, (
+            "a confirm button is sized by something other than fitConfirm: %s" % which)
+    assert '"0 22px"' not in page, "the button's padding is typed into the template again"
+    assert "GEO.confirm.padX" in page, "the padding no longer comes from geometry"
+    assert geo.CONFIRM_PAD_X > 0, "a confirm button with no padding is its own word and no more"
+    # AND THE BOX IT IS ALIGNED WITHIN IS STILL THE THING IT CONFIRMS, which is what puts the
+    # three of them on the edges the cards and the Tithe already stand on.
+    for slot in ("actionA", "actionB"):
+        assert geo.confirm_for(slot)["width"] == geo.art_slots()[slot]["width"], (
+            "%s's confirm is no longer aligned within its own card" % slot)
+    tithe = geo.as_dict()["confirm"]["tithe"]
+    assert tithe["x"] + tithe["width"] == geo.TITHE_X + geo.TITHE_W, (
+        "the Tithe's confirm does not finish where the Tithe does")

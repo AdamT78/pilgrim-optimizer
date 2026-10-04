@@ -206,7 +206,14 @@ Chrome will not overwrite a download -- a second save arrives as `framing (1).js
 - `icon_lab/` -- the three pages that decide how a mark is presented: its crop, with
   `framing.json` holding the answer; how big it is drawn; and where a duty's two sit. See the
   section above.
-- `duty_art_lab/` -- the viewfinder for cropping a duty's wide master into its two action cards.
+- `duty_art_lab/` -- the viewfinder for cropping a duty's wide master into its two action
+  cards, and `prompts/`, which is now the larger half of it: the briefs that produced the
+  art, each kept word for word as it was sent. `prompts/` itself holds the templated
+  two-panel briefs the viewfinder runs; `prompts/seals/` one file per wax seal;
+  `prompts/panels/` one file per duty action card; and `prompts/icons/` the single brief
+  that made every icon. `attribution.json` points at them by name. No shipped card comes
+  from the viewfinder any more -- all fourteen were generated whole -- so the cropping
+  half is history the tree keeps rather than a step anything runs.
 - `duty_actions/` -- the art itself, by duty: the action cards, the tile marks under `seals/`
   and `icons/`, and the untouched originals under each `masters/`.
 - `tokens/` -- the three Tithe resources, in both the wax and the coin treatment.
@@ -226,6 +233,9 @@ Chrome will not overwrite a download -- a second save arrives as `framing (1).js
   history was compacted before they could be filed. What was decided in each is recorded under
   *Development history* in `layout_lab/README.md`, which states the intent and the invariants
   rather than reproducing prompts that no longer exist.
+- `docs/webp_inlining_note.md` -- a measurement, not a change: what inlining the board's
+  pictures as WebP instead of JPEG and PNG would cost and save, and the one trap in doing it
+  (Pillow's WebP lossless is not exact by default). Nothing in the tree does this yet.
 
 ## What is not decided yet
 
