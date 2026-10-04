@@ -75,6 +75,13 @@ body.full{background:#000}
 .seal.filled{background:none;border:0;border-radius:0}
 .seal img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
 .seal.filled img{border-radius:0;object-fit:contain}
+/* A CUT-OUT BRINGS NO GROUND, so the board gives it one. A wax disc is a thing you could pick up
+   and it carries its own; an emblem drawn on transparency does not, and on the tile's black it
+   floats with nothing behind it. Which a seal is, is recorded in attribution.json and arrives
+   here as one word -- the page does not look at the picture. The corner is square on purpose:
+   these are plates, not discs, and the 4px is only to stop the colour cutting a hard rectangle
+   out of the tile. The purple is the card's, written once. */
+.seal.plate{background:#1E1935;border-radius:4px}
 
 /* ---- the two action cards -------------------------------------------------------------- */
 .art{overflow:hidden;background:#000;cursor:pointer}
@@ -297,7 +304,8 @@ function drawTiles(){
       seal.dataset.hoverDuty = d.slug; seal.dataset.hoverSlot = slot;
       var key = info && info[slot] && info[slot].seal;
       if (key && IMAGES[key]) { var im = document.createElement("img"); im.src = IMAGES[key];
-                                seal.appendChild(im); seal.classList.add("filled"); }
+                                seal.appendChild(im); seal.classList.add("filled");
+                                if (info[slot].sealGround === "board") seal.classList.add("plate"); }
       else seal.classList.add("empty");
       seal.addEventListener("click", slotClick);
       wireDrop(seal);

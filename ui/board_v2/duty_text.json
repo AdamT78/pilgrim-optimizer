@@ -89,7 +89,7 @@
     "construct": {
       "actionA": {
         "engineAction": "construct_building",
-        "name": "Construct",
+        "name": "Construct Building",
         "shortLabel": "Construct building",
         "byStrength": {
           "minority": null,
@@ -99,7 +99,7 @@
       },
       "actionB": {
         "engineAction": "construct_road_deferred",
-        "name": "Construct",
+        "name": "Construct Road",
         "shortLabel": "Build / upgrade / demolish 1 road",
         "byStrength": {
           "minority": null,

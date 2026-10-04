@@ -67,19 +67,38 @@ ART_DIR = BOARD / "duty_actions"
 TOKEN_DIR = BOARD / "tokens" / "resources"
 MANIFEST = BOARD / "metadata" / "action_board.json"
 
-# A duty's seals live under its own folder, beside the pictures of its actions, because they are
-# two drawings OF THE SAME ACTION and splitting them would make a slot's art and a slot's seal two
-# things to keep in step. ONE name, here, used by the walk that reads them and the save that
-# writes them -- the folder was typed twice and the second one would have been the one to drift.
-SEAL_SUBDIR = "seals"
+# A duty's marks live under its own folder, beside the pictures of its actions, because they are
+# two drawings OF THE SAME ACTION and splitting them would make a slot's art and a slot's mark two
+# things to keep in step. The fallback below is the tree as it stood when `seals` was the only kind
+# of mark there was; what the tree actually has is attribution.json's business.
+MARK_SUBDIR = "seals"
+
+
+def mark_folders() -> tuple:
+    """The folders a duty's tile mark may live in, per attribution.json.
+
+    THERE USED TO BE ONE AND ITS NAME WAS TYPED IN BOTH TOOLS THAT READ THIS TREE. Then a mark arrived that was not
+    a wax disc -- a cut-out icon, with no wax, no colour code and nothing to take -- and filing it
+    under `seals` would have made the tree say a thing that is not true. It got `icons`, and the
+    list of folders to look in went where the other shared facts about this tree already live,
+    because the last time a folder name was learned by one tool and not the others the layout lab
+    drew a 78px seal as a 590 x 295 action card.
+    """
+    try:
+        got = json.loads(ATTRIB_FILE.read_text(encoding="utf-8")).get("markFolders")
+    except Exception:
+        got = None
+    return tuple(got) if got else (MARK_SUBDIR,)
 
 
 def non_slot_folders() -> tuple:
     """Folder names under a duty that are NOT one of its actions, per attribution.json.
 
-    THE SKIP IS A SHARED FACT AND THE WRITE IS NOT. SEAL_SUBDIR above says where this tool
-    PUTS a seal; this says which folders every tool that walks the tree must step over, and
-    three tools walk it. Each carried its own copy of the word "masters", so when `seals`
+    THE SKIP IS A SHARED FACT AND SO IS THE LIST ABOVE, and they are still two facts. A mark
+    folder is one a mark lives in; a non-slot folder is one that is not an action, which also
+    covers `masters`. Every mark folder has to be in here, and a test says so rather than this
+    deriving it, because the day something is skipped that holds no mark, deriving breaks.
+    Three tools walk this tree. Each carried its own copy of the word "masters", so when `seals`
     appeared only this one was taught about it -- and the layout lab went on to draw a wax
     seal of 78 pixels as Clerical`s 590 x 295 action card. The fallback is the tree as it
     stood before the key existed.
@@ -88,7 +107,7 @@ def non_slot_folders() -> tuple:
         got = json.loads(ATTRIB_FILE.read_text(encoding="utf-8")).get("nonSlotFolders")
     except Exception:
         got = None
-    return tuple(got) if got else ("masters", SEAL_SUBDIR)
+    return tuple(got) if got else ("masters",) + mark_folders()
 
 
 def image_suffixes() -> tuple:
@@ -303,33 +322,83 @@ def bundled_seals() -> tuple[dict, dict, list]:
         return {}, {}, []
 
     placed: dict = {}
+    grounds: dict = {}
     if ATTRIB_FILE.is_file():
         rec = json.loads(ATTRIB_FILE.read_text(encoding="utf-8")).get("files", {})
         for path, e in rec.items():
             if path.startswith("duty_actions/"):
-                placed[path[len("duty_actions/"):]] = slot_of(path[len("duty_actions/"):], e)
+                rel = path[len("duty_actions/"):]
+                placed[rel] = slot_of(rel, e)
+                grounds[rel] = ground_of(path, e)
 
     side_to_slot = {"left": "actionA", "right": "actionB"}
     images: dict = {}
     by_duty: dict = {}
     for slug, _name, _deg in G.DUTIES:
-        folder = ART_DIR / slug / SEAL_SUBDIR
-        if not folder.is_dir():
-            continue
+        # THE LATER KIND WINS, AND THE HIGHER NUMBER WINS WITHIN A KIND. Two rules, because a
+        # version counts up inside one lineage and nothing else.
+        #
+        # This was one rule and it was wrong twice. First it sorted filenames, which put
+        # `..._icon_v04` before `..._seal_v03` on the letter i. Then it took the highest version
+        # across every folder -- which is right inside `seals`, and nonsense between `seals` and
+        # `icons`: a brand new icon arrives at v01 and loses to a wax disc on its second
+        # generation, so eleven slots silently went on drawing seals with their icons sitting
+        # right there. A seal's v02 and an icon's v01 are two unrelated counters.
+        #
+        # WHICH KIND WINS IS A CHOICE, not something the files can answer, so attribution.json's
+        # `markFolders` is read in order and the last one that has a mark for a slot takes it.
         newest: dict = {}
-        for f in images_under(folder):
-            rel = f.relative_to(ART_DIR).as_posix()
-            side = placed.get(rel)
-            if side not in ("left", "right"):
-                if side is None:
-                    notes.append("%s: no slot recorded, left out" % rel)
+        for sub_dir in mark_folders():
+            here: dict = {}
+            folder = ART_DIR / slug / sub_dir
+            if not folder.is_dir():
                 continue
-            newest[side] = f                      # sorted ascending, so _v03 beats _v02
+            for f in images_under(folder):
+                rel = f.relative_to(ART_DIR).as_posix()
+                side = placed.get(rel)
+                if side not in ("left", "right"):
+                    if side is None:
+                        notes.append("%s: no slot recorded, left out" % rel)
+                    continue
+                if side not in here or version_of(f) > version_of(here[side]):
+                    here[side] = f
+            newest.update(here)
         for side, f in newest.items():
             key = "seal:%s:%s" % (slug, side_to_slot[side])
             images[key] = _inline(f, (G.SEAL * 2, G.SEAL * 2), "PNG")
-            by_duty.setdefault(slug, {})[side_to_slot[side]] = [key, f.name]
+            rel = f.relative_to(ART_DIR).as_posix()
+            by_duty.setdefault(slug, {})[side_to_slot[side]] = [
+                key, f.name, grounds.get(rel, "own")]
     return images, by_duty, notes
+
+
+GROUNDS = ("own", "board")
+
+
+def ground_of(where: str, entry: dict) -> str:
+    """Whose ground this mark is drawn on: its own, or the board's.
+
+    A wax disc is a thing you could pick up. It carries its ground with it, and dropped on the
+    tile it sits on the black like an object. An emblem cut out on transparency carries none, and
+    the board has to put something behind it or it floats on nothing.
+
+    WHICH IT IS CANNOT BE MEASURED OFF THE FILE, and the first version of this tried. It looked
+    for a real alpha channel and called all forty-three marks cut-outs, because a round disc in a
+    square file is a fifth clear at the corners. Asking harder does not help: of the two cut-outs
+    the board now draws, one is opaque across 95% of its inner circle and the other across 56%,
+    with every wax disc in the tree sitting between those two numbers. The silhouette does not
+    know what the picture means.
+
+    SO THE RECORD SAYS IT, in the same breath as it says which slot the seal is for, and `own` is
+    the default because that is what every seal in the tree was until these two. An unknown value
+    stops the build rather than defaulting: `Board` for `board` would mean a mark drawn on
+    nothing, silently, and the only symptom would be a seal that looked wrong on the tile.
+    """
+    g = entry.get("ground", "own")
+    if g not in GROUNDS:
+        raise SystemExit("attribution.json gives %s a ground of %r, and a ground is %s"
+                         % (where, g, " or ".join(GROUNDS)))
+    return g
 
 
 def bundled_tokens() -> tuple[dict, list]:
@@ -390,7 +459,13 @@ def build() -> tuple[str, list]:
                            # stored line; the numbers are the game's business, not this page's.
                            "byStrength": s.get("byStrength"),
                            "art": a[0] if a else None, "artFile": a[1] if a else None,
-                           "seal": w[0] if w else None, "sealFile": w[1] if w else None}
+                           # ONE WORD, CARRIED WHOLE from attribution.json through to the
+                           # page: `own` or `board`. It was a boolean for an afternoon and the
+                           # page read it off the wrong shape -- `info[slot][2]` on a dict that
+                           # has names, not positions -- so the ground was never drawn and
+                           # nothing said so. A named field cannot be read off by accident.
+                           "seal": w[0] if w else None, "sealFile": w[1] if w else None,
+                           "sealGround": w[2] if w else None}
         duties[slug] = entry
 
     page = TMPL.read_text(encoding="utf-8")
@@ -482,6 +557,53 @@ def next_version(folder: pathlib.Path, stem: str) -> pathlib.Path:
     return folder / ("%s_v%02d.png" % (stem, n + 1))
 
 
+def version_of(path: pathlib.Path) -> int:
+    """The _vNN on the end of a name, or -1 for a file that carries none.
+
+    Used to pick the newest of a slot's marks when they are spread over more than one folder. A
+    file with no version loses to every file that has one, which is right: the versioned names
+    are the ones this tree manages.
+    """
+    m = re.search(r"_v(\d+)$", path.stem)
+    return int(m.group(1)) if m else -1
+
+
+def mark_subdir(duty: str, slot: str) -> str:
+    """Which of the mark folders this duty's slot already keeps its mark in.
+
+    A MARK ALREADY FILED IS THE ANSWER -- the same evidence slot_folder() prefers for the action
+    pictures, and the same reason: the tree knows, and asking it is what keeps a saved picture
+    beside its predecessor instead of opening a second home for one slot. A slot with no mark yet
+    falls back to `seals`.
+
+    THE SAME PRECEDENCE THE BOARD DRAWS BY, so a save lands beside the mark actually in play
+    rather than beside the one with the biggest number on it. Comparing versions across folders
+    was how this went wrong the first time.
+    """
+    if not ATTRIB_FILE.is_file():
+        return MARK_SUBDIR
+    rec = json.loads(ATTRIB_FILE.read_text(encoding="utf-8")).get("files", {})
+    want = {"actionA": "left", "actionB": "right"}.get(slot, slot)
+    folders = mark_folders()
+    best: dict = {}
+    for path, e in rec.items():
+        if not path.startswith("duty_actions/%s/" % duty):
+            continue
+        rel = path[len("duty_actions/"):]
+        parts = rel.split("/")
+        if len(parts) < 3 or parts[1] not in folders or "masters" in parts:
+            continue
+        if slot_of(rel, e) != want:
+            continue
+        v = version_of(pathlib.Path(parts[-1]))
+        if parts[1] not in best or v > best[parts[1]]:
+            best[parts[1]] = v
+    for sub_dir in folders:                    # in order, so the last one that has a mark wins
+        if sub_dir in best:
+            chosen = sub_dir
+    return chosen if best else MARK_SUBDIR
+
+
 def slot_folder(duty: str, slot: str) -> str | None:
     """Which folder this duty's slot keeps its pictures in.
 
@@ -570,8 +692,14 @@ def save(sent: dict) -> list:
             side = {"actionA": "left", "actionB": "right"}.get(img["slot"], img["slot"])
             stem = "%s_%s_%s" % (img["duty"], folder_name, side)
         elif img["kind"] == "seal":
-            folder = ART_DIR / img["duty"] / SEAL_SUBDIR
-            stem = "%s_%s_seal" % (img["duty"], img["slot"])
+            # BESIDE THE MARK THAT IS ALREADY THERE, which is the same rule the action pictures
+            # follow and for the same reason: a slot whose mark is an icon would otherwise have a
+            # seal saved into `seals/` on top of it, and the tree would be back to calling a
+            # cut-out a seal. The word in the filename comes off the folder for the same reason --
+            # two places saying what kind of thing this is, is one place too many.
+            sub_dir = mark_subdir(img["duty"], img["slot"])
+            folder = ART_DIR / img["duty"] / sub_dir
+            stem = "%s_%s_%s" % (img["duty"], img["slot"], re.sub(r"s$", "", sub_dir))
         elif img["kind"] == "token":
             folder = TOKEN_DIR
             stem = "token_%s" % img["slot"]

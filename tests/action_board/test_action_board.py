@@ -264,6 +264,28 @@ def test_everything_hoverable_says_so_in_markup_rather_than_in_a_list():
         "the hover lookup has grown a selector list")
 
 
+def test_no_duty_calls_both_of_its_actions_the_same_thing(gen):
+    """Two actions with one name is a hole, not a style, and it cost real time.
+
+    Construct's pair were both called "Construct" for as long as nothing had to tell them apart.
+    Then two icons arrived named for them and the wording could not say which was which: the slot
+    had to be worked out from attribution.json's `slotFolders` instead, and a wrong guess there
+    would have put the mason's building on the road action with nothing to notice it. The board
+    draws these names side by side on the two action cards, so a duty with one name twice is also
+    a board that cannot be read.
+
+    Falsified by giving any duty's two actions the same name again.
+    """
+    text = gen.duty_text()
+    same = []
+    for slug, said in sorted(text.items()):
+        names = [said[s]["name"] for s in ("actionA", "actionB")
+                 if said.get(s) and said[s].get("name")]
+        if len(names) == 2 and names[0].strip().lower() == names[1].strip().lower():
+            same.append("%s calls both of its actions %r" % (slug, names[0]))
+    assert not same, "\n".join(same)
+
+
 def test_the_map_covers_every_action_the_wording_says_exists(gen):
     """attribution.json's `slotFolders` and duty_text.json have to agree about the board.
 
@@ -413,21 +435,57 @@ def _solid_fraction(path):
     return max(rows[-1] - rows[0] + 1, cols[-1] - cols[0] + 1) / w
 
 
+def _marks():
+    """Every seal and token the board can draw, split into the two kinds it now has.
+
+    A DISC brings its own ground and fills 0.906 of its square. A PLATE is an emblem drawn on
+    transparency, which brings no ground and is trimmed to fill its square outright.
+
+    WHICH A FILE IS COMES FROM THE RECORD, read through the generator's own `ground_of`, so the
+    split here and the ground the board draws can never disagree about one picture. It is not
+    read off the pixels, and the two tests below are why it must not be: they measure the
+    silhouette, and a split that measured the silhouette too would be agreeing with itself.
+    """
+    gen = _load("generate_action_board")
+    board = ROOT / "ui" / "board_v2"
+    rec = json.loads((board / "attribution.json").read_text(encoding="utf-8")).get("files", {})
+    want = set(gen_suffixes())
+    # EVERY MARK FOLDER, ASKED FOR BY NAME. This used to glob `duty_actions/*/seals/*`, and the
+    # day the two cut-outs moved into `icons/` it quietly matched nothing -- so the plate test
+    # below found no plates and skipped, passing a run in which nothing was measured. A test that
+    # can go quiet when the tree moves underneath it is worse than no test.
+    folders = gen.mark_folders()
+    files = sorted(p for p in board.glob("tokens/resources/*") if p.suffix.lower() in want)
+    for sub_dir in folders:
+        files += sorted(p for p in board.glob("duty_actions/*/%s/*" % sub_dir)
+                        if p.parent.name == sub_dir and p.suffix.lower() in want)
+    files.sort()
+    discs, plates = [], []
+    for p in files:
+        rel = p.relative_to(board).as_posix()
+        side = plates if gen.ground_of(rel, rec.get(rel, {})) == "board" else discs
+        side.append(p)
+    return discs, plates
+
+
 def test_every_disc_the_board_draws_fills_the_same_fraction_of_its_square(geo):
     """Falsified by dropping in a new seal or coin straight from the generator.
 
     MASTERS ARE EXCLUDED ON PURPOSE. They are the untouched originals, kept so each correction
     stays reversible, so a master that measured 0.906 would mean the correction was never made.
+
+    PLATES ARE EXCLUDED TOO, and that exclusion is the newer thing. 0.906 is a fact about a wax
+    disc: it leaves a margin so a round drawing does not touch the edges of a square slot. An
+    emblem on transparency has no disc and no margin to leave -- it is trimmed to its own mark and
+    fills the square, and holding it to 0.906 would be holding it to somebody else's shape. The
+    test below keeps it honest instead.
     """
     pytest.importorskip("numpy")
     pytest.importorskip("PIL")
-    board = ROOT / "ui" / "board_v2"
-    want = set(gen_suffixes())
-    discs = sorted(p for p in board.glob("tokens/resources/*") if p.suffix.lower() in want) + \
-        sorted(p for p in board.glob("duty_actions/*/seals/*")
-               if p.parent.name == "seals" and p.suffix.lower() in want)
+    discs, _plates = _marks()
     if not discs:
         pytest.skip("this tree has no discs in it")
+    board = ROOT / "ui" / "board_v2"
     bad = []
     for p in discs:
         f = _solid_fraction(p)
@@ -437,10 +495,195 @@ def test_every_disc_the_board_draws_fills_the_same_fraction_of_its_square(geo):
     assert not bad, "\n".join(bad)
 
 
+def test_every_plate_the_board_draws_fills_its_square(geo):
+    """The other half of the rule, so neither kind of mark goes unmeasured.
+
+    A plate is trimmed to its own mark and padded to a square, so its longer side spans the slot.
+    One that measured well under 1.0 arrived untrimmed and would sit small beside its neighbours --
+    which is exactly how the first pair of these came in, at 0.77 and 0.92.
+
+    THIS TEST CAUGHT THE CLASSIFIER, not a picture. On the day it was written every mark in the
+    tree failed it, because the generator was deciding disc or plate by looking for an alpha
+    channel and a round disc in a square file has one. What is measured here is the silhouette;
+    what decides which list a file is in is the record. Keep those two apart.
+    """
+    pytest.importorskip("numpy")
+    pytest.importorskip("PIL")
+    _discs, plates = _marks()
+    # NO SKIP. The skip that used to be here fired the moment the plates moved folders, and a
+    # green run said nothing was wrong. This tree has plates; if it ever genuinely has none, the
+    # honest change is to delete this test, not to let it pass by looking away.
+    assert plates, ("no mark in %s is recorded as standing on the board's ground, and two are"
+                    % ", ".join(_load("generate_action_board").mark_folders()))
+    board = ROOT / "ui" / "board_v2"
+    bad = []
+    for p in plates:
+        f = _solid_fraction(p)
+        if f < 0.98:
+            bad.append("%s fills %.3f of its square; a plate is trimmed to fill it"
+                       % (p.relative_to(board).as_posix(), f))
+    assert not bad, "\n".join(bad)
+
+
+def test_the_mark_the_board_draws_is_the_one_the_record_points_at(gen):
+    """Falsified by sorting filenames, or by comparing versions across folders.
+
+    TWO RULES, NOT ONE, and getting that wrong has now cost two builds. Inside one folder a name
+    sorts the way a version does, so `sorted(...)[-1]` was right for as long as every mark lived
+    in `seals`; `..._icon_v04` sorts before `..._seal_v03` on the letter i, so that broke first.
+    The fix -- highest version anywhere -- then broke the other way, because a version counts up
+    inside one lineage and means nothing across two: a new icon at v01 lost to a wax disc at v02
+    on eleven slots at once. What decides is the ORDER of markFolders, last wins; the version only
+    settles ties inside one folder.
+    """
+    rec = json.loads(gen.ATTRIB_FILE.read_text(encoding="utf-8"))["files"]
+    order = {name: i for i, name in enumerate(gen.mark_folders())}
+    best = {}
+    for path, e in rec.items():
+        if not path.startswith("duty_actions/"):
+            continue
+        rel = path[len("duty_actions/"):]
+        parts = rel.split("/")
+        if len(parts) < 3 or parts[1] not in order or "masters" in parts:
+            continue
+        side = gen.slot_of(rel, e)
+        if side not in ("left", "right"):
+            continue
+        key = (parts[0], {"left": "actionA", "right": "actionB"}[side])
+        rank = (order[parts[1]], gen.version_of(pathlib.Path(parts[-1])))
+        if key not in best or rank > best[key][0]:
+            best[key] = (rank, parts[-1])
+
+    _images, by_duty, _notes = gen.bundled_seals()
+    drawn = {(slug, slot): w[1] for slug, slots in by_duty.items() for slot, w in slots.items()}
+    assert drawn, "the board bundled no marks at all"
+    wrong = ["%s %s: the board draws %s and the record points at %s"
+             % (d, s, drawn[(d, s)], best[(d, s)][1])
+             for (d, s) in drawn if (d, s) in best and drawn[(d, s)] != best[(d, s)][1]]
+    assert not wrong, "\n".join(wrong)
+
+
+def test_a_newer_kind_of_mark_beats_an_older_one_whatever_the_numbers_say(gen, tmp_path,
+                                                                          monkeypatch):
+    """A version counts up inside one lineage and means nothing across two.
+
+    This is the bug that shipped for one build. The rule was "highest version wins", which is
+    right inside `seals` and nonsense between `seals` and `icons`: a brand new icon arrives at
+    v01 and loses to a wax disc on its second generation. Eleven slots went on drawing seals with
+    their icons filed right beside them, and the board looked entirely normal.
+
+    Falsified by comparing versions across folders again, or by reversing the precedence. The
+    order in attribution.json's `markFolders` is what decides, last wins, and the version only
+    settles ties inside one folder.
+    """
+    art = tmp_path / "duty_actions"
+    for duty in ("clerical", "produce"):
+        (art / duty / "seals").mkdir(parents=True)
+        (art / duty / "icons").mkdir(parents=True)
+    # An old seal on its SECOND version against a new icon on its FIRST.
+    (art / "clerical" / "seals" / "clerical_actionA_seal_v02.png").write_bytes(b"x")
+    (art / "clerical" / "icons" / "clerical_actionA_icon_v01.png").write_bytes(b"x")
+    # And a slot with no icon at all, which must stay on its seal.
+    (art / "produce" / "seals" / "produce_actionA_seal_v03.png").write_bytes(b"x")
+    attrib = tmp_path / "attribution.json"
+    attrib.write_text(json.dumps({
+        "markFolders": ["seals", "icons"],
+        "nonSlotFolders": ["masters", "seals", "icons"],
+        "imageSuffixes": [".png", ".webp"],
+        "files": {
+            "duty_actions/clerical/seals/clerical_actionA_seal_v02.png": {"slot": "left"},
+            "duty_actions/clerical/icons/clerical_actionA_icon_v01.png": {"slot": "left",
+                                                                         "ground": "board"},
+            "duty_actions/produce/seals/produce_actionA_seal_v03.png": {"slot": "left"},
+        }}), encoding="utf-8")
+    monkeypatch.setattr(gen, "ART_DIR", art)
+    monkeypatch.setattr(gen, "ATTRIB_FILE", attrib)
+    monkeypatch.setattr(gen, "_inline", lambda *a, **k: "data:,")
+
+    _images, by_duty, _notes = gen.bundled_seals()
+    assert by_duty["clerical"]["actionA"][1] == "clerical_actionA_icon_v01.png", \
+        "the board drew %s" % by_duty["clerical"]["actionA"][1]
+    assert by_duty["clerical"]["actionA"][2] == "board", "and it drew it with no ground"
+    assert by_duty["produce"]["actionA"][1] == "produce_actionA_seal_v03.png", \
+        "a slot with no icon must keep its seal"
+    # A save for that slot follows the same precedence, so it lands beside the mark in play.
+    assert gen.mark_subdir("clerical", "actionA") == "icons"
+    assert gen.mark_subdir("produce", "actionA") == "seals"
+
+
+def test_a_slot_that_has_an_icon_is_drawn_with_the_icon(gen):
+    """What the precedence is FOR, asserted as the outcome rather than as the mechanism.
+
+    The test above derives its expectation from markFolders, so it moves whenever that list
+    moves -- reverse the list and it still passes while the board quietly goes back to wax. This
+    one says the thing the list exists to achieve: where a slot has both kinds filed, the icon is
+    what the board draws. That is this tree's direction, and when the direction changes this test
+    is what you change, on purpose, rather than discovering it later on the board.
+    """
+    rec = json.loads(gen.ATTRIB_FILE.read_text(encoding="utf-8"))["files"]
+    kinds = {}
+    for path, e in rec.items():
+        if not path.startswith("duty_actions/"):
+            continue
+        parts = path[len("duty_actions/"):].split("/")
+        if len(parts) < 3 or "masters" in parts:
+            continue
+        if gen.slot_of(path[len("duty_actions/"):], e) not in ("left", "right"):
+            continue
+        side = gen.slot_of(path[len("duty_actions/"):], e)
+        kinds.setdefault((parts[0], {"left": "actionA", "right": "actionB"}[side]),
+                         set()).add(parts[1])
+
+    both = {k for k, v in kinds.items() if {"seals", "icons"} <= v}
+    assert both, "no slot has both a seal and an icon, so this is not yet testing anything"
+    _images, by_duty, _notes = gen.bundled_seals()
+    wrong = []
+    for duty, slot in sorted(both):
+        drawn = by_duty.get(duty, {}).get(slot)
+        if not drawn or "_icon_" not in drawn[1]:
+            wrong.append("%s %s has an icon filed and the board draws %s"
+                         % (duty, slot, drawn[1] if drawn else "nothing"))
+    assert not wrong, "\n".join(wrong)
+
+
+def test_the_board_gives_a_plate_the_ground_it_does_not_carry(gen):
+    """A cut-out has no ground of its own, so the page has to supply one.
+
+    Falsified by dropping the class, or by dropping the field the generator sends with each
+    seal. Both leave an emblem floating on the tile's black with nothing behind it.
+
+    THE NAME IS CHECKED, NOT JUST THE SHAPE. The first version of this read the ground off a
+    three-element list as `info[slot][2]`, and the page's duty entries are objects with names --
+    so it was reading `undefined`, the class never went on, the test passed, and the board drew
+    the emblems on black. A field asked for by name either exists or does not.
+    """
+    page = TMPL.read_text(encoding="utf-8")
+    built = gen.build()[0]
+    assert '"sealGround"' in built, "the built page carries no ground for any seal"
+    assert ".seal.plate{" in page, "there is no ground rule for a cut-out seal"
+    assert 'seal.classList.add("plate")' in page, "nothing ever applies it"
+    assert 'sealGround === "board"' in page, "the page is not reading the recorded ground"
+
+
+def test_a_ground_the_record_does_not_know_stops_the_build(gen):
+    """A mistyped ground is the one failure that would not announce itself.
+
+    `own` and `board` are the two answers. Anything else -- `Board`, `none`, `transparent` --
+    would quietly fall back to `own` under a plain `.get`, and the only symptom would be an
+    emblem floating on the tile with nothing behind it, which is a thing you have to notice by
+    eye. Falsified by giving `ground_of` a default instead of a refusal.
+    """
+    assert gen.ground_of("a file", {}) == "own", "an unrecorded mark carries its own ground"
+    assert gen.ground_of("a file", {"ground": "board"}) == "board"
+    with pytest.raises(SystemExit) as e:
+        gen.ground_of("duty_actions/x/seals/y.png", {"ground": "Board"})
+    assert "duty_actions/x/seals/y.png" in str(e.value), "the refusal does not name the file"
+
+
 def test_the_record_gates_the_seal_the_same_way_it_gates_the_art(gen, tmp_path, monkeypatch):
     """Falsified by walking the seals folder and trusting the filename."""
     from PIL import Image
-    d = tmp_path / "duty_actions" / "clerical" / gen.SEAL_SUBDIR
+    d = tmp_path / "duty_actions" / "clerical" / gen.MARK_SUBDIR
     d.mkdir(parents=True)
     Image.new("RGBA", (40, 40), (9, 9, 9, 255)).save(d / "clerical_actionA_seal_v01.png")
     monkeypatch.setattr(gen, "ART_DIR", tmp_path / "duty_actions")
@@ -454,16 +697,16 @@ def test_a_seal_is_never_mistaken_for_the_card_art(gen, tmp_path, monkeypatch):
     """The seals live under the duty's own folder, which bundled_art walks recursively.
 
     Without the skip, a seal recorded as `left` would be inlined as the left CARD -- a 78px wax
-    seal stretched across 590 x 295. Falsified by removing the SEAL_SUBDIR skip in bundled_art.
+    seal stretched across 590 x 295. Falsified by removing the mark-folder skip in bundled_art.
     """
     from PIL import Image
     duty = tmp_path / "duty_actions" / "clerical"
-    (duty / gen.SEAL_SUBDIR).mkdir(parents=True)
+    (duty / gen.MARK_SUBDIR).mkdir(parents=True)
     Image.new("RGBA", (40, 40), (9, 9, 9, 255)).save(
-        duty / gen.SEAL_SUBDIR / "clerical_actionA_seal_v01.png")
+        duty / gen.MARK_SUBDIR / "clerical_actionA_seal_v01.png")
     attrib = tmp_path / "attribution.json"
     attrib.write_text(json.dumps({"files": {
-        "duty_actions/clerical/%s/clerical_actionA_seal_v01.png" % gen.SEAL_SUBDIR:
+        "duty_actions/clerical/%s/clerical_actionA_seal_v01.png" % gen.MARK_SUBDIR:
             {"slot": "left"}}}), encoding="utf-8")
     monkeypatch.setattr(gen, "ART_DIR", tmp_path / "duty_actions")
     monkeypatch.setattr(gen, "ATTRIB_FILE", attrib)
@@ -760,8 +1003,15 @@ def test_the_folders_a_walk_must_skip_have_one_owner(gen):
     doc = json.loads(gen.ATTRIB_FILE.read_text(encoding="utf-8"))
     listed = doc.get("nonSlotFolders")
     assert listed, "attribution.json no longer says which folders are not actions"
-    assert gen.SEAL_SUBDIR in listed, (
-        "this tool writes seals into %r and the walks are not told to skip it" % gen.SEAL_SUBDIR)
+    # EVERY MARK FOLDER, not just the one this tool falls back to. `icons` arrived beside
+    # `seals` and the two lists are kept separately on purpose -- a non-slot folder need not hold
+    # a mark -- so the containment is asserted rather than derived. Falsified by adding a mark
+    # folder and forgetting that every walk now has to step over it, which would put a 78px icon
+    # through bundled_art as a 590 x 295 card.
+    missing = [f for f in gen.mark_folders() if f not in listed]
+    assert not missing, (
+        "marks live in %s and the walks are not told to skip them" % ", ".join(missing))
+    assert gen.MARK_SUBDIR in gen.mark_folders(), "the fallback folder is not a mark folder"
     assert "masters" in listed, "the uncropped originals are not named as a non-slot folder"
     assert tuple(gen.non_slot_folders()) == tuple(listed), "the reader and the file disagree"
     # And no slot folder may share a name with one, or a duty's art would vanish.

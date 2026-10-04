@@ -100,8 +100,69 @@ own geometry -- position, size, fit -- and borrow whichever duty is previewed or
 box does not move an artwork's identity, and pointing both boxes at the same action is a display
 choice rather than a change of ownership.
 
+## Duty tile marks, and the icon lab
+
+A duty's tile carries one small mark per action, and there are two kinds of them. They are filed
+apart because they are not the same thing, and a tree that called them both seals would be saying
+something that is not true.
+
+`duty_actions/<duty>/seals/` holds the red wax discs. Nothing about one has to be decided: it is
+drawn to fill its own square and `../../tools/duty_art/file_seals.py` scales every one to the
+discs' 0.906 of it on the way in.
+
+`duty_actions/<duty>/icons/` holds the cut-out emblems, which arrive as a 1254 square with the
+mark somewhere inside it and a wide transparent margin. How much of that square the board draws,
+and which part, is a judgement nobody can make from the file alone. It is made in `icon_lab/` and
+written down in `icon_lab/framing.json`.
+
+    python3 ui/board_v2/icon_lab/generate_icon_sizer.py --open
+
+WHERE THE ICONS COME FROM. Every one of them was generated with ChatGPT, and that is on the record
+rather than in a sentence somewhere: each file's entry in `attribution.json` carries
+`creator: "Generated with ChatGPT (OpenAI)"` and `licence: "openai-generated"`, and the licence
+itself is spelled out in that file's `licences` block with a link to the terms the rights come
+from. The same is true of the wax seals and of every duty action card. So the question "may we
+ship this, and who do we credit" has one machine-readable answer for the whole tree, which is what
+that file is for -- and a guard in `tests/layout_lab/test_board_v2_attribution.py` makes a missing
+entry impossible rather than merely unlikely.
+
+`--open` builds and opens in one go, spelled the same way the action board's generator spells it;
+without it the page is written and left at `icon_lab/generated/icon_sizer.html`.
+
+**The build step is not optional.** `generated/` is ignored (see `../.gitignore`), so a fresh
+clone has the framing but not the page; running the generator is how one becomes the other. It
+needs nothing but the standard library, and it seeds from the masters rather than the shipped
+cuts, so a framing can be revisited any number of times and is still one trim away from the
+generator's own pixels.
+
+**A framing changes this page and nothing else.** `framing.json` decides what the cards show and
+what the `cut` button hands back; the board draws the file sitting in `duty_actions/<duty>/icons/`,
+which was cut under whatever framing was in force when somebody cut it. A framing that has been
+saved but never cut and filed is a change you can see here and nowhere else, and each build prints
+which ones those are.
+
+The page also remembers your framing in the browser, so reopening it without rebuilding shows what
+you last did. Those two can disagree, and the page does not choose quietly: the newer one wins,
+the line under the buttons says which it is showing and how old the other is, and a button takes
+the other instead. To make your framing the one the repository knows, press **save settings**,
+move the downloaded `framing.json` into `icon_lab/` over the one already there, and build again.
+Chrome will not overwrite a download -- a second save arrives as `framing (1).json` -- so check
+`savedAt` at the top of the file if which is newest is ever in doubt.
+
 ## What is here
 
+- `action_board/` -- the page the action-selection board is drawn on, and the generator that
+  builds it from `geometry.py`, `duty_text.json` and the art in `duty_actions/`.
+- `icon_lab/` -- where a cut-out icon's framing is chosen, with `framing.json` holding the
+  answer. See the section above.
+- `duty_art_lab/` -- the viewfinder for cropping a duty's wide master into its two action cards.
+- `duty_actions/` -- the art itself, by duty: the action cards, the tile marks under `seals/`
+  and `icons/`, and the untouched originals under each `masters/`.
+- `tokens/` -- the three Tithe resources, in both the wax and the coin treatment.
+- `attribution.json` -- provenance for every asset in this tree, and the shared facts the tools
+  would otherwise each keep their own copy of: which folders hold marks, which are not actions,
+  which file extensions to look for.
+- `duty_text.json` -- every word the board prints.
 - `docs/duty_wheel_spec.md` -- the design direction for the module.
 - `docs/layout_lab_brief.md` -- the brief the layout lab was built from, kept because it
   records what was asked for and what was left to judgement.
