@@ -169,8 +169,15 @@ body.full{background:#000}
 #wheel svg{width:100%;height:100%;display:block}
 #wheel [id="ground"]{display:none}
 #wheel [id="guide"]{display:none}
-#wheel path[data-face]{cursor:default;transition:filter .12s ease}
+#wheel path[data-face]{cursor:pointer;transition:filter .12s ease}
 #wheel path[data-face].lit{filter:brightness(1.45)}
+/* SELECTION IS A SECOND STATE, NOT THE SAME ONE. The tile has carried `sel` since there was a
+   board; the face had nothing, so picking a duty lit its tile and left the wheel saying nothing.
+   It is the hover brightness as asked, plus a gold rim: without the rim a selected face and a
+   hovered face are the same picture, and while you hover one face with another selected the
+   board would be showing two identical highlights and no way to tell which is which. */
+#wheel path[data-face].sel{filter:brightness(1.45);stroke:var(--line);stroke-width:2;
+  stroke-linejoin:round;paint-order:stroke}
 .fig{position:absolute;pointer-events:none}
 .fig svg{width:100%;height:100%;display:block;overflow:visible}
 
@@ -463,6 +470,12 @@ function drawWheel(){
     face.setAttribute("data-face", d.face);
     face.setAttribute("data-hover-duty", d.slug);
     face.style.pointerEvents = "auto";
+    // THE SAME ENTRY POINT THE TILE USES. A face and its tile are two handles on one duty, so
+    // they go through pickDuty and the selection, the action cards and the wheel all follow from
+    // the one piece of state rather than from whichever was clicked.
+    face.addEventListener("click", function(slug){
+      return function(){ pickDuty(slug); };
+    }(d.slug));
   });
   drawFigures();
 }
@@ -515,6 +528,10 @@ function render(){
   GEO.duties.forEach(function(d){
     var tile = document.getElementById("tile-" + d.slug);
     if (tile) tile.classList.toggle("sel", d.slug === S.duty);
+    // AND THE WHEEL, FROM THE SAME LINE. Two loops would be two answers the first time one of
+    // them was edited; this is the rule lightFace() already states for the hover pair.
+    var face = document.querySelector('#wheel [data-face="' + d.face + '"]');
+    if (face) face.classList.toggle("sel", d.slug === S.duty);
   });
   var info = dutyOf(S.duty);
   ["actionA","actionB"].forEach(function(slot){

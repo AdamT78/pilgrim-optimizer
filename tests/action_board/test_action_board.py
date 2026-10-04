@@ -1149,3 +1149,45 @@ def test_the_tile_carries_the_same_purple_the_marks_are_grounded_on(gen):
     # behind on --plate turns back into the visible square -- on the one tile you are looking at.
     assert ".tile.sel .seal.plate{background:var(--plate-lit)}" in page, (
         "the selected tile's plate does not follow it, so the square comes back when you select")
+
+
+def test_a_duty_can_be_picked_from_the_wheel_as_well_as_the_ribbon(gen):
+    """Falsified by wiring the face to anything but pickDuty, or by leaving it unclickable.
+
+    A duty tile and a wheel face are two handles on ONE duty. The tile could already be clicked
+    and the face could not -- it carried a hover highlight and `cursor: default`, which is a thing
+    that lights up under the pointer and then refuses to be pressed. Both go through pickDuty, so
+    the selection, the action cards and the wheel all follow from one piece of state rather than
+    from whichever handle was used.
+    """
+    page = TMPL.read_text(encoding="utf-8")
+    assert "#wheel path[data-face]{cursor:pointer" in page, (
+        "the wheel's faces are not offered as clickable")
+    wheel = page.split("function drawWheel()")[1].split("function drawFigures()")[0]
+    assert "pickDuty(slug)" in wheel, (
+        "a wheel face does not go through pickDuty, so the two handles can disagree")
+
+
+def test_picking_a_duty_lights_it_on_the_wheel_and_in_the_ribbon(gen):
+    """Falsified by painting the tile's selection and not the wheel's, which is where it started.
+
+    `sel` on the tile has existed since there was a board; the face had no selected state at all,
+    so picking a duty lit the ribbon and left the wheel saying nothing. Both are now set from the
+    SAME loop -- two loops would be two answers the first time one of them was edited, which is
+    the rule lightFace() already states for the hover pair.
+    """
+    page = TMPL.read_text(encoding="utf-8")
+    assert '#wheel path[data-face].sel{' in page, "the wheel face has no selected state"
+    # SELECTION AND HOVER HAVE TO BE TELLABLE APART. Both light the face; while you hover one face
+    # with another selected, identical highlights would leave the board showing two and saying
+    # which is which nowhere.
+    sel = page.split('#wheel path[data-face].sel{')[1].split('}')[0]
+    assert "stroke:" in sel, (
+        "a selected face is only brightened, so it is the same picture as a hovered one")
+    # ONE LOOP, BOTH PAINTED.
+    i = page.index('tile.classList.toggle("sel", d.slug === S.duty)')
+    nearby = page[i:i + 600]
+    assert 'face.classList.toggle("sel", d.slug === S.duty)' in nearby, (
+        "the wheel's selection is not painted beside the tile's, so they can drift apart")
+
+
