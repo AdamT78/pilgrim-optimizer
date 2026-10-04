@@ -129,6 +129,56 @@ entry impossible rather than merely unlikely.
 `--open` builds and opens in one go, spelled the same way the action board's generator spells it;
 without it the page is written and left at `icon_lab/generated/icon_sizer.html`.
 
+**Three pages, three decisions.** The sizer above decides a mark's CROP -- how much of its
+master the mark is. `generate_size_check.py --open` decides how big that mark is DRAWN, by
+showing every one of them at a size you choose and at the scale your own window would give them.
+
+    python3 ui/board_v2/icon_lab/generate_size_check.py --open
+
+ITS OUTPUT IS A NUMBER, NOT A FILE, and that is a decision rather than an omission. What you take
+away from it is a figure for `geometry.py`'s `SEAL`, which is the one place the board's sizes
+live. It deliberately exports nothing: baking the drawn size into a file would take it away from
+geometry.py, so changing one number would stop restyling the marks and start needing every one
+re-cut; baking the ground would take it from the record's `ground` field and the single CSS rule
+that owns that colour; baking a border would make a style into art; and a file at exactly its
+drawn size is soft on a retina screen, which is why the board inlines every mark at `SEAL * 2`
+instead. A guard in `tests/icon_lab/` holds it to being a viewer.
+
+**The third decides WHERE a duty's two marks sit.**
+
+    python3 ui/board_v2/icon_lab/generate_tile_column.py --open
+
+The board put them on the diagonal, overlapping: that was designed for round wax discs, where one
+resting on another reads as depth. The marks have corners now, and a corner cutting into a
+neighbour reads as a mistake. THIS PAGE IS WHERE THE COLUMN WAS DECIDED, and the board has since
+taken it, so the arrangement here is the one that ships; the levers are for asking what a
+different gap or tile height would cost. Every number is `geometry.py`'s,
+the mark's size included, so what is on screen is the board as it would be rather than a sketch of
+one -- which is what lets the page answer the question worth asking: at the size the board really
+draws, does a column of two fit the ribbon at all, and what would it cost if it does not.
+
+AND IT SAYS WHO PAYS. Nothing below the ribbon shrinks when the ribbon grows -- it moves. `ART_Y`
+is `RIBBON_Y + RIBBON_H + GAP` and the rest of the board follows down from there, so the action
+cards and the confirm row keep their sizes and change their places. The wheel is the one elastic
+thing on the board, because `WHEEL_H` is whatever the canvas has left over; it pays every pixel the
+ribbon gains, and it keeps its asset's aspect, so it narrows by about twice what it loses in
+height. The readout prices a height in the wheel's own width and height rather than as a count of
+pixels, and so does the build, on every run.
+
+The two levers are the gap and the tile's height. THE GAP DOES TWO JOBS: it is the space under the
+duty's name as well as the space between the two marks, so the column hangs from the name at the
+rhythm it keeps inside itself rather than floating in what is left over. That also puts the first
+mark on the same line on all eight tiles, including Taxation and Allocation, which have a single
+action each -- centring theirs in the leftover space sat it half a mark below its neighbours',
+which read as a mistake on the two tiles that are different rather than as the difference itself.
+
+THE HEIGHT IS A PROPOSAL, NOT `RIBBON_H`. The page opens at `START_H`, because the board as it
+stands does not fit a column and opening on the board would mean opening on the problem every time
+and dragging to the answer before you could look at anything. Nothing here moves the board:
+`RIBBON_H` is untouched, and the readout prints it beside the proposed height so the two cannot be
+confused. A guard holds `START_H` to a height the column actually fits at, since a proposal that
+does not fit is worse than no proposal.
+
 **The build step is not optional.** `generated/` is ignored (see `../.gitignore`), so a fresh
 clone has the framing but not the page; running the generator is how one becomes the other. It
 needs nothing but the standard library, and it seeds from the masters rather than the shipped
@@ -153,8 +203,9 @@ Chrome will not overwrite a download -- a second save arrives as `framing (1).js
 
 - `action_board/` -- the page the action-selection board is drawn on, and the generator that
   builds it from `geometry.py`, `duty_text.json` and the art in `duty_actions/`.
-- `icon_lab/` -- where a cut-out icon's framing is chosen, with `framing.json` holding the
-  answer. See the section above.
+- `icon_lab/` -- the three pages that decide how a mark is presented: its crop, with
+  `framing.json` holding the answer; how big it is drawn; and where a duty's two sit. See the
+  section above.
 - `duty_art_lab/` -- the viewfinder for cropping a duty's wide master into its two action cards.
 - `duty_actions/` -- the art itself, by duty: the action cards, the tile marks under `seals/`
   and `icons/`, and the untouched originals under each `masters/`.

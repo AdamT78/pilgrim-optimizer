@@ -15,6 +15,11 @@
 :root{
   --ink:#e2d7bc; --dim:#968e7c; --line:#c9b27a; --faint:#2c2924;
   --panel:#0e0d0b; --panelline:#46413710;
+  /* THE PLATE'S PURPLE, AND NOW THE TILE'S. It was written once, in .seal.plate, while the tile
+     under it was near-black -- so a cut-out icon sat on a visible purple square. The tile carries
+     the same colour now and the square stops being a square: the mark simply sits on the tile.
+     Two things using one colour is exactly when it stops being a literal and becomes a name. */
+  --plate:#1E1935; --plate-lit:#3B3160;
 }
 *{box-sizing:border-box}
 html,body{margin:0;background:#07070a;color:var(--ink);
@@ -54,10 +59,10 @@ body.full{background:#000}
   font-family:Georgia,serif;color:#e8dfca;white-space:nowrap;overflow:hidden}
 
 /* ---- the eight duty tiles -------------------------------------------------------------- */
-.tile{border:1px solid #2a2721;border-radius:4px;background:#0b0a09;cursor:pointer}
+.tile{border:1px solid #2a2721;border-radius:4px;background:var(--plate);cursor:pointer}
 .tile .nm{position:absolute;left:0;right:0;text-align:center;font-family:Georgia,serif;
   font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--ink)}
-.tile.sel{background:#1a1814;border-color:#60594a}
+.tile.sel{background:var(--plate-lit);border-color:#60594a}
 /* The cross-highlight: hovering a wheel face lights its tile and the other way round. One class,
    set from one place, so the two directions cannot drift apart. */
 .tile.lit{border-color:var(--line);box-shadow:0 0 0 1px #c9b27a66}
@@ -80,8 +85,14 @@ body.full{background:#000}
    floats with nothing behind it. Which a seal is, is recorded in attribution.json and arrives
    here as one word -- the page does not look at the picture. The corner is square on purpose:
    these are plates, not discs, and the 4px is only to stop the colour cutting a hard rectangle
-   out of the tile. The purple is the card's, written once. */
-.seal.plate{background:#1E1935;border-radius:4px}
+   out of the tile. THE TILE NOW CARRIES THE SAME PURPLE, so this rule draws nothing you can see
+   on today's board -- it is kept because it is what makes the mark right if the tile's colour
+   ever moves away from the plate's. */
+.seal.plate{background:var(--plate);border-radius:4px}
+/* A PLATE BELONGS TO ITS TILE, NOT TO THE BOARD. The selected tile lifts to --plate-lit, and a
+   plate left on --plate turned back into the visible square this whole arrangement exists to get
+   rid of -- on the one tile you are looking at. */
+.tile.sel .seal.plate{background:var(--plate-lit)}
 
 /* ---- the two action cards -------------------------------------------------------------- */
 .art{overflow:hidden;background:#000;cursor:pointer}
@@ -374,8 +385,8 @@ function drawSide(){
   // EVERY NUMBER IN THIS COLUMN COMES FROM GEO. The three seals used to start at a 21 typed
   // here and the label sat on a 14, which is how the column survived the seals going from 64 to
   // 78 without anybody noticing the label had been pushed at.
-  var y = t.tokenY;
-  t.order.forEach(function(name){
+  t.order.forEach(function(name, i){
+    var at = t.slots[i];
     // THE SEAL, NOT THE COIN. A seal on this board means a thing you can take, and its colour
     // says which kind -- red for a duty action, grey for a resource. The Tithe column is the
     // third choice beside the two actions, so it speaks the same language they do. The coin is
@@ -383,14 +394,13 @@ function drawSide(){
     // page has to stay usable with no assets at all.
     var k = IMAGES["seal:" + name] ? "seal:" + name
           : IMAGES["token:" + name] ? "token:" + name : null;
-    var e = el("div", "tok", {left: px(t.tokenX), top: px(y),
-                              width: px(t.token), height: px(t.token)}, p);
+    var e = el("div", "tok", {left: px(at.x), top: px(at.y),
+                              width: px(at.size), height: px(at.size)}, p);
     e.dataset.kind = "token"; e.dataset.slot = name;
     if (k) { var im = document.createElement("img"); im.src = IMAGES[k];
              e.appendChild(im); e.classList.add("filled"); }
     else e.textContent = name.slice(0, 1).toUpperCase();
     wireDrop(e);
-    y += t.token + t.tokenGap;
   });
   var lb = el("div", "lb", {top: px(t.labelTop), fontSize: px(t.labelSize),
                             lineHeight: String(t.lh)}, p);

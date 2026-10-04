@@ -1,0 +1,260 @@
+<!doctype html><meta charset=utf-8>
+<title>Duty tiles, icons in a column</title>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<style>
+:root{--ink:#e2d7bc;--dim:#968e7c;--line:#c9b27a;--edge:#211e1a;--plate:#1E1935;--plate-lit:#3B3160}
+*{box-sizing:border-box}
+body{margin:0;padding:22px 20px 80px;background:#07070a;color:var(--ink);
+  font:13px/1.55 ui-sans-serif,system-ui,sans-serif}
+h1{font:600 19px/1.3 Georgia,serif;margin:0 0 4px;color:#f0e6cd}
+.sub{color:var(--dim);max-width:86ch;margin:0 0 18px}
+.bar{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin:0 0 6px}
+label.r{display:flex;align-items:center;gap:8px;color:var(--dim);
+  font:600 11px/1 ui-sans-serif,sans-serif;letter-spacing:.09em;text-transform:uppercase}
+label.r input[type=range]{width:200px;accent-color:#c9b27a}
+label.r b{color:var(--ink);min-width:52px;font:700 12px/1 ui-monospace,monospace}
+button{background:#1b1915;color:var(--ink);border:1px solid #3c372e;border-radius:3px;
+  padding:5px 11px;font:600 11px/1.4 ui-sans-serif,sans-serif;letter-spacing:.09em;
+  text-transform:uppercase;cursor:pointer}
+button:hover{border-color:#6a6050}
+button[aria-pressed=true]{background:#2e2718;border-color:var(--line);color:#f0e6cd}
+#read{margin:8px 0 0;color:var(--dim);font:12px/1.7 ui-monospace,Menlo,monospace;white-space:pre}
+#read b{color:var(--ink);font-weight:700}
+
+/* THE RIBBON AS THE BOARD DRAWS IT, scaled as one piece. Every number inside comes from
+   geometry.py, so what is on screen is the tile at its real proportions and not a sketch of
+   one. Only the column arrangement is this page's own. */
+#scroll{margin:20px 0 0;overflow-x:auto;overflow-y:hidden;padding-bottom:10px}
+#stage{transform-origin:0 0}
+#ribbon{display:flex;align-items:flex-start}
+.tile{position:relative;background:var(--plate);border:1px solid #2a2721;border-radius:5px;
+  flex:0 0 auto;overflow:hidden}
+.nm{position:absolute;left:0;right:0;text-align:center;font-family:Georgia,serif;font-weight:600;
+  letter-spacing:.11em;text-transform:uppercase;color:var(--ink);white-space:nowrap}
+.mark{position:absolute;display:grid;place-items:center}
+.mark img{width:100%;height:100%;object-fit:contain;display:block}
+/* A CUT-OUT BRINGS NO GROUND, so this page supplies the same one the board does -- and now
+   the tile carries that colour too, so the plate stops being a square you can see and the mark
+   simply sits on the tile. It is left in rather than deleted: it is what makes the mark right
+   if the tile's own colour ever moves away from the plate's. */
+.mark.plate{background:var(--plate);border-radius:4px}
+/* A THIN EDGE, OFF BY DEFAULT. Now that the tile carries the plate's own colour there is nothing
+   to say where one mark ends and the tile begins, which is fine for a shape that fills its
+   square and less fine for one with a ragged edge. The border sits on the mark's box, so the
+   artwork gives up a pixel each side rather than growing past where it was placed. */
+body.edged .mark{border:1px solid var(--plate-lit);border-radius:4px}
+body.guides .tile{outline:1px dashed #3a352c}
+body.guides .mark{outline:1px dashed #6a5f48}
+.note{margin-top:30px;max-width:86ch;color:#8d8471;font-size:12.5px;
+  border-top:1px solid var(--edge);padding-top:14px}
+.note b{color:#b2a37c;font-weight:700}
+/* WHEN IT DOES NOT FIT, SAY SO IN THE PICTURE TOO. A readout alone is a thing you scroll past
+   while the marks are visibly hanging out of their tiles. */
+body.over .tile{outline:1px solid #7a3b3b}
+/* AND LET THEM ACTUALLY HANG OUT. The tile clips, which is what the board does, and a clipped
+   mark looks like a mark that was drawn smaller rather than one that did not fit. When the column
+   overflows the clip is turned off so the spill is the thing you see. */
+body.over .tile{overflow:visible}
+body.over #read b{color:#d98f8f}
+/* THE COST OF A TALLER RIBBON, MARKED. Not an error -- nothing is broken by a smaller wheel -- so
+   it is amber and only on the line that says so. */
+#read i{font-style:normal}
+body.costly #read i b{color:#d9b36b}
+</style>
+
+<h1>Duty tiles, icons in a column</h1>
+<p class=sub>The eight tiles at their real size, with each duty's marks stacked rather than
+overlapped on the diagonal, which is what the board did before this page talked it out of it.
+Everything except the stacking comes from geometry.py &mdash; the
+tile, its border, the name, the space they sit in, and the mark's own size, which is
+<code>SEAL</code>. What you choose is one gap &mdash; which sets both the space under the duty's
+name and the space between its two marks &mdash; and how tall the tile is. So the question the page
+answers is not "how big could the marks be" but "what would the board have to give up to stack
+them".</p>
+
+<div class=bar>
+  <label class=r>tile height <input id=tall type=range min="120" max="320" value="__START_H__"><b id=tallv>__START_H__</b></label>
+  <label class=r>gap <input id=gap type=range min="0" max="40" value="__GAP__"><b id=gapv>__GAP__</b></label>
+  <label class=r>view <input id=zoom type=range min="60" max="320" value="120"><b id=zoomv>1.2&times;</b></label>
+  <button id=edge>icon border</button>
+  <button id=guides>guides</button>
+  <button id=laptop>at 13&Prime; scale</button>
+</div>
+<pre id=read></pre>
+
+<div id=scroll><div id=stage><div id=ribbon></div></div></div>
+
+<p class=note>The mark's size is <code>SEAL</code> and is not this page's to choose &mdash; what
+you are looking at is the board as it would be, not a sketch of one. When the column does not fit
+the tiles are outlined in red and the marks are left hanging out of them, because a number saying
+so is a thing you can scroll past. <b>Who pays for a taller tile:</b> nothing below the ribbon
+shrinks, it moves &mdash; <code>ART_Y</code> is <code>RIBBON_Y + RIBBON_H + GAP</code> and the rest
+of the page follows down from there. The wheel is the one elastic thing on the board, because
+<code>WHEEL_H</code> is whatever the canvas has left over, so every pixel the ribbon gains comes
+off the wheel, and the wheel keeps its asset's aspect and narrows by about twice what it loses in
+height. The readout says that in the wheel's own numbers rather than as a count of pixels.
+<b>One gap, two jobs:</b> the space under the name is the space between the marks, and the column
+hangs from the name rather than floating in what is left over &mdash; so the first mark sits on the
+same line on all eight tiles, including Taxation and Allocation, which have a single action each.
+<b>at 13&Prime; scale</b> shows the tiles at 0.693, the board's own fit on a 13-inch laptop at full
+width.</p>
+
+<script>
+var GEO = __GEO__;
+var DUTIES = __DUTIES__;
+
+function el(t, cls, parent){ var e = document.createElement(t); if (cls) e.className = cls;
+  if (parent) parent.appendChild(e); return e; }
+function V(id){ return +document.getElementById(id).value; }
+
+// WHERE THE COLUMN CAN GO. The name has the top of the tile; everything below it is the marks'.
+// ONE GAP, TWO JOBS. The space under the name is the same space as the one between the marks, so
+// the whole tile reads as a single rhythm instead of a title with a block of marks loosely under
+// it. It was `SEAL_INSET` under the name and the slider's gap between, which are two numbers
+// nobody chose together and which went visibly out of step as soon as you moved the slider.
+// THE SIZE IS GEOMETRY'S, NOT THE GAP'S LEFTOVER. This used to derive the mark size from
+// whatever the gap left over, which answers "how big could they be" -- a fair question while
+// nobody had decided. SEAL has been decided, so the useful question is the other one: at the size
+// the board really draws, does a column fit the ribbon?
+// THE TILE'S HEIGHT IS THE OTHER LEVER, and the only one that can make a column of two at the
+// board's SEAL actually fit. RIBBON_H is a real number in geometry.py; this page lets you move it
+// to see what it would take, and then says what moving it costs.
+// WHO PAYS FOR A TALLER RIBBON. Everything below the ribbon is derived from it -- ART_Y is
+// RIBBON_Y + RIBBON_H + GAP, and the rest follows down the page -- so the action cards and the
+// confirm row do not shrink, they move. The wheel is the one elastic thing on the board, because
+// WHEEL_H is whatever the canvas has left: CANVAS_H - WHEEL_Y - GAP. Every pixel the ribbon gains
+// comes off the wheel, and the wheel keeps its asset's aspect, so it narrows by about twice what
+// it loses in height. That is the real price of a column, and it is the number this page exists
+// to put in front of you.
+function column(){
+  var h = V('tall');
+  var gap = V('gap');
+  var innerH = h - 2 * GEO.border;
+  var nameH = Math.round(GEO.nameSize * GEO.nameLh);
+  var top = GEO.nameTop + nameH + gap;
+  var avail = innerH - top - GEO.sealInset;
+  var size = GEO.seal;
+  var need = 2 * size + gap;
+  var grew = h - GEO.height;
+  var wheelH = GEO.wheelH - grew;
+  return {h: h, innerH: innerH, top: top, avail: avail, gap: gap, size: size, need: need,
+          over: need - avail,
+          couldBe: Math.floor((avail - gap) / 2),
+          wantRibbon: top + need + GEO.sealInset + 2 * GEO.border,
+          grew: grew,
+          wheelH: wheelH,
+          wheelW: Math.round(wheelH / GEO.wheelRatio)};
+}
+
+var NODES = [];
+function build(){
+  var ribbon = document.getElementById('ribbon');
+  ribbon.innerHTML = ''; NODES = [];
+  ribbon.style.gap = GEO.tileGap + 'px';
+  var c = column();
+  DUTIES.forEach(function(d){
+    var tile = el('div', 'tile', ribbon);
+    tile.style.width = GEO.tileW + 'px';
+    tile.style.height = c.h + 'px';
+    var nm = el('div', 'nm', tile);
+    nm.style.top = GEO.nameTop + 'px';
+    nm.style.fontSize = GEO.nameSize + 'px';
+    nm.style.lineHeight = String(GEO.nameLh);
+    nm.textContent = d.name;
+    var marks = d.slots.map(function(s){
+      var m = el('div', 'mark' + (s.ground ? ' plate' : ''), tile);
+      var im = document.createElement('img'); im.src = s.src; m.appendChild(im);
+      return m;
+    });
+    NODES.push({tile: tile, marks: marks});
+  });
+  place();
+}
+
+function place(){
+  var c = column();
+  NODES.forEach(function(n){
+    n.tile.style.height = c.h + 'px';
+    // EVERY MARK ON THE SAME LINE AS ITS NEIGHBOURS'. The first one hangs at the gap below the
+    // name and the rest follow at the same gap, so where a mark sits does not depend on how many
+    // the tile has. Taxation and Allocation have one action each, and centring theirs in the
+    // leftover space dropped it half a mark below the top mark of every tile beside them -- which
+    // read as a mistake on the two tiles that are different, rather than as the difference.
+    n.marks.forEach(function(m, i){
+      m.style.width = c.size + 'px';
+      m.style.height = c.size + 'px';
+      m.style.left = Math.round((GEO.innerW - c.size) / 2) + 'px';
+      m.style.top = (c.top + i * (c.size + c.gap)) + 'px';
+    });
+  });
+  fit(c); read(c);
+}
+
+// WHAT A HEIGHT COSTS, IN THE WHEEL'S OWN NUMBERS. Saying "grown 92 px" invites the reply "and?";
+// saying the wheel goes from 1106 x 586 to 932 x 494 is a thing you can hold an opinion about.
+function cost(c){
+  if (c.grew === 0) return 'the height geometry.py gives it, and the wheel keeps its <b>' +
+    GEO.wheelW + ' x ' + GEO.wheelH + '</b>';
+  var was = GEO.wheelW + ' x ' + GEO.wheelH, now = c.wheelW + ' x ' + c.wheelH;
+  if (c.grew < 0) return '<b>' + (-c.grew) + '</b> px shorter than the board draws it, so the ' +
+    'wheel gains the same: <b>' + was + '</b> becomes <b>' + now + '</b>';
+  return 'grown <b>' + c.grew + '</b> px, and the wheel pays all of it: <b>' + was +
+    '</b> becomes <b>' + now + '</b>';
+}
+
+function read(c){
+  var s = V('zoom') / 100;
+  var fits = c.over <= 0;
+  document.body.classList.toggle('over', !fits);
+  // A TENTH OF THE WHEEL IS WHERE I STOPPED CALLING IT FREE. There is no cliff in the geometry --
+  // the wheel just gets smaller -- so this is a mark on a slope, put here to be argued with.
+  document.body.classList.toggle('costly', c.grew > 0 && c.grew >= GEO.wheelH / 10);
+  document.getElementById('read').innerHTML =
+    'mark   <b>' + c.size + '</b> px   from geometry.py\u2019s SEAL        gap <b>' + c.gap +
+      '</b> px, under the name and between the two\n' +
+    'tile   <b>' + GEO.tileW + ' x ' + c.h + '</b>   the column has <b>' + c.avail +
+      '</b> px under the name and needs <b>' + c.need + '</b>\n' +
+    (fits
+      ? 'fits, with <b>' + (-c.over) + '</b> px to spare\n'
+      : '<b>DOES NOT FIT</b> by <b>' + c.over + '</b> px \u2014 the biggest that would fit at ' +
+        'this gap is <b>' + c.couldBe + '</b>, or the tile would have to be <b>' +
+        c.wantRibbon + '</b> tall\n') +
+    'height <i>' + cost(c) + '</i>   RIBBON_H is ' + GEO.height + '\n' +
+    'drawn  <b>' + (c.size * s).toFixed(0) + '</b> px here';
+}
+
+function fit(c){
+  c = c || column();
+  var s = V('zoom') / 100;
+  var st = document.getElementById('stage');
+  st.style.transform = 'scale(' + s + ')';
+  // A SCALED ELEMENT STILL CLAIMS ITS UNSCALED BOX, so the wrapper is told the real size or the
+  // page scrolls to nothing and leaves a hole under the tiles. The height is the tile's chosen
+  // one, not geometry's, or growing the ribbon would push the tiles under the note.
+  var w = DUTIES.length * GEO.tileW + (DUTIES.length - 1) * GEO.tileGap;
+  st.style.width = w + 'px';
+  document.getElementById('scroll').style.height = (c.h * s + 18) + 'px';
+  document.getElementById('ribbon').style.width = w + 'px';
+}
+
+document.getElementById('tall').addEventListener('input', function(){
+  document.getElementById('tallv').textContent = V('tall'); place(); });
+document.getElementById('gap').addEventListener('input', function(){
+  document.getElementById('gapv').textContent = V('gap'); place(); });
+document.getElementById('zoom').addEventListener('input', function(){
+  document.getElementById('zoomv').textContent = (V('zoom')/100).toFixed(1) + '×';
+  fit(); read(column()); });
+document.getElementById('edge').onclick = function(){
+  var on = document.body.classList.toggle('edged');
+  this.setAttribute('aria-pressed', String(on)); };
+document.getElementById('guides').onclick = function(){
+  var on = document.body.classList.toggle('guides');
+  this.setAttribute('aria-pressed', String(on)); };
+document.getElementById('laptop').onclick = function(){
+  var z = document.getElementById('zoom');
+  z.value = (z.value == 69) ? 160 : 69;
+  z.dispatchEvent(new Event('input'));
+  this.setAttribute('aria-pressed', String(z.value == 69)); };
+
+build();
+</script>
