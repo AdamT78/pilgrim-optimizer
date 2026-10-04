@@ -211,9 +211,9 @@ Chrome will not overwrite a download -- a second save arrives as `framing (1).js
   art, each kept word for word as it was sent. `prompts/` itself holds the templated
   two-panel briefs the viewfinder runs; `prompts/seals/` one file per wax seal;
   `prompts/panels/` one file per duty action card; and `prompts/icons/` the single brief
-  that made every icon. `attribution.json` points at them by name. No shipped card comes
-  from the viewfinder any more -- all fourteen were generated whole -- so the cropping
-  half is history the tree keeps rather than a step anything runs.
+  that made every icon. `attribution.json` points at them by name. The cropping half is now
+  history on both sides: every card was generated whole, and `crop_duty_master.py` itself has
+  been removed. The viewfinder page still builds and still serves the briefs.
 - `duty_actions/` -- the art itself, by duty: the action cards, the tile marks under `seals/`
   and `icons/`, and the untouched originals under each `masters/`.
 - `tokens/` -- the three Tithe resources, in both the wax and the coin treatment.

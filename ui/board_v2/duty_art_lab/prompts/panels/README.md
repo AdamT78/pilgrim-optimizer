@@ -14,7 +14,8 @@ written.
 ## They are here rather than in `../` on purpose
 
 The briefs in `../` are ONE text with `{{LEFT_SUBJECT}}` and friends substituted in, run against a
-duty to make a two-panel master for `crop_duty_master.py` to cut. These are the opposite: fourteen
+duty to make a two-panel master for `crop_duty_master.py` to cut -- a script since removed, so
+those briefs now describe a step nothing runs. These are the opposite: fourteen
 separate prompts, each for one finished card, with no tokens and nothing to substitute. Keeping
 them out of `../` means they are never offered as a master brief, which is the same reason the seal
 briefs sit in their own folder.
