@@ -1761,6 +1761,34 @@
       "reproducibleBy": "nothing in this repository -- the picture is model output and there is no crop step to re-run",
       "notes": "The first card art this duty has had; both folders held only a .gitkeep. `slot` is declared, not inferred -- the folder names are the wording, not the slot order -- and it is what makes the image usable at all, since one with no entry is dropped with \"no slot recorded, left out\". This pair runs ahead of the engine: duty_text.json gives BOTH of this duty's actions a null engineAction and records that the engine has only build_roads_deferred, a scaffold with no spatial placement, so neither box has an id to point at yet. The picture is the box's, not the action's, and does not wait on that.",
       "sha256": "7fd139341edec8544733140e990242b40b998b358b2c4da90d46513d9fae3dc2"
+    },
+    "duty_actions/produce/gain_wheat/produce_gain_wheat_left_v01.png": {
+      "state": "present",
+      "title": "Produce Wheat, first generation",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action art",
+      "source": "generated directly at the card's own 2:1, one image per action -- NOT cut from a shared master",
+      "licence": "openai-generated",
+      "slot": "left",
+      "role": "the LEFT action image, 1774 x 887, showing a reaper kneeling in cut stubble to bind a sheaf by hand, the sickle laid down beside her, a line of harvesters stooping behind, a hooded figure with a cross-staff and a crow on the fence at the right and an abbey on the skyline. Ratio 2.0000 against the slot's 2.0000, so `fit: cover` crops nothing; at 3.59 times the 494 x 247 slot it is comfortably above the 2x a retina screen asks for. duty_text.json calls this action 'Produce Wheat'; slotFolders puts it in actionA's folder, gain_wheat.",
+      "modifications": "NONE. Did not go through tools/duty_art/crop_duty_master.py. That script takes one wide master and splits it into a duty's two cards, so the pair shared a scene and a crop; these two are separate pictures of separate actions and are used whole. Nothing derives their shape from geometry.py, so if the slot's ratio ever moves off 2:1 they begin cropping and no script will notice.",
+      "reproducibleBy": "nothing in this repository -- the picture is model output and there is no crop step to re-run",
+      "notes": "The first card art this duty has had; both folders held only a .gitkeep. `slot` is declared, not inferred -- the folder names are the wording, not the slot order -- and it is what makes the image usable at all, since one with no entry is dropped with \"no slot recorded, left out\". Produce is the duty slotFoldersNote cites as proof the folder cannot be derived: its actionA is `gain_wheat` and its actionB `gain_stone`, where Clerical's are `gain_piety` and `gain_coins`, so neither alphabetical order nor the action's own name in duty_text.json would have given the answer. With this pair every duty on the ribbon has card art.",
+      "sha256": "828432eb49d6e0f1987862229b2e87e3416c1bbdbc69500153c6d0e6f743ad89"
+    },
+    "duty_actions/produce/gain_stone/produce_gain_stone_right_v01.png": {
+      "state": "present",
+      "title": "Produce Stone, first generation",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action art",
+      "source": "generated directly at the card's own 2:1, one image per action -- NOT cut from a shared master",
+      "licence": "openai-generated",
+      "slot": "right",
+      "role": "the RIGHT action image, 1774 x 887, showing a mason splitting a block open with a hammer in a quarry, chips flying, a lantern and a pick coiled round with rope on the ledge beside him, labourers dragging a sledge of cut blocks through the mud behind and a hooded overseer on the rim under three crosses. Ratio 2.0000 against the slot's 2.0000, so `fit: cover` crops nothing; at 3.59 times the 494 x 247 slot it is comfortably above the 2x a retina screen asks for. duty_text.json calls this action 'Produce Stone'; slotFolders puts it in actionB's folder, gain_stone.",
+      "modifications": "NONE. Did not go through tools/duty_art/crop_duty_master.py. That script takes one wide master and splits it into a duty's two cards, so the pair shared a scene and a crop; these two are separate pictures of separate actions and are used whole. Nothing derives their shape from geometry.py, so if the slot's ratio ever moves off 2:1 they begin cropping and no script will notice.",
+      "reproducibleBy": "nothing in this repository -- the picture is model output and there is no crop step to re-run",
+      "notes": "The first card art this duty has had; both folders held only a .gitkeep. `slot` is declared, not inferred -- the folder names are the wording, not the slot order -- and it is what makes the image usable at all, since one with no entry is dropped with \"no slot recorded, left out\". Produce is the duty slotFoldersNote cites as proof the folder cannot be derived: its actionA is `gain_wheat` and its actionB `gain_stone`, where Clerical's are `gain_piety` and `gain_coins`, so neither alphabetical order nor the action's own name in duty_text.json would have given the answer. With this pair every duty on the ribbon has card art.",
+      "sha256": "af30c8de6a1d47fa990493406d89e3f25a483e30eeeb4e1a9f6c7f0a32dff5f2"
     }
   },
   "assetDirs": [
