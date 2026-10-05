@@ -966,6 +966,57 @@ def test_clicking_a_mark_selects_the_action_it_stands_for():
         "pickAction draws the board %d times for one click" % body.count("render()"))
 
 
+def test_a_click_chooses_and_a_duty_with_one_action_chooses_itself():
+    """Two rules that only make sense together, so they are asserted together.
+
+    A CLICK DOES NOT UN-CHOOSE. Both routes into the slot used to toggle, so pressing the same
+    mark or the same card twice put the action back down. That was invisible while nothing marked
+    the choice, and became a misfire the moment the chosen mark started holding a solid edge.
+    Both are asserted, because one that toggles beside one that does not is the same click
+    behaving two ways depending on where it landed.
+
+    AND A DUTY WITH ONE ACTION HAS NOTHING TO ASK. Taxation and Allocation have one each, so
+    picking the duty picks it; otherwise the board sits on a tile whose single action is unchosen,
+    with an empty confirm row beside a dashed mark.
+
+    ASKED OF THE DATA, NOT OF A LIST OF NAMES. A duty gaining or losing a second action must not
+    need an edit here -- `actions` is duty_text.json's to say.
+
+    Falsified by putting either toggle back, by typing the two duties' names, or by seeding the
+    opening slot to a literal null that happens to be right today.
+    """
+    page = TMPL.read_text(encoding="utf-8")
+    code = re.sub(r"(?m)^\s*//.*$", "", page)
+
+    sel = code.split("function select(")[1].split("\n")[0]
+    assert "null" not in sel, "select() still puts the action back down: %s" % sel.strip()
+    act = code.split("function pickAction(")[1].split("\nfunction ")[0]
+    assert "null" not in act, "pickAction() still toggles: %s" % " ".join(act.split())
+
+    only = code.split("function onlySlot(")[1].split("\nfunction ")[0]
+    assert "actions === 1" in only or "actions == 1" in only, (
+        "onlySlot() does not ask how many actions the duty has: %s" % " ".join(only.split()))
+    for named in ("taxation", "allocation"):
+        assert named not in only.lower(), (
+            "onlySlot() names %s instead of counting its actions, so a duty that gains a second "
+            "one will keep choosing its first" % named)
+
+    duty = code.split("function pickDuty(")[1].split("\nfunction ")[0]
+    assert "onlySlot(" in duty, (
+        "picking a duty does not ask onlySlot(), so a one-action duty opens unchosen")
+    assert "S.slot = null" not in duty, "picking a duty still clears the slot unconditionally"
+
+    # AND THE BOARD OPENS BY THE SAME RULE, rather than on a null that is right only while the
+    # first duty on the ribbon happens to have two actions.
+    #
+    # MATCHED ON ITS ARGUMENT, not just on the call. `S.slot = onlySlot(` also describes the line
+    # inside pickDuty(), so the looser pattern passed with the opening line deleted -- it was
+    # reading the rule from the wrong place and reporting it as the right one.
+    assert re.search(r"S\.slot\s*=\s*onlySlot\(\s*S\.duty\s*\)", code), (
+        "the opening slot is not set by onlySlot(S.duty), so the board can open on a one-action "
+        "duty with its action unchosen")
+
+
 def test_the_road_is_drawn_and_nothing_below_it_moved(geo):
     """The strip is empty on purpose, which is exactly why it needs a guard.
 
