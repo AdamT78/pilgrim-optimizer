@@ -556,21 +556,33 @@ def column():
     return m
 
 
-def test_the_tile_column_takes_the_marks_size_from_geometry(column):
-    """Falsified by going back to deriving the size from whatever the gap leaves over.
+def test_the_tile_column_opens_at_geometrys_mark_size(column):
+    """The size is a slider now, so what has to hold is that it OPENS on the board's number.
 
-    That derivation answered "how big could they be", which was the right question while nobody
-    had decided. SEAL is decided, so the page has to draw what the board draws -- otherwise it is
-    a sketch of a board that does not exist, and the one thing it cannot then tell you is whether
-    the real one fits.
+    THIS GUARD USED TO SAY THE OPPOSITE, and the reason it changed is worth keeping. It asserted
+    `var size = GEO.seal` -- the size was fixed here, on the argument that SEAL had been decided
+    and a page drawing anything else would be a sketch of a board that does not exist. That was
+    right while editing geometry.py was the only way to draw a different size.
+    generate_action_board.py --icons made it a real choice, so the number needs somewhere to be
+    chosen, and this is the page that can show it against the tile it has to fit.
+
+    What still has to be true is everything that stopped it being a sketch: it opens at the
+    board's SEAL rather than a number typed here, the page is told geometry at build time, and it
+    still says what size WOULD fit. Falsified by hard-coding the slider's start, or by letting the
+    page invent a size again.
     """
     tmpl = _code(COL_TMPL)
-    assert "var size = GEO.seal;" in tmpl, "the page is inventing a mark size again"
+    assert "var size = V('size');" in tmpl, "the mark size is not read from its slider"
+    assert "__START_SEAL__" in tmpl, "the slider no longer opens on a value filled in at build time"
     assert "Math.floor((avail - gap) / 2)" in tmpl, \
         "the page no longer says what size WOULD fit, which is the useful half of a refusal"
     assert "__GEO__" in tmpl, "the geometry is no longer filled in at build time"
-    geo = column.GEO
-    assert geo["seal"] == column.G.SEAL, "the page's geometry and geometry.py disagree"
+    assert "GEO.seal" in tmpl, \
+        "the page no longer mentions the board's own SEAL, so a slider pushed away from it reads "\
+        "as the board rather than as a proposal"
+    assert column.START_SEAL == column.G.SEAL, \
+        "the page opens at %d while the board draws %d" % (column.START_SEAL, column.G.SEAL)
+    assert column.GEO["seal"] == column.G.SEAL, "the page's geometry and geometry.py disagree"
 
 
 def test_the_tile_column_says_when_a_column_does_not_fit(column, capsys, monkeypatch, tmp_path):

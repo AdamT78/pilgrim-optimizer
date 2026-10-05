@@ -65,16 +65,17 @@ body.costly #read i b{color:#d9b36b}
 <h1>Duty tiles, icons in a column</h1>
 <p class=sub>The eight tiles at their real size, with each duty's marks stacked rather than
 overlapped on the diagonal, which is what the board did before this page talked it out of it.
-Everything except the stacking comes from geometry.py &mdash; the
+Everything except the stacking starts from geometry.py &mdash; the
 tile, its border, the name, the space they sit in, and the mark's own size, which is
-<code>SEAL</code>. What you choose is one gap &mdash; which sets both the space under the duty's
-name and the space between its two marks &mdash; and how tall the tile is. So the question the page
-answers is not "how big could the marks be" but "what would the board have to give up to stack
-them".</p>
+<code>SEAL</code>. Three sliders move from there: one gap &mdash; which sets both the space under
+the duty's name and the space between its two marks &mdash; how tall the tile is, and how big the
+marks are. So the page answers "how big could the marks be" and "what would the board have to give
+up to stack them" at once, which is the pair of questions that have to be answered together.</p>
 
 <div class=bar>
   <label class=r>tile height <input id=tall type=range min="120" max="320" value="__START_H__"><b id=tallv>__START_H__</b></label>
   <label class=r>gap <input id=gap type=range min="0" max="40" value="__GAP__"><b id=gapv>__GAP__</b></label>
+  <label class=r>mark <input id=size type=range min="40" max="160" value="__START_SEAL__"><b id=sizev>__START_SEAL__</b></label>
   <label class=r>view <input id=zoom type=range min="60" max="320" value="120"><b id=zoomv>1.2&times;</b></label>
   <button id=edge>icon border</button>
   <button id=guides>guides</button>
@@ -84,8 +85,11 @@ them".</p>
 
 <div id=scroll><div id=stage><div id=ribbon></div></div></div>
 
-<p class=note>The mark's size is <code>SEAL</code> and is not this page's to choose &mdash; what
-you are looking at is the board as it would be, not a sketch of one. When the column does not fit
+<p class=note>The page opens at <code>SEAL</code>, so the first thing on screen is the board as it
+would be rather than a sketch of one; the readout names geometry.py's number beside the slider's
+whenever you move away from it. <b>Nothing here writes anything down.</b> A size you like goes to
+<code>generate_action_board.py --icons N</code> to see it on the real board, or into geometry.py by
+hand to keep it. When the column does not fit
 the tiles are outlined in red and the marks are left hanging out of them, because a number saying
 so is a thing you can scroll past. <b>Who pays for a taller tile:</b> nothing below the ribbon
 shrinks, it moves &mdash; <code>ART_Y</code> is <code>RIBBON_Y + RIBBON_H + GAP</code> and the rest
@@ -112,10 +116,12 @@ function V(id){ return +document.getElementById(id).value; }
 // the whole tile reads as a single rhythm instead of a title with a block of marks loosely under
 // it. It was `SEAL_INSET` under the name and the slider's gap between, which are two numbers
 // nobody chose together and which went visibly out of step as soon as you moved the slider.
-// THE SIZE IS GEOMETRY'S, NOT THE GAP'S LEFTOVER. This used to derive the mark size from
-// whatever the gap left over, which answers "how big could they be" -- a fair question while
-// nobody had decided. SEAL has been decided, so the useful question is the other one: at the size
-// the board really draws, does a column fit the ribbon?
+// THE SIZE IS A LEVER AGAIN, AND IT IS NOT THE GAP'S LEFTOVER. It was once derived from
+// whatever the gap left over, which answers "how big could they be" and was the wrong question
+// once SEAL had been decided. It is back as its own slider for a different reason: the board can
+// now be built at a size with `generate_action_board.py --icons N`, so the number has to be
+// chosen somewhere, and this is the page that can show you it. It opens on geometry.py's SEAL,
+// the readout names that number beside the slider's, and moving it changes nothing but this page.
 // THE TILE'S HEIGHT IS THE OTHER LEVER, and the only one that can make a column of two at the
 // board's SEAL actually fit. RIBBON_H is a real number in geometry.py; this page lets you move it
 // to see what it would take, and then says what moving it costs.
@@ -133,7 +139,7 @@ function column(){
   var nameH = Math.round(GEO.nameSize * GEO.nameLh);
   var top = GEO.nameTop + nameH + gap;
   var avail = innerH - top - GEO.sealInset;
-  var size = GEO.seal;
+  var size = V('size');
   var need = 2 * size + gap;
   var grew = h - GEO.height;
   var wheelH = GEO.wheelH - grew;
@@ -210,7 +216,10 @@ function read(c){
   // the wheel just gets smaller -- so this is a mark on a slope, put here to be argued with.
   document.body.classList.toggle('costly', c.grew > 0 && c.grew >= GEO.wheelH / 10);
   document.getElementById('read').innerHTML =
-    'mark   <b>' + c.size + '</b> px   from geometry.py\u2019s SEAL        gap <b>' + c.gap +
+    'mark   <b>' + c.size + '</b> px' +
+      (c.size === GEO.seal ? '   which is geometry.py\u2019s SEAL'
+                           : '   against geometry.py\u2019s SEAL of ' + GEO.seal) +
+      '        gap <b>' + c.gap +
       '</b> px, under the name and between the two\n' +
     'tile   <b>' + GEO.tileW + ' x ' + c.h + '</b>   the column has <b>' + c.avail +
       '</b> px under the name and needs <b>' + c.need + '</b>\n' +
@@ -241,6 +250,11 @@ document.getElementById('tall').addEventListener('input', function(){
   document.getElementById('tallv').textContent = V('tall'); place(); });
 document.getElementById('gap').addEventListener('input', function(){
   document.getElementById('gapv').textContent = V('gap'); place(); });
+// PLACE, NOT REBUILD -- place() already sets each mark's width and height from column(), so the
+// size needs nothing the other two sliders do not. Rebuilding would re-decode every inlined
+// picture on every pixel of drag, which is the one thing that would make this page feel slow.
+document.getElementById('size').addEventListener('input', function(){
+  document.getElementById('sizev').textContent = V('size'); place(); });
 document.getElementById('zoom').addEventListener('input', function(){
   document.getElementById('zoomv').textContent = (V('zoom')/100).toFixed(1) + '×';
   fit(); read(column()); });
