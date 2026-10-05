@@ -880,3 +880,42 @@ def test_a_thicker_icon_border_eats_the_mark_rather_than_growing_it():
         "border-box is gone, so a thicker border now grows the mark past where it was placed"
     assert "body.edged .mark{border:var(--edge-w" in tmpl, \
         "the border is no longer on the mark's own box"
+
+
+def _lstar(hexcol):
+    """CIE L* of an sRGB hex colour. Twenty lines rather than a dependency, as elsewhere here."""
+    r, g, b = (int(hexcol[i:i + 2], 16) / 255 for i in (1, 3, 5))
+    lin = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in (r, g, b)]
+    y = 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+    return 116 * (y ** (1 / 3)) - 16 if y > 0.008856 else 903.3 * y
+
+
+def test_every_plate_in_the_picker_is_the_same_weight():
+    """Choosing a colour must not quietly be choosing how legible the marks are.
+
+    The five plates were built at one lightness on purpose -- L* 10.8, which is today's violet
+    measured rather than guessed, and within a tenth of the fourteen cards' own median. Because
+    they share it, the bone-white mark reads the same distance above every one of them, so the
+    picker changes hue and nothing else. A plate dropped in at a different lightness would make
+    one option legible and another not, and it would look like a palette preference rather than
+    the mistake it is.
+
+    Falsified by adding a plate off the line, or by making a frame lighter than its plate.
+    """
+    tmpl = COL_TMPL.read_text(encoding="utf-8")
+    m = re.search(r"var PALETTE = (\[.*?\]);", tmpl, re.S)
+    assert m, "the page no longer carries a PALETTE for the picker"
+    pal = json.loads(m.group(1))
+    assert len(pal) == 5, "expected five plates, found %d" % len(pal)
+
+    ls = [_lstar(p["plate"]) for p in pal]
+    assert max(ls) - min(ls) < 1.0, (
+        "the five plates span %.1f L*, so the marks do not read the same against all of them: %s"
+        % (max(ls) - min(ls), ["%s %.1f" % (p["name"], l) for p, l in zip(pal, ls)]))
+
+    for p in pal:
+        assert _lstar(p["frame"]) < _lstar(p["plate"]), (
+            "%s's frame is not darker than its plate, so the edge reads as raised rather than "
+            "as a cut line" % p["name"])
+    assert any(p["plate"].upper() == "#1E1935" for p in pal), (
+        "today's violet is not among the five, so the others cannot be compared against it")
