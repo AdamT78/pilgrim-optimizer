@@ -88,6 +88,16 @@ body.full{background:#000}
    inside the mark's box -- everything here is border-box -- so the drawing gives up 2 px each
    side rather than growing past where geometry.py placed it. */
 .seal.filled{background:none;border:2px dashed var(--guide);border-radius:4px}
+/* AND SOLID UNDER THE POINTER. The dashes close up and NOTHING else changes -- same colour, same
+   2 px, same box -- so the mark does not move or recolour, it just firms up. That restraint is
+   the point: the border is already carrying the resting state, and a hover that also changed the
+   width would shift the artwork inside it by a pixel, because this is a border-box.
+
+   NO .tok RULE BESIDE IT, deliberately. The Tithe's three resources are `tok` and draw no border
+   at all; this is the duty tiles' marks, which is what was asked for. Nor does the icon lab get
+   one: its marks are a sizing preview and are not clickable, so a hover state there would be an
+   interaction that page does not have. */
+.seal.filled:hover{border-style:solid}
 .seal img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
 .seal.filled img{border-radius:0;object-fit:contain}
 /* A CUT-OUT BRINGS NO GROUND, so the board gives it one. A wax disc is a thing you could pick up

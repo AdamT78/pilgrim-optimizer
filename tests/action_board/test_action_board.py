@@ -791,6 +791,33 @@ def test_the_board_draws_the_mark_edge_the_icon_lab_settled_on():
     assert got == want, "the board's guide is %s and the icon lab's is %s" % (got, want)
 
 
+def test_the_pointer_closes_the_mark_s_dashes_and_moves_nothing_else():
+    """The hover firms the border up. It must not also resize it.
+
+    THE FAULT THIS IS FOR is a hover that sets `border` rather than `border-style` -- which looks
+    identical in a screenshot and is not the same thing. A mark is a border-box, so a hover that
+    restated the width would let a stale or rounded number through and shift the artwork inside by
+    a pixel as the pointer crossed it; one that restated the colour would quietly take the mark
+    off --guide for as long as you were looking at it, which is the one state you are looking at.
+
+    Falsified by widening or recolouring on hover, or by dropping the rule.
+    """
+    page = TMPL.read_text(encoding="utf-8")
+    css = re.sub(r"/\*.*?\*/", " ", page, flags=re.S)
+    m = re.search(r"\.seal\.filled:hover\{([^}]*)\}", css)
+    assert m, "a mark does not go solid under the pointer"
+    body = m.group(1)
+    assert "solid" in body, "the hover rule does not make the edge solid: %s" % body.strip()
+    for forbidden, why in (("px", "a width"), ("#", "a colour"), ("var(", "another variable")):
+        assert forbidden not in body, (
+            "the hover rule carries %s as well as the style (%s), so the mark changes size or "
+            "hue under the pointer instead of only firming up" % (why, body.strip()))
+    # AND THE RESTING RULE IS STILL THE ONE THAT OWNS THE WIDTH AND THE COLOUR.
+    rest = re.search(r"\.seal\.filled\{([^}]*)\}", css).group(1)
+    assert "dashed" in rest and "var(--guide)" in rest, (
+        "the resting mark is no longer the guides' dashed line: %s" % rest.strip())
+
+
 def test_the_tile_colour_is_one_of_the_icon_labs_plates_taken_whole():
     """The lab is where a plate is chosen; this is where the choice is written down.
 
