@@ -38,11 +38,17 @@ button[aria-pressed=true]{background:#2e2718;border-color:var(--line);color:#f0e
    simply sits on the tile. It is left in rather than deleted: it is what makes the mark right
    if the tile's own colour ever moves away from the plate's. */
 .mark.plate{background:var(--plate);border-radius:4px}
-/* A THIN EDGE, OFF BY DEFAULT. Now that the tile carries the plate's own colour there is nothing
-   to say where one mark ends and the tile begins, which is fine for a shape that fills its
-   square and less fine for one with a ragged edge. The border sits on the mark's box, so the
-   artwork gives up a pixel each side rather than growing past where it was placed. */
-body.edged .mark{border:1px solid var(--plate-lit);border-radius:4px}
+/* AN EDGE, OFF BY DEFAULT, AND ITS THICKNESS IS A SLIDER. Now that the tile carries the plate's
+   own colour there is nothing to say where one mark ends and the tile begins, which is fine for a
+   shape that fills its square and less fine for one with a ragged edge.
+   THE BORDER SITS ON THE MARK'S BOX -- everything here is border-box -- so the artwork gives up
+   the thickness on each side rather than growing past where it was placed. That is why it is
+   worth a slider rather than a yes or no: at 1 px a 100 px mark loses 2 of its 100, and at 6 px
+   it loses 12, which is a different drawing rather than the same one outlined. The readout says
+   what each setting costs.
+   ONE OWNER: --edge-w is the thickness AND whether there is a border at all, because 0 is off.
+   The button beside the sliders only moves that number, so the two cannot disagree. */
+body.edged .mark{border:var(--edge-w, 0px) solid var(--plate-lit);border-radius:4px}
 body.guides .tile{outline:1px dashed #3a352c}
 body.guides .mark{outline:1px dashed #6a5f48}
 .note{margin-top:30px;max-width:86ch;color:#8d8471;font-size:12.5px;
@@ -76,8 +82,9 @@ up to stack them" at once, which is the pair of questions that have to be answer
   <label class=r>tile height <input id=tall type=range min="120" max="320" value="__START_H__"><b id=tallv>__START_H__</b></label>
   <label class=r>gap <input id=gap type=range min="0" max="40" value="__GAP__"><b id=gapv>__GAP__</b></label>
   <label class=r>mark <input id=size type=range min="40" max="160" value="__START_SEAL__"><b id=sizev>__START_SEAL__</b></label>
+  <label class=r>border <input id=edge type=range min="0" max="8" value="0"><b id=edgev>off</b></label>
   <label class=r>view <input id=zoom type=range min="60" max="320" value="120"><b id=zoomv>1.2&times;</b></label>
-  <button id=edge>icon border</button>
+  <button id=edgetoggle>icon border</button>
   <button id=guides>guides</button>
   <button id=laptop>at 13&Prime; scale</button>
 </div>
@@ -143,7 +150,8 @@ function column(){
   var need = 2 * size + gap;
   var grew = h - GEO.height;
   var wheelH = GEO.wheelH - grew;
-  return {h: h, innerH: innerH, top: top, avail: avail, gap: gap, size: size, need: need,
+  var edge = V('edge');
+  return {h: h, innerH: innerH, top: top, avail: avail, gap: gap, size: size, need: need, edge: edge,
           over: need - avail,
           couldBe: Math.floor((avail - gap) / 2),
           wantRibbon: top + need + GEO.sealInset + 2 * GEO.border,
@@ -229,7 +237,11 @@ function read(c){
         'this gap is <b>' + c.couldBe + '</b>, or the tile would have to be <b>' +
         c.wantRibbon + '</b> tall\n') +
     'height <i>' + cost(c) + '</i>   RIBBON_H is ' + GEO.height + '\n' +
-    'drawn  <b>' + (c.size * s).toFixed(0) + '</b> px here';
+    'drawn  <b>' + (c.size * s).toFixed(0) + '</b> px here' +
+    (c.edge > 0
+      ? '        border <b>' + c.edge + '</b> px, so each mark gives up <b>' + (2 * c.edge) +
+        '</b> of its <b>' + c.size + '</b> to it'
+      : '');
 }
 
 function fit(c){
@@ -258,9 +270,25 @@ document.getElementById('size').addEventListener('input', function(){
 document.getElementById('zoom').addEventListener('input', function(){
   document.getElementById('zoomv').textContent = (V('zoom')/100).toFixed(1) + '×';
   fit(); read(column()); });
-document.getElementById('edge').onclick = function(){
-  var on = document.body.classList.toggle('edged');
-  this.setAttribute('aria-pressed', String(on)); };
+// THE SLIDER OWNS IT; THE BUTTON IS A SHORTCUT. It sets the slider rather than toggling a class
+// of its own, so there is no second answer to "is there a border" that could drift from the first.
+// It returns to the last thickness you chose rather than always to 1, because snapping a 5 px
+// border back to 1 on the way to comparing it is the thing that makes a toggle annoying.
+var lastEdge = 1;
+function applyEdge(){
+  var w = V('edge');
+  if (w > 0) lastEdge = w;
+  document.body.style.setProperty('--edge-w', w + 'px');
+  document.body.classList.toggle('edged', w > 0);
+  document.getElementById('edgev').textContent = w > 0 ? w : 'off';
+  document.getElementById('edgetoggle').setAttribute('aria-pressed', String(w > 0));
+  read(column());
+}
+document.getElementById('edge').addEventListener('input', applyEdge);
+document.getElementById('edgetoggle').onclick = function(){
+  var e = document.getElementById('edge');
+  e.value = (V('edge') > 0) ? 0 : lastEdge;
+  applyEdge(); };
 document.getElementById('guides').onclick = function(){
   var on = document.body.classList.toggle('guides');
   this.setAttribute('aria-pressed', String(on)); };
@@ -271,4 +299,8 @@ document.getElementById('laptop').onclick = function(){
   this.setAttribute('aria-pressed', String(z.value == 69)); };
 
 build();
+// AFTER build(), because applyEdge() reads the column back into the readout and there is nothing
+// to read until the tiles exist. This is what puts aria-pressed on the button at load rather than
+// leaving it absent until the first click -- the state was right, it just was not being said.
+applyEdge();
 </script>

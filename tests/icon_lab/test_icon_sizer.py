@@ -841,3 +841,42 @@ def test_one_gap_does_both_jobs_and_every_first_mark_shares_a_line(column, capsy
             + 2 * G.SEAL + 20 + geo["sealInset"] + 2 * G.BORDER)
     assert "RIBBON_H of about %d" % want in capsys.readouterr().out, \
         "the build's arithmetic kept a gap of its own, so it reports on a page nobody is looking at"
+
+
+def test_the_icon_border_has_one_owner():
+    """The slider is the thickness AND whether there is a border; the button only moves it.
+
+    A BUTTON THAT TOGGLED ITS OWN CLASS would be a second answer to "is there a border", and the
+    two drift the moment you drag the slider to 0 with the button still reading pressed. The page
+    has made this mistake in a neighbouring form before -- the comment above column() records a
+    gap that was `SEAL_INSET` under the name and the slider's value between, two numbers nobody
+    chose together that went visibly out of step.
+
+    A static check, because the lab lane installs no browser; the behaviour itself was driven in
+    one. Falsified by giving the button back a classList.toggle of its own, or by letting the
+    border be a fixed width again.
+    """
+    tmpl = _code(COL_TMPL)
+    assert "var(--edge-w" in tmpl, "the border is a fixed width again, so it cannot be dragged"
+    assert "classList.toggle('edged', w > 0)" in tmpl, \
+        "whether there is a border no longer follows the slider's own number"
+    toggle = tmpl.split("getElementById('edgetoggle').onclick")[1].split("};")[0]
+    assert "classList.toggle" not in toggle, \
+        "the button toggles a class of its own again, so it can disagree with the slider"
+    assert "applyEdge()" in toggle, "the button no longer goes through the one function that sets it"
+
+
+def test_a_thicker_icon_border_eats_the_mark_rather_than_growing_it():
+    """Everything here is border-box, and the fit arithmetic depends on it.
+
+    column() reports whether two marks of `size` fit the tile. If a border grew the mark's box
+    instead of being drawn inside it, every one of those numbers would be short by twice the
+    thickness and the page would say a column fits while the marks hung out of the tile -- the
+    exact failure the red outline exists to make unmissable. Falsified by dropping the
+    border-box rule, or by putting the border on something that is not the mark's own box.
+    """
+    tmpl = _code(COL_TMPL)
+    assert "*{box-sizing:border-box}" in tmpl, \
+        "border-box is gone, so a thicker border now grows the mark past where it was placed"
+    assert "body.edged .mark{border:var(--edge-w" in tmpl, \
+        "the border is no longer on the mark's own box"
