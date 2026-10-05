@@ -804,7 +804,7 @@ def test_the_pointer_closes_the_mark_s_dashes_and_moves_nothing_else():
     """
     page = TMPL.read_text(encoding="utf-8")
     css = re.sub(r"/\*.*?\*/", " ", page, flags=re.S)
-    m = re.search(r"\.seal\.filled:hover\{([^}]*)\}", css)
+    m = re.search(r"\.seal\.filled:hover[^{]*\{([^}]*)\}", css)
     assert m, "a mark does not go solid under the pointer"
     body = m.group(1)
     assert "solid" in body, "the hover rule does not make the edge solid: %s" % body.strip()
@@ -841,6 +841,80 @@ def test_the_tile_colour_is_one_of_the_icon_labs_plates_taken_whole():
         % (plate, lit, sorted((p["plate"], p["lit"], p["name"]) for p in palette)))
 
 
+def test_a_hovered_tile_rises_without_taking_any_room_to_do_it():
+    """The lift is a transform, it rides on the cross-highlight, and it gives back what it takes.
+
+    THREE CLAIMS, AND EACH ONE IS A FAULT AVOIDED.
+
+    It is a TRANSFORM, so the tile moves what it draws and not what it reserves. Everything below
+    RIBBON_Y is derived from it, so a lift written as a height, a margin or a top would ripple
+    down through the road, the cards and the wheel -- or fight the inline `top` the generator
+    writes from geometry.
+
+    It rides on `.lit`, which is what makes "lift it when its wheel face is hovered" free.
+    lightFace() already answers which duty the pointer is on from either end, so the second
+    direction needs no listener of its own; one would be the two-places-one-fact fault that class
+    exists to prevent.
+
+    And `::after` refills the strip the tile vacates, because hover is recomputed from what the
+    pointer is OVER: slide a tile out from under a pointer resting in its lowest few pixels and it
+    un-hovers, drops, re-hovers and shudders. Measured in a browser, and the first measurement was
+    wrong -- with a perfectly still pointer nothing re-hit-tests and it looks fine. Moving the
+    pointer a pixel, as a hand does, flickers across a band exactly --lift tall.
+
+    Falsified by lifting with anything but a transform, by hanging it off a second listener, or by
+    letting the strip and the lift stop being the same number.
+    """
+    page = TMPL.read_text(encoding="utf-8")
+    css = re.sub(r"/\*.*?\*/", " ", page, flags=re.S)
+    assert len(re.findall(r"--lift:\s*\d+px", css)) == 1, "--lift is not defined exactly once"
+
+    lit = re.search(r"\.tile\.lit[^{]*\{([^}]*)\}", css)
+    assert lit, ".tile.lit is gone"
+    assert "transform:translateY" in lit.group(1), (
+        "the tile does not rise by a transform: %s" % lit.group(1).strip())
+    assert "var(--lift)" in lit.group(1), "the lift is not read from --lift"
+    for owned in ("top:", "bottom:", "margin", "height:"):
+        assert owned not in lit.group(1), (
+            "the lift sets %s, which is geometry's to place, not the hover's to move" % owned)
+
+    # THE SELECTED TILE RISES BY THE SAME RULE, which is what stops a click moving anything. You
+    # are pointing at a tile when you click it, so it is already up; if selection had a height of
+    # its own the tile would jerk under your finger at the moment you pressed it. Asserted as ONE
+    # RULE rather than two equal values, because two values that happen to match today are exactly
+    # how they stop matching tomorrow.
+    assert re.search(r"\.tile\.lit\s*,\s*\.tile\.sel\s*\{"
+                     r"|\.tile\.sel\s*,\s*\.tile\.lit\s*\{", css), (
+        "the hover and the selection do not rise by the same rule, so clicking a tile you are "
+        "pointing at will move it")
+    sel = re.search(r"\.tile\.sel\{([^}]*)\}", css)
+    if sel:
+        assert "transform" not in sel.group(1), (
+            "the selected tile has a transform of its own as well: %s" % sel.group(1).strip())
+
+    strip = re.search(r"\.tile\.lit::after[^{]*\{([^}]*)\}", css)
+    assert strip, (
+        "the tile does not give back the strip it rises out of, so a pointer in its bottom few "
+        "pixels will un-hover it and the tile will shudder")
+    assert "top:100%" in strip.group(1), "the strip is not where the tile's lower edge was"
+    assert "height:var(--lift)" in strip.group(1), (
+        "the strip's height is not --lift itself, so it can stop matching the distance the tile "
+        "rises: %s" % strip.group(1).strip())
+
+    # THE SECOND DIRECTION IS NOT A SECOND LISTENER. If a future change moves the lift onto its
+    # own :hover rule, this still passes the CSS checks above and the wheel stops lifting tiles.
+    code = re.sub(r"(?m)^\s*//.*$", "", page)
+    assert ".tile:hover" not in css, (
+        "the lift is on the tile's own :hover, so hovering a wheel face no longer raises it")
+    face = code.split("function lightFace(")[1].split("\nfunction ")[0]
+    assert 'classList.toggle("lit"' in face and "tile" in face, (
+        "lightFace() no longer sets `lit` on the tile, so the lift has lost the half of its "
+        "wiring that comes from the wheel")
+
+    assert re.search(r"@media\s*\(prefers-reduced-motion:\s*reduce\)", css), (
+        "the tile animates with no way for a reader who asked for less motion to turn it off")
+
+
 def test_clicking_a_mark_selects_the_action_it_stands_for():
     """A mark IS its action, so pressing one has to put that action down.
 
@@ -863,6 +937,26 @@ def test_clicking_a_mark_selects_the_action_it_stands_for():
         "the mark's handler does not go through pickAction, so it cannot name an action")
     assert "pickDuty(" not in seal, (
         "the mark's handler still calls pickDuty, which sets the duty and clears the slot")
+    # AND THE CHOSEN MARK HOLDS ITS SOLID EDGE, by the hover's own rule rather than a second one.
+    css = re.sub(r"/\*.*?\*/", " ", page, flags=re.S)
+    assert re.search(r"\.seal\.filled:hover\s*,\s*\.seal\.filled\.on\s*\{"
+                     r"|\.seal\.filled\.on\s*,\s*\.seal\.filled:hover\s*\{", css), (
+        "the chosen mark and the hovered one do not draw their edge from the same rule, so the "
+        "two can come to disagree about what a solid edge means")
+    # SET FROM THE STATE, NOT WHERE IT IS CLICKED. S.slot is reached three ways -- the mark, the
+    # card below it, and picking a duty, which clears it or, for a one-action duty, chooses that
+    # action -- and a class set in the click handler is right on one of them. render() answers all
+    # three.
+    rend = code.split("function render(")[1].split("\nfunction ")[0]
+    assert 'classList.toggle("on"' in rend, (
+        "the chosen mark's class is not set in render(), so it will be wrong whenever the slot "
+        "changes by any route but clicking the mark -- the card below is one")
+    assert "pickAction" not in rend, "render() should not be picking anything"
+    on = re.search(r'classList\.toggle\("on",([^;]*)\)', rend).group(1)
+    assert "S.duty" in on and "S.slot" in on, (
+        "the chosen mark is matched on %s -- on the slot alone the same-named mark lights up in "
+        "every duty's tile at once" % on.strip())
+
     body = code.split("function pickAction(")[1].split("\nfunction ")[0]
     assert "S.duty" in body and "S.slot" in body, (
         "pickAction sets only one of the two, so a mark selects a duty or an action but not both")
@@ -870,6 +964,57 @@ def test_clicking_a_mark_selects_the_action_it_stands_for():
     # the slot, clearing it and setting it again -- drawing the board twice on the way.
     assert body.count("render()") == 1, (
         "pickAction draws the board %d times for one click" % body.count("render()"))
+
+
+def test_a_click_chooses_and_a_duty_with_one_action_chooses_itself():
+    """Two rules that only make sense together, so they are asserted together.
+
+    A CLICK DOES NOT UN-CHOOSE. Both routes into the slot used to toggle, so pressing the same
+    mark or the same card twice put the action back down. That was invisible while nothing marked
+    the choice, and became a misfire the moment the chosen mark started holding a solid edge.
+    Both are asserted, because one that toggles beside one that does not is the same click
+    behaving two ways depending on where it landed.
+
+    AND A DUTY WITH ONE ACTION HAS NOTHING TO ASK. Taxation and Allocation have one each, so
+    picking the duty picks it; otherwise the board sits on a tile whose single action is unchosen,
+    with an empty confirm row beside a dashed mark.
+
+    ASKED OF THE DATA, NOT OF A LIST OF NAMES. A duty gaining or losing a second action must not
+    need an edit here -- `actions` is duty_text.json's to say.
+
+    Falsified by putting either toggle back, by typing the two duties' names, or by seeding the
+    opening slot to a literal null that happens to be right today.
+    """
+    page = TMPL.read_text(encoding="utf-8")
+    code = re.sub(r"(?m)^\s*//.*$", "", page)
+
+    sel = code.split("function select(")[1].split("\n")[0]
+    assert "null" not in sel, "select() still puts the action back down: %s" % sel.strip()
+    act = code.split("function pickAction(")[1].split("\nfunction ")[0]
+    assert "null" not in act, "pickAction() still toggles: %s" % " ".join(act.split())
+
+    only = code.split("function onlySlot(")[1].split("\nfunction ")[0]
+    assert "actions === 1" in only or "actions == 1" in only, (
+        "onlySlot() does not ask how many actions the duty has: %s" % " ".join(only.split()))
+    for named in ("taxation", "allocation"):
+        assert named not in only.lower(), (
+            "onlySlot() names %s instead of counting its actions, so a duty that gains a second "
+            "one will keep choosing its first" % named)
+
+    duty = code.split("function pickDuty(")[1].split("\nfunction ")[0]
+    assert "onlySlot(" in duty, (
+        "picking a duty does not ask onlySlot(), so a one-action duty opens unchosen")
+    assert "S.slot = null" not in duty, "picking a duty still clears the slot unconditionally"
+
+    # AND THE BOARD OPENS BY THE SAME RULE, rather than on a null that is right only while the
+    # first duty on the ribbon happens to have two actions.
+    #
+    # MATCHED ON ITS ARGUMENT, not just on the call. `S.slot = onlySlot(` also describes the line
+    # inside pickDuty(), so the looser pattern passed with the opening line deleted -- it was
+    # reading the rule from the wrong place and reporting it as the right one.
+    assert re.search(r"S\.slot\s*=\s*onlySlot\(\s*S\.duty\s*\)", code), (
+        "the opening slot is not set by onlySlot(S.duty), so the board can open on a one-action "
+        "duty with its action unchosen")
 
 
 def test_the_road_is_drawn_and_nothing_below_it_moved(geo):

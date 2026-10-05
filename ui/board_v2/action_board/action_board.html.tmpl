@@ -27,6 +27,10 @@
      together: --plate-lit is the SELECTED tile, so taking one number and leaving the other gives
      seven slate tiles and one that is still the old hue. There is a guard for that now. */
   --plate:#151E25; --plate-lit:#2B3A46; --guide:#6a5f48;
+  /* HOW FAR A HOVERED TILE RISES. Here and not in geometry.py, deliberately: geometry owns what
+     the board RESERVES, and this reserves nothing -- it is a transform, so no number downstream
+     of RIBBON_Y can feel it. The 16 above the ribbon is what it rises into. */
+  --lift:6px;
 }
 *{box-sizing:border-box}
 html,body{margin:0;background:#07070a;color:var(--ink);
@@ -66,13 +70,45 @@ body.full{background:#000}
   font-family:Georgia,serif;color:#e8dfca;white-space:nowrap;overflow:hidden}
 
 /* ---- the eight duty tiles -------------------------------------------------------------- */
-.tile{border:1px solid #2a2721;border-radius:4px;background:var(--plate);cursor:pointer}
+.tile{border:1px solid #2a2721;border-radius:4px;background:var(--plate);cursor:pointer;
+  transition:transform .12s ease-out}
 .tile .nm{position:absolute;left:0;right:0;text-align:center;font-family:Georgia,serif;
   font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--ink)}
 .tile.sel{background:var(--plate-lit);border-color:#60594a}
 /* The cross-highlight: hovering a wheel face lights its tile and the other way round. One class,
-   set from one place, so the two directions cannot drift apart. */
-.tile.lit{border-color:var(--line);box-shadow:0 0 0 1px #c9b27a66}
+   set from one place, so the two directions cannot drift apart.
+
+   AND THE LIFT RIDES ON IT, which is the whole of "lift the tile when its wheel face is hovered
+   too". lightFace() already answers "which duty is the pointer on" from either end, so the second
+   direction needs no wiring -- adding a rule here is cheaper AND more correct than a second
+   listener, which would be the two-places-one-fact fault this class was made to avoid.
+
+   A TRANSFORM COSTS NO LAYOUT. The tile is placed at RIBBON_Y and stays placed there; translate
+   moves what is drawn and not what is reserved, so the road, the cards and the wheel do not feel
+   it. Anything that actually shortened or moved the box would push the whole column down. */
+/* THE LIFT IS THE WHOLE SIGNAL. This rule used to also set a gold border and a gold halo behind
+   it, and with the tile rising as well that was three things saying one thing. Movement is the
+   loudest of the three and the only one that cannot be confused with a state -- the gold rim read
+   as a near relative of the SELECTED tile's lighter plate, on a ribbon where exactly one tile is
+   always selected. The wheel's own faces still brighten; that is their rule, not this one. */
+/* AND THE SELECTED TILE STAYS UP, at exactly the same height. ONE VALUE, TWO SELECTORS, and they
+   have to stay one value: a tile you click is already raised, because you were pointing at it to
+   click it, so matching heights mean it does not move at all under your finger. Give selection a
+   height of its own and every click jerks the tile you just pressed. What changes on the click is
+   the COLOUR -- the new tile takes --plate-lit where it stands, and the old one darkens and sinks.
+   So height says "the pointer is here", plate says "this is the one in play", and the two stop
+   competing for the same signal.
+
+   HOVERING THE SELECTED TILE THEREFORE DOES NOTHING HERE, which is the one hole in this and is
+   covered elsewhere: its face on the wheel still brightens, so the pointer is still answered. */
+.tile.lit, .tile.sel{transform:translateY(calc(-1 * var(--lift)))}
+/* THE TILE KEEPS THE GROUND IT LEAVES. Hover is recomputed from what the pointer is OVER, so a
+   tile that slides out from under a pointer resting in its bottom few pixels un-hovers itself,
+   drops, re-hovers and shudders. This fills the strip it vacated: it is inside the transformed
+   box, so top:100% lands it exactly where the tile's lower edge used to be, and it belongs to the
+   tile for hit-testing. Found by driving the built page with the pointer on the bottom edge. */
+.tile.lit::after, .tile.sel::after{content:"";position:absolute;left:0;right:0;top:100%;height:var(--lift)}
+@media (prefers-reduced-motion:reduce){.tile{transition:none}}
 /* THE PLACEHOLDER IS A DISC; THE REAL SEAL IS NOT. The wax seals are drawn with a scalloped,
    irregular rim, so the container's own circle would show through at every bay of it and the
    round crop would shear the peaks off. Once a picture lands the container stops drawing -- the
@@ -97,7 +133,13 @@ body.full{background:#000}
    at all; this is the duty tiles' marks, which is what was asked for. Nor does the icon lab get
    one: its marks are a sizing preview and are not clickable, so a hover state there would be an
    interaction that page does not have. */
-.seal.filled:hover{border-style:solid}
+/* AND THE CHOSEN MARK STAYS SOLID, by the same rule rather than a second one -- the pattern the
+   tiles use for lift and selection, for the same reason: one declaration cannot drift from
+   itself. The pointer and the choice say the same thing here, which is right, because a mark
+   under the pointer is what the chosen one would look like if you pressed it.
+
+   An EMPTY slot is unaffected, as it is by the hover: there is no icon to firm up. */
+.seal.filled:hover, .seal.filled.on{border-style:solid}
 .seal img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
 .seal.filled img{border-radius:0;object-fit:contain}
 /* A CUT-OUT BRINGS NO GROUND, so the board gives it one. A wax disc is a thing you could pick up
@@ -240,7 +282,7 @@ var board = document.getElementById("board");
 var S = {
   phase: GEO.livePhase,
   duty: GEO.duties[0].slug,
-  slot: null,                       // the chosen action, or "tithe", or nothing yet
+  slot: null,                       // the chosen action, or "tithe"; set below, not here
   editing: false,
   // WHO STANDS WHERE. Seeded from geometry so a fresh page opens on the crowded state the lab
   // opens on, which is the one worth looking at -- an empty wheel tells you nothing about
@@ -248,6 +290,11 @@ var S = {
   occupancy: {},
   city: Object.assign({}, GEO.start.city)
 };
+// AND THE BOARD OPENS BY THE RULE A CLICK USES, rather than on a typed null that happens to be
+// right. The first duty on the ribbon has two actions today, so this is null today -- and it
+// stops being null on its own the day that duty has one, instead of opening on a tile whose
+// single action is unchosen.
+S.slot = onlySlot(S.duty);
 GEO.duties.forEach(function(d){
   var n = GEO.start.occupancy[d.slug] || 0;
   var seats = GEO.start.seats[d.slug];
@@ -542,9 +589,19 @@ function drawFigures(){
 // =================================================================================================
 // WHAT CLICKING DOES. In play a click chooses; while images are being replaced a click on a slot
 // opens the picker instead. One mode switch rather than two gestures to remember.
+// A DUTY WITH ONE ACTION HAS NOTHING TO CHOOSE, so choosing the duty chooses it. Taxation and
+// Allocation have one each -- duty_text.json is what says so, and this asks it rather than
+// naming them, so a duty gaining or losing a second action needs no edit here.
+//
+// WITHOUT THIS the board could sit on Taxation with Taxation's only action unchosen, showing an
+// empty confirm row and a dashed mark, which is a question with exactly one answer.
+function onlySlot(slug){
+  var info = dutyOf(slug);
+  return (info && info.actions === 1) ? "actionA" : null;
+}
 function pickDuty(slug){
   if (S.editing) return;
-  S.duty = slug; S.slot = null;
+  S.duty = slug; S.slot = onlySlot(slug);
   render();
 }
 function slotOrSelect(slot){
@@ -561,15 +618,25 @@ function slotClick(ev){
   // the tile is about the duty and names no action.
   if (d.duty) pickAction(d.duty, d.slot);
 }
-function select(slot){ S.slot = (S.slot === slot) ? null : slot; render(); }
-// ONE RENDER, NOT TWO. pickDuty followed by select would set the slot, clear it and set it again,
-// drawing the board twice on the way. It toggles like select does, so clicking the same mark
-// again puts the action back down.
+// A CLICK CHOOSES; IT DOES NOT UN-CHOOSE. Both of these used to toggle, so pressing the same
+// mark or the same card twice put the action back down. That was invisible while nothing marked
+// the choice and obvious the moment the chosen mark started holding a solid edge: the second
+// press read as a misfire rather than as an undo.
+//
+// BOTH, NOT JUST THE MARK. The mark and the card below it set the same fact by different routes,
+// and one that toggles beside one that does not is the same click behaving two ways depending on
+// where you aimed it. The Tithe comes through select() too and is included for that reason.
+//
+// Nothing is lost: "no action chosen" is still reached, by picking another duty, which is the
+// only time it means anything -- you have been asked which of the two.
+function select(slot){ S.slot = slot; render(); }
+// ONE RENDER, NOT TWO. pickDuty followed by select() would do the same work -- pickDuty sets the
+// duty and answers the slot for it, then select overwrites that answer -- and draw the whole
+// board twice on the way, once on a slot nobody asked for.
 function pickAction(duty, slot){
   if (S.editing) return;
-  var same = (S.duty === duty && S.slot === slot);
   S.duty = duty;
-  S.slot = same ? null : slot;
+  S.slot = slot;
   render();
 }
 
@@ -581,6 +648,17 @@ function render(){
     // them was edited; this is the rule lightFace() already states for the hover pair.
     var face = document.querySelector('#wheel [data-face="' + d.face + '"]');
     if (face) face.classList.toggle("sel", d.slug === S.duty);
+  });
+  // THE CHOSEN ACTION'S MARK, ASKED HERE AND NOT IN THE CLICK HANDLER. S.slot is reached three
+  // ways -- the mark, the card below it, and picking a duty, which either clears it or, for a
+  // duty with one action, chooses that one -- and a class set where it is CLICKED would be right
+  // on one of them. Set from the state, like everything else in render(), and all three are
+  // answered at once.
+  //
+  // BOTH HALVES OF THE QUESTION. Matching the slot alone would leave the same-named mark solid in
+  // every other duty's tile, which looks like eight choices rather than one.
+  Array.prototype.forEach.call(document.querySelectorAll("#board .seal"), function(s){
+    s.classList.toggle("on", s.dataset.duty === S.duty && s.dataset.slot === S.slot);
   });
   var info = dutyOf(S.duty);
   ["actionA","actionB"].forEach(function(slot){
