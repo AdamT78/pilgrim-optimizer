@@ -1221,3 +1221,92 @@ def test_every_confirm_button_is_the_same_button(geo, gen):
     tithe = geo.as_dict()["confirm"]["tithe"]
     assert tithe["x"] + tithe["width"] == geo.TITHE_X + geo.TITHE_W, (
         "the Tithe's confirm does not finish where the Tithe does")
+
+
+def test_the_phase_row_is_rebuilt_rather_than_added_to():
+    """drawPhases() is its own click handler, so it must clear before it appends.
+
+    WHAT HAPPENED WITHOUT THIS. Every click on Ready / City, Sowing or Action Selection appended
+    a second set of three buttons, so the row grew by three each time. The real damage was
+    quieter: a loop at the end of the function walked holder.children -- six, then nine -- against
+    GEO.phases[i], which is three, threw on the undefined, and took note() and setStatus() down
+    with it. The phase line and the placeholder note therefore stopped updating the moment the
+    first duplicate appeared, which is the kind of thing that reads as "the phases do nothing"
+    rather than as an error.
+
+    A STATIC CHECK, AND IT SAYS SO. The lab lane installs no browser, so this reads the template
+    rather than clicking the button; the behaviour itself was verified by driving the built page.
+    Falsified by deleting the clear, or by putting the second aria-pressed pass back.
+    """
+    page = TMPL.read_text(encoding="utf-8")
+    body = page.split("function drawPhases()")[1].split("\nfunction ")[0]
+    code = re.sub(r"(?m)^\s*//.*$", "", body)
+
+    assert re.search(r'holder\.(textContent\s*=\s*""|innerHTML\s*=\s*""|replaceChildren\(\))', code), (
+        "drawPhases() appends into #phases without emptying it first, so every click adds "
+        "another set of phase buttons")
+    assert code.index("holder.appendChild") > code.index("holder."), (
+        "the clear has to come before the appends")
+    assert "GEO.phases[i]" not in code, (
+        "the second aria-pressed pass is back: it indexes GEO.phases by a holder.children index, "
+        "which throws as soon as the two lengths disagree")
+    assert code.count('setAttribute("aria-pressed"') == 1, (
+        "aria-pressed is set in more than one place, so the two can disagree")
+
+
+# =================================================================================================
+# THE ONE NUMBER THAT CAN BE SET AT LAUNCH
+#
+# geometry.configure() exists so a mark size can be tried without editing geometry.py and
+# remembering to put it back. These load their own copy of the module, because configure()
+# reassigns module globals and the `geo` fixture is module-scoped -- a test that configured the
+# shared one would quietly change the board every test after it measures.
+
+def test_the_tithe_tokens_move_with_the_tile_marks():
+    """A seal and a coin are one size, so one lever has to move both.
+
+    THE BUG THIS IS POINTED AT is a flag that resizes the eight tiles' marks and leaves the
+    Tithe's three where they were, which reads as a layout fault rather than as a setting -- the
+    exact thing the comment above TOKEN in geometry.py was written for. Falsified by having
+    configure() set SEAL alone.
+    """
+    g = _load("geometry")
+    assert g.SEAL == g.TOKEN, "they do not start equal, so this test proves nothing"
+    g.configure(seal=70)
+    assert g.SEAL == 70, "configure() did not set the mark size"
+    assert g.TOKEN == 70, "the Tithe's tokens stayed at their old size while the tile marks moved"
+    assert g.TOKEN_SPREAD == 70 + g.INSET, "the triangle the three tokens sit on did not follow"
+    assert g.as_dict()["ribbon"]["seal"] == 70, "the page is still told the old size"
+    assert g.as_dict()["tithe"]["token"] == 70, "the page is still told the old token size"
+
+
+def test_a_mark_too_big_for_the_tile_is_refused_rather_than_drawn():
+    """The ribbon does not grow to fit a bigger mark -- it overflows, and check() is what says so.
+
+    This is the guard the --icons flag leans on instead of doing its own arithmetic, which is why
+    it is asserted here rather than trusted. 110 is the first size that does not fit a column of
+    two under the duty's name inside RIBBON_H. Falsified by making configure() grow RIBBON_H, or
+    by check() forgetting the tile.
+    """
+    g = _load("geometry")
+    assert g.check() == [], "the default board is not sound, so this test proves nothing"
+    g.configure(seal=110)
+    bad = g.check()
+    assert bad, "a 110 px mark overflows its tile and check() did not notice"
+    # NOT just "a line mentioning seals". The Tithe's own guard also says "seals", and it fires at
+    # this size too -- so a looser match passed while the tile guard was disabled, which is what
+    # mutating RIBBON_H revealed. The complaint has to be about the TILE.
+    assert any("inside a tile" in line for line in bad), (
+        "check() complained, but not that the mark overflows its tile: %s" % bad)
+
+
+def test_setting_the_mark_size_does_not_move_anything_else():
+    """One lever, not a settings system. Falsified by configure() touching a second number."""
+    g = _load("geometry")
+    before = {k: v for k, v in vars(g).items() if k.isupper() and isinstance(v, (int, float))}
+    g.configure(seal=70)
+    after = {k: v for k, v in vars(g).items() if k.isupper() and isinstance(v, (int, float))}
+    moved = {k for k in before if before[k] != after[k]}
+    assert moved == {"SEAL", "TOKEN", "TOKEN_SPREAD"}, (
+        "configure() changed %s; it may only move the mark size and what is derived from it"
+        % sorted(moved))

@@ -762,7 +762,27 @@ def main() -> None:
                     help="serve the page on localhost so its save button can write into the "
                          "repository (default port %(const)s); without this the button can only "
                          "download")
+    ap.add_argument("--icons", type=int, metavar="PX",
+                    help="draw the tile marks at this size instead of geometry.py's %d, for "
+                         "trying one without editing the file. The Tithe's three move with them, "
+                         "because a seal and a coin are one size. The ribbon does NOT grow to "
+                         "fit: too large and the build is refused" % G.SEAL)
     a = ap.parse_args()
+
+    # SET BEFORE ANYTHING READS THE NUMBERS, and checked immediately after. build() looks geometry
+    # up as it goes, so this only has to happen first; check() is run here rather than on every
+    # build because the default is already asserted sound by tests/action_board, and this flag is
+    # the only way the board's numbers can arrive wrong.
+    if a.icons is not None:
+        G.configure(seal=a.icons)
+        bad = G.check()
+        if bad:
+            raise SystemExit("--icons %d does not fit:\n  %s\n\n"
+                             "The ribbon's height is what buys room for the marks and the wheel is "
+                             "what pays for it, so the fix is not a bigger number here -- price the "
+                             "ribbon in ui/board_v2/icon_lab/generate_tile_column.py first."
+                             % (a.icons, "\n  ".join(bad)))
+        print("  marks at %d px instead of the usual (Tithe tokens at %d)" % (G.SEAL, G.TOKEN))
 
     page, notes = build()
     OUT.parent.mkdir(parents=True, exist_ok=True)

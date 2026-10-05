@@ -124,6 +124,33 @@ TILE_NAME_BOTTOM = TILE_NAME_TOP + round(TILE_NAME_SIZE * TILE_NAME_LH)   # 22
 SEAL = 100
 SEAL_INSET = INSET
 
+
+def configure(seal: int) -> None:
+    """Set the mark size at launch and recompute the two numbers that hang off it.
+
+    THE ONLY SUPPORTED OVERRIDE, and it exists so a size can be tried without editing this file
+    and remembering to put it back. Everything else here stays typed where it is: this is not a
+    settings system, it is one lever with one caller.
+
+    TOKEN and TOKEN_SPREAD are reassigned because they are DERIVED FROM SEAL, and a flag that
+    moved the tile marks while leaving the Tithe's three at 100 would be the exact bug the
+    comment above TOKEN exists to prevent -- a seal and a coin are meant to be interchangeable
+    at one size. Everything else reads SEAL through seal_slots(), token_slots() and as_dict(),
+    which look it up when they are called, so they need nothing done to them.
+
+    WHAT THIS DOES NOT DO IS MOVE THE RIBBON. RIBBON_H is 242 because a column of two at 100 asks
+    for it; a larger mark does not grow the tile to fit, it overflows it. That is deliberate --
+    the ribbon's height is paid for by the wheel, and pricing it is
+    icon_lab/generate_tile_column.py's job, not a flag's. check() is what refuses the overflow,
+    so call it after this and believe what it says.
+    """
+    global SEAL, TOKEN, TOKEN_SPREAD
+    if seal < 1:
+        raise SystemExit("a mark of %d px is not a size" % seal)
+    SEAL = seal
+    TOKEN = min(SEAL, (TITHE_INNER_W_PRE - 2 * INSET - INSET) // 2)
+    TOKEN_SPREAD = TOKEN + INSET
+
 # EVERY DISC ON THIS BOARD FILLS THIS MUCH OF ITS OWN SQUARE, and the number lives here rather
 # than in a README because it has now been got wrong three times: the three coins, then the three
 # grey resource seals, then the two red action seals, each set arriving with its discs at a
