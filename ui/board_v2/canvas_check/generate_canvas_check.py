@@ -141,6 +141,10 @@ def module_html(m) -> str:
             '<div class=%s style="left:%dpx;top:%dpx;width:%dpx;height:%dpx"><i>%s</i></div>'
             % (cls, round(x), round(y), round(w), round(h), html.escape(label)))
 
+    # ASKED ONCE. Everything below that is not a bare constant comes out of here, so the page and
+    # the board cannot disagree about a rect without geometry.py itself disagreeing with it.
+    rects = G.as_dict()
+
     st = G.STATUS
     box(st["x"], st["y"], st["width"], st["height"], "status")
 
@@ -150,16 +154,28 @@ def module_html(m) -> str:
     for i, (_slug, name, _deg) in enumerate(G.DUTIES):
         box(G.X0 + i * G.TILE_PITCH, G.RIBBON_Y, G.TILE_W, G.RIBBON_H, name)
 
-    # The action row and the confirm bar under it, the full width of the play column.
-    box(G.X0, G.ART_Y, G.ART_W, G.ART_H, "action art L")
-    box(G.X0 + G.ART_W + G.ART_GAP, G.ART_Y, G.ART_W, G.ART_H, "action art R")
+    # THE ROAD, between the ribbon and the action row. Reserved for the Merchant and empty on
+    # purpose, so what this page has to show about it is that it is there and how much room it
+    # takes -- which is the one question this page exists to answer.
+    rd = G.ROAD
+    box(rd["x"], rd["y"], rd["width"], rd["height"], "road")
+
+    # The action row and the confirm bar under it.
+    #
+    # ASKED FOR RATHER THAN REBUILT. These two were `G.X0` and `G.X0 + ART_W + ART_GAP`, which was
+    # the same arithmetic art_slots() does and stopped being true the moment the row moved off the
+    # margin and onto the first tile's centre. The page went on drawing them at the old x without
+    # failing anything, because a box in the wrong place still renders.
+    for key, label in (("actionA", "action art L"), ("actionB", "action art R")):
+        r = G.art_slots()[key]
+        box(r["x"], r["y"], r["width"], r["height"], label)
+
     box(G.X0, G.CONFIRM_Y, G.PLAY_W, G.CONFIRM_H, "confirm")
 
     # THE RIGHT-HAND COLUMN, top to bottom: Tithe beside the art, then the two standing controls,
     # then the City. Taken from as_dict() rather than listed by hand -- the first version of this
     # page WAS a hand-written list and it silently lost Show Map and Hire Building, which is
     # precisely what a hand-written list of someone else's objects does.
-    rects = m.G.as_dict()
     for key, label in (("tithe", "tithe"), ("showMap", "show map"),
                        ("hire", "hire building"), ("city", "city")):
         r = rects[key]

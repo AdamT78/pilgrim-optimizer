@@ -75,11 +75,29 @@ def test_the_card_is_exactly_two_to_one(geo):
     600 x 320 box took 6.25% of the width. Falsified by changing ART_W or ART_H alone.
     """
     assert geo.ART_W / geo.ART_H == pytest.approx(2.0, abs=1e-9)
-    # THE BOX BESIDE THE CARDS IS THE TITHE. It used to be the side column, which was the same
-    # thing while the column ran the full height of this row; the Tithe spans two tiles now and
-    # the column below it spans one, so the row is cards, gap, cards, gap, TITHE_W.
-    assert geo.ART_W * 2 + geo.ART_GAP + geo.GAP + geo.TITHE_W == geo.WORK_W, (
-        "the two cards, their gaps and the Tithe do not fill the working width")
+    # THE ROW NO LONGER FILLS THE WORKING WIDTH, AND THAT IS THE CHANGE. It used to run X0 to
+    # X0 + WORK_W, with the Tithe spanning the last two tiles; it now runs from the FIRST tile's
+    # centre to the LAST tile's, so it is hung under the eight rather than butted against them.
+    # What it holds is unchanged in kind -- cards, gap, cards, gap, Tithe -- so this is the same
+    # assertion measured against the right span.
+    assert geo.ART_W * 2 + 2 * geo.ART_GAP + geo.TITHE_W == geo.ROW_W, (
+        "the two cards, their gaps and the Tithe do not fill the row")
+    # AND THE ROW IS SEVEN PITCHES WIDE, which is what "centre of the first to centre of the
+    # last" comes to and is the one number a future change is likely to round.
+    assert geo.ROW_W == 7 * geo.TILE_PITCH, (
+        "the row is %d wide, which is not the distance between the two end tiles' centres"
+        % geo.ROW_W)
+    # SO IT IS CENTRED ON THE BOARD, which is the visible consequence and would survive none of
+    # the arithmetic above being wrong in the same direction twice.
+    assert geo.ROW_X - geo.X0 == (geo.X0 + geo.WORK_W) - (geo.TITHE_X + geo.TITHE_W), (
+        "the row has %d to its left and %d to its right"
+        % (geo.ROW_X - geo.X0, (geo.X0 + geo.WORK_W) - (geo.TITHE_X + geo.TITHE_W)))
+    # THE TITHE TAKES WHAT IS LEFT, AND IT COMES TO ONE TILE AND ONE GAP. This is the number that
+    # makes the arrangement work rather than nearly work: hold it at a bare TILE_W instead and the
+    # cards go to 502, the card height to 251, and the wheel pays the difference.
+    assert geo.TITHE_W == geo.TILE_PITCH, (
+        "the Tithe is %d wide, not one tile and one gap -- the cards have moved off three tiles"
+        % geo.TITHE_W)
     # AND THE CARD IS MEASURED OFF THE RIBBON, which is what makes its edges land on tile edges.
     assert geo.ART_W == 3 * geo.TILE_W + 2 * geo.TILE_GAP, (
         "a card is %d wide, which is not three duty tiles and their two gaps" % geo.ART_W)
@@ -748,6 +766,97 @@ def test_a_container_stops_drawing_once_a_picture_lands_in_it():
         "a small container is marked `art` again, which is the big card's class")
 
 
+def test_the_board_draws_the_mark_edge_the_icon_lab_settled_on():
+    """Two pages, one rule, and the lab is the one that decides it.
+
+    THE EDGE WAS CHOSEN IN icon_lab/tile_column.html.tmpl -- dashed, in the guides' own colour --
+    and the board has to draw the same thing or the lab stops being where that question is
+    answered and becomes a page that looks like the board used to. Falsified by giving the board
+    a colour of its own, a solid border, or by letting --guide be written out twice.
+    """
+    page = TMPL.read_text(encoding="utf-8")
+    css = re.sub(r"/\*.*?\*/", " ", page, flags=re.S)
+    assert re.search(r"--guide:#[0-9a-fA-F]{6}", css), "--guide is not defined at the root"
+    assert len(re.findall(r"--guide:#[0-9a-fA-F]{6}", css)) == 1, (
+        "the guide colour is written out more than once, so the two rules can disagree")
+    m = re.search(r"\.seal\.filled\{([^}]*)\}", css)
+    assert m, ".seal.filled is gone"
+    assert "dashed var(--guide)" in m.group(1), (
+        "the mark's edge is not the guides' dashed line: %s" % m.group(1).strip())
+    # AND IT IS THE LAB'S COLOUR, read from the lab rather than copied into this test, so the two
+    # files cannot drift apart while both of their own guards stay green.
+    lab = (ROOT / "ui" / "board_v2" / "icon_lab" / "tile_column.html.tmpl").read_text("utf-8")
+    want = re.search(r"--guide:(#[0-9a-fA-F]{6})", lab).group(1)
+    got = re.search(r"--guide:(#[0-9a-fA-F]{6})", css).group(1)
+    assert got == want, "the board's guide is %s and the icon lab's is %s" % (got, want)
+
+
+def test_clicking_a_mark_selects_the_action_it_stands_for():
+    """A mark IS its action, so pressing one has to put that action down.
+
+    THE BUG THIS IS POINTED AT: the mark's handler called pickDuty, which sets the duty and
+    CLEARS the slot. So the one thing on the tile that names a single action could not select it,
+    and the only way in was the card below -- while the mark lit up under the pointer the whole
+    time, which is what made it read as broken rather than as unclickable.
+
+    The TILE's own area still goes through pickDuty, and that is not an oversight: a click on the
+    tile is about the duty and names no action. Falsified by wiring the mark back to pickDuty, or
+    by having pickAction set the duty without the slot.
+
+    A STATIC CHECK, AND IT SAYS SO. The lab lane installs no browser; the behaviour itself was
+    verified by driving the built page.
+    """
+    page = TMPL.read_text(encoding="utf-8")
+    code = re.sub(r"(?m)^\s*//.*$", "", page)
+    seal = code.split("function slotClick(")[1].split("\nfunction ")[0]
+    assert "pickAction(" in seal, (
+        "the mark's handler does not go through pickAction, so it cannot name an action")
+    assert "pickDuty(" not in seal, (
+        "the mark's handler still calls pickDuty, which sets the duty and clears the slot")
+    body = code.split("function pickAction(")[1].split("\nfunction ")[0]
+    assert "S.duty" in body and "S.slot" in body, (
+        "pickAction sets only one of the two, so a mark selects a duty or an action but not both")
+    # ONE RENDER, NOT TWO. pickDuty followed by select() would have done this as well, by setting
+    # the slot, clearing it and setting it again -- drawing the board twice on the way.
+    assert body.count("render()") == 1, (
+        "pickAction draws the board %d times for one click" % body.count("render()"))
+
+
+def test_the_road_is_drawn_and_nothing_below_it_moved(geo):
+    """The strip is empty on purpose, which is exactly why it needs a guard.
+
+    Nothing is drawn in it yet, so there is no artwork whose absence would be noticed and no
+    layout that would visibly break if it quietly stopped being reserved. What it is FOR is the
+    room the shorter ribbon freed: the ribbon came down from 242 to 186, and rather than letting
+    the cards, the confirm row and the wheel all ride up 56 pixels, the road holds it open.
+
+    Falsified by deleting the strip, by flattening it, or by drawing it anywhere but between the
+    ribbon and the cards.
+
+    AND THE HEIGHT IS ASSERTED SEPARATELY, because the two position lines below cannot see it:
+    ART_Y is DERIVED from ROAD_H, so setting the road to zero moves the cards up and both lines
+    go on passing. Mutating it to 0 is what found that. There is no honest way to assert "the
+    cards did not move" from inside a file where they are measured off the thing that moved, so
+    what is asserted instead is the weaker true thing: a road thinner than a gap is not a road.
+    """
+    assert geo.ROAD["height"] >= geo.GAP, (
+        "the road is %d tall, which is thinner than the gaps either side of it -- it would read "
+        "as a rule rather than as a strip the Merchant travels along" % geo.ROAD["height"])
+    assert geo.ROAD["y"] == geo.RIBBON_Y + geo.RIBBON_H + geo.GAP, (
+        "the road is not under the ribbon")
+    assert geo.ART_Y == geo.ROAD["y"] + geo.ROAD["height"] + geo.GAP, (
+        "the cards are not under the road")
+    # FULL WIDTH, because the Merchant rides the eight duty tiles and the strip is the road it
+    # travels along -- so it spans what they span rather than what the card row does.
+    assert geo.ROAD["x"] == geo.X0 and geo.ROAD["width"] == geo.WORK_W, (
+        "the road does not span the working width the eight tiles stand on")
+    page = TMPL.read_text(encoding="utf-8")
+    assert "#road{" in page, "the road has no rule, so the strip renders as nothing"
+    code = re.sub(r"(?m)^\s*//.*$", "", page)
+    assert re.search(r"\bdrawRoad\(\)", code.split("function draw()")[1].split("\n}")[0]), (
+        "draw() does not draw the road")
+
+
 def test_a_label_sits_the_same_distance_from_the_top_of_whatever_box_it_is_in(geo):
     """The duty's name in its tile and the action's name on its card are the same kind of thing.
 
@@ -789,13 +898,32 @@ def test_the_two_wax_discs_clear_each_other_and_not_merely_their_boxes(geo):
 # plus the label's band comes to 298 in a box of 295. So the gap is a REMAINDER rather than a
 # choice, and these are what stop the label being pushed quietly out of the bottom.
 
-def test_the_tithe_seals_are_the_same_size_as_the_duty_action_seals(geo):
-    """Falsified by giving TOKEN a figure of its own.
+def test_a_tithe_seal_is_a_duty_mark_unless_the_box_will_not_take_one(geo):
+    """Falsified by giving TOKEN a figure of its own, or by letting one escape token_cap().
 
-    They were 64 against 78, which made the third choice on the row look like a lesser kind of
-    thing than the two beside it. Taking the tithe is the same sort of move.
+    THEY USED TO BE FLATLY EQUAL and this test used to say so. It cannot any more, and the reason
+    is worth keeping rather than deleting: at one tile wide with the three in a column, what binds
+    is the box's HEIGHT, and that height is ART_H -- a number chosen for the artwork. 72 does not
+    fit three times with its gaps, so a Tithe resource is 66.
+
+    The claim that replaces it is the one actually worth holding: a token is the mark's size, and
+    the ONLY thing that may make it smaller is the box it has to fit in. A figure of TOKEN's own
+    would pass `TOKEN <= SEAL` and fails here.
     """
-    assert geo.TOKEN == geo.SEAL
+    assert geo.TOKEN == geo.token_cap(geo.SEAL), "TOKEN did not come out of token_cap()"
+    assert geo.TOKEN <= geo.SEAL, (
+        "a Tithe resource is %d against a duty mark of %d -- it may never be the bigger of the two"
+        % (geo.TOKEN, geo.SEAL))
+    # WHERE THE BOX IS NOT THE CONSTRAINT, THE TWO ARE STILL EQUAL. Without this the test above
+    # would pass just as well for a cap that always shaved a few pixels off for no reason.
+    small = geo.SEAL // 2
+    assert geo.token_cap(small) == small, (
+        "a mark of %d leaves the box room to spare and still came back as %d"
+        % (small, geo.token_cap(small)))
+    # AND THE CAP BITES ON HEIGHT, not on width. The width term alone reports 67 and would let a
+    # column of three overflow the box by 11, which is the fault this function was written for.
+    assert geo.token_cap(10 ** 6) == geo.TOKEN, (
+        "an absurd mark size came back as something other than the box's own limit")
 
 
 def test_three_tithe_seals_and_their_label_fit_the_box_they_are_in(geo):
@@ -807,9 +935,9 @@ def test_three_tithe_seals_and_their_label_fit_the_box_they_are_in(geo):
     assert geo.check() == [], "\n".join(geo.check())
     # THE LABEL IS ABOVE THE SEALS NOW, so the two ends that can collide have swapped: the label
     # must finish before the column starts, and the column must finish inside the box.
-    # ASK THE SLOTS, NOT A STACK. The three sit on a triangle now -- two below, one centred over --
-    # so there is no TOKEN_Y plus three tokens and two gaps to add up. Reading the slots keeps this
-    # true of whatever the arrangement becomes, which is the mistake the old version made.
+    # ASK THE SLOTS, NOT A STACK. A row, then a triangle, now a column -- and the arrangement has
+    # changed under this test three times without it needing an edit, because it reads the slots
+    # rather than rebuilding their arithmetic. That is the mistake the first version made.
     label_end = geo.TITHE_LABEL_TOP + geo.TITHE_LABEL_H
     slots = geo.token_slots()
     assert len(slots) == 3, "the Tithe no longer offers three resources"
@@ -822,10 +950,17 @@ def test_three_tithe_seals_and_their_label_fit_the_box_they_are_in(geo):
         % (end, geo.TITHE_INNER_H - geo.INSET))
     assert geo.TOKEN <= geo.TITHE_W - 2 * geo.INSET, "a seal of %d does not fit a box %d wide" \
         % (geo.TOKEN, geo.TITHE_W)
-    # AND THEY ARE THE DUTY MARKS' OWN SIZE. The Tithe is the third choice on this row, not a
-    # lesser kind of thing; this is the assertion the old narrow column could not have passed.
-    assert geo.TOKEN == geo.SEAL, (
-        "a Tithe resource is %d and a duty mark is %d" % (geo.TOKEN, geo.SEAL))
+    # AND THE COLUMN IS CENTRED IN WHAT IS LEFT UNDER THE LABEL, rather than hung from the top
+    # with the slack falling to the bottom. Measured off the slots, so it survives the next
+    # rearrangement the way the block above did.
+    #
+    # WITHIN A PIXEL, AND THE PIXEL IS REAL RATHER THAN SLOP: the column's own slack is 1, which
+    # cannot be halved into two integer positions. Writing this as an equality failed, and the
+    # honest reading of that failure is that the board is centred and the arithmetic is odd.
+    above = top - (label_end + geo.INSET)
+    below = (geo.TITHE_INNER_H - geo.INSET) - end
+    assert abs(above - below) <= 1, (
+        "the column has %d above it and %d below" % (above, below))
 
 
 def test_the_tithe_column_states_no_numbers_of_its_own(gen):
@@ -1271,40 +1406,84 @@ def test_the_tithe_tokens_move_with_the_tile_marks():
     configure() set SEAL alone.
     """
     g = _load("geometry")
-    assert g.SEAL == g.TOKEN, "they do not start equal, so this test proves nothing"
-    g.configure(seal=70)
-    assert g.SEAL == 70, "configure() did not set the mark size"
-    assert g.TOKEN == 70, "the Tithe's tokens stayed at their old size while the tile marks moved"
-    assert g.TOKEN_SPREAD == 70 + g.INSET, "the triangle the three tokens sit on did not follow"
-    assert g.as_dict()["ribbon"]["seal"] == 70, "the page is still told the old size"
-    assert g.as_dict()["tithe"]["token"] == 70, "the page is still told the old token size"
+    # MEASURED BELOW THE TITHE BOX'S OWN LIMIT, so the two are free to be equal and this test is
+    # about the lever rather than about the cap. At the default they are NOT equal -- the column
+    # of three is height-bound at 66 against a mark of 72 -- and a test that set 70 here would be
+    # asserting the cap's number while believing it was asserting the lever's.
+    small = 40
+    assert g.token_cap(small) == small, "%d is capped, so this test proves nothing" % small
+    g.configure(seal=small)
+    assert g.SEAL == small, "configure() did not set the mark size"
+    assert g.TOKEN == small, (
+        "the Tithe's tokens stayed at their old size while the tile marks moved")
+    assert g.TOKEN_SPREAD == small + g.INSET, "the spacing the three tokens stand on did not follow"
+    assert g.as_dict()["ribbon"]["seal"] == small, "the page is still told the old size"
+    assert g.as_dict()["tithe"]["token"] == small, "the page is still told the old token size"
+    # AND ABOVE THE CAP THE LEVER STOPS AT THE BOX rather than running past it. The flag may make
+    # the Tithe's resources smaller than the duty marks; it may never make them not fit.
+    g.configure(seal=g.SEAL)
+    big = g.token_cap(10 ** 6) + 10
+    g.configure(seal=big)
+    assert g.SEAL == big, "configure() did not set the mark size"
+    assert g.TOKEN == g.token_cap(big) < big, (
+        "a mark of %d put a Tithe resource of %d in a box that cannot hold three"
+        % (big, g.TOKEN))
 
 
 def test_a_mark_too_big_for_the_tile_is_refused_rather_than_drawn():
     """The ribbon does not grow to fit a bigger mark -- it overflows, and check() is what says so.
 
     This is the guard the --icons flag leans on instead of doing its own arithmetic, which is why
-    it is asserted here rather than trusted. 110 is the first size that does not fit a column of
-    two under the duty's name inside RIBBON_H. Falsified by making configure() grow RIBBON_H, or
-    by check() forgetting the tile.
+    it is asserted here rather than trusted. Falsified by making configure() grow RIBBON_H, or by
+    check() forgetting the tile.
+
+    THE THRESHOLD IS DERIVED, NOT TYPED. It used to be 110, a round number above a RIBBON_H of
+    242. RIBBON_H is now computed from the mark it has to hold, so a typed 110 would have gone on
+    passing while testing a size far further over the line than it claimed.
+
+    AND THERE ARE TWO THRESHOLDS, WHICH IS WHAT WRITING IT THIS WAY FOUND. The mark stops keeping
+    the tile's rhythm at 73 and does not actually leave the tile until 76, so for three sizes the
+    board drew a tile that was visibly wrong and check() said nothing. Both are asserted, and
+    separately, because a single "it complains" would be satisfied by either.
     """
     g = _load("geometry")
     assert g.check() == [], "the default board is not sound, so this test proves nothing"
-    g.configure(seal=110)
+    # THE DEFAULT MARK IS THE BIGGEST THE TILE TAKES AT THE TILE'S OWN RHYTHM, which is what it
+    # means for RIBBON_H to be derived from it rather than chosen.
+    fits = (g.TILE_INNER_H - g.TILE_NAME_BOTTOM - 3 * g.SEAL_INSET) // 2
+    assert g.SEAL == fits, (
+        "the tile holds a mark of %d and the board draws %d, so the ribbon's height is no longer "
+        "the height of what it holds" % (fits, g.SEAL))
+
+    # ONE PIXEL OVER: still inside the tile, no longer at its rhythm.
+    g.configure(seal=fits + 1)
     bad = g.check()
-    assert bad, "a 110 px mark overflows its tile and check() did not notice"
+    assert any("leaves" in line and "inside a tile" in line for line in bad), (
+        "a %d px mark leaves less under it than the pair keep between them and check() did not "
+        "say so: %s" % (fits + 1, bad))
+
+    # FAR ENOUGH OVER TO LEAVE THE BOX, which is the complaint the --icons flag quotes back.
+    spills = g.TILE_INNER_H - g.TILE_NAME_BOTTOM - 2 * g.SEAL_INSET - g.SEAL_INSET // 2
+    g.configure(seal=spills)
+    bad = g.check()
+    assert bad, "a %d px mark overflows its tile and check() did not notice" % spills
     # NOT just "a line mentioning seals". The Tithe's own guard also says "seals", and it fires at
     # this size too -- so a looser match passed while the tile guard was disabled, which is what
-    # mutating RIBBON_H revealed. The complaint has to be about the TILE.
-    assert any("inside a tile" in line for line in bad), (
+    # mutating RIBBON_H revealed. The complaint has to be about the TILE, and about SPANNING it.
+    assert any("spans" in line and "inside a tile" in line for line in bad), (
         "check() complained, but not that the mark overflows its tile: %s" % bad)
 
 
 def test_setting_the_mark_size_does_not_move_anything_else():
-    """One lever, not a settings system. Falsified by configure() touching a second number."""
+    """One lever, not a settings system. Falsified by configure() touching a second number.
+
+    THE SIZE HAS TO BE ONE ALL THREE MOVE FOR. At 70 the Tithe's cap holds TOKEN at 66 where it
+    already was, so `moved` came back as {"SEAL"} alone -- which passes a subset check and would
+    have let configure() quietly stop moving the token at all.
+    """
     g = _load("geometry")
     before = {k: v for k, v in vars(g).items() if k.isupper() and isinstance(v, (int, float))}
-    g.configure(seal=70)
+    g.configure(seal=40)
     after = {k: v for k, v in vars(g).items() if k.isupper() and isinstance(v, (int, float))}
     moved = {k for k in before if before[k] != after[k]}
     assert moved == {"SEAL", "TOKEN", "TOKEN_SPREAD"}, (
