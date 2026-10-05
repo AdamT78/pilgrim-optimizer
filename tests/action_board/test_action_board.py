@@ -1221,3 +1221,34 @@ def test_every_confirm_button_is_the_same_button(geo, gen):
     tithe = geo.as_dict()["confirm"]["tithe"]
     assert tithe["x"] + tithe["width"] == geo.TITHE_X + geo.TITHE_W, (
         "the Tithe's confirm does not finish where the Tithe does")
+
+
+def test_the_phase_row_is_rebuilt_rather_than_added_to():
+    """drawPhases() is its own click handler, so it must clear before it appends.
+
+    WHAT HAPPENED WITHOUT THIS. Every click on Ready / City, Sowing or Action Selection appended
+    a second set of three buttons, so the row grew by three each time. The real damage was
+    quieter: a loop at the end of the function walked holder.children -- six, then nine -- against
+    GEO.phases[i], which is three, threw on the undefined, and took note() and setStatus() down
+    with it. The phase line and the placeholder note therefore stopped updating the moment the
+    first duplicate appeared, which is the kind of thing that reads as "the phases do nothing"
+    rather than as an error.
+
+    A STATIC CHECK, AND IT SAYS SO. The lab lane installs no browser, so this reads the template
+    rather than clicking the button; the behaviour itself was verified by driving the built page.
+    Falsified by deleting the clear, or by putting the second aria-pressed pass back.
+    """
+    page = TMPL.read_text(encoding="utf-8")
+    body = page.split("function drawPhases()")[1].split("\nfunction ")[0]
+    code = re.sub(r"(?m)^\s*//.*$", "", body)
+
+    assert re.search(r'holder\.(textContent\s*=\s*""|innerHTML\s*=\s*""|replaceChildren\(\))', code), (
+        "drawPhases() appends into #phases without emptying it first, so every click adds "
+        "another set of phase buttons")
+    assert code.index("holder.appendChild") > code.index("holder."), (
+        "the clear has to come before the appends")
+    assert "GEO.phases[i]" not in code, (
+        "the second aria-pressed pass is back: it indexes GEO.phases by a holder.children index, "
+        "which throws as soon as the two lengths disagree")
+    assert code.count('setAttribute("aria-pressed"') == 1, (
+        "aria-pressed is set in more than one place, so the two can disagree")
