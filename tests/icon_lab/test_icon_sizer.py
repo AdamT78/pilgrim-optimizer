@@ -556,21 +556,33 @@ def column():
     return m
 
 
-def test_the_tile_column_takes_the_marks_size_from_geometry(column):
-    """Falsified by going back to deriving the size from whatever the gap leaves over.
+def test_the_tile_column_opens_at_geometrys_mark_size(column):
+    """The size is a slider now, so what has to hold is that it OPENS on the board's number.
 
-    That derivation answered "how big could they be", which was the right question while nobody
-    had decided. SEAL is decided, so the page has to draw what the board draws -- otherwise it is
-    a sketch of a board that does not exist, and the one thing it cannot then tell you is whether
-    the real one fits.
+    THIS GUARD USED TO SAY THE OPPOSITE, and the reason it changed is worth keeping. It asserted
+    `var size = GEO.seal` -- the size was fixed here, on the argument that SEAL had been decided
+    and a page drawing anything else would be a sketch of a board that does not exist. That was
+    right while editing geometry.py was the only way to draw a different size.
+    generate_action_board.py --icons made it a real choice, so the number needs somewhere to be
+    chosen, and this is the page that can show it against the tile it has to fit.
+
+    What still has to be true is everything that stopped it being a sketch: it opens at the
+    board's SEAL rather than a number typed here, the page is told geometry at build time, and it
+    still says what size WOULD fit. Falsified by hard-coding the slider's start, or by letting the
+    page invent a size again.
     """
     tmpl = _code(COL_TMPL)
-    assert "var size = GEO.seal;" in tmpl, "the page is inventing a mark size again"
+    assert "var size = V('size');" in tmpl, "the mark size is not read from its slider"
+    assert "__START_SEAL__" in tmpl, "the slider no longer opens on a value filled in at build time"
     assert "Math.floor((avail - gap) / 2)" in tmpl, \
         "the page no longer says what size WOULD fit, which is the useful half of a refusal"
     assert "__GEO__" in tmpl, "the geometry is no longer filled in at build time"
-    geo = column.GEO
-    assert geo["seal"] == column.G.SEAL, "the page's geometry and geometry.py disagree"
+    assert "GEO.seal" in tmpl, \
+        "the page no longer mentions the board's own SEAL, so a slider pushed away from it reads "\
+        "as the board rather than as a proposal"
+    assert column.START_SEAL == column.G.SEAL, \
+        "the page opens at %d while the board draws %d" % (column.START_SEAL, column.G.SEAL)
+    assert column.GEO["seal"] == column.G.SEAL, "the page's geometry and geometry.py disagree"
 
 
 def test_the_tile_column_says_when_a_column_does_not_fit(column, capsys, monkeypatch, tmp_path):
@@ -829,3 +841,115 @@ def test_one_gap_does_both_jobs_and_every_first_mark_shares_a_line(column, capsy
             + 2 * G.SEAL + 20 + geo["sealInset"] + 2 * G.BORDER)
     assert "RIBBON_H of about %d" % want in capsys.readouterr().out, \
         "the build's arithmetic kept a gap of its own, so it reports on a page nobody is looking at"
+
+
+def test_the_icon_border_has_one_owner():
+    """The slider is the thickness AND whether there is a border; the button only moves it.
+
+    A BUTTON THAT TOGGLED ITS OWN CLASS would be a second answer to "is there a border", and the
+    two drift the moment you drag the slider to 0 with the button still reading pressed. The page
+    has made this mistake in a neighbouring form before -- the comment above column() records a
+    gap that was `SEAL_INSET` under the name and the slider's value between, two numbers nobody
+    chose together that went visibly out of step.
+
+    A static check, because the lab lane installs no browser; the behaviour itself was driven in
+    one. Falsified by giving the button back a classList.toggle of its own, or by letting the
+    border be a fixed width again.
+    """
+    tmpl = _code(COL_TMPL)
+    assert "var(--edge-w" in tmpl, "the border is a fixed width again, so it cannot be dragged"
+    assert "classList.toggle('edged', w > 0)" in tmpl, \
+        "whether there is a border no longer follows the slider's own number"
+    toggle = tmpl.split("getElementById('edgetoggle').onclick")[1].split("};")[0]
+    assert "classList.toggle" not in toggle, \
+        "the button toggles a class of its own again, so it can disagree with the slider"
+    assert "applyEdge()" in toggle, "the button no longer goes through the one function that sets it"
+
+
+def test_a_thicker_icon_border_eats_the_mark_rather_than_growing_it():
+    """Everything here is border-box, and the fit arithmetic depends on it.
+
+    column() reports whether two marks of `size` fit the tile. If a border grew the mark's box
+    instead of being drawn inside it, every one of those numbers would be short by twice the
+    thickness and the page would say a column fits while the marks hung out of the tile -- the
+    exact failure the red outline exists to make unmissable. Falsified by dropping the
+    border-box rule, or by putting the border on something that is not the mark's own box.
+    """
+    tmpl = _code(COL_TMPL)
+    assert "*{box-sizing:border-box}" in tmpl, \
+        "border-box is gone, so a thicker border now grows the mark past where it was placed"
+    assert "body.edged .mark{border:var(--edge-w" in tmpl, \
+        "the border is no longer on the mark's own box"
+
+
+def _lstar(hexcol):
+    """CIE L* of an sRGB hex colour. Twenty lines rather than a dependency, as elsewhere here."""
+    r, g, b = (int(hexcol[i:i + 2], 16) / 255 for i in (1, 3, 5))
+    lin = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in (r, g, b)]
+    y = 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+    return 116 * (y ** (1 / 3)) - 16 if y > 0.008856 else 903.3 * y
+
+
+def test_every_plate_in_the_picker_is_the_same_weight():
+    """Choosing a colour must not quietly be choosing how legible the marks are.
+
+    The five plates were built at one lightness on purpose -- L* 10.8, which is today's violet
+    measured rather than guessed, and within a tenth of the fourteen cards' own median. Because
+    they share it, the bone-white mark reads the same distance above every one of them, so the
+    picker changes hue and nothing else. A plate dropped in at a different lightness would make
+    one option legible and another not, and it would look like a palette preference rather than
+    the mistake it is.
+
+    Falsified by adding a plate off the line, or by making a frame lighter than its plate.
+    """
+    tmpl = COL_TMPL.read_text(encoding="utf-8")
+    m = re.search(r"var PALETTE = (\[.*?\]);", tmpl, re.S)
+    assert m, "the page no longer carries a PALETTE for the picker"
+    pal = json.loads(m.group(1))
+    assert len(pal) == 5, "expected five plates, found %d" % len(pal)
+
+    ls = [_lstar(p["plate"]) for p in pal]
+    assert max(ls) - min(ls) < 1.0, (
+        "the five plates span %.1f L*, so the marks do not read the same against all of them: %s"
+        % (max(ls) - min(ls), ["%s %.1f" % (p["name"], l) for p, l in zip(pal, ls)]))
+
+    # AND SO IS EVERY LIT, for the same reason one step up. The selected tile is the one the eye
+    # is on; if the five lifts landed at different lightnesses then picking a plate would quietly
+    # be picking how far the selection reads from its neighbours. They are built at the violet
+    # pair's own step -- +12.8 L* -- so this is that claim, not a tolerance around five numbers
+    # somebody typed.
+    lits = [_lstar(p["lit"]) for p in pal]
+    assert max(lits) - min(lits) < 1.0, (
+        "the five lits span %.1f L*, so the selected tile stands out by a different amount "
+        "depending on the plate: %s"
+        % (max(lits) - min(lits), ["%s %.1f" % (p["name"], x) for p, x in zip(pal, lits)]))
+    for p in pal:
+        assert _lstar(p["lit"]) > _lstar(p["plate"]), (
+            "%s's lit is not lighter than its plate, so the selected tile would sink rather "
+            "than lift" % p["name"])
+        assert _lstar(p["frame"]) < _lstar(p["plate"]), (
+            "%s's frame is not darker than its plate, so the edge reads as raised rather than "
+            "as a cut line" % p["name"])
+    assert any(p["plate"].upper() == "#1E1935" for p in pal), (
+        "today's violet is not among the five, so the others cannot be compared against it")
+
+
+def test_the_border_and_the_guides_overlay_draw_in_one_colour():
+    """The border is the guides' line made permanent, so it has to BE that line's colour.
+
+    This is the look that was chosen: a warm dashed hairline round each mark reads as a scribed
+    edge, where a solid band in the plate's own hue reads as a shadow under it. Two hex values
+    typed in two rules would answer the same question twice and drift the first time one is
+    tuned -- the page's own comments record that happening before, with a gap that was
+    SEAL_INSET in one place and a slider's value in the other.
+
+    Falsified by hard-coding either of them, or by making the border solid again.
+    """
+    tmpl = _code(COL_TMPL)
+    assert "body.edged .mark{border:var(--edge-w, 0px) dashed var(--guide)" in tmpl, \
+        "the border is no longer the guides' dashed line"
+    assert "body.guides .mark{outline:1px dashed var(--guide)}" in tmpl, \
+        "the guides overlay no longer reads the same variable the border does"
+    assert re.search(r"--guide:#[0-9a-fA-F]{6}", tmpl), "--guide is not defined once at the root"
+    assert tmpl.count("#6a5f48") <= 1, \
+        "the guide colour is written out more than once, so the two rules can disagree"

@@ -2,7 +2,7 @@
 <title>Duty tiles, icons in a column</title>
 <meta name=viewport content="width=device-width,initial-scale=1">
 <style>
-:root{--ink:#e2d7bc;--dim:#968e7c;--line:#c9b27a;--edge:#211e1a;--plate:#1E1935;--plate-lit:#3B3160}
+:root{--ink:#e2d7bc;--dim:#968e7c;--line:#c9b27a;--edge:#211e1a;--plate:#1E1935;--plate-lit:#3B3160;--frame:#120A25;--guide:#6a5f48}
 *{box-sizing:border-box}
 body{margin:0;padding:22px 20px 80px;background:#07070a;color:var(--ink);
   font:13px/1.55 ui-sans-serif,system-ui,sans-serif}
@@ -38,13 +38,36 @@ button[aria-pressed=true]{background:#2e2718;border-color:var(--line);color:#f0e
    simply sits on the tile. It is left in rather than deleted: it is what makes the mark right
    if the tile's own colour ever moves away from the plate's. */
 .mark.plate{background:var(--plate);border-radius:4px}
-/* A THIN EDGE, OFF BY DEFAULT. Now that the tile carries the plate's own colour there is nothing
-   to say where one mark ends and the tile begins, which is fine for a shape that fills its
-   square and less fine for one with a ragged edge. The border sits on the mark's box, so the
-   artwork gives up a pixel each side rather than growing past where it was placed. */
-body.edged .mark{border:1px solid var(--plate-lit);border-radius:4px}
+/* AN EDGE, OFF BY DEFAULT, AND ITS THICKNESS IS A SLIDER. Now that the tile carries the plate's
+   own colour there is nothing to say where one mark ends and the tile begins, which is fine for a
+   shape that fills its square and less fine for one with a ragged edge.
+   THE BORDER SITS ON THE MARK'S BOX -- everything here is border-box -- so the artwork gives up
+   the thickness on each side rather than growing past where it was placed. That is why it is
+   worth a slider rather than a yes or no: at 1 px a 100 px mark loses 2 of its 100, and at 6 px
+   it loses 12, which is a different drawing rather than the same one outlined. The readout says
+   what each setting costs.
+   ONE OWNER: --edge-w is the thickness AND whether there is a border at all, because 0 is off.
+   The button beside the sliders only moves that number, so the two cannot disagree. */
+body.edged .mark{border:var(--edge-w, 0px) dashed var(--guide);border-radius:4px}
 body.guides .tile{outline:1px dashed #3a352c}
-body.guides .mark{outline:1px dashed #6a5f48}
+body.guides .mark{outline:1px dashed var(--guide)}
+/* THE FIVE PLATES, AND WHY THEY ARE ALL THE SAME WEIGHT. Each one sits at L* 10.8 and the same
+   chroma as today's violet, which is the plate measured rather than guessed -- so swapping one
+   for another changes the hue and nothing else. The bone-white mark reads 75.4 L* lighter than
+   every one of them, within a tenth, which is what stops a palette choice from quietly becoming
+   a legibility choice. The frame is the same hue 6.5 L* DARKER, so it reads as a cut line rather
+   than a raised edge, and each plate carries its own --plate-lit for the selected tile, measured
+   off the violet pair rather than chosen (see PALETTE below for how).
+   THE BORDER DRAWS IN --guide, DASHED, and that is a choice rather than a leftover. What was
+   worth keeping turned out to be the thing the guides overlay was standing in for: a warm dashed
+   hairline round each mark reads as a scribed or stitched edge, where a solid band in the plate's
+   own hue reads as a shadow under it. So the border takes --guide -- the same variable the
+   overlay uses, so the two cannot drift -- while the plate and its darker sibling stay exactly as
+   the picker sets them. --frame is still set and is no longer read by this rule; the tile's own
+   edge is where it would naturally go. */
+.sw{display:inline-flex;gap:8px;margin-left:14px;vertical-align:middle}
+.sw button{width:26px;height:26px;padding:0;border-radius:50%;border:2px solid #3a352c}
+.sw button[aria-pressed=true]{border-color:var(--line);box-shadow:0 0 0 2px #2e2718}
 .note{margin-top:30px;max-width:86ch;color:#8d8471;font-size:12.5px;
   border-top:1px solid var(--edge);padding-top:14px}
 .note b{color:#b2a37c;font-weight:700}
@@ -65,18 +88,21 @@ body.costly #read i b{color:#d9b36b}
 <h1>Duty tiles, icons in a column</h1>
 <p class=sub>The eight tiles at their real size, with each duty's marks stacked rather than
 overlapped on the diagonal, which is what the board did before this page talked it out of it.
-Everything except the stacking comes from geometry.py &mdash; the
+Everything except the stacking starts from geometry.py &mdash; the
 tile, its border, the name, the space they sit in, and the mark's own size, which is
-<code>SEAL</code>. What you choose is one gap &mdash; which sets both the space under the duty's
-name and the space between its two marks &mdash; and how tall the tile is. So the question the page
-answers is not "how big could the marks be" but "what would the board have to give up to stack
-them".</p>
+<code>SEAL</code>. Three sliders move from there: one gap &mdash; which sets both the space under
+the duty's name and the space between its two marks &mdash; how tall the tile is, and how big the
+marks are. So the page answers "how big could the marks be" and "what would the board have to give
+up to stack them" at once, which is the pair of questions that have to be answered together.</p>
 
 <div class=bar>
   <label class=r>tile height <input id=tall type=range min="120" max="320" value="__START_H__"><b id=tallv>__START_H__</b></label>
   <label class=r>gap <input id=gap type=range min="0" max="40" value="__GAP__"><b id=gapv>__GAP__</b></label>
+  <label class=r>mark <input id=size type=range min="40" max="160" value="__START_SEAL__"><b id=sizev>__START_SEAL__</b></label>
+  <label class=r>border <input id=edge type=range min="0" max="8" value="0"><b id=edgev>off</b></label>
   <label class=r>view <input id=zoom type=range min="60" max="320" value="120"><b id=zoomv>1.2&times;</b></label>
-  <button id=edge>icon border</button>
+  <button id=edgetoggle>icon border</button>
+  <span id=swatches class=sw></span>
   <button id=guides>guides</button>
   <button id=laptop>at 13&Prime; scale</button>
 </div>
@@ -84,8 +110,11 @@ them".</p>
 
 <div id=scroll><div id=stage><div id=ribbon></div></div></div>
 
-<p class=note>The mark's size is <code>SEAL</code> and is not this page's to choose &mdash; what
-you are looking at is the board as it would be, not a sketch of one. When the column does not fit
+<p class=note>The page opens at <code>SEAL</code>, so the first thing on screen is the board as it
+would be rather than a sketch of one; the readout names geometry.py's number beside the slider's
+whenever you move away from it. <b>Nothing here writes anything down.</b> A size you like goes to
+<code>generate_action_board.py --icons N</code> to see it on the real board, or into geometry.py by
+hand to keep it. When the column does not fit
 the tiles are outlined in red and the marks are left hanging out of them, because a number saying
 so is a thing you can scroll past. <b>Who pays for a taller tile:</b> nothing below the ribbon
 shrinks, it moves &mdash; <code>ART_Y</code> is <code>RIBBON_Y + RIBBON_H + GAP</code> and the rest
@@ -112,10 +141,12 @@ function V(id){ return +document.getElementById(id).value; }
 // the whole tile reads as a single rhythm instead of a title with a block of marks loosely under
 // it. It was `SEAL_INSET` under the name and the slider's gap between, which are two numbers
 // nobody chose together and which went visibly out of step as soon as you moved the slider.
-// THE SIZE IS GEOMETRY'S, NOT THE GAP'S LEFTOVER. This used to derive the mark size from
-// whatever the gap left over, which answers "how big could they be" -- a fair question while
-// nobody had decided. SEAL has been decided, so the useful question is the other one: at the size
-// the board really draws, does a column fit the ribbon?
+// THE SIZE IS A LEVER AGAIN, AND IT IS NOT THE GAP'S LEFTOVER. It was once derived from
+// whatever the gap left over, which answers "how big could they be" and was the wrong question
+// once SEAL had been decided. It is back as its own slider for a different reason: the board can
+// now be built at a size with `generate_action_board.py --icons N`, so the number has to be
+// chosen somewhere, and this is the page that can show you it. It opens on geometry.py's SEAL,
+// the readout names that number beside the slider's, and moving it changes nothing but this page.
 // THE TILE'S HEIGHT IS THE OTHER LEVER, and the only one that can make a column of two at the
 // board's SEAL actually fit. RIBBON_H is a real number in geometry.py; this page lets you move it
 // to see what it would take, and then says what moving it costs.
@@ -133,11 +164,12 @@ function column(){
   var nameH = Math.round(GEO.nameSize * GEO.nameLh);
   var top = GEO.nameTop + nameH + gap;
   var avail = innerH - top - GEO.sealInset;
-  var size = GEO.seal;
+  var size = V('size');
   var need = 2 * size + gap;
   var grew = h - GEO.height;
   var wheelH = GEO.wheelH - grew;
-  return {h: h, innerH: innerH, top: top, avail: avail, gap: gap, size: size, need: need,
+  var edge = V('edge');
+  return {h: h, innerH: innerH, top: top, avail: avail, gap: gap, size: size, need: need, edge: edge,
           over: need - avail,
           couldBe: Math.floor((avail - gap) / 2),
           wantRibbon: top + need + GEO.sealInset + 2 * GEO.border,
@@ -210,7 +242,10 @@ function read(c){
   // the wheel just gets smaller -- so this is a mark on a slope, put here to be argued with.
   document.body.classList.toggle('costly', c.grew > 0 && c.grew >= GEO.wheelH / 10);
   document.getElementById('read').innerHTML =
-    'mark   <b>' + c.size + '</b> px   from geometry.py\u2019s SEAL        gap <b>' + c.gap +
+    'mark   <b>' + c.size + '</b> px' +
+      (c.size === GEO.seal ? '   which is geometry.py\u2019s SEAL'
+                           : '   against geometry.py\u2019s SEAL of ' + GEO.seal) +
+      '        gap <b>' + c.gap +
       '</b> px, under the name and between the two\n' +
     'tile   <b>' + GEO.tileW + ' x ' + c.h + '</b>   the column has <b>' + c.avail +
       '</b> px under the name and needs <b>' + c.need + '</b>\n' +
@@ -220,7 +255,20 @@ function read(c){
         'this gap is <b>' + c.couldBe + '</b>, or the tile would have to be <b>' +
         c.wantRibbon + '</b> tall\n') +
     'height <i>' + cost(c) + '</i>   RIBBON_H is ' + GEO.height + '\n' +
-    'drawn  <b>' + (c.size * s).toFixed(0) + '</b> px here';
+    'drawn  <b>' + (c.size * s).toFixed(0) + '</b> px here' +
+    // THE THREE TOGETHER, because all three are what the board needs. This line printed plate and
+    // frame, so the lit was the one value you could not copy off this page -- and it is the one
+    // the board uses for the selected tile.
+    '\n' + 'plate  <b>' + (getComputedStyle(document.body).getPropertyValue('--plate').trim()
+      || '#1E1935') + '</b>   lit <b>' +
+      (getComputedStyle(document.body).getPropertyValue('--plate-lit').trim() || '#3B3160') +
+      '</b>   frame <b>' +
+      (getComputedStyle(document.body).getPropertyValue('--frame').trim() || '#120A25') +
+      '</b>   the border draws dashed in --guide' +
+    (c.edge > 0
+      ? '        border <b>' + c.edge + '</b> px, so each mark gives up <b>' + (2 * c.edge) +
+        '</b> of its <b>' + c.size + '</b> to it'
+      : '');
 }
 
 function fit(c){
@@ -241,12 +289,33 @@ document.getElementById('tall').addEventListener('input', function(){
   document.getElementById('tallv').textContent = V('tall'); place(); });
 document.getElementById('gap').addEventListener('input', function(){
   document.getElementById('gapv').textContent = V('gap'); place(); });
+// PLACE, NOT REBUILD -- place() already sets each mark's width and height from column(), so the
+// size needs nothing the other two sliders do not. Rebuilding would re-decode every inlined
+// picture on every pixel of drag, which is the one thing that would make this page feel slow.
+document.getElementById('size').addEventListener('input', function(){
+  document.getElementById('sizev').textContent = V('size'); place(); });
 document.getElementById('zoom').addEventListener('input', function(){
   document.getElementById('zoomv').textContent = (V('zoom')/100).toFixed(1) + '×';
   fit(); read(column()); });
-document.getElementById('edge').onclick = function(){
-  var on = document.body.classList.toggle('edged');
-  this.setAttribute('aria-pressed', String(on)); };
+// THE SLIDER OWNS IT; THE BUTTON IS A SHORTCUT. It sets the slider rather than toggling a class
+// of its own, so there is no second answer to "is there a border" that could drift from the first.
+// It returns to the last thickness you chose rather than always to 1, because snapping a 5 px
+// border back to 1 on the way to comparing it is the thing that makes a toggle annoying.
+var lastEdge = 1;
+function applyEdge(){
+  var w = V('edge');
+  if (w > 0) lastEdge = w;
+  document.body.style.setProperty('--edge-w', w + 'px');
+  document.body.classList.toggle('edged', w > 0);
+  document.getElementById('edgev').textContent = w > 0 ? w : 'off';
+  document.getElementById('edgetoggle').setAttribute('aria-pressed', String(w > 0));
+  read(column());
+}
+document.getElementById('edge').addEventListener('input', applyEdge);
+document.getElementById('edgetoggle').onclick = function(){
+  var e = document.getElementById('edge');
+  e.value = (V('edge') > 0) ? 0 : lastEdge;
+  applyEdge(); };
 document.getElementById('guides').onclick = function(){
   var on = document.body.classList.toggle('guides');
   this.setAttribute('aria-pressed', String(on)); };
@@ -256,5 +325,43 @@ document.getElementById('laptop').onclick = function(){
   z.dispatchEvent(new Event('input'));
   this.setAttribute('aria-pressed', String(z.value == 69)); };
 
+// THE PALETTE IS THE PAGE'S, NOT THE BOARD'S. geometry.py owns no colour -- the plate lives in
+// the action board's own stylesheet -- so these five are a proposal you look at here and then
+// type into action_board.html.tmpl if you want one. Nothing is written down by clicking.
+//
+// AND EACH ONE CARRIES ITS LIT, which these five did not and should have from the start. The
+// board lifts the SELECTED tile to --plate-lit, and the picker set --plate and --frame and left
+// that one alone -- so taking slate to the board gave eight slate tiles and one that was still
+// violet. The swatch here could not have shown it either: nothing in this page reads --plate-lit.
+//
+// DERIVED, NOT PICKED. Each lit is its own plate at +12.8 L* with its chroma multiplied by 1.52,
+// keeping the plate's own hue -- which is the violet pair that was already on the board, measured
+// rather than invented. Running it back through violet returns #3A3160 against the #3B3160 that
+// is there now, one unit in red, so the rule and the board agree about the case we can check.
+var PALETTE = [{"name": "slate", "plate": "#151E25", "lit": "#2B3A46", "frame": "#051017"}, {"name": "amber", "plate": "#2E1800", "lit": "#533013", "frame": "#220900"}, {"name": "oxblood", "plate": "#371017", "lit": "#63222E", "frame": "#270105"}, {"name": "moss", "plate": "#10210D", "lit": "#213F20", "frame": "#001400"}, {"name": "violet", "plate": "#1E1935", "lit": "#3B3160", "frame": "#120A25"}];
+(function(){
+  var holder = document.getElementById('swatches');
+  PALETTE.forEach(function(p, i){
+    var b = document.createElement('button');
+    b.title = p.name + '  plate ' + p.plate + '  lit ' + p.lit + '  frame ' + p.frame;
+    b.style.background = p.plate;
+    b.style.borderColor = p.frame;
+    b.addEventListener('click', function(){
+      document.body.style.setProperty('--plate', p.plate);
+      document.body.style.setProperty('--plate-lit', p.lit);
+      document.body.style.setProperty('--frame', p.frame);
+      [].forEach.call(holder.children, function(o, j){
+        o.setAttribute('aria-pressed', String(j === i)); });
+      read(column());
+    });
+    holder.appendChild(b);
+  });
+  holder.children[PALETTE.length - 1].setAttribute('aria-pressed', 'true');  // opens on the violet
+})();
+
 build();
+// AFTER build(), because applyEdge() reads the column back into the readout and there is nothing
+// to read until the tiles exist. This is what puts aria-pressed on the button at load rather than
+// leaving it absent until the first click -- the state was right, it just was not being said.
+applyEdge();
 </script>

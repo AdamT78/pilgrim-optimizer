@@ -65,8 +65,10 @@ re-export clips at the canvas edge. **The three are meant to be interchangeable 
 the correction belongs here rather than in a control.**
 
 Sizing lives in the lab's TITHE panel, not in these files, and it is two numbers: one `tokenSize`
-for all three, and a `tokenSpread` that is the side of the invisible equilateral triangle their
-centres stand on. There is no per-resource scale. There was one, and it was a slider that let the
+for all three, and a `tokenSpread` that is the distance from one centre to the next. It has meant
+three arrangements now -- side by side, then the side of an invisible equilateral triangle, and
+now the step down a column -- and it is the same number each time, which is the point of naming it
+for the spacing rather than for the shape. There is no per-resource scale. There was one, and it was a slider that let the
 studio correct silver by hand -- which would have papered over the fault above while leaving the
 production pipeline to reproduce it.
 

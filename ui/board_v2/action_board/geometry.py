@@ -80,13 +80,11 @@ STATUS_SIZE = 16
 # width is whatever is left: (1344 - 7*16) / 8 = 154. The layout lab's 159 came from a 10px gap,
 # which is the one place the board had a third spacing in it.
 RIBBON_Y = STATUS["y"] + STATUS["height"] + GAP   # 55, derived so the rule cannot drift
-RIBBON_H = 242
 TILE_GAP = GAP
 TILE_W = (WORK_W - 7 * TILE_GAP) // 8           # 154
 TILE_PITCH = TILE_W + TILE_GAP
 TILE_NAME_SIZE = 13
 
-TILE_INNER_W, TILE_INNER_H = inner(TILE_W, RIBBON_H)      # 152 x 150
 
 # THE LINE HEIGHT IS SET RATHER THAN GUESSED. This was TILE_NAME_SIZE * 1.25 against a CSS rule
 # that named no line-height at all, so the browser used Georgia's own and drew a 15px line where
@@ -121,8 +119,59 @@ TILE_NAME_BOTTOM = TILE_NAME_TOP + round(TILE_NAME_SIZE * TILE_NAME_LH)   # 22
 # from RIBBON_H and the rest of the board follows down, so the wheel -- whose height is whatever
 # the canvas has left -- gives up all 90 pixels and narrows by about twice that.
 # icon_lab/generate_tile_column.py is the page that decided it and prices any other height.
-SEAL = 100
+SEAL = 72
 SEAL_INSET = INSET
+
+# THE RIBBON IS AS TALL AS WHAT IT HOLDS, rather than a number somebody typed. One inset does
+# every job in the tile -- under the name, between the two marks, and under the lower one -- so
+# the column hangs at a single rhythm and the tile stops at the same distance below the last mark
+# as the marks keep between themselves. It was 242 with a mark of 100; at 72 it is this.
+RIBBON_H = 2 * BORDER + TILE_NAME_BOTTOM + 3 * SEAL_INSET + 2 * SEAL     # 186
+
+# MOVED DOWN WITH IT. The tile's inner box is measured off RIBBON_H, and RIBBON_H is no longer a
+# number typed near the top -- it is derived from the marks it has to hold, which are declared
+# below the name. So this follows them rather than preceding them.
+TILE_INNER_W, TILE_INNER_H = inner(TILE_W, RIBBON_H)      # 152 x 184
+
+# THE ROAD. A strip the full width of the working area, between the ribbon and the action cards,
+# reserved for the Merchant -- which rides the eight duty tiles and advances one clockwise at each
+# round end, so it travels along the row rather than around anything. Nothing is drawn in it yet.
+#
+# ITS HEIGHT IS WHAT THE SHORTER RIBBON FREED, and that is the point: ART_Y stays exactly where it
+# was, so the cards, the confirm row and the wheel do not move and the wheel pays nothing. 40 is
+# what falls out of 242 - 186 less the two gaps that now sit either side of the strip.
+ROAD_H = 40
+ROAD_Y = RIBBON_Y + RIBBON_H + GAP
+ROAD_X = X0
+ROAD_W = WORK_W
+ROAD = {"x": ROAD_X, "y": ROAD_Y, "width": ROAD_W, "height": ROAD_H}
+
+
+def configure(seal: int) -> None:
+    """Set the mark size at launch and recompute the two numbers that hang off it.
+
+    THE ONLY SUPPORTED OVERRIDE, and it exists so a size can be tried without editing this file
+    and remembering to put it back. Everything else here stays typed where it is: this is not a
+    settings system, it is one lever with one caller.
+
+    TOKEN and TOKEN_SPREAD are reassigned because they are DERIVED FROM SEAL, and a flag that
+    moved the tile marks while leaving the Tithe's three at 100 would be the exact bug the
+    comment above TOKEN exists to prevent -- a seal and a coin are meant to be interchangeable
+    at one size. Everything else reads SEAL through seal_slots(), token_slots() and as_dict(),
+    which look it up when they are called, so they need nothing done to them.
+
+    WHAT THIS DOES NOT DO IS MOVE THE RIBBON. RIBBON_H is 242 because a column of two at 100 asks
+    for it; a larger mark does not grow the tile to fit, it overflows it. That is deliberate --
+    the ribbon's height is paid for by the wheel, and pricing it is
+    icon_lab/generate_tile_column.py's job, not a flag's. check() is what refuses the overflow,
+    so call it after this and believe what it says.
+    """
+    global SEAL, TOKEN, TOKEN_SPREAD
+    if seal < 1:
+        raise SystemExit("a mark of %d px is not a size" % seal)
+    SEAL = seal
+    TOKEN = token_cap(SEAL)
+    TOKEN_SPREAD = TOKEN + INSET
 
 # EVERY DISC ON THIS BOARD FILLS THIS MUCH OF ITS OWN SQUARE, and the number lives here rather
 # than in a README because it has now been got wrong three times: the three coins, then the three
@@ -148,7 +197,7 @@ DISC_CLEARANCE = 0
 # taller box. The masters are generated at 2:1, so `fit: cover` crops nothing at all -- what the
 # generator drew is what the card shows, end to end. Every earlier shape clipped something: the
 # 375 x 184 slot took 1.9% of the height, and a 600 x 320 box took 6.25% of the width.
-ART_Y = RIBBON_Y + RIBBON_H + GAP                # 177
+ART_Y = ROAD_Y + ROAD_H + GAP                    # 313, unchanged: the road took the slack
 
 # THE CARDS ARE MEASURED OFF THE RIBBON'S GRID, NOT TYPED. The right-hand column is ONE DUTY TILE
 # wide and sits under Allocation, so everything in it -- Take Tithe, Show Map, Hire Building, the
@@ -169,16 +218,30 @@ ART_W = 3 * TILE_W + 2 * TILE_GAP                # 494
 # shows, end to end. The earlier 579 x 205 was 2.82:1 and threw away 30% of every illustration.
 ART_H = ART_W // 2                               # 247, exactly half
 
-# THE TITHE SPANS THE LAST TWO TILES, Ordination and Allocation, starting where the second card
-# stops leaving room. The three boxes BELOW it keep the single tile's width they already had, so
-# this is the one box on the board whose width is not the column's.
-TITHE_X = X0 + 6 * TILE_PITCH                    # 1048, Ordination's left edge
-TITHE_W = 2 * TILE_W + TILE_GAP                  # 324, out to Allocation's right edge
-
-# Show Map, Hire Building and the City stay one tile wide, under Allocation.
+# Show Map, Hire Building and the City stay one tile wide, under Allocation. THEY NO LONGER LINE
+# UP WITH THE TITHE, and that is the cost of centring the row: the Tithe moved with the cards to
+# TITHE_X and this column stayed on the board's right margin, so the two are 93 apart. It is the
+# one visible seam in this arrangement and it is deliberate -- a row aligned to the ribbon and a
+# column aligned to the margin cannot both be had.
 SIDE_W = TILE_W
 SIDE_X = X0 + WORK_W - SIDE_W
+
 ART_GAP = GAP
+
+# THE CARD ROW IS CENTRED ON THE RIBBON'S TILES, not aligned to their edges. It begins at the
+# middle of the first tile and ends at the middle of the last, so the row reads as hung beneath
+# the eight rather than butted against them, and the ribbon's own rhythm sets where it starts.
+ROW_X = X0 + TILE_W // 2                         # 105, Clerical's centre
+ROW_END = X0 + 7 * TILE_PITCH + TILE_W // 2      # 1295, Allocation's centre
+ROW_W = ROW_END - ROW_X                          # 1190
+
+# AND THE TITHE TAKES WHAT IS LEFT OF IT, which comes to TILE_PITCH exactly -- one tile and one
+# gap. That is the number that makes this arrangement work rather than nearly work: the two cards
+# stay three tiles wide, every gap stays 16, ART_H does not move, and so nothing below the cards
+# moves and the wheel pays nothing. Holding the Tithe at one bare tile instead would have forced
+# the card to 502 and the card's height to 251, which the wheel would have paid for.
+TITHE_W = ROW_W - 2 * ART_W - 2 * ART_GAP        # 170 == TILE_PITCH
+TITHE_X = ROW_X + 2 * ART_W + 2 * ART_GAP        # 1125
 ART_RATIO = ART_W / ART_H                        # 2.0 exactly
 
 # The action NAME is printed on the picture, top left. The effect line is NOT: it moved off the
@@ -227,7 +290,25 @@ TITHE_LABEL_H = round(TITHE_LABEL_SIZE * CAP_LH)         # 17
 # at 64 beside duty action seals of 78, which made the third choice on this row look like a lesser
 # kind of thing than the two beside it. It is not: taking the tithe is the same sort of move. The
 # token takes the seal's size, and nothing here is free to disagree with it.
-TOKEN = min(SEAL, (TITHE_INNER_W_PRE - 2 * INSET - INSET) // 2)
+def token_cap(seal: int) -> int:
+    """The biggest a Tithe token can be, which is not always the mark's size.
+
+    THE COLUMN'S HEIGHT BINDS IT NOW. While the Tithe was two tiles wide with the three tokens
+    side by side, the question was how many fit across. One tile wide with them in a column it is
+    how many fit DOWN, and that height is ART_H -- a number chosen for the artwork. The width term
+    alone reports 67 and would let a column of three overflow its box by 11.
+
+    WRITTEN ONCE BECAUSE IT IS ASKED TWICE: here, and again in configure() when --icons moves the
+    mark size. Two copies would answer the same question differently the first time either was
+    tuned, which is the shape of fault this file exists to prevent.
+    """
+    room = (ART_H - 2 * BORDER) - (TITHE_LABEL_TOP + TITHE_LABEL_H + INSET) - INSET
+    return min(seal,
+               (TITHE_INNER_W_PRE - 2 * INSET - INSET) // 2,
+               (room - 2 * INSET) // 3)
+
+
+TOKEN = token_cap(SEAL)
 TOKEN_SPREAD = TOKEN + INSET
 TOKEN_ORDER = ("wheat", "stone", "silver")
 
@@ -237,8 +318,10 @@ TOKEN_ORDER = ("wheat", "stone", "silver")
 # the other way, picking a gap and hoping, is how the label gets quietly pushed out of the box.
 TITHE_INNER_W, TITHE_INNER_H = inner(TITHE_W, ART_H)         # 322 x 245
 # TOKEN_X, TOKEN_Y, TOKEN_GAP, TOKEN_TOP and TOKEN_COLUMN_H ARE GONE. Every one of them described
-# a vertical stack -- a first row, a gap repeated twice, a column height to centre in -- and the
-# three resources sit on a triangle now. token_slots() below says where they are, and TOKEN_SPREAD
+# a vertical stack -- a first row, a gap repeated twice, a column height to centre in -- and they
+# were deleted when the three resources went onto a triangle. The three are back IN a column now,
+# and these do not come back with them: the point was never the arrangement, it was that five
+# constants cannot be rearranged. token_slots() below says where the three are, and TOKEN_SPREAD
 # is the only number it needs.
 
 # ---- the acolyte -----------------------------------------------------------------------------
@@ -451,8 +534,8 @@ def seal_slots(n: int) -> list:
 def art_slots() -> dict:
     """The two picture boxes. The confirm under each is derived, not stored -- one less thing
     to drag out of register, and one less number for a saved file to disagree about."""
-    return {"actionA": {"x": X0, "y": ART_Y, "width": ART_W, "height": ART_H},
-            "actionB": {"x": X0 + ART_W + ART_GAP, "y": ART_Y,
+    return {"actionA": {"x": ROW_X, "y": ART_Y, "width": ART_W, "height": ART_H},
+            "actionB": {"x": ROW_X + ART_W + ART_GAP, "y": ART_Y,
                         "width": ART_W, "height": ART_H}}
 
 
@@ -471,6 +554,7 @@ def as_dict() -> dict:
         "canvas": {"width": CANVAS_W, "height": CANVAS_H},
         "gap": GAP, "gapWide": GAP_WIDE, "x0": X0, "workW": WORK_W,
         "status": dict(STATUS, size=STATUS_SIZE),
+        "road": dict(ROAD),
         "ribbon": {"y": RIBBON_Y, "height": RIBBON_H, "tileW": TILE_W, "tileGap": TILE_GAP,
                    "pitch": TILE_PITCH, "nameSize": TILE_NAME_SIZE,
                    "nameTop": TILE_NAME_TOP, "nameLh": TILE_NAME_LH,
@@ -524,15 +608,19 @@ def gaps() -> dict:
     # The board's outer MARGIN is X0 and is not a gap -- check() asserts the column lands on it.
     g = {
         "status -> ribbon": RIBBON_Y - (STATUS["y"] + STATUS["height"]),
-        "ribbon -> art": ART_Y - (RIBBON_Y + RIBBON_H),
+        "ribbon -> road": ROAD_Y - (RIBBON_Y + RIBBON_H),
+        "road -> art": ART_Y - (ROAD_Y + ROAD_H),
         "art -> confirm": CONFIRM_Y - (ART_Y + ART_H),
         "confirm -> wheel": WHEEL_Y - (CONFIRM_Y + CONFIRM_H),
         "wheel -> canvas foot": CANVAS_H - (WHEEL_Y + WHEEL_H),
-        "card A -> card B": art_slots()["actionB"]["x"] - (X0 + ART_W),
+        # MEASURED FROM THE ROW, NOT THE MARGIN. These two read 93 the moment the row moved
+        # off X0 and onto the first tile's centre -- the gaps had not changed at all, the
+        # thing they were measured from had.
+        "card A -> card B": art_slots()["actionB"]["x"] - (ROW_X + ART_W),
         # THE BOX BESIDE THE CARDS IS THE TITHE, NOT THE COLUMN BELOW IT. Measured to SIDE_X
         # this read 186 -- the distance to a box three rows further down, which is not a gap
         # anybody can see.
-        "cards -> tithe": TITHE_X - (X0 + ART_W + ART_GAP + ART_W),
+        "cards -> tithe": TITHE_X - (ROW_X + ART_W + ART_GAP + ART_W),
         "tithe -> its confirm": CONFIRM_Y - (TITHE["y"] + TITHE["height"]),
         "show map -> hire": HIRE_Y - (MAP_Y + STANDING_H),
         "hire -> city": CITY_Y - (HIRE_Y + STANDING_H),
@@ -586,23 +674,25 @@ def check() -> list:
                    % (tokens_end, TITHE_INNER_H - INSET))
     # THE TITHE'S DISCS HAVE TO CLEAR EACH OTHER TOO, by the same rule as the tile's marks and for
     # the same reason: the drawn disc is SOLID_FRACTION of its square, so a gap that looks safe
-    # between boxes can still have two wax discs touching. On the triangle every pair of centres
-    # is TOKEN_SPREAD apart, so one number answers for all three.
+    # between boxes can still have two wax discs touching. In a column the NEAREST pair is
+    # TOKEN_SPREAD apart and the outer two are twice that, so testing the nearest answers for all
+    # three -- as it did on the triangle, where every pair was TOKEN_SPREAD. The sentence changed
+    # and the test did not, which is the property TOKEN_SPREAD was named for.
     touch = SOLID_FRACTION * TOKEN
     if TOKEN_SPREAD < touch + DISC_CLEARANCE:
         bad.append("three Tithe seals of %d stand %d apart and their discs meet at %.1f, so they "
                    "clear each other by %.1f" % (TOKEN, TOKEN_SPREAD, touch, TOKEN_SPREAD - touch))
     if TOKEN > TITHE_W - 2 * INSET:
         bad.append("a Tithe seal of %d does not fit a box %d wide" % (TOKEN, TITHE_W))
-    # THE CARDS AND THE TITHE STAND ON THE RIBBON'S OWN EDGES, which is the claim this layout
-    # makes and the one thing no other guard here would notice going wrong.
+    # THE ROW STANDS ON THE RIBBON'S CENTRES, which is the claim this layout makes and the one
+    # thing no other guard here would notice going wrong. It used to stand on their EDGES, and
+    # these two lines are the whole difference between the old arrangement and this one.
     t = tiles()
-    for label, got, want in (("card one's right edge", X0 + ART_W, t["produce"]["x"] + TILE_W),
-                             ("card two's right edge", X0 + ART_W + ART_GAP + ART_W,
-                              t["give_alms"]["x"] + TILE_W),
-                             ("the Tithe's left edge", TITHE_X, t["ordination"]["x"]),
-                             ("the Tithe's right edge", TITHE_X + TITHE_W,
-                              t["allocation"]["x"] + TILE_W)):
+    half = TILE_W // 2
+    for label, got, want in (("the row's left edge", ROW_X, t["clerical"]["x"] + half),
+                             ("the row's right edge", TITHE_X + TITHE_W,
+                              t["allocation"]["x"] + half),
+                             ("the Tithe's width", TITHE_W, TILE_PITCH)):
         if got != want:
             bad.append("%s is at %d and the tile above it at %d" % (label, got, want))
 
@@ -649,6 +739,19 @@ def check() -> list:
                            "above the tile's lower edge"
                            % (n, s["y"] - TILE_NAME_BOTTOM, TILE_INNER_H - s["y"] - SEAL))
 
+    # AND THE LAST MARK LEAVES WHAT THE PAIR KEEP BETWEEN THEM, which is the rule RIBBON_H is now
+    # DERIVED from -- so without this line the derivation is a comment rather than something the
+    # board is held to. The box test above does not reach it: a mark of 73 stays well inside the
+    # tile and merely sits two pixels nearer the edge than the pair sit from each other, which is
+    # the whole of what the shorter ribbon was asked for. 76 is where it starts to overflow, and
+    # by then the tile has been wrong for three sizes without complaint.
+    last = seal_slots(2)[-1]
+    under = TILE_INNER_H - (last["y"] + SEAL)
+    if under != SEAL_INSET:
+        bad.append("the lower seal leaves %d under it inside a tile while the pair keep %d "
+                   "between them, so the ribbon is no longer the height of what it holds"
+                   % (under, SEAL_INSET))
+
     # THE DISCS HAVE TO CLEAR, NOT THE BOXES. Two boxes can overlap at a corner and still leave
     # the drawn discs apart, because each disc is only SOLID_FRACTION of its square -- so the box
     # arithmetic is not the thing to assert. The first arrangement passed every box test above
@@ -676,22 +779,22 @@ if __name__ == "__main__":                                   # pragma: no cover 
 
 
 def token_slots() -> list:
-    """The three Tithe resources on an equilateral TRIANGLE, two below and one centred above.
+    """The three Tithe resources in a COLUMN, centred, TOKEN_SPREAD apart.
 
-    A COLUMN OF THREE IS SIZED BY ITS BOX'S HEIGHT; A TRIANGLE BY ITS WIDTH. That is the whole
-    reason to change it. The Tithe box IS the action card's box -- its height is ART_H -- so a
-    stack of three was hostage to a number chosen for the artwork: shorten the cards to make room
-    for taller duty tiles and the Tithe resources had to shrink with them. On a triangle the
-    binding constraint is the bottom pair against SIDE_W, which no card height can touch.
+    A ROW, A TRIANGLE, A ROW, AND NOW A COLUMN -- and every change was the box changing shape
+    rather than anybody's taste. Side by side wants width and the box had it at two tiles wide;
+    on a triangle the width binds and no card height can touch it; in a column the HEIGHT binds,
+    and that height is ART_H, chosen for the artwork. One tile wide, a column is the only
+    arrangement that reads, and token_cap() is what keeps three of them inside the box.
 
-    TOKEN_SPREAD IS THE SIDE OF THE TRIANGLE THE THREE CENTRES STAND ON, which is the vocabulary
-    tokens/README.md already uses for this arrangement.
+    TOKEN_SPREAD IS STILL CENTRE TO CENTRE, as it was for the row and for the triangle's side, so
+    check()'s touch test goes on measuring one number whatever the arrangement.
     """
-    half = TOKEN_SPREAD / 2.0
-    rise = TOKEN_SPREAD * (3 ** 0.5) / 2.0
     cx = TITHE_INNER_W / 2.0
-    cy_top = TITHE_LABEL_TOP + TITHE_LABEL_H + INSET + TOKEN / 2.0
-    cy_bot = cy_top + rise
-    centres = [(cx, cy_top), (cx - half, cy_bot), (cx + half, cy_bot)]
+    top = TITHE_LABEL_TOP + TITHE_LABEL_H + INSET
+    bottom = TITHE_INNER_H - INSET
+    span = 2 * TOKEN_SPREAD + TOKEN
+    y0 = top + (bottom - top - span) / 2.0 + TOKEN / 2.0
+    centres = [(cx, y0), (cx, y0 + TOKEN_SPREAD), (cx, y0 + 2 * TOKEN_SPREAD)]
     return [{"x": int(round(x - TOKEN / 2.0)), "y": int(round(y - TOKEN / 2.0)), "size": TOKEN}
             for x, y in centres]

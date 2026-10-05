@@ -8,11 +8,17 @@ discs, where one resting on another reads as depth; the marks are squares with c
 corner cutting into a neighbour reads as a mistake. This page asks what the obvious alternative
 looks like.
 
-EVERY NUMBER IS GEOMETRY.PY'S, INCLUDING THE MARK'S SIZE. The size is `SEAL`, read from the
-board, so what you are looking at is the board as it would be rather than a sketch of a board that
-might be. What the page lets you move is the gap and the tile's height, which is RIBBON_H -- and
-those are the only two levers there are, because at SEAL = 100 a column of two does not fit the
-ribbon as it stands.
+EVERY NUMBER STARTS AS GEOMETRY.PY'S. The page opens on the board's own `SEAL`, `GAP` and a tile
+height worth looking at, so what you see first is the board as it would be rather than a sketch of
+a board that might be. Three sliders move from there: the gap, the tile's height -- which is
+RIBBON_H -- and the mark's size.
+
+THE SIZE IS A LEVER BECAUSE THE BOARD NOW TAKES ONE. It used to be fixed here on the argument that
+SEAL had been decided, which was true while the only way to draw a different size was to edit
+geometry.py. `generate_action_board.py --icons N` made it a real choice, so the number needs a
+place to be chosen, and this is the page that can show you it against the tile it has to fit.
+Nothing here writes it down: the readout names geometry.py's SEAL beside the slider's whenever the
+two differ, and what you decide goes to --icons or into geometry.py by hand.
 
 ONE GAP, TWO JOBS. The gap is the space under the duty's name as well as the space between its two
 marks, so the column hangs from the name at the rhythm it keeps inside itself instead of floating
@@ -67,6 +73,13 @@ GAP = 15
 # NOTHING HERE MOVES THE BOARD. RIBBON_H in geometry.py is untouched and the readout still names
 # it beside this one, so the page cannot be mistaken for the board it is proposing.
 START_H = 265
+
+# AND THE MARK SIZE THE PAGE OPENS ON, WHICH IS THE BOARD'S. Unlike the two above it this one is
+# not a number chosen for the page -- it is read straight from geometry.py, so the page opens on
+# the board you have and the slider is what proposes something else. It is also what the fit
+# arithmetic below reports on, for the same reason the gap is: a build that printed a verdict on a
+# size the page does not open at would be reporting on a page nobody is looking at.
+START_SEAL = G.SEAL
 
 TEXT = json.loads((BOARD / "duty_text.json").read_text(encoding="utf-8"))["duties"]
 REC = json.loads((BOARD / "attribution.json").read_text(encoding="utf-8"))["files"]
@@ -133,7 +146,8 @@ def main():
         raise SystemExit("the template is not at %s" % TMPL)
     page = TMPL.read_text(encoding="utf-8")
     fill = {"__GEO__": json.dumps(GEO), "__DUTIES__": json.dumps(duties),
-            "__START_H__": str(START_H), "__GAP__": str(GAP)}
+            "__START_H__": str(START_H), "__GAP__": str(GAP),
+            "__START_SEAL__": str(START_SEAL)}
     for token, value in fill.items():
         if token not in page:
             raise SystemExit("the template has no %s in it, so the build would be dropped on "
@@ -143,18 +157,18 @@ def main():
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(page, encoding="utf-8")
     print("  wrote %s  (%d KB)" % (OUT, len(page.encode("utf-8")) // 1024))
-    print("  %d tiles, %d marks, drawn at SEAL = %d"
-          % (len(duties), sum(len(d["slots"]) for d in duties), G.SEAL))
+    print("  %d tiles, %d marks, opening at %d px (geometry.py's SEAL)"
+          % (len(duties), sum(len(d["slots"]) for d in duties), START_SEAL))
 
     # WHETHER IT FITS, SAID ON EVERY BUILD. The page shows it, but a build that printed nothing
     # while the marks overflowed their tile would be a build that looked fine.
     name_h = round(GEO["nameSize"] * GEO["nameLh"])
     top = GEO["nameTop"] + name_h + GAP
     avail = GEO["innerH"] - top - GEO["sealInset"]
-    if 2 * G.SEAL > avail:
+    if 2 * START_SEAL > avail:
         print("  two marks of %d need %d px and the tile has %d under its name"
-              % (G.SEAL, 2 * G.SEAL, avail))
-        want = top + 2 * G.SEAL + GAP + GEO["sealInset"] + 2 * G.BORDER
+              % (START_SEAL, 2 * START_SEAL, avail))
+        want = top + 2 * START_SEAL + GAP + GEO["sealInset"] + 2 * G.BORDER
         grew = want - G.RIBBON_H
         tall = G.WHEEL_H - grew
         print("  a column wants RIBBON_H of about %d against today's %d" % (want, G.RIBBON_H))

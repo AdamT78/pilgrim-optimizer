@@ -91,7 +91,8 @@ def test_the_module_is_the_boards_module_and_every_object_is_drawn(cc, page):
     # All eight tiles, under the names G.DUTIES gives them and in its order.
     for _slug, name, _deg in G.DUTIES:
         assert ">%s<" % name in page, "%s has no tile on the page" % name
-    for label in ("status", "action art L", "action art R", "confirm", "tithe", "city"):
+    for label in ("status", "road", "action art L", "action art R",
+                  "confirm L", "confirm R", "confirm tithe", "tithe", "city"):
         assert ">%s<" % label in page, "no box labelled %r" % label
 
     # THE RIBBON IS ON ONE PITCH, asserted rather than assumed: eight tiles evenly spaced is the
@@ -100,6 +101,32 @@ def test_the_module_is_the_boards_module_and_every_object_is_drawn(cc, page):
         assert ('style="left:%dpx;top:%dpx;width:%dpx;height:%dpx"'
                 % (G.X0 + i * G.TILE_PITCH, G.RIBBON_Y, G.TILE_W, G.RIBBON_H)) in page, (
             "tile %d is not at the board's own pitch" % i)
+
+    # THE CARD ROW AT ITS OWN SLOTS, not at arithmetic this page repeats. The page built these
+    # two from X0 and they were right for as long as the row began at the margin; when the row
+    # moved onto the first tile's centre the page went on drawing them at the old x, and nothing
+    # failed, because a box in the wrong place still renders. The rect sweep below could not see
+    # it either -- art_slots() is not a top-level rect in as_dict(). Hence this, by name.
+    for key in ("actionA", "actionB"):
+        r = G.art_slots()[key]
+        assert ('style="left:%dpx;top:%dpx;width:%dpx;height:%dpx"'
+                % (r["x"], r["y"], r["width"], r["height"])) in page, (
+            "%s is not drawn where art_slots() puts it" % key)
+
+    # THE CONFIRM ROW IS THREE BOXES. The page drew one bar from X0 across PLAY_W -- a width
+    # nothing on the board occupies, running past the Tithe and stopping short of the side column.
+    # It was invisible while the row began at the margin and obvious the moment it did not, which
+    # is the worst way for a layout page to be wrong: right by coincidence, then quietly not.
+    confirm = G.as_dict()["confirm"]
+    for key in ("actionA", "actionB", "tithe"):
+        r = confirm[key]
+        assert ('style="left:%dpx;top:%dpx;width:%dpx;height:%dpx"'
+                % (r["x"], r["y"], r["width"], r["height"])) in page, (
+            "the confirm under %s is not drawn at the rect geometry gives it" % key)
+    # AND NOT THE OLD BAR, which would otherwise be allowed to sit underneath them.
+    assert ('style="left:%dpx;top:%dpx;width:%dpx;height:%dpx"'
+            % (G.X0, G.CONFIRM_Y, G.PLAY_W, G.CONFIRM_H)) not in page, (
+        "the single confirm bar across PLAY_W is back")
 
     # The one real drawing, at geometry's own rect.
     assert "<svg" in page, "the wheel SVG is not inlined"
