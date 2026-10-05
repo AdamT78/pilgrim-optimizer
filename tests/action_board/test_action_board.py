@@ -841,6 +841,80 @@ def test_the_tile_colour_is_one_of_the_icon_labs_plates_taken_whole():
         % (plate, lit, sorted((p["plate"], p["lit"], p["name"]) for p in palette)))
 
 
+def test_a_hovered_tile_rises_without_taking_any_room_to_do_it():
+    """The lift is a transform, it rides on the cross-highlight, and it gives back what it takes.
+
+    THREE CLAIMS, AND EACH ONE IS A FAULT AVOIDED.
+
+    It is a TRANSFORM, so the tile moves what it draws and not what it reserves. Everything below
+    RIBBON_Y is derived from it, so a lift written as a height, a margin or a top would ripple
+    down through the road, the cards and the wheel -- or fight the inline `top` the generator
+    writes from geometry.
+
+    It rides on `.lit`, which is what makes "lift it when its wheel face is hovered" free.
+    lightFace() already answers which duty the pointer is on from either end, so the second
+    direction needs no listener of its own; one would be the two-places-one-fact fault that class
+    exists to prevent.
+
+    And `::after` refills the strip the tile vacates, because hover is recomputed from what the
+    pointer is OVER: slide a tile out from under a pointer resting in its lowest few pixels and it
+    un-hovers, drops, re-hovers and shudders. Measured in a browser, and the first measurement was
+    wrong -- with a perfectly still pointer nothing re-hit-tests and it looks fine. Moving the
+    pointer a pixel, as a hand does, flickers across a band exactly --lift tall.
+
+    Falsified by lifting with anything but a transform, by hanging it off a second listener, or by
+    letting the strip and the lift stop being the same number.
+    """
+    page = TMPL.read_text(encoding="utf-8")
+    css = re.sub(r"/\*.*?\*/", " ", page, flags=re.S)
+    assert len(re.findall(r"--lift:\s*\d+px", css)) == 1, "--lift is not defined exactly once"
+
+    lit = re.search(r"\.tile\.lit[^{]*\{([^}]*)\}", css)
+    assert lit, ".tile.lit is gone"
+    assert "transform:translateY" in lit.group(1), (
+        "the tile does not rise by a transform: %s" % lit.group(1).strip())
+    assert "var(--lift)" in lit.group(1), "the lift is not read from --lift"
+    for owned in ("top:", "bottom:", "margin", "height:"):
+        assert owned not in lit.group(1), (
+            "the lift sets %s, which is geometry's to place, not the hover's to move" % owned)
+
+    # THE SELECTED TILE RISES BY THE SAME RULE, which is what stops a click moving anything. You
+    # are pointing at a tile when you click it, so it is already up; if selection had a height of
+    # its own the tile would jerk under your finger at the moment you pressed it. Asserted as ONE
+    # RULE rather than two equal values, because two values that happen to match today are exactly
+    # how they stop matching tomorrow.
+    assert re.search(r"\.tile\.lit\s*,\s*\.tile\.sel\s*\{"
+                     r"|\.tile\.sel\s*,\s*\.tile\.lit\s*\{", css), (
+        "the hover and the selection do not rise by the same rule, so clicking a tile you are "
+        "pointing at will move it")
+    sel = re.search(r"\.tile\.sel\{([^}]*)\}", css)
+    if sel:
+        assert "transform" not in sel.group(1), (
+            "the selected tile has a transform of its own as well: %s" % sel.group(1).strip())
+
+    strip = re.search(r"\.tile\.lit::after[^{]*\{([^}]*)\}", css)
+    assert strip, (
+        "the tile does not give back the strip it rises out of, so a pointer in its bottom few "
+        "pixels will un-hover it and the tile will shudder")
+    assert "top:100%" in strip.group(1), "the strip is not where the tile's lower edge was"
+    assert "height:var(--lift)" in strip.group(1), (
+        "the strip's height is not --lift itself, so it can stop matching the distance the tile "
+        "rises: %s" % strip.group(1).strip())
+
+    # THE SECOND DIRECTION IS NOT A SECOND LISTENER. If a future change moves the lift onto its
+    # own :hover rule, this still passes the CSS checks above and the wheel stops lifting tiles.
+    code = re.sub(r"(?m)^\s*//.*$", "", page)
+    assert ".tile:hover" not in css, (
+        "the lift is on the tile's own :hover, so hovering a wheel face no longer raises it")
+    face = code.split("function lightFace(")[1].split("\nfunction ")[0]
+    assert 'classList.toggle("lit"' in face and "tile" in face, (
+        "lightFace() no longer sets `lit` on the tile, so the lift has lost the half of its "
+        "wiring that comes from the wheel")
+
+    assert re.search(r"@media\s*\(prefers-reduced-motion:\s*reduce\)", css), (
+        "the tile animates with no way for a reader who asked for less motion to turn it off")
+
+
 def test_clicking_a_mark_selects_the_action_it_stands_for():
     """A mark IS its action, so pressing one has to put that action down.
 

@@ -27,6 +27,10 @@
      together: --plate-lit is the SELECTED tile, so taking one number and leaving the other gives
      seven slate tiles and one that is still the old hue. There is a guard for that now. */
   --plate:#151E25; --plate-lit:#2B3A46; --guide:#6a5f48;
+  /* HOW FAR A HOVERED TILE RISES. Here and not in geometry.py, deliberately: geometry owns what
+     the board RESERVES, and this reserves nothing -- it is a transform, so no number downstream
+     of RIBBON_Y can feel it. The 16 above the ribbon is what it rises into. */
+  --lift:6px;
 }
 *{box-sizing:border-box}
 html,body{margin:0;background:#07070a;color:var(--ink);
@@ -66,13 +70,45 @@ body.full{background:#000}
   font-family:Georgia,serif;color:#e8dfca;white-space:nowrap;overflow:hidden}
 
 /* ---- the eight duty tiles -------------------------------------------------------------- */
-.tile{border:1px solid #2a2721;border-radius:4px;background:var(--plate);cursor:pointer}
+.tile{border:1px solid #2a2721;border-radius:4px;background:var(--plate);cursor:pointer;
+  transition:transform .12s ease-out}
 .tile .nm{position:absolute;left:0;right:0;text-align:center;font-family:Georgia,serif;
   font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--ink)}
 .tile.sel{background:var(--plate-lit);border-color:#60594a}
 /* The cross-highlight: hovering a wheel face lights its tile and the other way round. One class,
-   set from one place, so the two directions cannot drift apart. */
-.tile.lit{border-color:var(--line);box-shadow:0 0 0 1px #c9b27a66}
+   set from one place, so the two directions cannot drift apart.
+
+   AND THE LIFT RIDES ON IT, which is the whole of "lift the tile when its wheel face is hovered
+   too". lightFace() already answers "which duty is the pointer on" from either end, so the second
+   direction needs no wiring -- adding a rule here is cheaper AND more correct than a second
+   listener, which would be the two-places-one-fact fault this class was made to avoid.
+
+   A TRANSFORM COSTS NO LAYOUT. The tile is placed at RIBBON_Y and stays placed there; translate
+   moves what is drawn and not what is reserved, so the road, the cards and the wheel do not feel
+   it. Anything that actually shortened or moved the box would push the whole column down. */
+/* THE LIFT IS THE WHOLE SIGNAL. This rule used to also set a gold border and a gold halo behind
+   it, and with the tile rising as well that was three things saying one thing. Movement is the
+   loudest of the three and the only one that cannot be confused with a state -- the gold rim read
+   as a near relative of the SELECTED tile's lighter plate, on a ribbon where exactly one tile is
+   always selected. The wheel's own faces still brighten; that is their rule, not this one. */
+/* AND THE SELECTED TILE STAYS UP, at exactly the same height. ONE VALUE, TWO SELECTORS, and they
+   have to stay one value: a tile you click is already raised, because you were pointing at it to
+   click it, so matching heights mean it does not move at all under your finger. Give selection a
+   height of its own and every click jerks the tile you just pressed. What changes on the click is
+   the COLOUR -- the new tile takes --plate-lit where it stands, and the old one darkens and sinks.
+   So height says "the pointer is here", plate says "this is the one in play", and the two stop
+   competing for the same signal.
+
+   HOVERING THE SELECTED TILE THEREFORE DOES NOTHING HERE, which is the one hole in this and is
+   covered elsewhere: its face on the wheel still brightens, so the pointer is still answered. */
+.tile.lit, .tile.sel{transform:translateY(calc(-1 * var(--lift)))}
+/* THE TILE KEEPS THE GROUND IT LEAVES. Hover is recomputed from what the pointer is OVER, so a
+   tile that slides out from under a pointer resting in its bottom few pixels un-hovers itself,
+   drops, re-hovers and shudders. This fills the strip it vacated: it is inside the transformed
+   box, so top:100% lands it exactly where the tile's lower edge used to be, and it belongs to the
+   tile for hit-testing. Found by driving the built page with the pointer on the bottom edge. */
+.tile.lit::after, .tile.sel::after{content:"";position:absolute;left:0;right:0;top:100%;height:var(--lift)}
+@media (prefers-reduced-motion:reduce){.tile{transition:none}}
 /* THE PLACEHOLDER IS A DISC; THE REAL SEAL IS NOT. The wax seals are drawn with a scalloped,
    irregular rim, so the container's own circle would show through at every bay of it and the
    round crop would shear the peaks off. Once a picture lands the container stops drawing -- the
