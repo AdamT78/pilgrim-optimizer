@@ -144,6 +144,7 @@ def module_html(m) -> str:
     # ASKED ONCE. Everything below that is not a bare constant comes out of here, so the page and
     # the board cannot disagree about a rect without geometry.py itself disagreeing with it.
     rects = G.as_dict()
+    rects_confirm = rects["confirm"]
 
     st = G.STATUS
     box(st["x"], st["y"], st["width"], st["height"], "status")
@@ -170,7 +171,20 @@ def module_html(m) -> str:
         r = G.art_slots()[key]
         box(r["x"], r["y"], r["width"], r["height"], label)
 
-    box(G.X0, G.CONFIRM_Y, G.PLAY_W, G.CONFIRM_H, "confirm")
+    # THE CONFIRM ROW IS THREE BOXES, NOT ONE BAR. This page drew a single strip from X0 across
+    # PLAY_W, which was never what the board does: there is a confirm under each action card and
+    # one under the Tithe, each the width of the thing it confirms, and only the selected one is
+    # shown. A bar out to PLAY_W also ran past the Tithe and stopped short of the side column, so
+    # it answered the question this page exists for -- how much room does this row take -- with a
+    # width nothing on the board occupies. It showed up the moment the row moved off the margin,
+    # because the bar stayed behind and the register was suddenly visible.
+    #
+    # ALL THREE AT ONCE, though the board shows one at a time: the question here is what the row
+    # RESERVES, and that is all three.
+    for key, label in (("actionA", "confirm L"), ("actionB", "confirm R"),
+                       ("tithe", "confirm tithe")):
+        r = rects_confirm[key]
+        box(r["x"], r["y"], r["width"], r["height"], label)
 
     # THE RIGHT-HAND COLUMN, top to bottom: Tithe beside the art, then the two standing controls,
     # then the City. Taken from as_dict() rather than listed by hand -- the first version of this
