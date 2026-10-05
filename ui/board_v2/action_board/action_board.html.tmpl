@@ -671,6 +671,12 @@ function note(t){ document.getElementById("note").textContent = t || ""; }
 // =================================================================================================
 function drawPhases(){
   var holder = document.getElementById("phases");
+  // REBUILT, NOT ADDED TO. This function is its own click handler, so without this line every
+  // click appended a second set of phase buttons and the row grew by three each time. The loop
+  // that used to sit at the end then walked holder.children against GEO.phases[i], which is
+  // shorter, threw on the undefined, and took note() and setStatus() down with it -- so the
+  // phase line silently stopped updating as well. One clear fixes both.
+  holder.textContent = "";
   GEO.phases.forEach(function(p){
     var b = document.createElement("button");
     b.textContent = p.label;
@@ -684,9 +690,6 @@ function drawPhases(){
     });
     holder.appendChild(b);
   });
-  var kids = holder.children;
-  for (var i = 0; i < kids.length; i++)
-    kids[i].setAttribute("aria-pressed", String(GEO.phases[i].key === S.phase));
 }
 
 function draw(){
