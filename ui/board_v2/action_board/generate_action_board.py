@@ -65,6 +65,7 @@ TEXT_FILE = BOARD / "duty_text.json"
 ATTRIB_FILE = BOARD / "attribution.json"
 ART_DIR = BOARD / "duty_actions"
 TOKEN_DIR = BOARD / "tokens" / "resources"
+SFX_DIR = BOARD / "sfx"
 MANIFEST = BOARD / "metadata" / "action_board.json"
 
 # A duty's marks live under its own folder, beside the pictures of its actions, because they are
@@ -437,13 +438,41 @@ def bundled_tokens() -> tuple[dict, list]:
     return out, notes
 
 
+def bundled_sfx() -> tuple[dict, list]:
+    """The interface sounds, inlined like everything else the page draws.
+
+    THE PAGE IS ONE FILE, and that is the rule a sound has to obey as much as a picture: the
+    board is opened from disk and handed around, so a cue that lived beside it as a separate
+    request would simply be silent for everyone but the person who built it.
+
+    THEY ARE TINY and no re-encode happens here. A mark is 200 x 200 PNG because the page chose
+    its size; a sound has no size to choose, so these are carried across byte for byte -- the two
+    of them together are under 10 KB, which is a two-hundredth of one duty action card.
+
+    NAMED BY WHAT THEY DO, NOT BY WHAT THEY ARE. `tile` and `confirm` are cues; the file that
+    happens to be behind a cue is a choice that will change, and the page should not have to.
+    """
+    out: dict = {}
+    notes: list = []
+    if not SFX_DIR.is_dir():
+        return out, ["no sfx/ at %s, so the board is silent" % SFX_DIR]
+    for cue in ("tile", "confirm"):
+        f = SFX_DIR / ("%s.ogg" % cue)
+        if not f.is_file():
+            notes.append("%s.ogg is missing, so that cue is silent" % cue)
+            continue
+        out[cue] = "data:audio/ogg;base64," + base64.b64encode(f.read_bytes()).decode("ascii")
+    return out, notes
+
+
 def build() -> tuple[str, list]:
     if not TMPL.is_file():
         raise SystemExit("the template is not at %s" % TMPL)
     art, by_duty, notes = bundled_art()
     seals, seal_by_duty, snotes = bundled_seals()
     tokens, tnotes = bundled_tokens()
-    notes += snotes + tnotes
+    sfx, xnotes = bundled_sfx()
+    notes += snotes + tnotes + xnotes
 
     text = duty_text()
     duties = {}
@@ -474,6 +503,7 @@ def build() -> tuple[str, list]:
         "__GEOMETRY__": json.dumps(G.as_dict()),
         "__DUTIES__": json.dumps(duties),
         "__IMAGES__": json.dumps({**art, **seals, **tokens}),
+        "__SFX__": json.dumps(sfx),
         "__WHEEL_SVG__": json.dumps(wheel_svg()),
         "__SAVEKEYS__": json.dumps(SAVE_KEYS),
         "__BUILD__": json.dumps({"version": BUILD_VERSION, "notes": notes}),

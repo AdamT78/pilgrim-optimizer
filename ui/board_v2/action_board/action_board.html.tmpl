@@ -256,6 +256,7 @@ body.editing .art.drop,body.editing .seal.drop,body.editing .tok.drop{outline:2p
   <span class=tag>phase</span>
   <span id=phases></span>
   <span class=sp></span>
+  <button id=bSound aria-pressed="true" title="interface sounds">sound</button>
   <button id=bEdit aria-pressed="false" title="click a slot to replace its picture; drop a file on one at any time">images</button>
   <button id=bSave>save</button>
   <span class=tag>f &nbsp;full screen</span>
@@ -340,7 +341,13 @@ function setStatus(){
   document.getElementById("statusText").textContent = t;
 }
 function hover(duty, slot){
+  // ON THE CHANGE, NOT ON THE CROSSING. mouseover bubbles and fires every time the pointer moves
+  // between a tile and the mark inside it, which is the same duty twice -- so a cue fired here
+  // without this test would rattle while you sat still over one tile. The duty under the pointer
+  // changing is the thing that happened.
+  var was = hovered ? hovered.duty : null;
   hovered = duty ? {duty: duty, slot: slot || null} : null;
+  if (duty && duty !== was) sfx("hover");
   setStatus();
   lightFace(duty);
 }
@@ -452,6 +459,10 @@ function drawArt(){
                                                             display: "none"}));
     b.id = "confirm-" + slot;
     b.textContent = "Confirm";
+    // THE ONLY THING CONFIRM DOES TODAY. These three buttons have never had a handler -- there is
+    // no turn to commit yet -- so this is a cue attached to a placeholder, and it should come off
+    // the moment the button is given its real job rather than be wired around.
+    b.addEventListener("click", function(){ sfxWake(); sfx("confirm"); });
     fitConfirm(b, c);
   });
 }
@@ -500,6 +511,10 @@ function drawSide(){
   var b = el("div", "btn primary", Object.assign(box(tc), {fontSize: px(GEO.confirm.size),
                                                            display: "none"}));
   b.id = "confirm-tithe"; b.textContent = "Confirm";
+  // THE THIRD CONFIRM, and it gets the cue by the same line as the other two. This is the button
+  // that was left out when the other two were given their width, which is how it ended up the
+  // full width of the panel; a cue added to two of three would be the same oversight again.
+  b.addEventListener("click", function(){ sfxWake(); sfx("confirm"); });
   fitConfirm(b, tc);
 
   [["showMap", "Show Map"], ["hire", "Hire Building"]].forEach(function(pair){
@@ -589,6 +604,99 @@ function drawFigures(){
 // =================================================================================================
 // WHAT CLICKING DOES. In play a click chooses; while images are being replaced a click on a slot
 // opens the picker instead. One mode switch rather than two gestures to remember.
+// =================================================================================================
+// THE INTERFACE SOUNDS
+//
+// WEB AUDIO, NOT <audio> ELEMENTS, and the reason is the hover. Eight tiles on a ribbon means a
+// pointer crossing them fires eight cues inside a second; one <audio> element restarts and cuts
+// itself off, and eight of them is a pool to manage. A decoded buffer can be fired as many times
+// as you like, overlapping, from one copy in memory.
+//
+// DECODED AT LOAD, RESUMED ON THE FIRST GESTURE, and those are two different rules that are easy
+// to collapse into one and get wrong. A browser will not let audio SOUND before a gesture, so a
+// context built now is born suspended -- but building it now is exactly what we want, because
+// decoding is asynchronous. Waiting for the first click to start decoding makes that first click
+// silent and the second one work, which reads as a broken cue rather than as a policy.
+//
+// So: the context and the buffers are made at load, and the first click resumes a context that
+// already has everything it needs. The first hover of a fresh page is still silent, and nothing
+// can change that.
+//
+// ONE CLIP SERVES HOVER AND SELECTION, at two gains. They are the same event at two strengths --
+// the pointer passing over a duty, and the duty being taken -- so the same mark of sound at a
+// quarter of the level reads as a quieter version of the same thing rather than a second idea.
+var SFX = __SFX__;
+// THE CLIPS ARE AT THEIR NATURAL LEVEL, so these gains mean what they say. An earlier cut was
+// peak-normalised to -1 dBFS, which lifted the confirm 3.1 dB above the level it has in the
+// montage and made the board's version of it plainly louder than the one that was chosen in the
+// picker. Normalising one-shots that were recorded together throws away the thing you were
+// listening to -- how loud they are RELATIVE to each other.
+//
+// 0.7 is the picker's own volume slider, so confirm comes out of the board at the level it came
+// out of the picker.
+var SFX_GAIN = {hover: 0.12, select: 0.5, confirm: 0.7};
+var SFX_ON = true, actx = null, BUF = {};
+
+function sfxWake(){
+  if (actx) return;
+  var C = window.AudioContext || window.webkitAudioContext;
+  if (!C) return;
+  actx = new C();
+  Object.keys(SFX).forEach(function(k){
+    var raw = atob(SFX[k].split(",")[1]);
+    var b = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) b[i] = raw.charCodeAt(i);
+    actx.decodeAudioData(b.buffer, function(buf){ BUF[k] = buf; }, function(){});
+  });
+}
+// THE CUE IS NAMED, THE CLIP IS LOOKED UP. `tile` is one file today and the page asks for
+// "hover" and "select"; swapping either to its own file is a line in the generator, not here.
+// ONE GESTURE ANYWHERE UNLOCKS IT, AND THERE MUST BE ONE. A browser keeps a page silent until it
+// has been clicked or typed into, and MOVING a pointer is not a gesture -- so the first hover of a
+// freshly loaded board cannot make a sound, whatever this file does. That is not a bug to fix, it
+// is a rule to be honest about.
+//
+// What IS fixable is the surprise. Any pointerdown or keydown anywhere on the document unlocks it,
+// so the bar, the background and the f key all count and you do not have to find a tile; and until
+// it happens the board says so in its own note line rather than in a tooltip nobody hovers.
+function sfxUnlock(){
+  removeEventListener("pointerdown", sfxUnlock, true);
+  removeEventListener("keydown", sfxUnlock, true);
+  sfxWake();
+  if (actx && actx.state === "suspended") actx.resume().then(sfxBadge, sfxBadge);
+  else sfxBadge();
+}
+addEventListener("pointerdown", sfxUnlock, true);
+addEventListener("keydown", sfxUnlock, true);
+
+function sfxBadge(){
+  var b = document.getElementById("bSound");
+  if (!b) return;
+  var live = !!actx && actx.state === "running";
+  b.setAttribute("aria-pressed", String(SFX_ON));
+  b.title = !SFX_ON ? "interface sounds are off"
+          : live ? "interface sounds"
+          : "click or press a key anywhere first — a browser keeps a page silent until you do";
+  b.textContent = (SFX_ON && !live) ? "sound ·" : "sound";
+  // IN THE NOTE LINE, WHERE IT WILL BE READ. A tooltip explains this only to somebody who already
+  // suspects the button, and the person it needs to reach is the one who just hovered the ribbon
+  // and heard nothing. The line clears itself the moment the first gesture lands.
+  var n = document.getElementById("note");
+  if (!n) return;
+  if (SFX_ON && !live) n.textContent = "sound is ready — click anywhere once to let the browser play it";
+  else if (n.textContent.indexOf("click anywhere once") >= 0) n.textContent = "";
+}
+
+function sfx(cue){
+  if (!SFX_ON || !actx) return;
+  var buf = BUF[cue === "confirm" ? "confirm" : "tile"];
+  if (!buf) return;
+  if (actx.state === "suspended") actx.resume();
+  var s = actx.createBufferSource(), g = actx.createGain();
+  s.buffer = buf; g.gain.value = SFX_GAIN[cue] || 0.5;
+  s.connect(g); g.connect(actx.destination); s.start();
+}
+
 // A DUTY WITH ONE ACTION HAS NOTHING TO CHOOSE, so choosing the duty chooses it. Taxation and
 // Allocation have one each -- duty_text.json is what says so, and this asks it rather than
 // naming them, so a duty gaining or losing a second action needs no edit here.
@@ -601,6 +709,7 @@ function onlySlot(slug){
 }
 function pickDuty(slug){
   if (S.editing) return;
+  sfxWake(); sfx("select");
   S.duty = slug; S.slot = onlySlot(slug);
   render();
 }
@@ -635,6 +744,7 @@ function select(slot){ S.slot = slot; render(); }
 // board twice on the way, once on a slot nobody asked for.
 function pickAction(duty, slot){
   if (S.editing) return;
+  sfxWake(); sfx("select");
   S.duty = duty;
   S.slot = slot;
   render();
@@ -852,6 +962,11 @@ document.getElementById("bEdit").addEventListener("click", function(){
   note(S.editing ? "click a picture slot to replace it, or drop a file on one" : "");
 });
 document.getElementById("bSave").addEventListener("click", doSave);
+document.getElementById("bSound").addEventListener("click", function(){
+  SFX_ON = !SFX_ON;
+  sfxBadge();
+  if (SFX_ON) sfx("select");
+});
 
 // ---- FULL SCREEN, ON F --------------------------------------------------------------------
 //
@@ -918,6 +1033,10 @@ window.addEventListener("resize", fit);
 drawPhases();
 draw();
 fit();
+// DECODE NOW SO THE FIRST CLICK CAN SOUND. The context is born suspended and the first gesture
+// resumes it; what cannot be hurried is the decoding, so it happens here rather than on a click.
+sfxWake();
+sfxBadge();
 if (BUILD.notes && BUILD.notes.length) note(BUILD.notes.join("  ·  "));
 </script>
 </html>

@@ -841,6 +841,95 @@ def test_the_tile_colour_is_one_of_the_icon_labs_plates_taken_whole():
         % (plate, lit, sorted((p["plate"], p["lit"], p["name"]) for p in palette)))
 
 
+def test_every_cue_the_page_plays_has_a_sound_and_a_level():
+    """A cue with no gain is silent; a cue with no file is silent. Both read as a broken board.
+
+    THE PAGE NAMES CUES, NOT FILES -- it asks for `hover`, `select` and `confirm`, and the
+    generator decides which clip answers. That indirection is worth having and it is exactly what
+    lets a cue go missing quietly: adding `sfx("warning")` somewhere compiles, builds, ships and
+    does nothing at all. So the call sites are read back out of the template and checked.
+
+    Falsified by playing a cue that SFX_GAIN does not price, or by naming a clip the generator
+    cannot find.
+    """
+    page = TMPL.read_text(encoding="utf-8")
+    code = re.sub(r"(?m)^\s*//.*$", "", page)
+    cues = set(re.findall(r'\bsfx\("([a-z_]+)"\)', code))
+    assert cues, "nothing plays a sound at all"
+    priced = re.search(r"var SFX_GAIN = \{([^}]*)\}", code).group(1)
+    gains = dict(re.findall(r"(\w+):\s*([0-9.]+)", priced))
+    missing = sorted(c for c in cues if c not in gains)
+    assert not missing, (
+        "these cues are played but have no gain, so they play at nothing: %s" % missing)
+    # AND EVERY GAIN IS A LEVEL, not a multiplier. Above 1 the clip clips, and these were cut at
+    # their natural peak precisely so the numbers here mean what they say.
+    for c, g in gains.items():
+        assert 0 < float(g) <= 1, "%s plays at %s, which is not a level" % (c, g)
+
+    # THE CLIP BEHIND EACH CUE HAS TO EXIST. The generator maps cues onto files; this walks the
+    # same map rather than assuming the two file names.
+    gen = (TOOL / "generate_action_board.py").read_text(encoding="utf-8")
+    files = re.findall(r'for cue in \(([^)]*)\)', gen)
+    assert files, "bundled_sfx() no longer lists the cues it bundles"
+    for name in re.findall(r'"([a-z_]+)"', files[0]):
+        f = ROOT / "ui" / "board_v2" / "sfx" / ("%s.ogg" % name)
+        assert f.is_file(), "the generator bundles %s.ogg and there is no such file" % name
+
+
+def test_the_hover_cue_fires_on_the_duty_changing_not_on_every_crossing():
+    """mouseover bubbles, so the pointer "arrives" many times over one tile.
+
+    hover() is called from a delegated mouseover, which fires again every time the pointer moves
+    between a tile and the mark inside it -- the same duty, twice. A cue fired on arrival rattles
+    while you hold still over one tile, and a ribbon of eight turns a slow sweep into a stutter.
+    The thing that happened is the duty under the pointer CHANGING.
+
+    Falsified by playing the cue unconditionally in hover(), which is what it would look like if
+    somebody simplified the function.
+    """
+    page = TMPL.read_text(encoding="utf-8")
+    code = re.sub(r"(?m)^\s*//.*$", "", page)
+    body = code.split("function hover(")[1].split("\nfunction ")[0]
+    assert 'sfx("hover")' in body, "hovering a duty plays nothing"
+    line = [ln for ln in body.split("\n") if 'sfx("hover")' in ln][0]
+    assert "!==" in line or "!=" in line, (
+        "the hover cue is not guarded by the duty changing, so it fires on every crossing "
+        "between a tile and the mark inside it: %s" % line.strip())
+    # AND THE COMPARISON IS AGAINST WHAT IT WAS, captured before hovered is reassigned.
+    assert body.index("hovered") < body.index('sfx("hover")'), (
+        "the previous duty is not read before `hovered` is overwritten, so the test compares a "
+        "value with itself and is always false")
+
+
+def test_a_sound_in_the_tree_says_where_it_came_from():
+    """The same rule the pictures live under, applied to the one asset class that escaped it.
+
+    `tests/layout_lab/test_board_v2_attribution.py` holds every image in ui/board_v2/ to a record
+    in attribution.json, and it walks by SUFFIX -- png, jpg, webp, svg, gif, avif. A .ogg is
+    invisible to it. So the sounds arrived in a tree whose whole discipline is that an asset
+    nobody can account for gets dropped, and nothing would have noticed.
+
+    This is the cheap version of that rule rather than an extension of attribution.json: every
+    sound has to be named in its own README, which is where the licence and the cut are recorded.
+    Falsified by dropping a clip into sfx/ and saying nothing about it.
+    """
+    sfx = ROOT / "ui" / "board_v2" / "sfx"
+    if not sfx.is_dir():
+        pytest.skip("no sfx/ in this tree")
+    readme = (sfx / "README.md")
+    assert readme.is_file(), "there are sounds in the tree and no record of where they came from"
+    said = readme.read_text(encoding="utf-8")
+    # NOT _to_delete/ OR ANYTHING UNDER IT. A folder of things on their way out is not an asset.
+    clips = [p for p in sorted(sfx.rglob("*.ogg")) if "_to_delete" not in p.parts]
+    assert clips, "sfx/ holds no sounds"
+    for p in clips:
+        assert p.name in said, (
+            "%s is in the tree and is not named in sfx/README.md, so nothing says what it is or "
+            "what licence it carries" % p.name)
+    assert "CC0" in said or "licence" in said.lower() or "license" in said.lower(), (
+        "sfx/README.md records no licence for any of it")
+
+
 def test_a_hovered_tile_rises_without_taking_any_room_to_do_it():
     """The lift is a transform, it rides on the cross-highlight, and it gives back what it takes.
 
