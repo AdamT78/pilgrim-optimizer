@@ -133,7 +133,13 @@ body.full{background:#000}
    at all; this is the duty tiles' marks, which is what was asked for. Nor does the icon lab get
    one: its marks are a sizing preview and are not clickable, so a hover state there would be an
    interaction that page does not have. */
-.seal.filled:hover{border-style:solid}
+/* AND THE CHOSEN MARK STAYS SOLID, by the same rule rather than a second one -- the pattern the
+   tiles use for lift and selection, for the same reason: one declaration cannot drift from
+   itself. The pointer and the choice say the same thing here, which is right, because a mark
+   under the pointer is what the chosen one would look like if you pressed it.
+
+   An EMPTY slot is unaffected, as it is by the hover: there is no icon to firm up. */
+.seal.filled:hover, .seal.filled.on{border-style:solid}
 .seal img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
 .seal.filled img{border-radius:0;object-fit:contain}
 /* A CUT-OUT BRINGS NO GROUND, so the board gives it one. A wax disc is a thing you could pick up
@@ -617,6 +623,16 @@ function render(){
     // them was edited; this is the rule lightFace() already states for the hover pair.
     var face = document.querySelector('#wheel [data-face="' + d.face + '"]');
     if (face) face.classList.toggle("sel", d.slug === S.duty);
+  });
+  // THE CHOSEN ACTION'S MARK, ASKED HERE AND NOT IN THE CLICK HANDLER. S.slot is reached by four
+  // routes -- the mark, the card, picking another duty, and pressing the same thing twice to put
+  // it back down -- and a class set where it is CLICKED would only be right on one of them. Set
+  // from the state, like everything else in render(), and all four are answered at once.
+  //
+  // BOTH HALVES OF THE QUESTION. Matching the slot alone would leave the same-named mark solid in
+  // every other duty's tile, which looks like eight choices rather than one.
+  Array.prototype.forEach.call(document.querySelectorAll("#board .seal"), function(s){
+    s.classList.toggle("on", s.dataset.duty === S.duty && s.dataset.slot === S.slot);
   });
   var info = dutyOf(S.duty);
   ["actionA","actionB"].forEach(function(slot){

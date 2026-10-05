@@ -804,7 +804,7 @@ def test_the_pointer_closes_the_mark_s_dashes_and_moves_nothing_else():
     """
     page = TMPL.read_text(encoding="utf-8")
     css = re.sub(r"/\*.*?\*/", " ", page, flags=re.S)
-    m = re.search(r"\.seal\.filled:hover\{([^}]*)\}", css)
+    m = re.search(r"\.seal\.filled:hover[^{]*\{([^}]*)\}", css)
     assert m, "a mark does not go solid under the pointer"
     body = m.group(1)
     assert "solid" in body, "the hover rule does not make the edge solid: %s" % body.strip()
@@ -937,6 +937,26 @@ def test_clicking_a_mark_selects_the_action_it_stands_for():
         "the mark's handler does not go through pickAction, so it cannot name an action")
     assert "pickDuty(" not in seal, (
         "the mark's handler still calls pickDuty, which sets the duty and clears the slot")
+    # AND THE CHOSEN MARK HOLDS ITS SOLID EDGE, by the hover's own rule rather than a second one.
+    css = re.sub(r"/\*.*?\*/", " ", page, flags=re.S)
+    assert re.search(r"\.seal\.filled:hover\s*,\s*\.seal\.filled\.on\s*\{"
+                     r"|\.seal\.filled\.on\s*,\s*\.seal\.filled:hover\s*\{", css), (
+        "the chosen mark and the hovered one do not draw their edge from the same rule, so the "
+        "two can come to disagree about what a solid edge means")
+    # SET FROM THE STATE, NOT WHERE IT IS CLICKED. S.slot is reached three ways -- the mark, the
+    # card below it, and picking a duty, which clears it or, for a one-action duty, chooses that
+    # action -- and a class set in the click handler is right on one of them. render() answers all
+    # three.
+    rend = code.split("function render(")[1].split("\nfunction ")[0]
+    assert 'classList.toggle("on"' in rend, (
+        "the chosen mark's class is not set in render(), so it will be wrong whenever the slot "
+        "changes by any route but clicking the mark -- the card below is one")
+    assert "pickAction" not in rend, "render() should not be picking anything"
+    on = re.search(r'classList\.toggle\("on",([^;]*)\)', rend).group(1)
+    assert "S.duty" in on and "S.slot" in on, (
+        "the chosen mark is matched on %s -- on the slot alone the same-named mark lights up in "
+        "every duty's tile at once" % on.strip())
+
     body = code.split("function pickAction(")[1].split("\nfunction ")[0]
     assert "S.duty" in body and "S.slot" in body, (
         "pickAction sets only one of the two, so a mark selects a duty or an action but not both")
