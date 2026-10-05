@@ -91,8 +91,8 @@ def test_the_module_is_the_boards_module_and_every_object_is_drawn(cc, page):
     # All eight tiles, under the names G.DUTIES gives them and in its order.
     for _slug, name, _deg in G.DUTIES:
         assert ">%s<" % name in page, "%s has no tile on the page" % name
-    for label in ("status", "road", "action art L", "action art R",
-                  "confirm L", "confirm R", "confirm tithe", "tithe", "city"):
+    for label in ("status", "backdrop", "road", "action art L", "action art R",
+                  "mark map", "mark hire", "mark commit", "tithe", "city"):
         assert ">%s<" % label in page, "no box labelled %r" % label
 
     # THE RIBBON IS ON ONE PITCH, asserted rather than assumed: eight tiles evenly spaced is the
@@ -113,20 +113,25 @@ def test_the_module_is_the_boards_module_and_every_object_is_drawn(cc, page):
                 % (r["x"], r["y"], r["width"], r["height"])) in page, (
             "%s is not drawn where art_slots() puts it" % key)
 
-    # THE CONFIRM ROW IS THREE BOXES. The page drew one bar from X0 across PLAY_W -- a width
-    # nothing on the board occupies, running past the Tithe and stopping short of the side column.
-    # It was invisible while the row began at the margin and obvious the moment it did not, which
-    # is the worst way for a layout page to be wrong: right by coincidence, then quietly not.
-    confirm = G.as_dict()["confirm"]
-    for key in ("actionA", "actionB", "tithe"):
-        r = confirm[key]
+    # THE CONTROLS COLUMN, AT mark_slots()' OWN RECTS. This is where the confirm row used to be
+    # asserted, and the history is worth keeping: the page drew one confirm bar from X0 across
+    # PLAY_W -- a width nothing on the board occupied, running past the Tithe and stopping short
+    # of the side column. It was invisible while the row began at the margin and obvious the
+    # moment it did not, which is the worst way for a layout page to be wrong: right by
+    # coincidence, then quietly not. The same fault is available here, because the column is a
+    # stack and a stack is one line of arithmetic to retype.
+    marks = G.as_dict()["marks"]
+    for name in marks["order"]:
+        r = marks[name]
         assert ('style="left:%dpx;top:%dpx;width:%dpx;height:%dpx"'
                 % (r["x"], r["y"], r["width"], r["height"])) in page, (
-            "the confirm under %s is not drawn at the rect geometry gives it" % key)
-    # AND NOT THE OLD BAR, which would otherwise be allowed to sit underneath them.
-    assert ('style="left:%dpx;top:%dpx;width:%dpx;height:%dpx"'
-            % (G.X0, G.CONFIRM_Y, G.PLAY_W, G.CONFIRM_H)) not in page, (
-        "the single confirm bar across PLAY_W is back")
+            "the %s mark is not drawn at the rect geometry gives it" % name)
+    # AND THE FIVE OBJECTS IT REPLACED ARE NOT STILL ON THE PAGE BESIDE IT. A measuring instrument
+    # that goes on reserving room for a confirm row the board no longer has reports a board that
+    # does not exist -- which is precisely the question this page is here to answer.
+    for gone in ("confirm L", "confirm R", "confirm tithe", "show map", "hire building"):
+        assert ">%s<" % gone not in page, (
+            "the page still draws %r, which the board no longer has" % gone)
 
     # The one real drawing, at geometry's own rect.
     assert "<svg" in page, "the wheel SVG is not inlined"

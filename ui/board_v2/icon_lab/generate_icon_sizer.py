@@ -32,6 +32,7 @@ import webbrowser
 HERE = pathlib.Path(__file__).resolve().parent
 BOARD = HERE.parent
 ART_DIR = BOARD / "duty_actions"
+CONTROL_DIR = BOARD / "controls"
 ATTRIB_FILE = BOARD / "attribution.json"
 TEXT_FILE = BOARD / "duty_text.json"
 TMPL = HERE / "icon_sizer.html.tmpl"
@@ -142,6 +143,17 @@ def names() -> dict:
     return out
 
 
+def control_names() -> dict:
+    """What the three marks in the controls column are called, from the same file.
+
+    READ, NOT LISTED. "Show Map", "Hire Building" and "Confirm" were a JS object typed into
+    action_board.html.tmpl, and a second copy here would have been the same fault twice. They are
+    in duty_text.json's `controls` block now, which is where the board reads them too -- so a
+    rename reaches the card in this lab and the title on the board from one edit.
+    """
+    return json.loads(TEXT_FILE.read_text(encoding="utf-8")).get("controls", {})
+
+
 def saved_framing() -> dict:
     """The framing last written back into the lab, if there is one.
 
@@ -159,13 +171,21 @@ def saved_framing() -> dict:
         raise SystemExit("%s is not readable as JSON: %s" % (FRAMING_FILE, e))
 
 
-def seeds() -> tuple[list, list]:
-    """Every icon master in the tree, as the page wants it."""
-    rec = _records()
+def _card(master: pathlib.Path, label: str, out_name: str) -> dict:
+    """One master, as the page wants it. The only place a seed's shape is written."""
+    return {"name": label,
+            "file": master.name,
+            "out": out_name,
+            "src": "data:image/png;base64," + base64.b64encode(master.read_bytes()).decode()}
+
+
+def _duty_seeds(rec: dict) -> tuple[list, list]:
+    """The duty actions' icon masters: eight folders, two slots each, named from duty_text.json."""
     label = names()
     out, notes = [], []
+    want = set(image_suffixes())
     if not ART_DIR.is_dir():
-        return out, ["there is no %s, so there is nothing to frame" % ART_DIR]
+        return out, ["there is no %s, so there are no duty icons to frame" % ART_DIR]
 
     for duty_dir in sorted(p for p in ART_DIR.iterdir() if p.is_dir()):
         duty = duty_dir.name
@@ -176,9 +196,7 @@ def seeds() -> tuple[list, list]:
 
             # A CUT WITHOUT A MASTER CANNOT BE REVISITED, only re-cut, and that is worth saying
             # out loud rather than leaving somebody to wonder why their icon has no card.
-            cuts = duty_dir / sub_dir
-            want = set(image_suffixes())
-            for f in sorted(cuts.glob("*")):
+            for f in sorted((duty_dir / sub_dir).glob("*")):
                 if not f.is_file() or f.suffix.lower() not in want:
                     continue
                 crel = f.relative_to(ART_DIR).as_posix()
@@ -197,16 +215,96 @@ def seeds() -> tuple[list, list]:
                 if slot is None:
                     notes.append("%s: the name does not say which action, left out" % rel)
                     continue
-                out.append({
-                    "name": label.get("%s:%s" % (duty, slot), "%s %s" % (duty, slot)),
-                    "file": f.name,
-                    "out": next_cut(duty, slot, sub_dir),
-                    "src": "data:image/png;base64,"
-                           + base64.b64encode(f.read_bytes()).decode(),
-                })
+                out.append(_card(f, label.get("%s:%s" % (duty, slot), "%s %s" % (duty, slot)),
+                                 next_cut(duty, slot, sub_dir)))
+    return out, notes
+
+
+def _control_seeds(rec: dict) -> tuple[list, list]:
+    """The controls column's three marks, which are not duty actions and are not shaped like them.
+
+    A DUTY ICON IS FOUND BY ITS DUTY AND ITS SLOT -- `allocation/icons/masters/allocation_actionA_
+    icon_master_v01.png` -- and neither of those exists here. These three belong to the board, not
+    to a duty, and there is no actionA/actionB to be: pressing a mark in that column is not a move
+    the engine scores. Hanging them off a ninth folder under duty_actions/ would have made this
+    walk shorter and every OTHER walk in the tree need an exception, so they have a root.
+
+    WHAT IS THE SAME is everything that matters to this page: a 1254 square with a mark somewhere
+    inside it and a transparent margin, a judgement to make about how much of it the board draws,
+    and a record saying where it came from. So they get the same card, by the same rules, and the
+    page cannot tell them apart -- which is right. The framing question does not care whose icon
+    it is.
+
+    THE KEY IS THE MARK'S OWN NAME, from geometry.py's MARKS_ORDER by way of duty_text.json:
+    `control_commit_icon_master_v01.png` is the commit's. A file whose key is not one of the three
+    is named and left out rather than guessed at, exactly as a duty master with no slot is.
+    """
+    out, notes = [], []
+    want = set(image_suffixes())
+    masters = CONTROL_DIR / "icons" / MASTERS
+    if not masters.is_dir():
+        return out, notes
+
+    said = control_names()
+    for f in sorted((CONTROL_DIR / "icons").glob("*")):
+        if not f.is_file() or f.suffix.lower() not in want:
+            continue
+        crel = f.relative_to(CONTROL_DIR).as_posix()
+        if not (CONTROL_DIR / master_of(crel, rec.get("controls/" + crel))).is_file():
+            notes.append("%s has no master, so its framing cannot be revisited here without "
+                         "cutting a cut" % f.name)
+
+    for f in sorted(masters.glob("*")):
+        if not f.is_file() or f.suffix.lower() not in want:
+            continue
+        rel = f.relative_to(CONTROL_DIR).as_posix()
+        if "controls/" + rel not in rec:
+            notes.append("%s: no attribution entry, left out" % rel)
+            continue
+        m = re.match(r"control_([a-z0-9]+)_icon_master_v\d+$", f.stem)
+        if not m or m.group(1) not in said:
+            notes.append("%s: the name does not say which control, left out -- duty_text.json's "
+                         "controls block knows %s" % (rel, ", ".join(sorted(said)) or "none"))
+            continue
+        key = m.group(1)
+        out.append(_card(f, said[key].get("name") or key, next_control_cut(key)))
+    return out, notes
+
+
+def next_control_cut(key: str) -> str:
+    """What the tree would call the next cut of a control mark.
+
+    The same rule next_cut() follows for a duty's, and separate from it because the names are
+    shaped differently: a control has no duty and no slot, so there is nothing for that function's
+    arguments to be. Both answer the same question -- never hand back a name that would overwrite
+    a file whose sha256 is already recorded.
+    """
+    base = "control_%s_icon" % key
+    folder = CONTROL_DIR / "icons"
+    n = 0
+    if folder.is_dir():
+        for f in folder.iterdir():
+            m = re.match(re.escape(base) + r"_v(\d+)$", f.stem)
+            if m:
+                n = max(n, int(m.group(1)))
+    return "%s_v%02d%s" % (base, n + 1, PRINT_SUFFIX)
+
+
+def seeds() -> tuple[list, list]:
+    """Every icon master in the tree, as the page wants it.
+
+    TWO ROOTS, ONE PAGE. The duty actions' icons and the board's three controls are filed apart
+    because everything else in the tree treats them differently; they are framed together because
+    this lab's question -- how much of a 1254 square does the board draw -- is the same for both.
+    """
+    rec = _records()
+    duty, dnotes = _duty_seeds(rec)
+    ctrl, cnotes = _control_seeds(rec)
+    out = duty + ctrl
+    notes = dnotes + cnotes
     if not out:
-        notes.append("no icon master is filed anywhere under %s, so there is nothing to frame; "
-                     "the page still takes files dropped onto it" % ART_DIR)
+        notes.append("no icon master is filed under %s or %s, so there is nothing to frame; "
+                     "the page still takes files dropped onto it" % (ART_DIR, CONTROL_DIR))
     return out, notes
 
 
@@ -284,10 +382,18 @@ def _cut_from(master_name: str) -> tuple | None:
     ASKED OF THE RECORD, NOT OF THE FILENAMES. A cut names its master in a field precisely because
     the two versions come apart -- Build Roads' fifth cut was taken from its fourth master -- so
     walking the folder and matching numbers would find the wrong one or none at all.
+
+    BOTH ROOTS, which this missed when the controls arrived. It filtered on `duty_actions/`, so the
+    three control cuts were invisible to it and the build reported them "framed but never cut" with
+    the cuts sitting right there -- a line that is worse than silence, because it reads as a job
+    still to do. The lesson is the one the seeds walk already learned: a second root is a second
+    place every path filter in this file has to know about.
     """
     best = None
     for path, e in _records().items():
-        if not path.startswith("duty_actions/") or "/masters/" in path:
+        if "/masters/" in path:
+            continue
+        if not (path.startswith("duty_actions/") or path.startswith("controls/")):
             continue
         if e.get("master") != master_name or not e.get("crop"):
             continue

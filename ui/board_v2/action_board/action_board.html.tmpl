@@ -31,6 +31,9 @@
      the board RESERVES, and this reserves nothing -- it is a transform, so no number downstream
      of RIBBON_Y can feel it. The 16 above the ribbon is what it rises into. */
   --lift:6px;
+  /* HOW MUCH VALLEY COMES THROUGH A TILE. One number; the marks keep their own opaque ground, so
+     this moves the card and not what is drawn on it. */
+  --tile-alpha:55%;
 }
 *{box-sizing:border-box}
 html,body{margin:0;background:#07070a;color:var(--ink);
@@ -70,11 +73,25 @@ body.full{background:#000}
   font-family:Georgia,serif;color:#e8dfca;white-space:nowrap;overflow:hidden}
 
 /* ---- the eight duty tiles -------------------------------------------------------------- */
-.tile{border:1px solid #2a2721;border-radius:4px;background:var(--plate);cursor:pointer;
+/* THE TILE IS GLASS OVER THE VALLEY. --plate at --tile-alpha rather than a colour of its own, so
+   the palette stays one fact and the transparency is one number. The SELECTED tile stays opaque
+   on purpose -- its gradient has no alpha -- which is what makes it read as solid against seven
+   panes of glass, and is a second thing selection says for free. */
+.tile{border:1px solid #2a2721;border-radius:4px;cursor:pointer;
+  background:color-mix(in srgb, var(--plate) var(--tile-alpha), transparent);
   transition:transform .12s ease-out}
 .tile .nm{position:absolute;left:0;right:0;text-align:center;font-family:Georgia,serif;
   font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--ink)}
-.tile.sel{background:var(--plate-lit);border-color:#60594a}
+/* THE SELECTED TILE CATCHES LIGHT, it is not filled in. A flat --plate-lit across the whole card
+   read as a highlighted rectangle -- the selection announced by a block of colour. The gradient
+   puts the light at the name and lets the card settle back into the board, which is what a raised
+   thing does.
+
+   IT CAN AFFORD TO BE QUIET NOW, and could not have been before. Selection is already carried by
+   the lift and by the chosen mark's solid edge, so the plate is the third voice saying it rather
+   than the only one. On a board where the plate had to do this alone, this would be too faint. */
+.tile.sel{background:linear-gradient(180deg,var(--plate-lit) 0%,var(--plate) 100%);
+  border-color:#60594a}
 /* The cross-highlight: hovering a wheel face lights its tile and the other way round. One class,
    set from one place, so the two directions cannot drift apart.
 
@@ -123,7 +140,7 @@ body.full{background:#000}
 /* THE MARK'S EDGE, chosen in the icon lab: dashed, in the guides' own colour, 2 px. It sits
    inside the mark's box -- everything here is border-box -- so the drawing gives up 2 px each
    side rather than growing past where geometry.py placed it. */
-.seal.filled{background:none;border:2px dashed var(--guide);border-radius:4px}
+.seal.filled{background:none;border:var(--seal-border) dashed var(--guide);border-radius:4px}
 /* AND SOLID UNDER THE POINTER. The dashes close up and NOTHING else changes -- same colour, same
    2 px, same box -- so the mark does not move or recolour, it just firms up. That restraint is
    the point: the border is already carrying the resting state, and a hover that also changed the
@@ -153,14 +170,40 @@ body.full{background:#000}
 .seal.plate{background:var(--plate);border-radius:4px}
 /* THE ROAD. Reserved for the Merchant and empty on purpose -- it is the space the shorter
    ribbon freed, held open so the cards below it did not move. */
-#road{position:absolute;background:var(--plate);border:1px solid #2a2721;border-radius:4px}
-/* A PLATE BELONGS TO ITS TILE, NOT TO THE BOARD. The selected tile lifts to --plate-lit, and a
-   plate left on --plate turned back into the visible square this whole arrangement exists to get
-   rid of -- on the one tile you are looking at. */
-.tile.sel .seal.plate{background:var(--plate-lit)}
+/* THE STRIP IS A PLACE, NOT A SURFACE, NOW THAT THERE IS A PICTURE BEHIND IT. It used to paint
+   itself --plate, which is exactly the band of the backdrop the road is painted on -- so the one
+   part of the valley that had to show was the one part covered up. It keeps its rect, because the
+   Merchant still needs somewhere to be told to walk. */
+#road{position:absolute;background:transparent;border:0}
+#backdrop{position:absolute;background-size:100% 100%;background-position:center;border-radius:4px}
+/* A PLATE BELONGS TO ITS TILE, NOT TO THE BOARD. The selected tile lifts, and a plate left on
+   --plate turned back into the visible square this whole arrangement exists to get rid of -- on
+   the one tile you are looking at.
+
+   AND ON A GRADIENT IT CAN ONLY BE NOTHING. A ground is invisible when it is the same colour as
+   what it sits on; against a gradient there is no one colour to be, so --plate-lit would match at
+   exactly one height of the tile and draw a lighter rectangle at every other. All fourteen marks
+   carry this class, so that is fourteen squares, which is precisely the fault naming the plate
+   was meant to end. Transparent lets the tile's own light through and the ground disappears.
+
+   NOT `background:none` BY ACCIDENT EITHER: these marks are cut-outs with real alpha, so what
+   shows through here is the gradient, which is the ground. */
+.tile.sel .seal.plate{background:transparent}
 
 /* ---- the two action cards -------------------------------------------------------------- */
-.art{overflow:hidden;background:#000;cursor:pointer}
+/* ISOLATED, AND THAT IS A FIX RATHER THAN A TIDY-UP. The `lift` overlay below is
+   mix-blend-mode:screen, and a blended element blends with its nearest STACKING CONTEXT's
+   backdrop -- not with its parent. `.art` is position:absolute with z-index:auto, which does not
+   make one, so each card's overlay was blending against everything painted beneath it across the
+   whole board: the backdrop picture, the road, the ribbon.
+   TWO CONSEQUENCES, one of them visible. The effect is meant to lift the flames in THIS card's
+   own picture, and it was reaching outside the card to do it. And a blending group that spans the
+   board has to be rasterised together, so anything that changes compositing elsewhere -- a tile
+   taking its hover transform, a mark animating its filter -- invalidates it, and the two cards
+   flash while it is rebuilt. Two cards, side by side: a black rectangle on each side of the row.
+   `isolation:isolate` makes each card its own stacking context, so the blend sees its own picture
+   and nothing else, and the group cannot be disturbed by anything outside the card. */
+.art{overflow:hidden;background:#000;cursor:pointer;isolation:isolate}
 .art img{width:100%;height:100%;object-fit:cover;display:block}
 /* THE NAME ONLY, AND NO SCRIM BEHIND IT.
    The effect line used to live along the bottom of the picture and moved into the upper text box,
@@ -204,8 +247,36 @@ body.full{background:#000}
   text-align:center;line-height:1.35}
 .btn.primary{background:#2e2718;border:1px solid var(--line);color:#ecdfc0}
 .btn.primary:hover{background:#3a301d}
-.btn.standing{background:#141210;border:1px solid #60594a;color:#cdc2a8}
-.btn.standing:hover{border-color:#8b806a}
+/* THE CONTROLS COLUMN. Three marks at the working edge -- Map, Hire Building, commit -- and no
+   frame around any of them, which is what was asked for and is also the one thing that keeps them
+   from being misread. A mark on a duty tile wears a dashed border because it is a thing you CHOOSE,
+   and the border is the slot it would sit in; these are things you PRESS. Giving them the same
+   edge would say they were the same kind of object and put three more selectable-looking squares
+   on a board whose whole grammar is select-then-confirm.
+   So the artwork is the control. Under the pointer it brightens and nothing moves -- the same
+   restraint as the tile marks' hover, for the same reason: these are border-box squares at
+   geometry's own rect, and a hover that changed the box would shift the drawing inside it. */
+.mark{position:absolute;display:grid;place-items:center;cursor:pointer;
+  color:var(--ink);font:700 15px/1 ui-monospace,monospace;
+  filter:brightness(.88);transition:filter .12s ease}
+.mark:hover{filter:brightness(1.12)}
+/* A STAND-IN LOOKS LIKE ONE. A control with no cut filed yet borrows Allocation's mark, and the
+   whole reason that is better than drawing nothing is that a wrong emblem is visibly wrong --
+   which only holds if it does not look as settled as the two beside it. Half-lit says provisional
+   without inventing a second treatment, and it goes away by itself the moment a cut is filed. */
+.mark.stand-in{filter:brightness(.55)}
+.mark.stand-in:hover{filter:brightness(.75)}
+/* NOTHING CHOSEN, NOTHING TO COMMIT. The three Confirm buttons this column replaced were drawn
+   `display:none` until their own slot was selected, and the commit mark inherits that rule: it is
+   the same control, so it appears at the same moment. Map and Hire are standing offers and are
+   always there.
+   display, NOT visibility: the mark should not be a dark square the pointer can find. The column
+   is absolutely positioned at geometry's own slots, so the two above it do not move to fill the
+   gap -- which is right, since they would otherwise shift under the pointer every time a duty was
+   chosen. */
+.mark.off{display:none}
+.mark img{width:100%;height:100%;object-fit:contain;display:block}
+@media (prefers-reduced-motion:reduce){.mark{transition:none}}
 .panel{border:1px solid #46413a;border-radius:5px;background:#0e0d0b}
 .panel .lb{position:absolute;left:0;right:0;text-align:center;font-family:Georgia,serif;font-weight:600;
   letter-spacing:.16em;text-transform:uppercase;color:var(--ink)}
@@ -270,6 +341,7 @@ body.editing .art.drop,body.editing .seal.drop,body.editing .tok.drop{outline:2p
 // THE NUMBERS COME FROM geometry.py AND ARE NOT RESTATED HERE.
 var GEO    = __GEOMETRY__;
 var DUTIES = __DUTIES__;
+var CONTROLS = __CONTROLS__;
 var IMAGES = __IMAGES__;
 var SAVE   = __SAVEKEYS__;
 var BUILD  = __BUILD__;
@@ -372,6 +444,18 @@ function drawStatus(){
   var t = el("span", null, null, e); t.id = "statusText"; t.style.position = "static";
 }
 
+// THE VALLEY, DRAWN FIRST SO EVERYTHING ELSE STANDS IN FRONT OF IT. It is the only thing on this
+// board placed where other objects will cover it, so it goes in before the tiles rather than
+// being pushed back with a z-index nobody can see the other end of.
+//
+// STRETCHED TO THE RECT, NOT COVERED INTO IT. The crop was anchored so its painted ground falls
+// where the road strip falls; `cover` keeps the aspect and slides that alignment off.
+function drawBackdrop(){
+  if (!BACKDROP) return;
+  var d = el("div", null, box(GEO.backdrop));
+  d.id = "backdrop";
+  d.style.backgroundImage = "url(" + BACKDROP + ")";
+}
 function drawRoad(){
   var r = el("div", null, box(GEO.road));
   r.id = "road";
@@ -454,28 +538,59 @@ function drawArt(){
     art.dataset.hoverSlot = slot;
     art.addEventListener("click", function(){ slotOrSelect(slot); });
     wireDrop(art);
-    var c = GEO.confirm[slot];
-    var b = el("div", "btn primary", Object.assign(box(c), {fontSize: px(GEO.confirm.size),
-                                                            display: "none"}));
-    b.id = "confirm-" + slot;
-    b.textContent = "Confirm";
-    // THE ONLY THING CONFIRM DOES TODAY. These three buttons have never had a handler -- there is
-    // no turn to commit yet -- so this is a cue attached to a placeholder, and it should come off
-    // the moment the button is given its real job rather than be wired around.
-    b.addEventListener("click", function(){ sfxWake(); sfx("confirm"); });
-    fitConfirm(b, c);
   });
 }
 
-// ONE RULE FOR EVERY CONFIRM BUTTON. All three say the same word and do the same kind of thing,
-// so they are the same button: as wide as that word plus the board's padding, sitting at the
-// right-hand end of whatever it confirms. It was written inline for the two action cards and not
-// for the Tithe, so the Tithe's took its box at face value and came out the full width of the
-// panel -- three buttons, one job, two sizes. The padding was a 22 typed here; it is
-// CONFIRM_PAD_X now, because a number the drawing depends on belongs with the other ones.
-function fitConfirm(b, at){
-  b.style.left = ""; b.style.right = px(GEO.canvas.width - (at.x + at.width));
-  b.style.width = "auto"; b.style.padding = "0 " + px(GEO.confirm.padX);
+// =================================================================================================
+// THE CONTROLS COLUMN, which replaces three confirm buttons and two standing ones with three marks.
+//
+// WHY ONE COLUMN AND NOT A BUTTON UNDER EACH CARD. The three confirms said the same word and did
+// the same thing, and there was only ever one of them on screen -- the row under the cards was 64px
+// of board reserved for whichever one was showing. Collapsing them into a single commit at the end
+// of the row gives that height back (it is the road's now) and says the true thing about the turn:
+// you choose one action anywhere in the row and confirm it once.
+//
+// THE PLACEHOLDER IS THE SAME PICTURE THREE TIMES, on purpose. Adam is drawing a Map, a Hire
+// Building and an OK; until they land, three different borrowed emblems would read as three
+// meanings and invite judgements about an arrangement that has none yet. One repeated emblem reads
+// as what it is -- the column's size and rhythm, with the artwork still to come. The title is what
+// says which is which in the meantime.
+// WHICH MARK COMMITS, named once. Two rules turn on it -- the cue it plays and whether it is
+// shown at all -- and the second was added long after the first, which is exactly when a second
+// copy of a string gets typed. geometry.py's MARKS_ORDER owns the three names and a guard holds
+// this to it, so a rename fails the build rather than quietly leaving a mark that makes the
+// confirm sound and never appears.
+var COMMIT = "commit";
+
+function drawMarks(){
+  var M = GEO.marks;
+  // THE WORDING COMES FROM duty_text.json, like every other string the board prints. It was a
+  // `labels` object typed here while the marks were placeholders, which is one file restating
+  // another -- and the icon lab needs the same three strings for its card titles, so the two
+  // would have disagreed the first time a mark was renamed.
+  // ALLOCATION'S MARK IS STILL THE FALLBACK, for a control with no cut filed yet. A column that
+  // refused to draw would look finished and be empty; a column wearing the wrong emblem is
+  // visibly wrong, which is the failure you want.
+  var placeholder = IMAGES["seal:allocation:actionA"];
+  M.order.forEach(function(name){
+    var at = M[name];
+    var said = CONTROLS[name] || {};
+    var label = said.name || name;
+    var src = IMAGES["control:" + name] || placeholder;
+    var e = el("div", "mark", box(at));
+    e.id = "mark-" + name;
+    e.dataset.kind = "mark"; e.dataset.mark = name;
+    e.title = said.shortLabel ? label + " \u2014 " + said.shortLabel : label;
+    e.classList.toggle("stand-in", !IMAGES["control:" + name]);
+    if (src){ var im = document.createElement("img"); im.src = src;
+              im.alt = label; e.appendChild(im); }
+    else e.textContent = label.slice(0, 1).toUpperCase();
+    // THE ONLY THING THE COMMIT DOES TODAY. There is no turn to commit yet, so this is a cue on a
+    // placeholder -- it should come off when the mark is given its real job rather than be wired
+    // around. Map and Hire are silent for the same reason the standing buttons were: they are not
+    // the confirm, and a board where every mark clicks the same way teaches nothing.
+    if (name === COMMIT) e.addEventListener("click", function(){ sfxWake(); sfx("confirm"); });
+  });
 }
 
 function drawSide(){
@@ -506,23 +621,6 @@ function drawSide(){
   var lb = el("div", "lb", {top: px(t.labelTop), fontSize: px(t.labelSize),
                             lineHeight: String(t.lh)}, p);
   lb.textContent = "Take Tithe";
-
-  var tc = GEO.confirm.tithe;
-  var b = el("div", "btn primary", Object.assign(box(tc), {fontSize: px(GEO.confirm.size),
-                                                           display: "none"}));
-  b.id = "confirm-tithe"; b.textContent = "Confirm";
-  // THE THIRD CONFIRM, and it gets the cue by the same line as the other two. This is the button
-  // that was left out when the other two were given their width, which is how it ended up the
-  // full width of the panel; a cue added to two of three would be the same oversight again.
-  b.addEventListener("click", function(){ sfxWake(); sfx("confirm"); });
-  fitConfirm(b, tc);
-
-  [["showMap", "Show Map"], ["hire", "Hire Building"]].forEach(function(pair){
-    var o = GEO[pair[0]];
-    var e = el("div", "btn standing", Object.assign(box(o), {
-      fontSize: px(GEO.standing.size), padding: "0 " + px(GEO.standing.padX)}));
-    e.textContent = pair[1];
-  });
 
   // THE CITY GRID IS HANDED OVER PLACED, like the seals in a duty tile. It used to be worked out
   // here from `(c.width - 24) / 2` with 8px margins -- and 132 is the panel's OUTER width, so the
@@ -625,6 +723,7 @@ function drawFigures(){
 // ONE CLIP SERVES HOVER AND SELECTION, at two gains. They are the same event at two strengths --
 // the pointer passing over a duty, and the duty being taken -- so the same mark of sound at a
 // quarter of the level reads as a quieter version of the same thing rather than a second idea.
+var BACKDROP = __BACKDROP__;
 var SFX = __SFX__;
 // THE CLIPS ARE AT THEIR NATURAL LEVEL, so these gains mean what they say. An earlier cut was
 // peak-normalised to -1 dBFS, which lifted the confirm 3.1 dB above the level it has in the
@@ -701,8 +800,8 @@ function sfx(cue){
 // Allocation have one each -- duty_text.json is what says so, and this asks it rather than
 // naming them, so a duty gaining or losing a second action needs no edit here.
 //
-// WITHOUT THIS the board could sit on Taxation with Taxation's only action unchosen, showing an
-// empty confirm row and a dashed mark, which is a question with exactly one answer.
+// WITHOUT THIS the board could sit on Taxation with Taxation's only action unchosen -- an unlit
+// card and a dashed mark, which is a question with exactly one answer.
 function onlySlot(slug){
   var info = dutyOf(slug);
   return (info && info.actions === 1) ? "actionA" : null;
@@ -798,9 +897,13 @@ function render(){
     }
     var lift = document.createElement("div"); lift.className = "lift"; art.appendChild(lift);
     art.classList.toggle("sel", S.slot === slot);
-    document.getElementById("confirm-" + slot).style.display = (S.slot === slot) ? "grid" : "none";
   });
-  document.getElementById("confirm-tithe").style.display = (S.slot === "tithe") ? "grid" : "none";
+  // THE COMMIT APPEARS WHEN THERE IS SOMETHING TO COMMIT, which is what the confirm buttons it
+  // replaced did -- one per card and one under the Tithe, each drawn only while its own slot was
+  // chosen. One mark serves all three now, so the condition is simply that a slot is chosen at
+  // all. S.slot is null until a duty with one action selects its own, so the board can open with
+  // the column showing two marks rather than three.
+  document.getElementById("mark-" + COMMIT).classList.toggle("off", !S.slot);
   setStatus();
 }
 
@@ -920,7 +1023,8 @@ function drawPhases(){
 }
 
 function draw(){
-  drawStatus(); drawTiles(); drawRoad(); drawArt(); drawSide(); drawWheel(); render();
+  drawStatus(); drawBackdrop(); drawTiles(); drawRoad(); drawArt(); drawMarks(); drawSide();
+  drawWheel(); render();
 }
 
 // SCALED ON BOTH AXES, and the chrome above the stage is MEASURED rather than allowed for.
@@ -954,6 +1058,11 @@ function fit(){
 board.style.width = px(GEO.canvas.width);
 board.style.height = px(GEO.canvas.height);
 board.style.setProperty("--solid", String(GEO.ribbon.solidFraction));
+// THE MARK'S FRAME, FROM GEOMETRY. It was a 2 typed into .seal.filled, which was nobody's business
+// but this file's until the controls column was sized off it: a mark in that column is a tile's
+// mark MINUS this frame, so the same number now sets a border here and a width there. Two owners
+// would mean the column quietly stopping being the artwork it is supposed to equal.
+board.style.setProperty("--seal-border", px(GEO.ribbon.sealBorder));
 document.getElementById("buildTag").textContent = "build " + BUILD.version;
 document.getElementById("bEdit").addEventListener("click", function(){
   S.editing = !S.editing;
