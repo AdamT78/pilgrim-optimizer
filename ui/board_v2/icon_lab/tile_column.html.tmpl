@@ -2,7 +2,7 @@
 <title>Duty tiles, icons in a column</title>
 <meta name=viewport content="width=device-width,initial-scale=1">
 <style>
-:root{--ink:#e2d7bc;--dim:#968e7c;--line:#c9b27a;--edge:#211e1a;--plate:#1E1935;--plate-lit:#3B3160;--frame:#120A25}
+:root{--ink:#e2d7bc;--dim:#968e7c;--line:#c9b27a;--edge:#211e1a;--plate:#1E1935;--plate-lit:#3B3160;--frame:#120A25;--guide:#6a5f48}
 *{box-sizing:border-box}
 body{margin:0;padding:22px 20px 80px;background:#07070a;color:var(--ink);
   font:13px/1.55 ui-sans-serif,system-ui,sans-serif}
@@ -48,15 +48,22 @@ button[aria-pressed=true]{background:#2e2718;border-color:var(--line);color:#f0e
    what each setting costs.
    ONE OWNER: --edge-w is the thickness AND whether there is a border at all, because 0 is off.
    The button beside the sliders only moves that number, so the two cannot disagree. */
-body.edged .mark{border:var(--edge-w, 0px) solid var(--frame);border-radius:4px}
+body.edged .mark{border:var(--edge-w, 0px) dashed var(--guide);border-radius:4px}
 body.guides .tile{outline:1px dashed #3a352c}
-body.guides .mark{outline:1px dashed #6a5f48}
+body.guides .mark{outline:1px dashed var(--guide)}
 /* THE FIVE PLATES, AND WHY THEY ARE ALL THE SAME WEIGHT. Each one sits at L* 10.8 and the same
    chroma as today's violet, which is the plate measured rather than guessed -- so swapping one
    for another changes the hue and nothing else. The bone-white mark reads 75.4 L* lighter than
    every one of them, within a tenth, which is what stops a palette choice from quietly becoming
    a legibility choice. The frame is the same hue 6.5 L* DARKER, so it reads as a cut line rather
-   than a raised edge; --plate-lit is still here and is the lighter direction if that is wanted. */
+   than a raised edge; --plate-lit is still here and is the lighter direction if that is wanted.
+   THE BORDER DRAWS IN --guide, DASHED, and that is a choice rather than a leftover. What was
+   worth keeping turned out to be the thing the guides overlay was standing in for: a warm dashed
+   hairline round each mark reads as a scribed or stitched edge, where a solid band in the plate's
+   own hue reads as a shadow under it. So the border takes --guide -- the same variable the
+   overlay uses, so the two cannot drift -- while the plate and its darker sibling stay exactly as
+   the picker sets them. --frame is still set and is no longer read by this rule; the tile's own
+   edge is where it would naturally go. */
 .sw{display:inline-flex;gap:8px;margin-left:14px;vertical-align:middle}
 .sw button{width:26px;height:26px;padding:0;border-radius:50%;border:2px solid #3a352c}
 .sw button[aria-pressed=true]{border-color:var(--line);box-shadow:0 0 0 2px #2e2718}
@@ -250,7 +257,8 @@ function read(c){
     'drawn  <b>' + (c.size * s).toFixed(0) + '</b> px here' +
     '\n' + 'plate  <b>' + (getComputedStyle(document.body).getPropertyValue('--plate').trim()
       || '#1E1935') + '</b>   frame <b>' +
-      (getComputedStyle(document.body).getPropertyValue('--frame').trim() || '#120A25') + '</b>' +
+      (getComputedStyle(document.body).getPropertyValue('--frame').trim() || '#120A25') +
+      '</b>   the border draws dashed in --guide' +
     (c.edge > 0
       ? '        border <b>' + c.edge + '</b> px, so each mark gives up <b>' + (2 * c.edge) +
         '</b> of its <b>' + c.size + '</b> to it'

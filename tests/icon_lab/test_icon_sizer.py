@@ -919,3 +919,24 @@ def test_every_plate_in_the_picker_is_the_same_weight():
             "as a cut line" % p["name"])
     assert any(p["plate"].upper() == "#1E1935" for p in pal), (
         "today's violet is not among the five, so the others cannot be compared against it")
+
+
+def test_the_border_and_the_guides_overlay_draw_in_one_colour():
+    """The border is the guides' line made permanent, so it has to BE that line's colour.
+
+    This is the look that was chosen: a warm dashed hairline round each mark reads as a scribed
+    edge, where a solid band in the plate's own hue reads as a shadow under it. Two hex values
+    typed in two rules would answer the same question twice and drift the first time one is
+    tuned -- the page's own comments record that happening before, with a gap that was
+    SEAL_INSET in one place and a slider's value in the other.
+
+    Falsified by hard-coding either of them, or by making the border solid again.
+    """
+    tmpl = _code(COL_TMPL)
+    assert "body.edged .mark{border:var(--edge-w, 0px) dashed var(--guide)" in tmpl, \
+        "the border is no longer the guides' dashed line"
+    assert "body.guides .mark{outline:1px dashed var(--guide)}" in tmpl, \
+        "the guides overlay no longer reads the same variable the border does"
+    assert re.search(r"--guide:#[0-9a-fA-F]{6}", tmpl), "--guide is not defined once at the root"
+    assert tmpl.count("#6a5f48") <= 1, \
+        "the guide colour is written out more than once, so the two rules can disagree"
