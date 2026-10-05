@@ -15,11 +15,18 @@
 :root{
   --ink:#e2d7bc; --dim:#968e7c; --line:#c9b27a; --faint:#2c2924;
   --panel:#0e0d0b; --panelline:#46413710;
-  /* THE PLATE'S PURPLE, AND NOW THE TILE'S. It was written once, in .seal.plate, while the tile
-     under it was near-black -- so a cut-out icon sat on a visible purple square. The tile carries
-     the same colour now and the square stops being a square: the mark simply sits on the tile.
-     Two things using one colour is exactly when it stops being a literal and becomes a name. */
-  --plate:#1E1935; --plate-lit:#3B3160; --guide:#6a5f48;
+  /* THE PLATE, AND NOW THE TILE'S. It was written once, in .seal.plate, while the tile under it
+     was near-black -- so a cut-out icon sat on a visible coloured square. The tile carries the
+     same colour now and the square stops being a square: the mark simply sits on the tile. Two
+     things using one colour is exactly when it stops being a literal and becomes a name. The road
+     took it as a third, which is the test of whether that was true.
+
+     SLATE, CHOSEN IN THE ICON LAB. These three numbers are one entry of PALETTE in
+     icon_lab/tile_column.html.tmpl, copied across whole -- the lab is where a plate is looked at
+     against the real marks, and this is where the choice is written down. The pair has to move
+     together: --plate-lit is the SELECTED tile, so taking one number and leaving the other gives
+     seven slate tiles and one that is still the old hue. There is a guard for that now. */
+  --plate:#151E25; --plate-lit:#2B3A46; --guide:#6a5f48;
 }
 *{box-sizing:border-box}
 html,body{margin:0;background:#07070a;color:var(--ink);

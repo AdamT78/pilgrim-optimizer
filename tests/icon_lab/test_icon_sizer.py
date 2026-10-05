@@ -913,7 +913,20 @@ def test_every_plate_in_the_picker_is_the_same_weight():
         "the five plates span %.1f L*, so the marks do not read the same against all of them: %s"
         % (max(ls) - min(ls), ["%s %.1f" % (p["name"], l) for p, l in zip(pal, ls)]))
 
+    # AND SO IS EVERY LIT, for the same reason one step up. The selected tile is the one the eye
+    # is on; if the five lifts landed at different lightnesses then picking a plate would quietly
+    # be picking how far the selection reads from its neighbours. They are built at the violet
+    # pair's own step -- +12.8 L* -- so this is that claim, not a tolerance around five numbers
+    # somebody typed.
+    lits = [_lstar(p["lit"]) for p in pal]
+    assert max(lits) - min(lits) < 1.0, (
+        "the five lits span %.1f L*, so the selected tile stands out by a different amount "
+        "depending on the plate: %s"
+        % (max(lits) - min(lits), ["%s %.1f" % (p["name"], x) for p, x in zip(pal, lits)]))
     for p in pal:
+        assert _lstar(p["lit"]) > _lstar(p["plate"]), (
+            "%s's lit is not lighter than its plate, so the selected tile would sink rather "
+            "than lift" % p["name"])
         assert _lstar(p["frame"]) < _lstar(p["plate"]), (
             "%s's frame is not darker than its plate, so the edge reads as raised rather than "
             "as a cut line" % p["name"])

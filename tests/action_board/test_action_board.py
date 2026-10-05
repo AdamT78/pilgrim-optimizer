@@ -791,6 +791,29 @@ def test_the_board_draws_the_mark_edge_the_icon_lab_settled_on():
     assert got == want, "the board's guide is %s and the icon lab's is %s" % (got, want)
 
 
+def test_the_tile_colour_is_one_of_the_icon_labs_plates_taken_whole():
+    """The lab is where a plate is chosen; this is where the choice is written down.
+
+    THE PAIR IS THE POINT. The board lifts the SELECTED tile to --plate-lit, and the lab's picker
+    used to set --plate and --frame and leave the lit alone -- so carrying a plate across by hand
+    gave seven tiles in the new colour and one still in the old. Nothing in either page would have
+    said so: the lab reads no --plate-lit, and the board reads no palette.
+
+    Falsified by typing a plate the lab does not offer, or by moving one of the two and not the
+    other -- which is the failure this is actually for.
+    """
+    board = TMPL.read_text(encoding="utf-8")
+    lab = (ROOT / "ui" / "board_v2" / "icon_lab" / "tile_column.html.tmpl").read_text("utf-8")
+    palette = json.loads(re.search(r"var PALETTE = (\[.*?\]);", lab, re.S).group(1))
+    assert palette, "the icon lab offers no plates"
+    plate = re.search(r"--plate:(#[0-9A-Fa-f]{6})", board).group(1).upper()
+    lit = re.search(r"--plate-lit:(#[0-9A-Fa-f]{6})", board).group(1).upper()
+    pairs = {(p["plate"].upper(), p["lit"].upper()): p["name"] for p in palette}
+    assert (plate, lit) in pairs, (
+        "the board draws plate %s with lit %s, which is not one of the lab's: %s"
+        % (plate, lit, sorted((p["plate"], p["lit"], p["name"]) for p in palette)))
+
+
 def test_clicking_a_mark_selects_the_action_it_stands_for():
     """A mark IS its action, so pressing one has to put that action down.
 

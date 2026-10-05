@@ -56,7 +56,8 @@ body.guides .mark{outline:1px dashed var(--guide)}
    for another changes the hue and nothing else. The bone-white mark reads 75.4 L* lighter than
    every one of them, within a tenth, which is what stops a palette choice from quietly becoming
    a legibility choice. The frame is the same hue 6.5 L* DARKER, so it reads as a cut line rather
-   than a raised edge; --plate-lit is still here and is the lighter direction if that is wanted.
+   than a raised edge, and each plate carries its own --plate-lit for the selected tile, measured
+   off the violet pair rather than chosen (see PALETTE below for how).
    THE BORDER DRAWS IN --guide, DASHED, and that is a choice rather than a leftover. What was
    worth keeping turned out to be the thing the guides overlay was standing in for: a warm dashed
    hairline round each mark reads as a scribed or stitched edge, where a solid band in the plate's
@@ -255,8 +256,13 @@ function read(c){
         c.wantRibbon + '</b> tall\n') +
     'height <i>' + cost(c) + '</i>   RIBBON_H is ' + GEO.height + '\n' +
     'drawn  <b>' + (c.size * s).toFixed(0) + '</b> px here' +
+    // THE THREE TOGETHER, because all three are what the board needs. This line printed plate and
+    // frame, so the lit was the one value you could not copy off this page -- and it is the one
+    // the board uses for the selected tile.
     '\n' + 'plate  <b>' + (getComputedStyle(document.body).getPropertyValue('--plate').trim()
-      || '#1E1935') + '</b>   frame <b>' +
+      || '#1E1935') + '</b>   lit <b>' +
+      (getComputedStyle(document.body).getPropertyValue('--plate-lit').trim() || '#3B3160') +
+      '</b>   frame <b>' +
       (getComputedStyle(document.body).getPropertyValue('--frame').trim() || '#120A25') +
       '</b>   the border draws dashed in --guide' +
     (c.edge > 0
@@ -322,16 +328,27 @@ document.getElementById('laptop').onclick = function(){
 // THE PALETTE IS THE PAGE'S, NOT THE BOARD'S. geometry.py owns no colour -- the plate lives in
 // the action board's own stylesheet -- so these five are a proposal you look at here and then
 // type into action_board.html.tmpl if you want one. Nothing is written down by clicking.
-var PALETTE = [{"name": "slate", "plate": "#151E25", "frame": "#051017"}, {"name": "amber", "plate": "#2E1800", "frame": "#220900"}, {"name": "oxblood", "plate": "#371017", "frame": "#270105"}, {"name": "moss", "plate": "#10210D", "frame": "#001400"}, {"name": "violet", "plate": "#1E1935", "frame": "#120A25"}];
+//
+// AND EACH ONE CARRIES ITS LIT, which these five did not and should have from the start. The
+// board lifts the SELECTED tile to --plate-lit, and the picker set --plate and --frame and left
+// that one alone -- so taking slate to the board gave eight slate tiles and one that was still
+// violet. The swatch here could not have shown it either: nothing in this page reads --plate-lit.
+//
+// DERIVED, NOT PICKED. Each lit is its own plate at +12.8 L* with its chroma multiplied by 1.52,
+// keeping the plate's own hue -- which is the violet pair that was already on the board, measured
+// rather than invented. Running it back through violet returns #3A3160 against the #3B3160 that
+// is there now, one unit in red, so the rule and the board agree about the case we can check.
+var PALETTE = [{"name": "slate", "plate": "#151E25", "lit": "#2B3A46", "frame": "#051017"}, {"name": "amber", "plate": "#2E1800", "lit": "#533013", "frame": "#220900"}, {"name": "oxblood", "plate": "#371017", "lit": "#63222E", "frame": "#270105"}, {"name": "moss", "plate": "#10210D", "lit": "#213F20", "frame": "#001400"}, {"name": "violet", "plate": "#1E1935", "lit": "#3B3160", "frame": "#120A25"}];
 (function(){
   var holder = document.getElementById('swatches');
   PALETTE.forEach(function(p, i){
     var b = document.createElement('button');
-    b.title = p.name + '  plate ' + p.plate + '  frame ' + p.frame;
+    b.title = p.name + '  plate ' + p.plate + '  lit ' + p.lit + '  frame ' + p.frame;
     b.style.background = p.plate;
     b.style.borderColor = p.frame;
     b.addEventListener('click', function(){
       document.body.style.setProperty('--plate', p.plate);
+      document.body.style.setProperty('--plate-lit', p.lit);
       document.body.style.setProperty('--frame', p.frame);
       [].forEach.call(holder.children, function(o, j){
         o.setAttribute('aria-pressed', String(j === i)); });
