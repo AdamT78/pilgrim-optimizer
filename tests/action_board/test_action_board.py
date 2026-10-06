@@ -276,6 +276,72 @@ def test_the_page_restates_no_geometry(gen):
                          % ", ".join(str(n) for n in overlap))
 
 
+def test_every_folder_under_a_duty_is_either_an_action_or_declared_not_to_be(gen):
+    """A new folder beside a duty's actions silently becomes one of them.
+
+    WHAT HAPPENED. `cutouts/` was added to hold the icons with their painted field knocked out --
+    deliberately not on the board, since markFolders still lists only seals and icons. But the
+    card art is found by walking every folder under a duty and skipping the ones nonSlotFolders
+    names, and `cutouts` was not in that list. The cutouts carry `slot: left` and `slot: right`,
+    so they qualified as card art; the walk takes the last match in sorted order; and `cutouts`
+    sorts after `action_a`, `build_road` and `construct_building`. Five cards -- Taxation, both
+    Build Roads, both Construct -- quietly drew a 68px emblem stretched across 590 x 295. The
+    other five survived only because their folder names happen to sort after the letter c.
+
+    THE LISTS ANSWER DIFFERENT QUESTIONS, which is the trap. markFolders is where a tile's MARK
+    may come from; nonSlotFolders is which folders are not an ACTION. A folder can need to be in
+    the second without being in the first, and that is exactly the case that was missed.
+
+    So this derives the invariant instead of restating a list: every directory that exists under
+    a duty is either one of that duty's action folders, or declared not to be one. Falsified by
+    adding any folder under a duty without telling nonSlotFolders about it.
+    """
+    import json
+    rec = json.loads((ROOT / "ui" / "board_v2" / "attribution.json").read_text(encoding="utf-8"))
+    slot_folders = rec["slotFolders"]
+    skip = set(gen.non_slot_folders())
+    art_dir = ROOT / "ui" / "board_v2" / "duty_actions"
+
+    stray = []
+    for duty_dir in sorted(p for p in art_dir.iterdir() if p.is_dir()):
+        mine = set((slot_folders.get(duty_dir.name) or {}).values())
+        for sub in sorted(p for p in duty_dir.iterdir() if p.is_dir()):
+            if sub.name in mine or sub.name in skip:
+                continue
+            stray.append("%s/%s" % (duty_dir.name, sub.name))
+    assert not stray, (
+        "these folders are under a duty and are neither one of its actions nor in "
+        "nonSlotFolders, so the card walk will take them for artwork: %s" % sorted(set(stray)))
+
+
+def test_a_card_is_drawn_from_its_own_slots_folder(gen):
+    """The direct statement of what went wrong, asserted on the result rather than the rule.
+
+    attribution.json's slotFolders says which folder holds each action's pictures. Whatever the
+    walk does, the file it ends up inlining for a slot has to have come out of that folder --
+    which is the one thing the five broken cards were not doing, while every list involved still
+    looked correct on its own.
+
+    Falsified by any folder that shadows a slot's own, whatever the reason.
+    """
+    import json
+    rec = json.loads((ROOT / "ui" / "board_v2" / "attribution.json").read_text(encoding="utf-8"))
+    slot_folders = rec["slotFolders"]
+    _art, by_duty, _notes = gen.bundled_art()
+    assert by_duty, "no card art was bundled at all"
+
+    wrong = []
+    for duty, slots in sorted(by_duty.items()):
+        for slot, (_key, filename) in sorted(slots.items()):
+            want = (slot_folders.get(duty) or {}).get(slot)
+            if want is None:
+                wrong.append("%s %s has art and no folder recorded for it" % (duty, slot))
+                continue
+            if not (ROOT / "ui" / "board_v2" / "duty_actions" / duty / want / filename).is_file():
+                wrong.append("%s %s drew %s, which is not in %s/" % (duty, slot, filename, want))
+    assert not wrong, "\n".join(wrong)
+
+
 def test_the_record_gates_the_art(gen, tmp_path, monkeypatch):
     """A picture with no attribution entry is left out and NAMED, never guessed into place.
 
