@@ -66,6 +66,8 @@ ATTRIB_FILE = BOARD / "attribution.json"
 ART_DIR = BOARD / "duty_actions"
 TOKEN_DIR = BOARD / "tokens" / "resources"
 SFX_DIR = BOARD / "sfx"
+BACKDROP_DIR = BOARD / "backdrop"
+CONTROL_DIR = BOARD / "controls" / "icons"
 MANIFEST = BOARD / "metadata" / "action_board.json"
 
 # A duty's marks live under its own folder, beside the pictures of its actions, because they are
@@ -206,6 +208,30 @@ def duty_text() -> dict:
     if missing:
         raise SystemExit("duty_text.json has no wording for %s" % ", ".join(missing))
     return d
+
+
+def control_text() -> dict:
+    """What the three marks in the controls column are called. The same file owns this too.
+
+    THE PAGE HAD THEM TYPED INTO IT -- a `labels` object in drawMarks(), "Show Map", "Hire
+    Building", "Confirm" -- which was the exact fault duty_text.json exists to end, written out
+    again for a new object. The icon lab needed the same three strings for its card titles the
+    moment the masters were filed, and two copies would have disagreed the first time a mark was
+    renamed. They are in duty_text.json's `controls` block now and both readers read it.
+
+    REFUSES RATHER THAN FALLING BACK. A mark whose name is missing would draw with no title and
+    nothing would say so -- the emblem is the same either way, so the loss is invisible on the
+    board and only shows in a screen reader or a tooltip nobody checks.
+    """
+    if not TEXT_FILE.is_file():
+        raise SystemExit("duty_text.json is not at %s -- the board has nothing to print" % TEXT_FILE)
+    d = json.loads(TEXT_FILE.read_text(encoding="utf-8")).get("controls", {})
+    missing = [k for k in G.MARKS_ORDER if not (d.get(k) or {}).get("name")]
+    if missing:
+        raise SystemExit("duty_text.json's controls block has no name for %s"
+                         % ", ".join(missing))
+    return {k: {"name": d[k]["name"], "shortLabel": d[k].get("shortLabel", "")}
+            for k in G.MARKS_ORDER}
 
 
 def slot_of(rel: str, entry: dict) -> str | None:
@@ -438,6 +464,77 @@ def bundled_tokens() -> tuple[dict, list]:
     return out, notes
 
 
+def bundled_controls() -> tuple[dict, list]:
+    """The three marks in the controls column, at twice the size they are drawn.
+
+    THE RECORD GATES THESE TOO, by the same rule as every other picture on this board: a file with
+    no attribution entry is left out and NAMED rather than guessed into a slot. That rule is what
+    lets the twelve empty duty slots be filled without this tool, and a control is not an exception
+    to it just because there are only three.
+
+    NEWEST VERSION WINS, as it does for the backdrop. `control_<key>_icon_vNN.webp`, highest NN,
+    so replacing a mark is adding a file rather than overwriting one and orphaning its sha256.
+
+    AT 2x AND NOT AT 1x, which is the same bargain the Tithe's resources strike: the board draws a
+    control at G.MARK and a retina screen asks for twice that. Resampled here rather than in the
+    page, because a browser scaling a 1090-square down to 68 does it once per paint and this does
+    it once per build.
+
+    WHAT IS MISSING IS SAID OUT LOUD AND THE BOARD STILL DRAWS. A control with no cut yet falls
+    back to Allocation's mark in the page, which is what it has been doing since the column was
+    built; a column that refused to draw would be a worse answer than a column wearing the wrong
+    emblem, because the wrong emblem is visibly wrong and an empty column looks finished.
+    """
+    notes: list = []
+    out: dict = {}
+    if not CONTROL_DIR.is_dir():
+        return out, ["no controls/icons/ at %s, so the controls column keeps its placeholder"
+                     % CONTROL_DIR]
+    rec = {}
+    if ATTRIB_FILE.is_file():
+        rec = json.loads(ATTRIB_FILE.read_text(encoding="utf-8")).get("files", {})
+    want = image_suffixes()
+    for key in G.MARKS_ORDER:
+        found = sorted(f for f in CONTROL_DIR.glob("control_%s_icon_v*" % key)
+                       if f.is_file() and f.suffix.lower() in want)
+        if not found:
+            notes.append("no cut for the %s mark, so it draws the placeholder" % key)
+            continue
+        f = found[-1]
+        rel = "controls/icons/%s" % f.name
+        if rel not in rec:
+            notes.append("%s: no attribution entry, left out" % rel)
+            continue
+        out["control:%s" % key] = _inline(f, (G.MARK * 2, G.MARK * 2), "PNG")
+    return out, notes
+
+
+def bundled_backdrop() -> tuple[str, list]:
+    """The valley the ribbon stands in front of.
+
+    NEWEST VERSION WINS, by the same rule the marks follow: the file is `ribbon_backdrop_vNN.jpg`
+    and the highest NN is the one drawn, so replacing the picture is adding a file rather than
+    overwriting one and losing what was there.
+
+    DRAWN AT THE RECT, NOT AT ITS OWN SIZE. geometry publishes a box 1344 x 242 and the picture is
+    stretched to exactly that -- `100% 100%` rather than `cover` -- because the crop was anchored
+    so its painted ground falls where the road strip falls. `cover` would preserve the aspect and
+    slide that alignment off by however much the two ratios disagree, which is the one thing about
+    this picture that has to stay true.
+    """
+    notes: list = []
+    if not BACKDROP_DIR.is_dir():
+        return "", ["no backdrop/ at %s, so the ribbon keeps its flat plate" % BACKDROP_DIR]
+    found = sorted(BACKDROP_DIR.glob("ribbon_backdrop_v*"))
+    found = [f for f in found if f.suffix.lower() in image_suffixes()]
+    if not found:
+        return "", ["backdrop/ holds no ribbon_backdrop_v* in a format this tree reads"]
+    f = found[-1]
+    kind = "jpeg" if f.suffix.lower() in (".jpg", ".jpeg") else f.suffix.lower().lstrip(".")
+    uri = ("data:image/%s;base64," % kind) + base64.b64encode(f.read_bytes()).decode("ascii")
+    return uri, notes
+
+
 def bundled_sfx() -> tuple[dict, list]:
     """The interface sounds, inlined like everything else the page draws.
 
@@ -472,7 +569,9 @@ def build() -> tuple[str, list]:
     seals, seal_by_duty, snotes = bundled_seals()
     tokens, tnotes = bundled_tokens()
     sfx, xnotes = bundled_sfx()
-    notes += snotes + tnotes + xnotes
+    backdrop, bnotes = bundled_backdrop()
+    controls, cnotes = bundled_controls()
+    notes += snotes + tnotes + xnotes + bnotes + cnotes
 
     text = duty_text()
     duties = {}
@@ -502,8 +601,10 @@ def build() -> tuple[str, list]:
     fill = {
         "__GEOMETRY__": json.dumps(G.as_dict()),
         "__DUTIES__": json.dumps(duties),
-        "__IMAGES__": json.dumps({**art, **seals, **tokens}),
+        "__CONTROLS__": json.dumps(control_text()),
+        "__IMAGES__": json.dumps({**art, **seals, **tokens, **controls}),
         "__SFX__": json.dumps(sfx),
+        "__BACKDROP__": json.dumps(backdrop),
         "__WHEEL_SVG__": json.dumps(wheel_svg()),
         "__SAVEKEYS__": json.dumps(SAVE_KEYS),
         "__BUILD__": json.dumps({"version": BUILD_VERSION, "notes": notes}),

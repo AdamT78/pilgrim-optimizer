@@ -1775,11 +1775,120 @@
       "reproducibleBy": "duty_art_lab/prompts/panels/08-ordination-mission.md -- the prompt as it was sent. It does not reproduce these pixels: the same prompt does not produce the same picture twice, which is why the picture is committed and not just the recipe. The brief is the intent, the file is the artefact.",
       "notes": "REPLACES THE v02 CUT, and that is the point of this pair rather than a change of subject. Ordination was the last duty whose cards came out of tools/duty_art/crop_duty_master.py, which is why retiring that script became possible: with this pair in place nothing on the board was cut from a master any more, and the script and its guard have since been removed. The v02 files and their records are deleted too -- they were script output, whose master is committed and whose recipe was recorded, which is the half attribution.json calls regenerable. The masters stay. `slot` is declared, not inferred.",
       "sha256": "ec1500f0aa02b77fc6483b1bcb7676c9adc63560a532d272ee1dca23cf94359b"
+    },
+    "backdrop/ribbon_backdrop_v02.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "generated in a ChatGPT session for this project as 'Lantern Road Through the Misty Kingdom', 2172 x 724, no upstream URL and no seed",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 ribbon backdrop",
+      "title": "Lantern Road Through the Misty Kingdom",
+      "role": "the valley the eight duty tiles stand in front of, and the road the Merchant travels along the foot of it. Drawn behind the ribbon and the road strip together, at geometry's BACKDROP rect",
+      "modifications": "cropped to 2172 x 495 from the master's y 229 to 724 -- the full width untouched, the upper sky dropped -- to reach the 1344:306 the board's BACKDROP rect wants now that the confirm row has gone and the road strip has taken its height. The crop is BOTTOM-ANCHORED and ASPECT-TRUE: 2172/495 is 4.3879 against the rect's 4.3922, so the board stretches it by 0.1% and nothing in the picture is distorted. THE GROUND NO LONGER LANDS ON THE TOP OF THE STRIP, and it cannot: the painted ground begins 87.1% down this crop and the road strip begins 66.0% down the rect, because the master has 64 rows of foreground below its horizon and a rect with a 104-tall strip wants 168. The horizon falls INSIDE the strip instead -- 64px into its 104 -- which is what the strip being a place rather than a surface allows. Re-encoded as WebP at quality 86 with method 6; the PNG was 1.7 MB and this is 87 KB, and the board inlines it, so the saving is the page's open time. Nothing resampled: the crop is whole source pixels.",
+      "reproducibleBy": "ui/board_v2/backdrop/README.md, which records the master, the crop box and why the bottom edge is the anchor",
+      "sha256": "fee01f1853cd6af1fb91e7999d1589023222b35139df39b596cedcc9bf4ac8a1"
+    },
+    "controls/icons/masters/control_map_icon_master_v01.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "generated in a ChatGPT session for this project on a transparent background; no upstream URL and no seed. Which prompt produced it is reproducibleBy's to say, not this field's.",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 control icons",
+      "title": "Show Map, control icon, as generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, 1254 square on transparency. The Show Map mark in the controls column at the end of the action row: a folded map with a marked route, an X and a compass rose. duty_text.json's `controls` block owns the wording; geometry.py's MARKS_ORDER owns where it sits in the column.",
+      "notes": "master, not shipped, and nothing is cut from it yet: how much of the square the board draws is chosen in ui/board_v2/icon_lab/, and until it is there is no control_map_icon_v01.webp for this to be the original of -- the board draws Allocation's mark in this slot as a placeholder meanwhile. NOT A DUTY ACTION, which is why it is here and not under duty_actions/: a mark in that column is a button you press, and everything under duty_actions is a move the engine scores. Downloaded as button_map.png and copied in unchanged -- same machine, staged through the device bridge, so verify the sha256 rather than assuming it.",
+      "reproducibleBy": "not recorded. The duty icons came from duty_art_lab/prompts/icons/01-icons-from-seal-motifs.md with the action's own wax seal attached; these three have no seal to be a redrawing of, and the prompt that made them was not kept. If they are ever regenerated the brief should be written down first.",
+      "sha256": "9036ab56e3d2fc363cb993daa8e596e0cdcb208d981ca46c760f201cc693d96b"
+    },
+    "controls/icons/masters/control_hire_icon_master_v01.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "generated in a ChatGPT session for this project on a transparent background; no upstream URL and no seed. Which prompt produced it is reproducibleBy's to say, not this field's.",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 control icons",
+      "title": "Hire Building, control icon, as generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, 1254 square on transparency. The Hire Building mark in the controls column at the end of the action row: a chapel and a stack of coins over a downward arrow. duty_text.json's `controls` block owns the wording; geometry.py's MARKS_ORDER owns where it sits in the column.",
+      "notes": "master, not shipped, and nothing is cut from it yet: how much of the square the board draws is chosen in ui/board_v2/icon_lab/, and until it is there is no control_hire_icon_v01.webp for this to be the original of -- the board draws Allocation's mark in this slot as a placeholder meanwhile. NOT A DUTY ACTION, which is why it is here and not under duty_actions/: a mark in that column is a button you press, and everything under duty_actions is a move the engine scores. Downloaded as button_hire building.png and copied in unchanged -- same machine, staged through the device bridge, so verify the sha256 rather than assuming it.",
+      "reproducibleBy": "not recorded. The duty icons came from duty_art_lab/prompts/icons/01-icons-from-seal-motifs.md with the action's own wax seal attached; these three have no seal to be a redrawing of, and the prompt that made them was not kept. If they are ever regenerated the brief should be written down first.",
+      "sha256": "94b9b24ec693ff6684031558a5e72592f46a05e005fa81cf115e5e4ac0166e8f"
+    },
+    "controls/icons/masters/control_commit_icon_master_v01.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "generated in a ChatGPT session for this project on a transparent background; no upstream URL and no seed. Which prompt produced it is reproducibleBy's to say, not this field's.",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 control icons",
+      "title": "Confirm, control icon, as generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, 1254 square on transparency. The Confirm mark in the controls column at the end of the action row: a tick inside a four-pointed ring. duty_text.json's `controls` block owns the wording; geometry.py's MARKS_ORDER owns where it sits in the column.",
+      "notes": "master, not shipped, and nothing is cut from it yet: how much of the square the board draws is chosen in ui/board_v2/icon_lab/, and until it is there is no control_commit_icon_v01.webp for this to be the original of -- the board draws Allocation's mark in this slot as a placeholder meanwhile. NOT A DUTY ACTION, which is why it is here and not under duty_actions/: a mark in that column is a button you press, and everything under duty_actions is a move the engine scores. Downloaded as button_confirm.png and copied in unchanged -- same machine, staged through the device bridge, so verify the sha256 rather than assuming it.",
+      "reproducibleBy": "not recorded. The duty icons came from duty_art_lab/prompts/icons/01-icons-from-seal-motifs.md with the action's own wax seal attached; these three have no seal to be a redrawing of, and the prompt that made them was not kept. If they are ever regenerated the brief should be written down first.",
+      "sha256": "1b671fcad7abd6cf95c90b22db0fe60435df3afc614b4a16840ba1a8e7d64a83"
+    },
+    "controls/icons/control_map_icon_v01.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "cut from control_map_icon_master_v01.png, which is the untouched download; see that entry for where the drawing came from",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 control icons",
+      "title": "Show Map, control icon",
+      "slot": "control",
+      "master": "control_map_icon_master_v01.png",
+      "crop": {
+        "x": 137,
+        "y": 106,
+        "w": 972
+      },
+      "role": "the Show Map mark in the controls column at the end of the action row, drawn at geometry.py's MARK -- 68px, which is a duty tile's mark less its frame. duty_text.json's `controls` block owns the wording.",
+      "modifications": "cropped to the square (137, 106) 972 wide out of the master, at the framing chosen in ui/board_v2/icon_lab/ and recorded in its framing.json -- whole source pixels, no resampling, no ground painted in, and the alpha carried through exactly. Encoded WebP at quality 90, which is what this tree ships; the master stays the lossless archive. WHAT THE ENCODE COSTS, measured rather than assumed: alpha is bit-exact everywhere, and on the body of the mark -- alpha 240 and above, which is 97% of the square, because this artwork is drawn just under full opacity rather than at it -- the worst colour error is 24 of 255 and the mean is 1.9. The larger errors are all in the band under alpha 16, where nothing is drawn. CUT HERE RATHER THAN IN THE PAGE: the lab's own cut button goes out through a canvas, which keeps colour premultiplied and so rounds every part-transparent pixel on the way back; this crop does not, so it is the more faithful of the two by a little. The framing is the lab's either way.",
+      "reproducibleBy": "ui/board_v2/icon_lab/framing.json, entry control_map_icon_master_v01.png: the crop is (x, y, w) taken out of the master at its own resolution. Re-cutting from that file and this master reproduces these pixels up to the WebP encoder.",
+      "sha256": "4c57e117da9e1bce642c99bb5bd0a240438a3b5401aa2617ba647124cf18d211"
+    },
+    "controls/icons/control_hire_icon_v01.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "cut from control_hire_icon_master_v01.png, which is the untouched download; see that entry for where the drawing came from",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 control icons",
+      "title": "Hire Building, control icon",
+      "slot": "control",
+      "master": "control_hire_icon_master_v01.png",
+      "crop": {
+        "x": 158,
+        "y": 128,
+        "w": 922
+      },
+      "role": "the Hire Building mark in the controls column at the end of the action row, drawn at geometry.py's MARK -- 68px, which is a duty tile's mark less its frame. duty_text.json's `controls` block owns the wording.",
+      "modifications": "cropped to the square (158, 128) 922 wide out of the master, at the framing chosen in ui/board_v2/icon_lab/ and recorded in its framing.json -- whole source pixels, no resampling, no ground painted in, and the alpha carried through exactly. Encoded WebP at quality 90, which is what this tree ships; the master stays the lossless archive. WHAT THE ENCODE COSTS, measured rather than assumed: alpha is bit-exact everywhere, and on the body of the mark -- alpha 240 and above, which is 97% of the square, because this artwork is drawn just under full opacity rather than at it -- the worst colour error is 26 of 255 and the mean is 2.0. The larger errors are all in the band under alpha 16, where nothing is drawn. CUT HERE RATHER THAN IN THE PAGE: the lab's own cut button goes out through a canvas, which keeps colour premultiplied and so rounds every part-transparent pixel on the way back; this crop does not, so it is the more faithful of the two by a little. The framing is the lab's either way.",
+      "reproducibleBy": "ui/board_v2/icon_lab/framing.json, entry control_hire_icon_master_v01.png: the crop is (x, y, w) taken out of the master at its own resolution. Re-cutting from that file and this master reproduces these pixels up to the WebP encoder.",
+      "sha256": "fcd2bc9c3758a5e0205582085f0c169bf24e095930dbfade39b14c7624f626f8"
+    },
+    "controls/icons/control_commit_icon_v01.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "cut from control_commit_icon_master_v01.png, which is the untouched download; see that entry for where the drawing came from",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 control icons",
+      "title": "Confirm, control icon",
+      "slot": "control",
+      "master": "control_commit_icon_master_v01.png",
+      "crop": {
+        "x": 82,
+        "y": 88,
+        "w": 1090
+      },
+      "role": "the Confirm mark in the controls column at the end of the action row, drawn at geometry.py's MARK -- 68px, which is a duty tile's mark less its frame. duty_text.json's `controls` block owns the wording.",
+      "modifications": "cropped to the square (82, 88) 1090 wide out of the master, at the framing chosen in ui/board_v2/icon_lab/ and recorded in its framing.json -- whole source pixels, no resampling, no ground painted in, and the alpha carried through exactly. Encoded WebP at quality 90, which is what this tree ships; the master stays the lossless archive. WHAT THE ENCODE COSTS, measured rather than assumed: alpha is bit-exact everywhere, and on the body of the mark -- alpha 240 and above, which is 97% of the square, because this artwork is drawn just under full opacity rather than at it -- the worst colour error is 25 of 255 and the mean is 2.0. The larger errors are all in the band under alpha 16, where nothing is drawn. CUT HERE RATHER THAN IN THE PAGE: the lab's own cut button goes out through a canvas, which keeps colour premultiplied and so rounds every part-transparent pixel on the way back; this crop does not, so it is the more faithful of the two by a little. The framing is the lab's either way.",
+      "reproducibleBy": "ui/board_v2/icon_lab/framing.json, entry control_commit_icon_master_v01.png: the crop is (x, y, w) taken out of the master at its own resolution. Re-cutting from that file and this master reproduces these pixels up to the WebP encoder.",
+      "sha256": "f3a5e8ffe508e1a93e8facd6a145fd2fd0c7ce914b217396241dbeddca62e97d"
     }
   },
   "assetDirs": [
     "layout_lab/assets",
     "duty_actions",
+    "controls",
     "tokens/masters",
     "tokens/resources"
   ],

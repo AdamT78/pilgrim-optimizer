@@ -81,7 +81,13 @@ STATUS_SIZE = 16
 # which is the one place the board had a third spacing in it.
 RIBBON_Y = STATUS["y"] + STATUS["height"] + GAP   # 55, derived so the rule cannot drift
 TILE_GAP = GAP
-TILE_W = (WORK_W - 7 * TILE_GAP) // 8           # 154
+# HOW MANY TILES, as a name rather than as an 8 and a 7 in the same expression. DUTIES is the real
+# owner of this count and is declared far below -- it has to be, it carries the wording -- so the
+# number lived here as a literal, which was tolerable while only this line used it. The controls
+# column is placed off the LAST tile, so a second expression now depends on it. check() holds the
+# two together.
+TILES = 8
+TILE_W = (WORK_W - (TILES - 1) * TILE_GAP) // TILES           # 154
 TILE_PITCH = TILE_W + TILE_GAP
 TILE_NAME_SIZE = 13
 
@@ -122,6 +128,16 @@ TILE_NAME_BOTTOM = TILE_NAME_TOP + round(TILE_NAME_SIZE * TILE_NAME_LH)   # 22
 SEAL = 72
 SEAL_INSET = INSET
 
+# THE FRAME ROUND A MARK, which lived as a `2` in the template's CSS until the controls column
+# needed it. It was harmless there while it only drew an edge; the moment another object's SIZE is
+# measured from it, it is a number two files depend on and only one of them could see. The page
+# reads it from here now and sets --seal-border off it.
+#
+# WHAT IT COSTS A MARK: the marks are border-box, so a 72 mark with a 2 frame shows 68 of artwork,
+# and two of them 6 apart have 10 of clear air between the pictures. Both of those are what the
+# controls column is matched to, below.
+SEAL_BORDER = 2
+
 # THE RIBBON IS AS TALL AS WHAT IT HOLDS, rather than a number somebody typed. One inset does
 # every job in the tile -- under the name, between the two marks, and under the lower one -- so
 # the column hangs at a single rhythm and the tile stops at the same distance below the last mark
@@ -140,11 +156,39 @@ TILE_INNER_W, TILE_INNER_H = inner(TILE_W, RIBBON_H)      # 152 x 184
 # ITS HEIGHT IS WHAT THE SHORTER RIBBON FREED, and that is the point: ART_Y stays exactly where it
 # was, so the cards, the confirm row and the wheel do not move and the wheel pays nothing. 40 is
 # what falls out of 242 - 186 less the two gaps that now sit either side of the strip.
-ROAD_H = 40
+# 104: the 40 the shorter ribbon freed, PLUS the 64 the confirm row gave back when it stopped
+# being a row. The cards drop by that 64 so their foot lands where the confirm's did, which is
+# why WHEEL_Y does not move -- the wheel neither gains nor pays for any of this.
+ROAD_H = 104
 ROAD_Y = RIBBON_Y + RIBBON_H + GAP
 ROAD_X = X0
 ROAD_W = WORK_W
 ROAD = {"x": ROAD_X, "y": ROAD_Y, "width": ROAD_W, "height": ROAD_H}
+
+# THE BACKDROP IS THE RIBBON AND THE ROAD TOGETHER, and it is derived from both rather than given
+# a height of its own. It runs from the top of the tiles to the foot of the strip -- a valley the
+# eight tiles stand in front of and the Merchant's road runs along the bottom of.
+#
+# IT IS THE ONE RECT ON THIS BOARD THAT IS MEANT TO BE COVERED. Everything else here is placed so
+# that nothing overlaps it; this is placed BEHIND two things that do, which is why its height is
+# the distance between two other objects and can never be typed. Shorten the ribbon or widen the
+# strip and the picture follows without anybody remembering to resize it.
+#
+# THE ARTWORK'S OWN ROAD USED TO HAVE TO LAND ON THE TOP OF THE STRIP, and that rule has gone --
+# not relaxed because it was inconvenient, but because the strip stopped being a surface. It is
+# where the Merchant is TOLD to walk; the picture behind him is scenery. The arithmetic says the
+# same: the strip is 104 tall now rather than 64, so it wants 34% of the rect below the horizon
+# and the master has 8.8% of its height below its own. No crop of that file can satisfy the old
+# rule, and stretching one to fit distorted the whole valley by 26% to do it. The horizon falls
+# INSIDE the strip instead, 64px down its 104.
+BACKDROP_Y = RIBBON_Y
+BACKDROP_H = (ROAD_Y + ROAD_H) - BACKDROP_Y      # 306
+BACKDROP = {"x": X0, "y": BACKDROP_Y, "width": WORK_W, "height": BACKDROP_H}
+
+# WHERE THE PAINTED GROUND STARTS, as a fraction of the picture's height. Measured off the file,
+# not chosen: it is what the crop came out at. Published so the page and the records agree about
+# it, and so a replacement picture has a number to be compared with by eye rather than nothing.
+BACKDROP_GROUND = 0.871   # recorded, no longer enforced
 
 
 def configure(seal: int) -> None:
@@ -232,15 +276,95 @@ ART_GAP = GAP
 # middle of the first tile and ends at the middle of the last, so the row reads as hung beneath
 # the eight rather than butted against them, and the ribbon's own rhythm sets where it starts.
 ROW_X = X0 + TILE_W // 2                         # 105, Clerical's centre
-ROW_END = X0 + 7 * TILE_PITCH + TILE_W // 2      # 1295, Allocation's centre
-ROW_W = ROW_END - ROW_X                          # 1190
 
-# AND THE TITHE TAKES WHAT IS LEFT OF IT, which comes to TILE_PITCH exactly -- one tile and one
-# gap. That is the number that makes this arrangement work rather than nearly work: the two cards
-# stay three tiles wide, every gap stays 16, ART_H does not move, and so nothing below the cards
-# moves and the wheel pays nothing. Holding the Tithe at one bare tile instead would have forced
-# the card to 502 and the card's height to 251, which the wheel would have paid for.
-TITHE_W = ROW_W - 2 * ART_W - 2 * ART_GAP        # 170 == TILE_PITCH
+# AND THE ROW NOW ENDS WITH A MARK, not with the Tithe. The three standing controls -- Show Map,
+# Hire Building and the commit -- are a column of marks, and the row reads cards, Tithe, controls.
+# The Tithe takes what is left of it.
+#
+# WHERE THE COLUMN ENDS IS WHERE THE ROW ENDS, and the column is placed by the eighth tile rather
+# than by the board's margin -- see MARKS_X below for why. So this cannot be stated until the
+# column has been, and ROW_END is published down there with it.
+# MOVED UP FROM BELOW THE ROW. It used to sit with the rest of the tile's drawing, which was
+# fine while nothing outside the tile asked where a mark goes. The controls column is placed
+# off Allocation's mark, and a module-level expression cannot call a function declared after
+# it -- so the choice was to inline the centring here and let two expressions drift, or to put
+# the one that owns it in front. This is the one that owns it.
+def seal_slots(n: int) -> list:
+    """Where a duty's seals sit INSIDE its tile, for a duty with n actions.
+
+    RELATIVE TO THE TILE, not the board, because the tile is what moves. Eight tiles have eight
+    different x, and a seal position written in board coordinates would be eight facts where one
+    will do.
+
+    A one-action duty gets ONE seal where the FIRST of two would go -- not centred in the space,
+    and not the first of two with an empty slot beside it.
+    An empty slot is a hole nobody can fill, and Taxation and Allocation genuinely have one action
+    each; `duty_text.json` is what says so.
+
+    THE TOP SEAL IS INSET FROM THE NAME EXACTLY AS THE BOTTOM ONE IS FROM THE EDGE. It used to
+    begin at TILE_NAME_BOTTOM, flush against the line of type with nothing between them, while
+    the other had a margin under it -- so the pair sat high and lopsided in a tile that looked
+    like it had been nudged. One inset, measured from whatever is above each seal.
+    """
+    top = TILE_NAME_BOTTOM + SEAL_INSET
+    x = (TILE_INNER_W - SEAL) // 2
+    # EVERY FIRST MARK ON THE SAME LINE, WHATEVER THE TILE HOLDS. A single mark used to be centred
+    # in the space under the name, which put Taxation's and Allocation's half a mark lower than the
+    # top mark of every tile beside them -- and on a ribbon of eight that reads as two tiles done
+    # wrong rather than as two tiles that are different. The column hangs from the name instead,
+    # so where a mark sits stops depending on how many the tile has.
+    if n == 1:
+        return [{"x": x, "y": top, "size": SEAL}]
+    if n == 2:
+        return [{"x": x, "y": top, "size": SEAL},
+                {"x": x, "y": top + SEAL + SEAL_INSET, "size": SEAL}]
+    raise SystemExit("a duty with %d actions has no seal arrangement here" % n)
+
+
+# ---- the controls column ----------------------------------------------------------------------
+# THREE MARKS AT THE END OF THE ACTION ROW: Show Map, Hire Building, and the commit.
+#
+# THE COLUMN IS THE EIGHTH TILE'S MARK, CARRIED DOWN. Not "near" it and not centred under it by a
+# number worked out here -- the same box, to the pixel: Allocation's artwork sits at 1261..1329
+# inside its frame, and so do these. That single fact gives the column its x, its width and the
+# row's right edge, and it is why there is no margin arithmetic in this section at all.
+#
+# IT USED TO BE FLUSH WITH THE WORKING EDGE, 41px to the right of this, and the two right edges
+# lining up made it look deliberate from a distance while no two emblems on the board shared an
+# axis. Nothing else here is justified to the margin -- the cards hang off tile centres -- so the
+# column was the one object relating to the page rather than to the board.
+#
+# WHAT IT COSTS: 43px at the right of the action row with nothing in it, and the Tithe down to 120
+# from 159, since the Tithe is what the row has left after the cards and this. Both are real and
+# neither is hidden: the strip has no owner until something lands in it.
+MARKS_ORDER = ("map", "hire", "commit")
+
+# A MARK HERE IS A TILE'S MARK WITHOUT ITS FRAME, which is the whole of the sizing rule. A mark on
+# a tile is SEAL with a SEAL_BORDER frame inside it, so it shows SEAL - 2*SEAL_BORDER of artwork;
+# these carry no frame, because they are pressed rather than chosen, so they ARE that artwork size.
+# The same emblem is now the same size in both places, which it was not at SEAL.
+MARK = SEAL - 2 * SEAL_BORDER                    # 68
+# AND THE AIR BETWEEN THEM IS THE AIR A TILE KEEPS, measured between the pictures rather than
+# between the boxes. A tile's two marks are SEAL_INSET apart as boxes and 10 apart as artwork,
+# because each box spends SEAL_BORDER on its frame. Matching the 6 -- which the column did at
+# first -- matches the arithmetic and not the eye.
+MARK_AIR = SEAL_INSET + 2 * SEAL_BORDER          # 10
+MARKS_W = MARK
+MARKS_H = len(MARKS_ORDER) * MARK + (len(MARKS_ORDER) - 1) * MARK_AIR        # 224
+
+# ALLOCATION'S ARTWORK BOX, asked of the tile rather than retyped. seal_slots() places a mark
+# inside its tile and the tile is placed on the pitch, so this is the one expression that survives
+# the ribbon changing width, the seal changing size, or a ninth duty arriving.
+MARKS_X = (X0 + (TILES - 1) * TILE_PITCH         # the eighth tile's left edge
+           + BORDER + seal_slots(1)[0]["x"]      # its mark, inside the border
+           + SEAL_BORDER)                        # and inside the mark's frame
+ROW_END = MARKS_X + MARKS_W                      # 1329
+ROW_W = ROW_END - ROW_X                          # 1224
+
+# TITHE_W STOPPED BEING TILE_PITCH, which it was while the row ended at Allocation's centre and
+# held nothing but cards and the Tithe. That was the happy number that made the centred row free;
+# it is spent twice over now -- once on the column, once on pulling the column back off the margin.
+TITHE_W = ROW_W - 2 * ART_W - 2 * ART_GAP - GAP - MARKS_W    # 120
 TITHE_X = ROW_X + 2 * ART_W + 2 * ART_GAP        # 1125
 ART_RATIO = ART_W / ART_H                        # 2.0 exactly
 
@@ -254,17 +378,13 @@ CAP_H = round(CAP_PAD_Y * 2 + CAP_SIZE * CAP_LH)  # 29
 
 # ---- the confirm row -----------------------------------------------------------------------------
 # No box under the cards -- the button alone, right-aligned to the card it confirms, on the same
-# line as the right-hand column's controls so the three choices read as one row.
-CONFIRM_Y = ART_Y + ART_H + GAP                  # 488
-CONFIRM_H = 48
-CONFIRM_SIZE = 14
-# THE BUTTON IS AS WIDE AS ITS WORD, NOT AS WIDE AS ITS BOX. confirm_for() hands over the whole
-# card's width because that is the span the button is aligned WITHIN -- it sits at the right-hand
-# end of it, where the thing it acts on finishes. What it actually occupies is the word plus this
-# padding each side. The number lived in the template, which is why the Tithe's button never got
-# it: that one took its box at face value and came out the full width of the Tithe panel, a
-# different button from the two beside it doing the same job.
-CONFIRM_PAD_X = 22
+# THE CONFIRM ROW IS GONE. Three buttons, one of which showed at a time, reserving a band 48 tall
+# plus a gap across the whole board for whichever one it was. It is one mark now, at the foot of
+# the controls column, and the 64 px it held went to the road above the cards.
+#
+# CONFIRM_Y, CONFIRM_H, CONFIRM_SIZE and CONFIRM_PAD_X are gone with it, and confirm_for() with
+# them. A button that is a mark has no type size and no padding: it has SEAL, like every other
+# mark on this board.
 
 # ---- the right-hand column -------------------------------------------------------------------
 # SIDE_X and SIDE_W are set with the cards above, because the column is now what the cards are
@@ -301,10 +421,18 @@ def token_cap(seal: int) -> int:
     WRITTEN ONCE BECAUSE IT IS ASKED TWICE: here, and again in configure() when --icons moves the
     mark size. Two copies would answer the same question differently the first time either was
     tuned, which is the shape of fault this file exists to prevent.
+
+    THE WIDTH TERM WAS STILL DIVIDING BY TWO, and this is where that was caught. It dates from the
+    side-by-side arrangement -- two tokens across, so each gets half the room -- and it was never
+    updated when they went into a column, because it did not BIND: at a Tithe of 159 it reported
+    69 against a height term of 66, so the wrong expression and the right one happened to agree
+    about the answer. Narrowing the Tithe to 120 for the controls column made it bind, and the
+    tokens silently went from 66 to 50 -- a third of their area, for a reason nobody chose.
+    One token across now, with an inset either side of it.
     """
     room = (ART_H - 2 * BORDER) - (TITHE_LABEL_TOP + TITHE_LABEL_H + INSET) - INSET
     return min(seal,
-               (TITHE_INNER_W_PRE - 2 * INSET - INSET) // 2,
+               TITHE_INNER_W_PRE - 2 * INSET,
                (room - 2 * INSET) // 3)
 
 
@@ -336,9 +464,9 @@ ACOLYTE_W = round(ACOLYTE_H * ACOLYTE_ASPECT)                # 50
 # because they are a different kind of thing from the move being made this turn.
 #
 # CITY_H is derived from the figures and the label, so it is set below, once both are known.
-STANDING_H = 48
-STANDING_SIZE = 13
-STANDING_PAD_X = 8
+# STANDING_H, STANDING_SIZE and STANDING_PAD_X are gone. Show Map and Hire Building were text
+# buttons 48 tall in this column; they are marks now, in the controls column at the end of the
+# action row, and a mark has SEAL and nothing else to say about its size.
 
 # ---- the figures in the City ---------------------------------------------------------------------
 # PLACEHOLDER NUMBERS, LIKE THE ACOLYTES BELOW, and in here for the same reason. Four pawns in a
@@ -397,7 +525,7 @@ def city_figures() -> list:
     return out
 
 # ---- the wheel ----------------------------------------------------------------------------------
-WHEEL_Y = CONFIRM_Y + CONFIRM_H + GAP            # 552
+WHEEL_Y = ART_Y + ART_H + GAP                    # 640, exactly where it was
 # THE WHEEL'S ROOM IS EVERYTHING LEFT OF THE RIGHT-HAND COLUMN, not the width of the cards. It
 # was the cards' width, which was the same thing while they reached the column; at three tiles
 # each they stop well short of it, and a wheel centred under them was pushed 12px past the board's
@@ -434,12 +562,12 @@ WHEEL_W = round(WHEEL_H / WHEEL_RATIO)
 WHEEL_X = X0 + (PLAY_W - WHEEL_W) // 2
 
 CITY_Y = WHEEL_Y + WHEEL_H - CITY_H              # bottom-aligned with the wheel
-HIRE_Y = CITY_Y - GAP_WIDE - STANDING_H
-MAP_Y = HIRE_Y - GAP_WIDE - STANDING_H
+# The two standing buttons that used to stack above the City have left for the controls column.
+# The City keeps its place on the wheel's baseline and its derived height; the 160 px they held
+# is empty for now, and is the room the City will need when the wheel's centre stops holding
+# acolytes and this box starts showing them -- which is what the note above CITY_H already says.
 
 CITY = {"x": SIDE_X, "y": CITY_Y, "width": SIDE_W, "height": CITY_H}
-HIRE = {"x": SIDE_X, "y": HIRE_Y, "width": SIDE_W, "height": STANDING_H}
-SHOW_MAP = {"x": SIDE_X, "y": MAP_Y, "width": SIDE_W, "height": STANDING_H}
 
 # ---- the acolytes on the wheel ------------------------------------------------------------------
 # Re-implemented rather than imported, deliberately -- see the fork note in the generator. These
@@ -499,36 +627,23 @@ def tiles() -> dict:
             for i, (slug, _n, _d) in enumerate(DUTIES)}
 
 
-def seal_slots(n: int) -> list:
-    """Where a duty's seals sit INSIDE its tile, for a duty with n actions.
+def mark_slots() -> dict:
+    """Where the three controls sit: bottom-aligned with the action row, one MARK_AIR up from it.
 
-    RELATIVE TO THE TILE, not the board, because the tile is what moves. Eight tiles have eight
-    different x, and a seal position written in board coordinates would be eight facts where one
-    will do.
+    THE FOOT IS WHAT IS ALIGNED, not the head. The commit is the mark the eye ends on, so it sits
+    at the bottom of the row where the cards finish, held off the edge by the same air the column
+    keeps internally -- the tile does exactly this under its lower mark.
 
-    A one-action duty gets ONE seal where the FIRST of two would go -- not centred in the space,
-    and not the first of two with an empty slot beside it.
-    An empty slot is a hole nobody can fill, and Taxation and Allocation genuinely have one action
-    each; `duty_text.json` is what says so.
-
-    THE TOP SEAL IS INSET FROM THE NAME EXACTLY AS THE BOTTOM ONE IS FROM THE EDGE. It used to
-    begin at TILE_NAME_BOTTOM, flush against the line of type with nothing between them, while
-    the other had a margin under it -- so the pair sat high and lopsided in a tile that looked
-    like it had been nudged. One inset, measured from whatever is above each seal.
+    THE SLACK IS ALL AT THE TOP, and there is 13 of it: three marks and their air come to 234 in a
+    row of 247. There is no box around this column, so that 13 is not a margin of anything and has
+    nothing to be unequal with. Spreading it to make the column fill the row would mean a different
+    rhythm from the tiles', which is the thing being matched.
     """
-    top = TILE_NAME_BOTTOM + SEAL_INSET
-    x = (TILE_INNER_W - SEAL) // 2
-    # EVERY FIRST MARK ON THE SAME LINE, WHATEVER THE TILE HOLDS. A single mark used to be centred
-    # in the space under the name, which put Taxation's and Allocation's half a mark lower than the
-    # top mark of every tile beside them -- and on a ribbon of eight that reads as two tiles done
-    # wrong rather than as two tiles that are different. The column hangs from the name instead,
-    # so where a mark sits stops depending on how many the tile has.
-    if n == 1:
-        return [{"x": x, "y": top, "size": SEAL}]
-    if n == 2:
-        return [{"x": x, "y": top, "size": SEAL},
-                {"x": x, "y": top + SEAL + SEAL_INSET, "size": SEAL}]
-    raise SystemExit("a duty with %d actions has no seal arrangement here" % n)
+    bottom = ART_Y + ART_H - MARK_AIR
+    top = bottom - MARKS_H
+    return {name: {"x": MARKS_X, "y": top + i * (MARK + MARK_AIR),
+                   "width": MARK, "height": MARK}
+            for i, name in enumerate(MARKS_ORDER)}
 
 
 def art_slots() -> dict:
@@ -537,11 +652,6 @@ def art_slots() -> dict:
     return {"actionA": {"x": ROW_X, "y": ART_Y, "width": ART_W, "height": ART_H},
             "actionB": {"x": ROW_X + ART_W + ART_GAP, "y": ART_Y,
                         "width": ART_W, "height": ART_H}}
-
-
-def confirm_for(slot: str) -> dict:
-    a = art_slots()[slot]
-    return {"x": a["x"], "y": CONFIRM_Y, "width": a["width"], "height": CONFIRM_H}
 
 
 def as_dict() -> dict:
@@ -555,11 +665,12 @@ def as_dict() -> dict:
         "gap": GAP, "gapWide": GAP_WIDE, "x0": X0, "workW": WORK_W,
         "status": dict(STATUS, size=STATUS_SIZE),
         "road": dict(ROAD),
+        "backdrop": dict(BACKDROP, ground=BACKDROP_GROUND),
         "ribbon": {"y": RIBBON_Y, "height": RIBBON_H, "tileW": TILE_W, "tileGap": TILE_GAP,
                    "pitch": TILE_PITCH, "nameSize": TILE_NAME_SIZE,
                    "nameTop": TILE_NAME_TOP, "nameLh": TILE_NAME_LH,
                    "innerW": TILE_INNER_W, "innerH": TILE_INNER_H,
-                   "seal": SEAL, "sealInset": SEAL_INSET,
+                   "seal": SEAL, "sealInset": SEAL_INSET, "sealBorder": SEAL_BORDER,
                    # So an empty slot is honest about the size of the seal that will fill it.
                    "solidFraction": SOLID_FRACTION,
                    # The page does not work the diagonal out; it is handed both arrangements.
@@ -569,18 +680,17 @@ def as_dict() -> dict:
                 "ratio": ART_RATIO, "capSize": CAP_SIZE, "capPadX": CAP_PAD_X,
                 "capPadY": CAP_PAD_Y, "capLh": CAP_LH, "capH": CAP_H},
         "slots": art_slots(),
-        "confirm": {"y": CONFIRM_Y, "height": CONFIRM_H, "size": CONFIRM_SIZE,
-                    "padX": CONFIRM_PAD_X,
-                    "actionA": confirm_for("actionA"), "actionB": confirm_for("actionB"),
-                    "tithe": {"x": TITHE_X, "y": CONFIRM_Y,
-                              "width": TITHE_W, "height": CONFIRM_H}},
+        # NO `size` HERE. It was published beside the rects and read by nobody -- the rects each
+        # carry their own width and height, which is what a drawing needs, so the extra key was a
+        # second statement of the same number waiting to disagree with it. That is the fault this
+        # tree already has an open note about elsewhere (`--frame`, set by the icon picker and read
+        # by no rule), and it is cheaper to not start a second one.
+        "marks": dict(mark_slots(), order=list(MARKS_ORDER)),
         "side": {"x": SIDE_X, "width": SIDE_W},
         "tithe": dict(TITHE, labelSize=TITHE_LABEL_SIZE, labelH=TITHE_LABEL_H,
                       labelTop=TITHE_LABEL_TOP, lh=CAP_LH, token=TOKEN,
                       order=list(TOKEN_ORDER), spread=TOKEN_SPREAD,
                       slots=token_slots()),
-        "showMap": SHOW_MAP, "hire": HIRE,
-        "standing": {"size": STANDING_SIZE, "padX": STANDING_PAD_X},
         "city": dict(CITY, labelSize=CITY_LABEL_SIZE, labelH=CITY_LABEL_H, labelTop=INSET,
                      lh=TILE_NAME_LH, figures=city_figures()),
         "wheel": {"x": WHEEL_X, "y": WHEEL_Y, "width": WHEEL_W, "height": WHEEL_H,
@@ -610,8 +720,6 @@ def gaps() -> dict:
         "status -> ribbon": RIBBON_Y - (STATUS["y"] + STATUS["height"]),
         "ribbon -> road": ROAD_Y - (RIBBON_Y + RIBBON_H),
         "road -> art": ART_Y - (ROAD_Y + ROAD_H),
-        "art -> confirm": CONFIRM_Y - (ART_Y + ART_H),
-        "confirm -> wheel": WHEEL_Y - (CONFIRM_Y + CONFIRM_H),
         "wheel -> canvas foot": CANVAS_H - (WHEEL_Y + WHEEL_H),
         # MEASURED FROM THE ROW, NOT THE MARGIN. These two read 93 the moment the row moved
         # off X0 and onto the first tile's centre -- the gaps had not changed at all, the
@@ -621,9 +729,8 @@ def gaps() -> dict:
         # this read 186 -- the distance to a box three rows further down, which is not a gap
         # anybody can see.
         "cards -> tithe": TITHE_X - (ROW_X + ART_W + ART_GAP + ART_W),
-        "tithe -> its confirm": CONFIRM_Y - (TITHE["y"] + TITHE["height"]),
-        "show map -> hire": HIRE_Y - (MAP_Y + STANDING_H),
-        "hire -> city": CITY_Y - (HIRE_Y + STANDING_H),
+        "cards -> wheel": WHEEL_Y - (ART_Y + ART_H),
+        "tithe -> the controls": MARKS_X - (TITHE_X + TITHE_W),
         # No "seal -> seal" here any more. The two seals OVERLAP by design, so the distance
         # between them is not a gap and holding it to GAP would have forced them back into a row
         # they do not fit in. check() asserts the overlap is a corner instead.
@@ -684,17 +791,35 @@ def check() -> list:
                    "clear each other by %.1f" % (TOKEN, TOKEN_SPREAD, touch, TOKEN_SPREAD - touch))
     if TOKEN > TITHE_W - 2 * INSET:
         bad.append("a Tithe seal of %d does not fit a box %d wide" % (TOKEN, TITHE_W))
+    # AND THE CAP AGREES WITH THE ARRANGEMENT. The width term in token_cap() went on dividing by
+    # two after the tokens left their row, and nothing failed for as long as the height term was
+    # the smaller of the two -- a wrong expression hidden behind a right answer. This asks the
+    # question the other way round: whatever the cap says, a token has to be the largest that the
+    # column it actually sits in will take. One across, an inset either side, three down.
+    slots = token_slots()
+    if len({t["x"] for t in slots}) != 1:
+        bad.append("the Tithe's tokens are no longer one across, so token_cap()'s width term is "
+                   "measuring an arrangement the board does not have")
+    elif TOKEN < min(SEAL, TITHE_INNER_W - 2 * INSET,
+                     ((ART_H - 2 * BORDER) - (TITHE_LABEL_TOP + TITHE_LABEL_H + INSET)
+                      - INSET - 2 * INSET) // 3):
+        bad.append("a Tithe token is %d and the box would take a larger one -- the cap is "
+                   "stricter than the column it is capping" % TOKEN)
     # THE ROW STANDS ON THE RIBBON'S CENTRES, which is the claim this layout makes and the one
     # thing no other guard here would notice going wrong. It used to stand on their EDGES, and
     # these two lines are the whole difference between the old arrangement and this one.
     t = tiles()
     half = TILE_W // 2
-    for label, got, want in (("the row's left edge", ROW_X, t["clerical"]["x"] + half),
-                             ("the row's right edge", TITHE_X + TITHE_W,
-                              t["allocation"]["x"] + half),
-                             ("the Tithe's width", TITHE_W, TILE_PITCH)):
-        if got != want:
-            bad.append("%s is at %d and the tile above it at %d" % (label, got, want))
+    if ROW_X != t["clerical"]["x"] + half:
+        bad.append("the row's left edge is at %d and the first tile's centre at %d"
+                   % (ROW_X, t["clerical"]["x"] + half))
+    # AND THE RIGHT-HAND END IS ALLOCATION'S MARK, by the same rule as the left is Clerical's
+    # centre. The row briefly ended at the working edge, while the controls column was pinned
+    # there; both ends hang off the ribbon again now, which is what makes the row read as belonging
+    # to the eight tiles rather than to the page it is printed on.
+    if ROW_END != MARKS_X + MARKS_W:
+        bad.append("the row ends at %d and the controls column at %d"
+                   % (ROW_END, MARKS_X + MARKS_W))
 
     # The City: four figures in a grid, inside the panel's border, evenly margined.
     figs = city_figures()
@@ -719,12 +844,52 @@ def check() -> list:
                    % (figs[0]["y"] - (INSET + CITY_LABEL_H), INSET))
     if CITY_FIG_W < 1 or CITY_FIG_H < 1:
         bad.append("a City figure comes out %d x %d" % (CITY_FIG_W, CITY_FIG_H))
-    if MAP_Y <= CONFIRM_Y + CONFIRM_H:
-        bad.append("Show Map at %d runs into the confirm row ending at %d"
-                   % (MAP_Y, CONFIRM_Y + CONFIRM_H))
+    # THE CONTROLS COLUMN STAYS INSIDE THE ACTION ROW, which replaces the old guard that Show Map
+    # cleared the confirm row -- both of those objects have gone. Three marks and their air come to
+    # 234 in a row of 247, and the thing that would break it is somebody raising SEAL.
+    if len(DUTIES) != TILES:
+        bad.append("the ribbon is built for %d tiles and there are %d duties"
+                   % (TILES, len(DUTIES)))
+    m = mark_slots()
+    first, last = m[MARKS_ORDER[0]], m[MARKS_ORDER[-1]]
+    if first["y"] < ART_Y or last["y"] + MARK > ART_Y + ART_H:
+        bad.append("the controls column spans %d..%d and the action row is %d..%d"
+                   % (first["y"], last["y"] + MARK, ART_Y, ART_Y + ART_H))
+    # AND IT STANDS ON ALLOCATION'S MARK, which is the claim the whole section is built on and the
+    # one a later edit is most likely to break while everything still renders. Asked of the tile
+    # here, exactly as MARKS_X asks it, so the two cannot drift: if this ever fails, the column has
+    # stopped being the eighth tile's artwork carried down and is merely near it.
+    art_x = X0 + (TILES - 1) * TILE_PITCH + BORDER + seal_slots(1)[0]["x"] + SEAL_BORDER
+    if MARKS_X != art_x or MARKS_W != SEAL - 2 * SEAL_BORDER:
+        bad.append("the controls column is %d..%d and Allocation's artwork is %d..%d"
+                   % (MARKS_X, MARKS_X + MARKS_W, art_x, art_x + SEAL - 2 * SEAL_BORDER))
+    # THE STRIP IT LEAVES AT THE RIGHT IS DECLARED, not discovered. Pulling the column off the
+    # margin left 43px of board with nothing in it, and a guard that said nothing would let that
+    # grow unremarked. It is not an arbitrary 43, though, which is the point worth holding: it is
+    # exactly the margin Allocation's own mark leaves to the right INSIDE its tile -- the tile's
+    # border, the space beside the mark, and the mark's own frame -- carried straight down. The
+    # column is the tile's artwork and the strip is the tile's margin; one fact, stated twice.
+    strip = (X0 + WORK_W) - ROW_END
+    want = BORDER + (TILE_INNER_W - SEAL - (TILE_INNER_W - SEAL) // 2) + SEAL_BORDER
+    if strip != want:
+        bad.append("the strip right of the controls column is %d and the tile's own right margin "
+                   "round its mark is %d" % (strip, want))
     if WHEEL_X < X0 or WHEEL_X + WHEEL_W > SIDE_X:
         bad.append("the wheel spans %d..%d and the play column is %d..%d"
                    % (WHEEL_X, WHEEL_X + WHEEL_W, X0, SIDE_X))
+
+    # THE BACKDROP COVERS THE RIBBON AND THE STRIP EXACTLY, which is the one thing about it that
+    # can go wrong silently: it sits behind two objects, so a backdrop an inch too short shows as
+    # a seam under the last tile rather than as anything that fails.
+    if BACKDROP["y"] != RIBBON_Y or BACKDROP["y"] + BACKDROP["height"] != ROAD_Y + ROAD_H:
+        bad.append("the backdrop spans %d..%d and the ribbon and road span %d..%d"
+                   % (BACKDROP["y"], BACKDROP["y"] + BACKDROP["height"],
+                      RIBBON_Y, ROAD_Y + ROAD_H))
+    # THE PAINTED ROAD NO LONGER HAS TO LAND ON THE STRIP, and the guard that held it there has
+    # gone with the rule. The strip is where the Merchant is TOLD to walk and the picture is
+    # scenery behind him -- that was the choice, and holding a painted horizon to a reserved band
+    # was the other one. What is still worth asserting is that the picture reaches both ends of
+    # what it stands behind, which the guard above does.
 
     # ---- the seals in the tile -----------------------------------------------------------------
     for n in (1, 2):
@@ -770,14 +935,6 @@ def check() -> list:
     return bad
 
 
-if __name__ == "__main__":                                   # pragma: no cover - a hand check
-    for k, v in gaps().items():
-        print("  %-24s %d" % (k, v))
-    print()
-    for line in check() or ["sound"]:
-        print(" ", line)
-
-
 def token_slots() -> list:
     """The three Tithe resources in a COLUMN, centred, TOKEN_SPREAD apart.
 
@@ -798,3 +955,11 @@ def token_slots() -> list:
     centres = [(cx, y0), (cx, y0 + TOKEN_SPREAD), (cx, y0 + 2 * TOKEN_SPREAD)]
     return [{"x": int(round(x - TOKEN / 2.0)), "y": int(round(y - TOKEN / 2.0)), "size": TOKEN}
             for x, y in centres]
+
+
+if __name__ == "__main__":                                   # pragma: no cover - a hand check
+    for k, v in gaps().items():
+        print("  %-24s %d" % (k, v))
+    print()
+    for line in check() or ["sound"]:
+        print(" ", line)

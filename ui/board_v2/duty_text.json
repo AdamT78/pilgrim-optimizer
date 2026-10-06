@@ -5,6 +5,21 @@
   "singleAction": "Taxation and Allocation have ONE action, so `actionB` is null. The lab draws no right artwork box for them and the ribbon card lists one row; nothing else moves, because nothing in this layout cascades.",
   "joinsOn": "`engineAction` is an id from docs/rules/DutyTiles.md under Canonical Action Names, and is the only thread to the engine. tests/layout_lab/test_duty_text.py fails if an id here is not in that table.",
   "filling": "A null `name` is an open question; a null `actionB` means the duty has one action. `unresolved` records a question about the DUTY rather than its wording.",
+  "controlsNote": "The three marks in the controls column at the end of the action row, in the order geometry.py's MARKS_ORDER gives them -- Show Map, Hire Building, and the commit. They are BUTTONS, not duty actions: there is no engineAction and no byStrength, because pressing one is not a move the engine scores. `name` is what the mark's title says and what the icon lab labels its card with; `shortLabel` is what the mark does, and nothing prints it yet -- it is here because a mark with no caption still needs somewhere to say what it is for, and the three labels were a JS object typed into action_board.html.tmpl before this block existed, which is the exact fault this file was created to end.",
+  "controls": {
+    "map": {
+      "name": "Show Map",
+      "shortLabel": "Open the kingdom map"
+    },
+    "hire": {
+      "name": "Hire Building",
+      "shortLabel": "Take a building into your service"
+    },
+    "commit": {
+      "name": "Confirm",
+      "shortLabel": "Commit the chosen action"
+    }
+  },
   "duties": {
     "clerical": {
       "actionA": {

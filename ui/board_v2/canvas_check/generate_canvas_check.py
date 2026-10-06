@@ -15,7 +15,7 @@ WHAT IS REAL HERE AND WHAT IS A BOX
 
 The duty wheel is the real drawing: the same vendored SVG the action board inlines, through its
 own wheel_svg(), at the position and size geometry.py gives it. Everything else -- the status
-line, the eight duty tiles, the two action artworks, the confirm bar, Tithe and the City -- is a
+line, the eight duty tiles, the two action artworks, the three controls, Tithe and the City -- is a
 correctly sized labelled box. That is the same bargain tools/ui_debug/generate_wheel_space_check.py strikes,
 and for the same reason: the question is how much room is left over, and art inside the module
 cannot change the answer.
@@ -34,8 +34,8 @@ IT USED TO READ THE LAYOUT LAB'S default_state(). That was right while the lab w
 composition was decided, and wrong once the action board became the thing that ships: the lab can
 be dragged about, and a measuring instrument reporting a draggable layout measures nothing in
 particular. geometry.py owns these numbers and refuses to be nudged, which is exactly the property
-this page needs. The objects differ accordingly -- a ribbon of eight tiles and a confirm bar where
-the lab had eight cards and none.
+this page needs. The objects differ accordingly -- a ribbon of eight tiles and a controls column
+where the lab had eight cards and neither.
 
 There is deliberately no fallback if either import fails. A page that silently drew hard-coded
 canvases would be worth less than no page: it would keep agreeing with itself while the numbers
@@ -144,7 +144,11 @@ def module_html(m) -> str:
     # ASKED ONCE. Everything below that is not a bare constant comes out of here, so the page and
     # the board cannot disagree about a rect without geometry.py itself disagreeing with it.
     rects = G.as_dict()
-    rects_confirm = rects["confirm"]
+
+    # THE BACKDROP FIRST, because it is the one object here that other objects stand in front of.
+    # Drawn before them so the page's own stacking puts it behind, the same order the board uses.
+    bd = rects["backdrop"]
+    box(bd["x"], bd["y"], bd["width"], bd["height"], "backdrop")
 
     st = G.STATUS
     box(st["x"], st["y"], st["width"], st["height"], "status")
@@ -161,7 +165,7 @@ def module_html(m) -> str:
     rd = G.ROAD
     box(rd["x"], rd["y"], rd["width"], rd["height"], "road")
 
-    # The action row and the confirm bar under it.
+    # The action row.
     #
     # ASKED FOR RATHER THAN REBUILT. These two were `G.X0` and `G.X0 + ART_W + ART_GAP`, which was
     # the same arithmetic art_slots() does and stopped being true the moment the row moved off the
@@ -171,27 +175,23 @@ def module_html(m) -> str:
         r = G.art_slots()[key]
         box(r["x"], r["y"], r["width"], r["height"], label)
 
-    # THE CONFIRM ROW IS THREE BOXES, NOT ONE BAR. This page drew a single strip from X0 across
-    # PLAY_W, which was never what the board does: there is a confirm under each action card and
-    # one under the Tithe, each the width of the thing it confirms, and only the selected one is
-    # shown. A bar out to PLAY_W also ran past the Tithe and stopped short of the side column, so
-    # it answered the question this page exists for -- how much room does this row take -- with a
-    # width nothing on the board occupies. It showed up the moment the row moved off the margin,
-    # because the bar stayed behind and the register was suddenly visible.
+    # THE CONTROLS COLUMN, at the end of the same row. Three marks where there used to be a confirm
+    # row under the cards and two standing buttons in the side column -- so this page now shows one
+    # object where it showed five, which is the point of the change and the thing it has to show.
     #
-    # ALL THREE AT ONCE, though the board shows one at a time: the question here is what the row
-    # RESERVES, and that is all three.
-    for key, label in (("actionA", "confirm L"), ("actionB", "confirm R"),
-                       ("tithe", "confirm tithe")):
-        r = rects_confirm[key]
-        box(r["x"], r["y"], r["width"], r["height"], label)
+    # DRAWN AT mark_slots() AND NOT AT A STACK REBUILT HERE, for the same reason the two art boxes
+    # are: the arithmetic is one line and that is exactly what makes retyping it tempting and
+    # invisible when it rots. MARKS_ORDER gives the order, so a fourth mark appears here by itself.
+    marks = rects["marks"]
+    for name in marks["order"]:
+        r = marks[name]
+        box(r["x"], r["y"], r["width"], r["height"], "mark %s" % name)
 
-    # THE RIGHT-HAND COLUMN, top to bottom: Tithe beside the art, then the two standing controls,
-    # then the City. Taken from as_dict() rather than listed by hand -- the first version of this
-    # page WAS a hand-written list and it silently lost Show Map and Hire Building, which is
-    # precisely what a hand-written list of someone else's objects does.
-    for key, label in (("tithe", "tithe"), ("showMap", "show map"),
-                       ("hire", "hire building"), ("city", "city")):
+    # THE RIGHT-HAND COLUMN: Tithe beside the art, and the City below. Taken from as_dict() rather
+    # than listed by hand -- the first version of this page WAS a hand-written list and it silently
+    # lost Show Map and Hire Building, which is precisely what a hand-written list of someone
+    # else's objects does. Those two are marks now, drawn just above.
+    for key, label in (("tithe", "tithe"), ("city", "city")):
         r = rects[key]
         box(r["x"], r["y"], r["width"], r["height"], label)
 

@@ -136,9 +136,26 @@ def test_the_lab_puts_every_icon_master_on_the_page(gen, rec):
                   if p.startswith("duty_actions/")
                   and "/icons/masters/" in p
                   and gen.slot_in_name(pathlib.PurePosixPath(p).name))
+    # AND THE CONTROLS, which are filed apart and framed together. Read off the record by the same
+    # rule as the duties above -- whatever has a record and a name the lab can resolve -- rather
+    # than listed here, for the reason in this test's own docstring: a list is a second place to
+    # say which marks exist, and the three controls were the fifteenth, sixteenth and seventeenth.
+    said = gen.control_names()
+    want += sorted(pathlib.PurePosixPath(p).name for p in rec
+                   if p.startswith("controls/")
+                   and "/icons/masters/" in p
+                   and (re.match(r"control_([a-z0-9]+)_icon_master_v\d+$",
+                                 pathlib.PurePosixPath(p).stem) or [None, None])[1] in said)
+    want = sorted(want)
     seed, notes = gen.seeds()
     assert sorted(s["file"] for s in seed) == want, notes
     assert want, "this tree has no icon masters in it at all"
+    # BOTH ROOTS ARE ON THE PAGE. The duty icons alone would pass everything above the moment the
+    # control walk was dropped, because the controls would simply stop being in `want` too.
+    assert any(s["file"].startswith("control_") for s in seed), (
+        "no control mark reached the page, so the lab is walking duty_actions only")
+    assert any(not s["file"].startswith("control_") for s in seed), (
+        "no duty icon reached the page")
     # Every card knows what to call itself and what a cut of it would be called.
     for s in seed:
         assert s["name"] and not s["name"].startswith("duty_actions"), s
@@ -168,6 +185,11 @@ def test_a_master_with_no_record_is_left_out_and_named(gen, tmp_path, monkeypatc
         "duty_actions/clerical/icons/masters/clerical_actionA_icon_master_v01.png": {
             "slot": "master"}}}), encoding="utf-8")
     monkeypatch.setattr(gen, "ART_DIR", art)
+    # AND THE SECOND ROOT, or this is not a sandbox. seeds() walks duty_actions AND controls; a
+    # test that pins one and leaves the other pointing at the real tree reports the real tree's
+    # icons as though tmp_path had produced them. Both of the walks in this file failed exactly
+    # that way the hour the controls root was added, which is how it was noticed.
+    monkeypatch.setattr(gen, "CONTROL_DIR", tmp_path / "controls")
     monkeypatch.setattr(gen, "ATTRIB_FILE", attrib)
 
     seed, notes = gen.seeds()
@@ -196,13 +218,35 @@ def test_the_walk_only_looks_at_images(gen, tmp_path, monkeypatch):
         "duty_actions/clerical/icons/masters/clerical_actionA_icon_master_v01.png":
             {"slot": "master"},
         "duty_actions/clerical/icons/clerical_actionA_icon_v01.png": {"slot": "left"},
+        "controls/icons/masters/control_map_icon_master_v01.png": {"slot": "master"},
+        "controls/icons/masters/control_lantern_icon_master_v01.png": {"slot": "master"},
+        "controls/icons/control_map_icon_v01.png": {"slot": "master",
+                                                    "master": "control_map_icon_master_v01.png"},
     }}), encoding="utf-8")
+    # THE CONTROL ROOT GETS THE SAME TREATMENT, in the same sandbox, because it is the same walk
+    # written twice and the second copy is where a rule gets forgotten. A .DS_Store beside a
+    # control master, a master nobody recorded, and a master whose name is not one of the three.
+    ctrl = tmp_path / "controls" / "icons"
+    (ctrl / "masters").mkdir(parents=True)
+    (ctrl / "masters" / "control_map_icon_master_v01.png").write_bytes(b"x")
+    (ctrl / "masters" / "control_hire_icon_master_v01.png").write_bytes(b"x")
+    (ctrl / "masters" / "control_lantern_icon_master_v01.png").write_bytes(b"x")
+    (ctrl / "masters" / ".DS_Store").write_bytes(b"x")
+    (ctrl / "control_map_icon_v01.png").write_bytes(b"x")
+    (ctrl / ".DS_Store").write_bytes(b"x")
+
     monkeypatch.setattr(gen, "ART_DIR", art)
+    monkeypatch.setattr(gen, "CONTROL_DIR", tmp_path / "controls")
     monkeypatch.setattr(gen, "ATTRIB_FILE", attrib)
 
     seed, notes = gen.seeds()
-    assert [s["file"] for s in seed] == ["clerical_actionA_icon_master_v01.png"], seed
-    assert not notes, notes
+    assert [s["file"] for s in seed] == ["clerical_actionA_icon_master_v01.png",
+                                         "control_map_icon_master_v01.png"], seed
+    # hire: recorded nowhere. lantern: recorded, but not a control duty_text.json knows about.
+    assert len(notes) == 2, notes
+    assert any("control_hire" in n and "no attribution entry" in n for n in notes), notes
+    assert any("control_lantern" in n and "does not say which control" in n for n in notes), notes
+    assert not any(".DS_Store" in n or "notes.txt" in n for n in notes), notes
 
 
 def test_a_framing_file_that_cannot_be_read_stops_the_build(gen, tmp_path, monkeypatch):
@@ -953,3 +997,39 @@ def test_the_border_and_the_guides_overlay_draw_in_one_colour():
     assert re.search(r"--guide:#[0-9a-fA-F]{6}", tmpl), "--guide is not defined once at the root"
     assert tmpl.count("#6a5f48") <= 1, \
         "the guide colour is written out more than once, so the two rules can disagree"
+
+
+def test_a_cut_on_disk_is_found_whichever_root_it_lives_under(gen, rec):
+    """The build tells you what is framed and not yet cut, and it has to be telling the truth.
+
+    WHAT WENT WRONG. `_cut_from` filtered on `duty_actions/`, which was every root there was when
+    it was written. The three control cuts live under `controls/`, so it could not see them, and
+    the build announced "framed but never cut: Confirm, Hire Building, Show Map" with all three
+    sitting in the folder. A line like that is worse than no line: it reads as a job still to do,
+    and the only way to find out it is wrong is to go and look.
+
+    THE GUARD IS ROOT-AGNOSTIC on purpose. It asks the record which masters have a cut and then
+    asks `_cut_from` to find each one, so a third root inherits the check rather than needing its
+    own. Falsified by putting any path filter back in front of it.
+    """
+    want = {}
+    for path, e in rec.items():
+        if "/masters/" in path or not e.get("master") or not e.get("crop"):
+            continue
+        if not (ROOT / "ui" / "board_v2" / path).is_file():
+            continue
+        want.setdefault(e["master"], []).append(path.rsplit("/", 1)[-1])
+    assert want, "no cut in this tree names the master it came from"
+
+    seeded = {x["file"] for x in gen.seeds()[0]}
+    missed = [m for m in want if m in seeded and gen._cut_from(m) is None]
+    assert not missed, (
+        "these masters have a cut on disk and the lab cannot find it, so the build will call "
+        "them never cut: %s" % sorted(missed))
+
+    # AND BOTH ROOTS ARE ACTUALLY REPRESENTED, or the sweep above proves nothing about the one
+    # that broke: a filter on duty_actions/ passes a test whose corpus is all duty actions.
+    roots = {p.split("/")[0] for p in rec if "/masters/" not in p and rec[p].get("master")}
+    assert {"duty_actions", "controls"} <= roots, (
+        "the tree no longer has a cut under each root, so this test cannot see a filter that "
+        "drops one -- roots found: %s" % sorted(roots))

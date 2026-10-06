@@ -1,11 +1,10 @@
 {
-  "savedAt": "2026-10-03T22:58:58.415Z",
+  "savedAt": "2026-10-05T20:09:10.510Z",
   "iconSize": 115,
   "note": "scale, ox and oy are the framing; everything else is worked out from them and is here to be read. Offsets are fractions of the box, so they survive a change of icon size. A cut is the square (x, y, w) taken out of `file` at its own resolution, with no resampling and no ground; where it runs off the edge of the file it is clear.",
   "icons": {
     "allocation_actionA_icon_master_v01.png": {
       "name": "Allocation",
-      "out": "allocation_actionA_icon_v02.png",
       "source": 1254,
       "scale": 1.45,
       "ox": -0.22114,
@@ -20,7 +19,6 @@
     },
     "build_roads_actionA_icon_master_v04.png": {
       "name": "Build Roads",
-      "out": "build_roads_actionA_icon_v06.png",
       "source": 1254,
       "scale": 1.46,
       "ox": -0.14026,
@@ -35,7 +33,6 @@
     },
     "build_roads_actionB_icon_master_v04.png": {
       "name": "Build Shrine",
-      "out": "build_roads_actionB_icon_v06.png",
       "source": 1254,
       "scale": 1.48,
       "ox": -0.12565,
@@ -50,7 +47,6 @@
     },
     "clerical_actionA_icon_master_v01.png": {
       "name": "Devotion",
-      "out": "clerical_actionA_icon_v02.png",
       "source": 1254,
       "scale": 1.23,
       "ox": -0.10712,
@@ -65,7 +61,6 @@
     },
     "clerical_actionB_icon_master_v01.png": {
       "name": "Silversmith",
-      "out": "clerical_actionB_icon_v02.png",
       "source": 1254,
       "scale": 1.44,
       "ox": -0.20386,
@@ -80,7 +75,6 @@
     },
     "construct_actionA_icon_master_v01.png": {
       "name": "Construct Building",
-      "out": "construct_actionA_icon_v02.png",
       "source": 1254,
       "scale": 1.39,
       "ox": -0.27919,
@@ -95,7 +89,6 @@
     },
     "construct_actionB_icon_master_v01.png": {
       "name": "Construct Road",
-      "out": "construct_actionB_icon_v02.png",
       "source": 1254,
       "scale": 1.08696,
       "ox": -0.05435,
@@ -110,7 +103,6 @@
     },
     "give_alms_actionA_icon_master_v01.png": {
       "name": "Alms",
-      "out": "give_alms_actionA_icon_v02.png",
       "source": 1254,
       "scale": 1.26,
       "ox": -0.10902,
@@ -125,7 +117,6 @@
     },
     "give_alms_actionB_icon_master_v01.png": {
       "name": "Donate Building",
-      "out": "give_alms_actionB_icon_v02.png",
       "source": 1254,
       "scale": 1.4,
       "ox": -0.27047,
@@ -140,7 +131,6 @@
     },
     "ordination_actionA_icon_master_v01.png": {
       "name": "Ordain",
-      "out": "ordination_actionA_icon_v02.png",
       "source": 1254,
       "scale": 1.31126,
       "ox": -0.21095,
@@ -155,7 +145,6 @@
     },
     "ordination_actionB_icon_master_v01.png": {
       "name": "Mission",
-      "out": "ordination_actionB_icon_v02.png",
       "source": 1254,
       "scale": 1.38,
       "ox": -0.1902,
@@ -170,7 +159,6 @@
     },
     "produce_actionA_icon_master_v01.png": {
       "name": "Produce Wheat",
-      "out": "produce_actionA_icon_v01.png",
       "source": 1254,
       "scale": 1.04167,
       "ox": -0.02083,
@@ -185,7 +173,6 @@
     },
     "produce_actionB_icon_master_v01.png": {
       "name": "Produce Stone",
-      "out": "produce_actionB_icon_v02.png",
       "source": 1254,
       "scale": 1.23,
       "ox": -0.10523,
@@ -200,7 +187,6 @@
     },
     "taxation_actionA_icon_master_v01.png": {
       "name": "Taxation",
-      "out": "taxation_actionA_icon_v02.png",
       "source": 1254,
       "scale": 1.54,
       "ox": -0.25962,
@@ -211,6 +197,48 @@
         "w": 814
       },
       "markFillsSlot": 1.46,
+      "ground": null
+    },
+    "control_commit_icon_master_v01.png": {
+      "name": "Confirm",
+      "source": 1254,
+      "scale": 1.15,
+      "ox": -0.075,
+      "oy": -0.08075,
+      "crop": {
+        "x": 82,
+        "y": 88,
+        "w": 1090
+      },
+      "markFillsSlot": 1.03,
+      "ground": null
+    },
+    "control_hire_icon_master_v01.png": {
+      "name": "Hire Building",
+      "source": 1254,
+      "scale": 1.36,
+      "ox": -0.17085,
+      "oy": -0.13846,
+      "crop": {
+        "x": 158,
+        "y": 128,
+        "w": 922
+      },
+      "markFillsSlot": 1.22,
+      "ground": null
+    },
+    "control_map_icon_master_v01.png": {
+      "name": "Show Map",
+      "source": 1254,
+      "scale": 1.29,
+      "ox": -0.14045,
+      "oy": -0.10872,
+      "crop": {
+        "x": 137,
+        "y": 106,
+        "w": 972
+      },
+      "markFillsSlot": 1.1,
       "ground": null
     }
   }
