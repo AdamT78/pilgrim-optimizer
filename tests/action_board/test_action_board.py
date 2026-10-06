@@ -276,6 +276,175 @@ def test_the_page_restates_no_geometry(gen):
                          % ", ".join(str(n) for n in overlap))
 
 
+def test_every_folder_under_a_duty_is_either_an_action_or_declared_not_to_be(gen):
+    """A new folder beside a duty's actions silently becomes one of them.
+
+    WHAT HAPPENED. `cutouts/` was added to hold the icons with their painted field knocked out --
+    deliberately not on the board, since markFolders still lists only seals and icons. But the
+    card art is found by walking every folder under a duty and skipping the ones nonSlotFolders
+    names, and `cutouts` was not in that list. The cutouts carry `slot: left` and `slot: right`,
+    so they qualified as card art; the walk takes the last match in sorted order; and `cutouts`
+    sorts after `action_a`, `build_road` and `construct_building`. Five cards -- Taxation, both
+    Build Roads, both Construct -- quietly drew a 68px emblem stretched across 590 x 295. The
+    other five survived only because their folder names happen to sort after the letter c.
+
+    THE LISTS ANSWER DIFFERENT QUESTIONS, which is the trap. markFolders is where a tile's MARK
+    may come from; nonSlotFolders is which folders are not an ACTION. A folder can need to be in
+    the second without being in the first, and that is exactly the case that was missed.
+
+    So this derives the invariant instead of restating a list: every directory that exists under
+    a duty is either one of that duty's action folders, or declared not to be one. Falsified by
+    adding any folder under a duty without telling nonSlotFolders about it.
+    """
+    import json
+    rec = json.loads((ROOT / "ui" / "board_v2" / "attribution.json").read_text(encoding="utf-8"))
+    slot_folders = rec["slotFolders"]
+    skip = set(gen.non_slot_folders())
+    art_dir = ROOT / "ui" / "board_v2" / "duty_actions"
+
+    stray = []
+    for duty_dir in sorted(p for p in art_dir.iterdir() if p.is_dir()):
+        mine = set((slot_folders.get(duty_dir.name) or {}).values())
+        for sub in sorted(p for p in duty_dir.iterdir() if p.is_dir()):
+            if sub.name in mine or sub.name in skip:
+                continue
+            stray.append("%s/%s" % (duty_dir.name, sub.name))
+    assert not stray, (
+        "these folders are under a duty and are neither one of its actions nor in "
+        "nonSlotFolders, so the card walk will take them for artwork: %s" % sorted(set(stray)))
+
+
+def test_a_card_is_drawn_from_its_own_slots_folder(gen):
+    """The direct statement of what went wrong, asserted on the result rather than the rule.
+
+    attribution.json's slotFolders says which folder holds each action's pictures. Whatever the
+    walk does, the file it ends up inlining for a slot has to have come out of that folder --
+    which is the one thing the five broken cards were not doing, while every list involved still
+    looked correct on its own.
+
+    Falsified by any folder that shadows a slot's own, whatever the reason.
+    """
+    import json
+    rec = json.loads((ROOT / "ui" / "board_v2" / "attribution.json").read_text(encoding="utf-8"))
+    slot_folders = rec["slotFolders"]
+    _art, by_duty, _notes = gen.bundled_art()
+    assert by_duty, "no card art was bundled at all"
+
+    wrong = []
+    for duty, slots in sorted(by_duty.items()):
+        for slot, (_key, filename) in sorted(slots.items()):
+            want = (slot_folders.get(duty) or {}).get(slot)
+            if want is None:
+                wrong.append("%s %s has art and no folder recorded for it" % (duty, slot))
+                continue
+            if not (ROOT / "ui" / "board_v2" / "duty_actions" / duty / want / filename).is_file():
+                wrong.append("%s %s drew %s, which is not in %s/" % (duty, slot, filename, want))
+    assert not wrong, "\n".join(wrong)
+
+
+def test_every_cutout_still_comes_out_of_the_icon_it_says_it_came_from():
+    """The committed cutouts are derived files, so the derivation has to still produce them.
+
+    A derived file in a repository is a claim: run this script on that input and you get these
+    bytes. Nothing was checking it. Change a threshold, change the cream, hand-edit one in an
+    image editor, or regenerate against a newer icon, and the files and their records would drift
+    apart silently -- and because the board does not draw them yet (markFolders lists seals and
+    icons only), nothing would look wrong for as long as they sit unused. The day they are
+    switched on is the worst possible day to find out.
+
+    PIXELS, NOT BYTES, and deliberately. The obvious guard is a sha256 of a re-encode, and it
+    would fail the first time CI's libwebp differed from the machine that wrote the file -- a red
+    build that means nothing. What is actually being claimed survives the encoder: the alpha
+    channel is carried losslessly by WebP, so it must match exactly, and the colour is a flat
+    cream by construction, so it must be that cream everywhere the alpha shows anything.
+
+    Falsified by changing LO, HI or CREAM in the script, or by editing any cutout.
+    """
+    import importlib.util
+    import numpy as np
+    from PIL import Image
+
+    spec = importlib.util.spec_from_file_location(
+        "_knockout", ROOT / "tools" / "duty_art" / "knockout_icons.py")
+    knock = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = knock
+    spec.loader.exec_module(knock)
+
+    rec = json.loads((ROOT / "ui" / "board_v2" / "attribution.json").read_text(encoding="utf-8"))
+    files = rec["files"]
+    art = ROOT / "ui" / "board_v2" / "duty_actions"
+    cutouts = sorted(art.glob("*/cutouts/*.webp"))
+    assert cutouts, "there are no cutouts in this tree at all"
+
+    for f in cutouts:
+        rel = "duty_actions/%s" % f.relative_to(art).as_posix()
+        assert rel in files, "%s has no attribution entry" % rel
+        entry = files[rel]
+        src = f.parent.parent / "icons" / entry["derivedFrom"]
+        assert src.is_file(), "%s says it came from %s, which is not there" % (rel, src.name)
+
+        made = knock.knockout(src)
+        have = Image.open(f).convert("RGBA")
+        assert made.size == have.size, "%s is %s and the derivation gives %s" % (
+            f.name, have.size, made.size)
+
+        a, b = np.asarray(made), np.asarray(have)
+        # ALPHA EXACTLY, EVERYWHERE. It is the whole content of a cutout -- the emblem is a shape
+        # cut in the alpha channel and the colour is a constant -- and lossless WebP carries it
+        # bit for bit, so there is nothing to be approximate about.
+        assert np.array_equal(a[:, :, 3], b[:, :, 3]), (
+            "%s no longer has the alpha the knockout produces from %s" % (f.name, src.name))
+
+        # AND THE COLOUR EXACTLY, WHERE ANY OF IT SHOWS. Not under the fully clear pixels: the
+        # encoder drops their colour whatever `exact` is asked for, so the file comes back with
+        # 246 where 248 was written in regions nothing draws. Asserting the whole array failed on
+        # precisely those pixels, which is a true difference about a thing that cannot be seen.
+        #
+        # THIS HALF IS STRICT BECAUSE THE FILES ARE LOSSLESS, and they are lossless because the
+        # loose version of this guard caught the reason: at quality 90 the cream was written 236
+        # and read back 235, so "one flat colour" was not true of what was stored.
+        shown = b[:, :, 3] > 0
+        assert shown.any(), "%s is entirely transparent" % f.name
+        assert np.array_equal(a[:, :, :3][shown], b[:, :, :3][shown]), (
+            "%s is no longer the colour the knockout paints" % f.name)
+        for i, want in enumerate(knock.CREAM):
+            assert (b[:, :, i][shown] == want).all(), (
+                "%s is not the flat cream the derivation paints" % f.name)
+
+
+def test_a_cutouts_record_quotes_the_numbers_the_script_actually_uses():
+    """Fourteen records restate the thresholds in prose; the script owns them.
+
+    `modifications` says "alpha ramped from luminance 30 to 180" and names the cream, because a
+    record that only said "knocked out" would describe nothing anyone could repeat. But that makes
+    the record a second copy of three constants, and the copy cannot answer back: change LO in the
+    script and fourteen entries quietly describe a derivation that no longer happened.
+
+    Falsified by editing either side alone.
+    """
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "_knockout2", ROOT / "tools" / "duty_art" / "knockout_icons.py")
+    knock = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = knock
+    spec.loader.exec_module(knock)
+
+    said_ramp = "luminance %d to %d" % (int(knock.LO), int(knock.HI))
+    said_cream = "rgb(%d, %d, %d)" % knock.CREAM
+
+    rec = json.loads((ROOT / "ui" / "board_v2" / "attribution.json").read_text(encoding="utf-8"))
+    checked = 0
+    for rel, entry in rec["files"].items():
+        if "/cutouts/" not in rel:
+            continue
+        checked += 1
+        mod = entry.get("modifications", "")
+        assert said_ramp in mod, "%s does not quote the script's ramp (%s)" % (rel, said_ramp)
+        assert said_cream in mod, "%s does not quote the script's cream (%s)" % (rel, said_cream)
+    assert checked, "no cutout records to check"
+
+
 def test_the_record_gates_the_art(gen, tmp_path, monkeypatch):
     """A picture with no attribution entry is left out and NAMED, never guessed into place.
 
