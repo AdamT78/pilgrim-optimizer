@@ -2154,6 +2154,45 @@
       "measured": "0.00% painted matter above the tiles' line and 0.00% behind every one of the eight tiles, the first backdrop to read zero on both. Status line 6.69:1 at its worst row against the 4.5 ordinary text wants. Tile band 105, inside the 95-115 the brief asks for. Worst emblem against its own tile 5.57:1, mean 7.13:1, measured on the rendered .tile element at 4x rather than sampled off a screenshot.",
       "reproducibleBy": "ui/board_v2/backdrop/PROMPT.md -- the no-motif mist prompt, its negative prompt, and the window search described there",
       "sha256": "5675bba244e9f7f0df939daf1c7e8731d63e3adcc955c3095ab89a7daf5633f4"
+    },
+    "controls/icons/control_map_icon_v02.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "derived from control_map_icon_v01.webp, which is the drawn cut; see that entry for where the drawing came from",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 control icons, cut out",
+      "title": "Show Map, control icon, cut out",
+      "derivedFrom": "control_map_icon_v01.webp",
+      "role": "the Show Map mark in the controls column, with its painted black field removed so only the emblem remains. v02 rather than a cutouts/ folder because a control is chosen by version -- bundled_controls() takes the highest vNN -- so filing this IS the switch, and v01 stays beside it rather than being overwritten.",
+      "modifications": "the field knocked out of v01 by tools/duty_art/knockout_icons.py and nothing else: same pixel dimensions, same artwork, alpha ramped from luminance 30 to 180 and the colour set flat to the emblem's own cream rgb(248, 236, 201). THE SAME RECIPE AS THE FOURTEEN DUTY CUTOUTS, and the controls were simply outside the tree that script walked: measured, they carried 51-61% near-opaque dark field against the cutouts' 0%, so they had exactly the fault it exists for. The emblem keeps 29.2% of the square here, inside the 19.5-37.4% the fourteen land in, which is the check that the shared threshold suits this drawing too. Encoded WebP LOSSLESS for the reason the duty cutouts are: one flat colour with a varying alpha is what lossy coding handles worst.",
+      "reproducibleBy": "python3 tools/duty_art/knockout_icons.py --write",
+      "sha256": "1d15d57ae88fa6793e416276d3084288b922c6fdbfd4d6cf0425d2e38ce846e4"
+    },
+    "controls/icons/control_hire_icon_v02.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "derived from control_hire_icon_v01.webp, which is the drawn cut; see that entry for where the drawing came from",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 control icons, cut out",
+      "title": "Hire Building, control icon, cut out",
+      "derivedFrom": "control_hire_icon_v01.webp",
+      "role": "the Hire Building mark in the controls column, with its painted black field removed so only the emblem remains. v02 rather than a cutouts/ folder because a control is chosen by version -- bundled_controls() takes the highest vNN -- so filing this IS the switch, and v01 stays beside it rather than being overwritten.",
+      "modifications": "the field knocked out of v01 by tools/duty_art/knockout_icons.py and nothing else: same pixel dimensions, same artwork, alpha ramped from luminance 30 to 180 and the colour set flat to the emblem's own cream rgb(248, 236, 201). THE SAME RECIPE AS THE FOURTEEN DUTY CUTOUTS, and the controls were simply outside the tree that script walked: measured, they carried 51-61% near-opaque dark field against the cutouts' 0%, so they had exactly the fault it exists for. The emblem keeps 21.4% of the square here, inside the 19.5-37.4% the fourteen land in, which is the check that the shared threshold suits this drawing too. Encoded WebP LOSSLESS for the reason the duty cutouts are: one flat colour with a varying alpha is what lossy coding handles worst.",
+      "reproducibleBy": "python3 tools/duty_art/knockout_icons.py --write",
+      "sha256": "d83dd42ac5513b2da8c088fc380813d64766074e93d8be4d997da5fdb486b306"
+    },
+    "controls/icons/control_commit_icon_v02.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "derived from control_commit_icon_v01.webp, which is the drawn cut; see that entry for where the drawing came from",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 control icons, cut out",
+      "title": "Confirm, control icon, cut out",
+      "derivedFrom": "control_commit_icon_v01.webp",
+      "role": "the the commit mark in the controls column, with its painted black field removed so only the emblem remains. v02 rather than a cutouts/ folder because a control is chosen by version -- bundled_controls() takes the highest vNN -- so filing this IS the switch, and v01 stays beside it rather than being overwritten.",
+      "modifications": "the field knocked out of v01 by tools/duty_art/knockout_icons.py and nothing else: same pixel dimensions, same artwork, alpha ramped from luminance 30 to 180 and the colour set flat to the emblem's own cream rgb(248, 236, 201). THE SAME RECIPE AS THE FOURTEEN DUTY CUTOUTS, and the controls were simply outside the tree that script walked: measured, they carried 51-61% near-opaque dark field against the cutouts' 0%, so they had exactly the fault it exists for. The emblem keeps 20.6% of the square here, inside the 19.5-37.4% the fourteen land in, which is the check that the shared threshold suits this drawing too. Encoded WebP LOSSLESS for the reason the duty cutouts are: one flat colour with a varying alpha is what lossy coding handles worst.",
+      "reproducibleBy": "python3 tools/duty_art/knockout_icons.py --write",
+      "sha256": "e6b31cc24d497f719605fcd9070eb887aea96902f6999f210001b064a9d7da00"
     }
   },
   "assetDirs": [

@@ -4,9 +4,43 @@ Show Map, Hire Building and the commit: the column of marks at the right-hand en
 row. One folder, shaped exactly like a duty's `icons/` — the cut beside its `masters/` original.
 
 ```
-controls/icons/control_map_icon_v01.webp        the cut the board draws
+controls/icons/control_map_icon_v02.webp        the cut the board draws, field knocked out
+controls/icons/control_map_icon_v01.webp        the drawn cut it came from, kept
 controls/icons/masters/control_map_icon_master_v01.png   the untouched download
 ```
+
+## The field, and why v02 exists
+
+These were drawn light-on-black like the fourteen duty icons, and they kept their painted field
+for longer because `tools/duty_art/knockout_icons.py` only walked `duty_actions/`. Measured, the
+three carried **51–61% near-opaque dark** against the duty cutouts' **0%** — the same fault, in a
+folder the script could not see. It walks both trees now.
+
+**And the cutout is a version, not a folder, which is the one real difference between the two
+halves of that script.** A duty mark is chosen by `attribution.json`'s `markFolders`, so its
+cutout goes into `cutouts/` and waits until that list names it. A control is chosen by *highest
+version* — `bundled_controls()` takes the highest `vNN` — so there is nowhere to put one where
+the board is not already looking. Filing `v02` **is** the switch. `v01` stays beside it rather
+than being overwritten, so its `sha256` is not orphaned.
+
+Re-running the script will not cut a cut: each source is measured first and skipped when it has
+no field left to remove, which is what stops a second run deriving a `v03` from `v02`.
+
+## The ground under them
+
+Each mark stands in a `.panel` — the same border, radius and colour the Take Tithe box and the
+City wear — drawn as `.mark::before` at a negative inset of `geometry.CONTROL_PAD`. Before that
+they were bare artwork on the canvas, which is black here because the backdrop ends at the foot
+of the ribbon, well above this row.
+
+Not the duty tile's plate, which was the other candidate: a tile is *glass*, 55% of `--plate`
+over the picture behind it, and there is no picture behind this row — the same treatment carried
+down is very nearly invisible. A tile also means "selectable, takes the gold rim when chosen",
+and Show Map and Hire Building are never chosen.
+
+The pad forced this into `geometry.py` rather than leaving it a stylesheet flourish: two 6s round
+two marks is 12 of box where the column has 6 of air, so the column is spaced as three **boxes**
+now and the marks sit inside them.
 
 ## Why these are not under `duty_actions/`
 

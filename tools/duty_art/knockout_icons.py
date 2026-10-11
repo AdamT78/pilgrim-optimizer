@@ -22,10 +22,22 @@ the emblem comes out with a grey fringe that shows against anything lighter than
 from. The emblem is one cream throughout -- CREAM below, measured off the artwork -- so painting
 that flat and varying only alpha gives a clean edge at any size, over anything.
 
-NOT WIRED TO THE BOARD. These are written to `cutouts/` beside `icons/`, and attribution.json's
-`markFolders` lists `seals` and `icons` only -- so the board goes on drawing what it draws until
-`cutouts` is added to that list, last, which is what the ordering in markFolders is for. Running
-this changes no pixel the board shows.
+THE TWO HALVES REACH THE BOARD DIFFERENTLY, and the difference matters before you run it.
+
+The fourteen DUTY cutouts are NOT WIRED. They are written to `cutouts/` beside `icons/`, and
+attribution.json's `markFolders` lists `seals` and `icons` only -- so the board goes on drawing
+what it draws until `cutouts` is added to that list, last, which is what the ordering in
+markFolders is for. That half changes no pixel the board shows.
+
+The three CONTROL cutouts ARE wired, immediately. A control is chosen by version rather than by
+folder -- bundled_controls() takes the highest vNN -- so there is nowhere to put one where the
+board is not already looking, and filing it IS the switch. Run this with --write and the next
+build draws the new cuts.
+
+AND IT WILL NOT CUT A CUT. Because the controls' newest version becomes the cutout, a second run
+would otherwise derive v03 from v02 and keep climbing. Each source is measured first and skipped
+when it has no painted field left to remove, which is the property that actually matters rather
+than a filename convention -- see HAS_A_FIELD below.
 """
 import argparse
 import json
@@ -36,6 +48,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 BOARD = ROOT / "ui" / "board_v2"
 ART_DIR = BOARD / "duty_actions"
+CONTROL_DIR = BOARD / "controls" / "icons"
 ATTRIB_FILE = BOARD / "attribution.json"
 
 SRC_DIR = "icons"
@@ -63,6 +76,15 @@ CREAM = (248, 236, 201)
 # hard cut is what keeps the antialiasing the artist drew.
 LO, HI = 30.0, 180.0
 
+# WHAT "STILL HAS A FIELD" MEANS, measured rather than named. A drawn icon is 51-61% near-opaque
+# dark; a cutout is 0.0%, because every visible pixel of one is the flat cream and everything else
+# is clear. There is no middle, so any small number separates them and 2% is slack, not a judgement.
+#
+# WHY NOT TEST THE FILENAME. A control's cutout is `control_map_icon_v02`, which is spelt exactly
+# like a second drawn cut -- the version is the only thing that moves, deliberately, because that
+# is how the board picks one. So the name cannot answer this and the pixels can.
+HAS_A_FIELD = 0.02
+
 
 def newest_icons() -> dict:
     """The icon cut the board would draw for each duty and slot, by the board's own rule.
@@ -81,6 +103,43 @@ def newest_icons() -> dict:
         if key not in out or v > out[key][0]:
             out[key] = (v, f)
     return {k: v[1] for k, v in out.items()}
+
+
+def newest_controls() -> dict:
+    """The three controls, by the board's own rule: control_<key>_icon_vNN, highest NN wins.
+
+    THE SAME FIELD, THE SAME PROBLEM, A DIFFERENT FOLDER. The three controls were drawn by the
+    same hand and in the same way as the fourteen duty icons -- light on a painted black field --
+    and measured, they carry 51-61% near-opaque dark against the cutouts' 0%. So they had exactly
+    the fault this script exists for and were simply not in the tree it walked.
+
+    AND THEY NEED NO cutouts/ FOLDER, which is the one real difference. A duty mark is chosen by
+    attribution.json's markFolders list, so a cutout had to go somewhere the board was not yet
+    looking and be switched on by adding a folder name to the end of that list. A control is
+    chosen by VERSION -- bundled_controls() takes the highest vNN -- so the knocked-out cut is
+    just the next version, and filing it IS the switch. v01 stays beside it, unorphaned.
+    """
+    out: dict = {}
+    if not CONTROL_DIR.is_dir():
+        return out
+    for f in sorted(CONTROL_DIR.glob("control_*_icon_v*%s" % SUFFIX)):
+        m = re.match(r"control_([a-z]+)_icon_v(\d+)$", f.stem)
+        if not m:
+            continue
+        key, v = m.group(1), int(m.group(2))
+        if key not in out or v > out[key][0]:
+            out[key] = (v, f)
+    return {k: v for k, v in out.items()}
+
+
+def field_fraction(path: pathlib.Path) -> float:
+    """How much of this square is painted field: near-opaque, and not the emblem's cream."""
+    from PIL import Image
+    import numpy as np
+
+    a = np.asarray(Image.open(path).convert("RGBA")).astype(int)
+    alpha, rgb = a[:, :, 3], a[:, :, :3]
+    return float(((alpha > 200) & (rgb.mean(axis=2) <= 140)).mean())
 
 
 def knockout(path: pathlib.Path):
@@ -130,12 +189,43 @@ def main() -> int:
         print("  %-34s -> %-36s %4d square, emblem keeps %4.1f%%%s"
               % (src.name, out.name, im.width, 100 * kept, "" if a.write else "   (dry run)"))
 
+    # THE CONTROLS, BY VERSION RATHER THAN BY FOLDER. Everything above this line writes into a
+    # cutouts/ folder the board does not read until it is told to; these write the next version
+    # of a file the board already reads, so this half of the run is live the moment it is filed.
+    for key, (ver, src) in sorted(newest_controls().items()):
+        srel = "controls/icons/%s" % src.name
+        if srel not in rec:
+            print("  %-34s no attribution entry, skipped" % src.name)
+            continue
+        field = field_fraction(src)
+        if field < HAS_A_FIELD:
+            print("  %-34s already a cutout (%.1f%% field), nothing to take off"
+                  % (src.name, 100 * field))
+            continue
+        im = knockout(src)
+        kept = (np.asarray(im)[:, :, 3] > 8).mean()
+        if kept > 0.60:
+            print("  %-34s keeps %.0f%% -- that is a field, not an emblem, SKIPPED"
+                  % (src.name, 100 * kept))
+            continue
+        out = CONTROL_DIR / ("control_%s_icon_v%02d%s" % (key, ver + 1, SUFFIX))
+        if out.exists():
+            print("  %-34s %s already exists, skipped" % (src.name, out.name))
+            continue
+        if a.write:
+            im.save(out, "WEBP", lossless=LOSSLESS, quality=100, method=6, exact=True)
+        print("  %-34s -> %-36s %4d square, emblem keeps %4.1f%%%s"
+              % (src.name, out.name, im.width, 100 * kept, "" if a.write else "   (dry run)"))
+
     if not a.write:
         print("\nnothing written; pass --write to file them")
     else:
-        print("\nfiled under */%s/. The board does not read that folder: attribution.json's"
-              "\nmarkFolders is the list, and adding %r to the END of it is what would switch"
-              "\nthe board over." % (OUT_DIR, OUT_DIR))
+        print("\nduty cutouts filed under */%s/, which the board does NOT read:"
+              "\nattribution.json's markFolders is the list, and adding %r to the END of it is"
+              "\nwhat would switch the board over."
+              "\n\nany control cutout above is LIVE -- a control is chosen by highest version, so"
+              "\nfiling it was the switch. Record its sha256 in attribution.json and rebuild."
+              % (OUT_DIR, OUT_DIR))
     return 0
 
 
