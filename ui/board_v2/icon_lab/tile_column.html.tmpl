@@ -26,11 +26,18 @@ button[aria-pressed=true]{background:#2e2718;border-color:var(--line);color:#f0e
    one. Only the column arrangement is this page's own. */
 #scroll{margin:20px 0 0;overflow-x:auto;overflow-y:hidden;padding-bottom:10px}
 #stage{transform-origin:0 0}
-#ribbon{display:flex;align-items:flex-start}
+/* THE BAND, with the tiles standing in it. Its own height is the slider's, and the
+   tiles are centred down it the way the board hangs them in RIBBON_H. */
+#ribbon{display:flex;align-items:center;background:#15130f;border-radius:4px}
 .tile{position:relative;background:var(--plate);border:1px solid #2a2721;border-radius:5px;
   flex:0 0 auto;overflow:hidden}
-.nm{position:absolute;left:0;right:0;text-align:center;font-family:Georgia,serif;font-weight:600;
-  letter-spacing:.11em;text-transform:uppercase;color:var(--ink);white-space:nowrap}
+/* A SLICE IS THE COLUMN, THE TILE IS THE BOX IN IT. They were one element while a tile filled
+   its column; the tile is 74 in a column of 154 now, so the ribbon spaces COLUMNS at the board's
+   gap and each column centres its tile -- which is exactly what the board does, and is what
+   keeps the eight marks on the lines they are on there.
+
+   THE .nm RULE IS GONE WITH THE DUTY NAMES. */
+.slice{flex:0 0 auto;display:flex;justify-content:center}
 .mark{position:absolute;display:grid;place-items:center}
 .mark img{width:100%;height:100%;object-fit:contain;display:block}
 /* A CUT-OUT BRINGS NO GROUND, so this page supplies the same one the board does -- and now
@@ -157,22 +164,37 @@ function V(id){ return +document.getElementById(id).value; }
 // comes off the wheel, and the wheel keeps its asset's aspect, so it narrows by about twice what
 // it loses in height. That is the real price of a column, and it is the number this page exists
 // to put in front of you.
+// ONE GAP, STILL BOTH JOBS -- BUT THE SECOND JOB CHANGED. It used to be the space under the duty
+// NAME as well as the space between the two marks, which is what hung the column from the name at
+// the rhythm it keeps inside itself. There is no name on a tile now: the tile is the pair and the
+// air round it, so the gap's second job is that AIR, at twice itself, exactly as geometry.py has
+// it (TILE_PAD = 2 * SEAL_INSET). One lever still moves both, and every first mark still stands
+// on the line its neighbours' do.
+//
+// AND THE TILE IS DERIVED NOW, WHICH TURNS THIS PAGE ROUND. The tile used to BE the band: the
+// 'tall' slider set one height and it was both. The tile is whatever its marks ask for, so the
+// question this page answers is no longer "how tall must the tile be" but "does the band hold
+// the tile the marks ask for" -- same arithmetic, read the other way.
 function column(){
   var h = V('tall');
   var gap = V('gap');
-  var innerH = h - 2 * GEO.border;
-  var nameH = Math.round(GEO.nameSize * GEO.nameLh);
-  var top = GEO.nameTop + nameH + gap;
-  var avail = innerH - top - GEO.sealInset;
   var size = V('size');
-  var need = 2 * size + gap;
+  var pad = 2 * gap;
+  var tileH = 2 * size + gap + 2 * pad;
+  var innerH = tileH - 2 * GEO.border;
+  var top = pad - GEO.border;
+  // THE PRICE IS THE BAND'S, NOT THE TILE'S. The slider sets the band and the band is what the
+  // rest of the board is pushed down by; the tile is whatever its marks ask for and costs
+  // nothing on its own. These were the same number while the tile WAS the band.
   var grew = h - GEO.height;
   var wheelH = GEO.wheelH - grew;
   var edge = V('edge');
-  return {h: h, innerH: innerH, top: top, avail: avail, gap: gap, size: size, need: need, edge: edge,
-          over: need - avail,
-          couldBe: Math.floor((avail - gap) / 2),
-          wantRibbon: top + need + GEO.sealInset + 2 * GEO.border,
+  return {h: h, innerH: innerH, top: top, gap: gap, pad: pad, size: size,
+          tileW: size + 2 * pad, tileH: tileH,
+          avail: h, need: tileH,
+          over: tileH - h,
+          couldBe: Math.floor((h - gap - 2 * pad) / 2),
+          wantRibbon: tileH,
           grew: grew,
           wheelH: wheelH,
           wheelW: Math.round(wheelH / GEO.wheelRatio)};
@@ -184,15 +206,22 @@ function build(){
   ribbon.innerHTML = ''; NODES = [];
   ribbon.style.gap = GEO.tileGap + 'px';
   var c = column();
+  // THE BAND IS DRAWN NOW, AND IT HAS TO BE. The height slider used to set the TILE, so you
+  // could see what you were dragging; it sets the band the tiles stand in, and a band with
+  // nothing drawn for it is a slider that appears to do nothing at all.
+  ribbon.style.height = c.h + 'px';
   DUTIES.forEach(function(d){
-    var tile = el('div', 'tile', ribbon);
-    tile.style.width = GEO.tileW + 'px';
-    tile.style.height = c.h + 'px';
-    var nm = el('div', 'nm', tile);
-    nm.style.top = GEO.nameTop + 'px';
-    nm.style.fontSize = GEO.nameSize + 'px';
-    nm.style.lineHeight = String(GEO.nameLh);
-    nm.textContent = d.name;
+    var slice = el('div', 'slice', ribbon);
+    slice.style.width = GEO.sliceW + 'px';
+    var tile = el('div', 'tile', slice);
+    tile.style.width = c.tileW + 'px';
+    tile.style.height = c.tileH + 'px';
+    tile.style.borderRadius = Math.round(c.tileW * GEO.radiusFrac) + 'px';
+    // THE NAME IS THE TITLE, NOT A LINE OF TYPE. It was printed across the top of the tile and
+    // the column hung from where it ended; the board does not print it any more, so neither does
+    // this -- but a page of eight unlabelled boxes is no use for judging a size, so it is kept
+    // where pointing at it will say it.
+    tile.title = d.name;
     var marks = d.slots.map(function(s){
       var m = el('div', 'mark' + (s.ground ? ' plate' : ''), tile);
       var im = document.createElement('img'); im.src = s.src; m.appendChild(im);
@@ -205,8 +234,12 @@ function build(){
 
 function place(){
   var c = column();
+  var ribbon = document.getElementById('ribbon');
+  ribbon.style.height = c.h + 'px';
   NODES.forEach(function(n){
-    n.tile.style.height = c.h + 'px';
+    n.tile.style.width = c.tileW + 'px';
+    n.tile.style.height = c.tileH + 'px';
+    n.tile.style.borderRadius = Math.round(c.tileW * GEO.radiusFrac) + 'px';
     // EVERY MARK ON THE SAME LINE AS ITS NEIGHBOURS'. The first one hangs at the gap below the
     // name and the rest follow at the same gap, so where a mark sits does not depend on how many
     // the tile has. Taxation and Allocation have one action each, and centring theirs in the
@@ -215,7 +248,7 @@ function place(){
     n.marks.forEach(function(m, i){
       m.style.width = c.size + 'px';
       m.style.height = c.size + 'px';
-      m.style.left = Math.round((GEO.innerW - c.size) / 2) + 'px';
+      m.style.left = Math.round((c.tileW - 2 * GEO.border - c.size) / 2) + 'px';
       m.style.top = (c.top + i * (c.size + c.gap)) + 'px';
     });
   });
@@ -246,13 +279,13 @@ function read(c){
       (c.size === GEO.seal ? '   which is geometry.py\u2019s SEAL'
                            : '   against geometry.py\u2019s SEAL of ' + GEO.seal) +
       '        gap <b>' + c.gap +
-      '</b> px, under the name and between the two\n' +
-    'tile   <b>' + GEO.tileW + ' x ' + c.h + '</b>   the column has <b>' + c.avail +
-      '</b> px under the name and needs <b>' + c.need + '</b>\n' +
+      '</b> px between the two, and <b>' + c.pad + '</b> of air round them\n' +
+    'tile   <b>' + c.tileW + ' x ' + c.tileH + '</b>   the band is <b>' + c.avail +
+      '</b> px and the tile needs <b>' + c.need + '</b>\n' +
     (fits
-      ? 'fits, with <b>' + (-c.over) + '</b> px to spare\n'
+      ? 'fits, with <b>' + (-c.over) + '</b> px of band to spare\n'
       : '<b>DOES NOT FIT</b> by <b>' + c.over + '</b> px \u2014 the biggest that would fit at ' +
-        'this gap is <b>' + c.couldBe + '</b>, or the tile would have to be <b>' +
+        'this gap is <b>' + c.couldBe + '</b>, or the band would have to be <b>' +
         c.wantRibbon + '</b> tall\n') +
     'height <i>' + cost(c) + '</i>   RIBBON_H is ' + GEO.height + '\n' +
     'drawn  <b>' + (c.size * s).toFixed(0) + '</b> px here' +
@@ -279,9 +312,9 @@ function fit(c){
   // A SCALED ELEMENT STILL CLAIMS ITS UNSCALED BOX, so the wrapper is told the real size or the
   // page scrolls to nothing and leaves a hole under the tiles. The height is the tile's chosen
   // one, not geometry's, or growing the ribbon would push the tiles under the note.
-  var w = DUTIES.length * GEO.tileW + (DUTIES.length - 1) * GEO.tileGap;
+  var w = DUTIES.length * GEO.sliceW + (DUTIES.length - 1) * GEO.tileGap;
   st.style.width = w + 'px';
-  document.getElementById('scroll').style.height = (c.h * s + 18) + 'px';
+  document.getElementById('scroll').style.height = (Math.max(c.h, c.tileH) * s + 18) + 'px';
   document.getElementById('ribbon').style.width = w + 'px';
 }
 

@@ -27,10 +27,11 @@
      together: --plate-lit is the SELECTED tile, so taking one number and leaving the other gives
      seven slate tiles and one that is still the old hue. There is a guard for that now. */
   --plate:#151E25; --plate-lit:#2B3A46; --guide:#6a5f48;
-  /* HOW FAR A HOVERED TILE RISES. Here and not in geometry.py, deliberately: geometry owns what
-     the board RESERVES, and this reserves nothing -- it is a transform, so no number downstream
-     of RIBBON_Y can feel it. The 16 above the ribbon is what it rises into. */
-  --lift:6px;
+  /* NO --lift. A hovered tile used to rise 6px and a selected one stayed up, and both are gone:
+     the tiles sit still now and say everything they have to say in colour. The variable went
+     with the rule, along with the ::after that refilled the strip a rising tile vacated and the
+     reduced-motion rule that existed for its transition -- three pieces of machinery whose only
+     job was to make the movement safe, which is the shape a removed feature should leave. */
   /* HOW MUCH VALLEY COMES THROUGH A TILE. One number; the marks keep their own opaque ground, so
      this moves the card and not what is drawn on it. */
   --tile-alpha:55%;
@@ -68,68 +69,115 @@ body.full{background:#000}
    picture yet" on top of each other. Anything nested that needs placing says so itself. */
 #board > *{position:absolute}
 
-/* Upper text box. One line, centred in its own box, so nothing is clipped at any size. */
+/* Upper text box. One line, centred in its own box, so nothing is clipped at any size.
+
+   BLACK, AND IT IS THE ONLY BLACK TYPE ON THE BOARD. Everything else here is cream on dark,
+   because everything else sits on the board's own ground. This line does not: the backdrop
+   reaches the top of the canvas, so these words are on painted SKY -- a flat mist at luminance
+   144, the lightest surface on the board by a long way. Cream on it was 2.2:1 against the 4.5
+   ordinary text is held to; black is 6.6:1.
+
+   AND THE SHADOW WENT WITH THE CREAM. It was two dark rings holding light type off a light sky,
+   which is a correction for a contrast that no longer exists -- a dark glow behind dark letters
+   buys nothing and softens the edge it sits on. What has NOT come back is a plate: a dark box
+   behind the words would be the black strip across the top of the picture that extending the
+   picture removed, put back in the one place it was removed from.
+
+   THE PAIRING IS MEASURED, NOT ASSUMED. The guard reads this colour out of the stylesheet and
+   the sky out of the shipped backdrop file, so a darker picture arriving under black type fails
+   rather than quietly disappearing. */
 #status{display:grid;place-items:center;text-align:center;
-  font-family:Georgia,serif;color:#e8dfca;white-space:nowrap;overflow:hidden}
+  font-family:Georgia,serif;color:#000;white-space:nowrap;overflow:hidden}
 
 /* ---- the eight duty tiles -------------------------------------------------------------- */
 /* THE TILE IS GLASS OVER THE VALLEY. --plate at --tile-alpha rather than a colour of its own, so
    the palette stays one fact and the transparency is one number. The SELECTED tile stays opaque
    on purpose -- its gradient has no alpha -- which is what makes it read as solid against seven
    panes of glass, and is a second thing selection says for free. */
-.tile{border:1px solid #2a2721;border-radius:4px;cursor:pointer;
-  background:color-mix(in srgb, var(--plate) var(--tile-alpha), transparent);
-  transition:transform .12s ease-out}
-.tile .nm{position:absolute;left:0;right:0;text-align:center;font-family:Georgia,serif;
-  font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--ink)}
-/* THE SELECTED TILE CATCHES LIGHT, it is not filled in. A flat --plate-lit across the whole card
-   read as a highlighted rectangle -- the selection announced by a block of colour. The gradient
-   puts the light at the name and lets the card settle back into the board, which is what a raised
-   thing does.
+/* NO border-radius HERE. It was a flat 4, and a flat number was the right owner while the
+   tile filled its column -- 4 at 154 wide is the same softening as 4 at 150. The corner is
+   0.12 of the box now, which is the box's own shape, so geometry sets it inline and a value
+   left in this rule would be the shape stated twice with specificity deciding which wins. */
+.tile{border:1px solid #2a2721;cursor:pointer;
+  background:color-mix(in srgb, var(--plate) var(--tile-alpha), transparent)}
+/* A LIT TILE CATCHES LIGHT, it is not filled in. A flat --plate-lit across the whole card read
+   as a highlighted rectangle -- the state announced by a block of colour. The gradient puts the
+   light at the top and lets the card settle back into the board, which is what a raised thing
+   does.
 
-   IT CAN AFFORD TO BE QUIET NOW, and could not have been before. Selection is already carried by
-   the lift and by the chosen mark's solid edge, so the plate is the third voice saying it rather
-   than the only one. On a board where the plate had to do this alone, this would be too faint. */
-.tile.sel{background:linear-gradient(180deg,var(--plate-lit) 0%,var(--plate) 100%);
+   AND HOVER NOW TAKES THE SAME PLATE, which is a deliberate change and costs something worth
+   writing down. The lift was the whole of hover, and measured off the rendered tile at 4x that
+   came to one grey level: a hovered tile read 59 against an untouched 60, so in a still frame
+   the pointer was answered by nothing at all and only the 6px of movement carried it.
+
+   SO THE PLATE NO LONGER SAYS WHICH TILE IS IN PLAY, and the rim below says it instead. For a
+   short while it said it by elimination -- at most two tiles are lit, the one under the pointer
+   is the hovered one -- which worked but made the board unreadable in a screenshot, where there
+   is no pointer to reason from. The rim gives the answer back without taking the plate off
+   hover.
+
+   THE PLATE IS STILL ONE RULE FOR BOTH, and that is the part to keep. Write it twice and the
+   next edit to one copy puts a third appearance on the board with nothing to say what it means.
+   One selector list here; the single difference is the rim, declared once, immediately below.
+   test_hover_and_selection_differ_by_the_rim_alone holds that shape. */
+.tile.lit, .tile.sel{background:linear-gradient(180deg,var(--plate-lit) 0%,var(--plate) 100%);
   border-color:#60594a}
+/* THE RIM IS THE WHOLE OF SELECTION, and it is --line because --line is ALREADY what this board
+   says when it means "this one is chosen": the selected wheel face's stroke, the selected action
+   card's outline, the pressed toolbar button, .btn.primary. The tile was the last thing holding
+   selection that was not saying it in the board's own word.
+
+   A GOLD RIM USED TO BE ON HOVER and was taken off for reading as "a near relative of the
+   SELECTED tile's lighter plate" -- two states both saying gold-ish, neither owning it. The
+   objection was to the collision, never to the gold, so the fix was to let exactly one state
+   have it. That is still the rule; this line only corrects WHICH gold.
+
+   AND IT WAS BRIEFLY A LITERAL, #9d7d35, WHICH WAS A MISTAKE WORTH LEAVING A NOTE ABOUT. Five
+   candidates were rendered against the tiles and one was picked on looks, with a careful
+   paragraph of measurements under it -- dE from the hover rim, WCAG contrast, the greyscale
+   failure mode. Every figure was correct. The reasoning was still wrong, because it never asked
+   what the rest of the board already did, and the answer was a token two scroll-lengths up. The
+   tile ended up 16.8 dE from the wheel face beside it, L* 54 against 73: two golds, one meaning,
+   neither owning it -- the exact fault the hover rim had been removed for.
+
+   THE LESSON IS NOT "MEASURE MORE". It is that a colour for a state is a question about the
+   board's vocabulary before it is a question about the colour, and a comparison rendered without
+   the wheel in frame could not see that. Judge a rim beside the other things wearing one.
+
+   ONE PIXEL, NOT TWO. The wheel's stroke is 2px and matching it here is tempting, but
+   geometry.inner() takes 2 * BORDER off the tile to get the 72 x 128 the marks are centred in,
+   with BORDER = 1. A 2px rim leaves the real interior at 70 x 126 while geometry still places
+   the pair for 72 x 128, so every mark sits off-centre. The border width is geometry's. */
+.tile.sel{border-color:var(--line)}
 /* The cross-highlight: hovering a wheel face lights its tile and the other way round. One class,
    set from one place, so the two directions cannot drift apart.
 
-   AND THE LIFT RIDES ON IT, which is the whole of "lift the tile when its wheel face is hovered
-   too". lightFace() already answers "which duty is the pointer on" from either end, so the second
-   direction needs no wiring -- adding a rule here is cheaper AND more correct than a second
-   listener, which would be the two-places-one-fact fault this class was made to avoid.
+   IT CARRIES THE PLATE, AND THAT IS NOW ALL IT CARRIES. lightFace() already answers "which duty
+   is the pointer on" from either end, so hovering a wheel face lights its tile without a second
+   listener -- which would be the two-places-one-fact fault this class was made to avoid.
 
-   A TRANSFORM COSTS NO LAYOUT. The tile is placed at RIBBON_Y and stays placed there; translate
-   moves what is drawn and not what is reserved, so the road, the cards and the wheel do not feel
-   it. Anything that actually shortened or moved the box would push the whole column down. */
-/* THE LIFT IS THE WHOLE SIGNAL. This rule used to also set a gold border and a gold halo behind
-   it, and with the tile rising as well that was three things saying one thing. Movement is the
-   loudest of the three and the only one that cannot be confused with a state -- the gold rim read
-   as a near relative of the SELECTED tile's lighter plate, on a ribbon where exactly one tile is
-   always selected. The wheel's own faces still brighten; that is their rule, not this one. */
-/* AND THE SELECTED TILE STAYS UP, at exactly the same height. ONE VALUE, TWO SELECTORS, and they
-   have to stay one value: a tile you click is already raised, because you were pointing at it to
-   click it, so matching heights mean it does not move at all under your finger. Give selection a
-   height of its own and every click jerks the tile you just pressed. What changes on the click is
-   the COLOUR -- the new tile takes --plate-lit where it stands, and the old one darkens and sinks.
-   So height says "the pointer is here", plate says "this is the one in play", and the two stop
-   competing for the same signal.
+   THE LIFT IS GONE, and with it three pieces of machinery that existed only to make it safe.
+   A hovered tile rose 6px, a selected tile stayed up at the same height, an ::after refilled
+   the strip the rising tile vacated so a pointer resting on its bottom edge did not set off an
+   un-hover / drop / re-hover shudder, and a reduced-motion rule turned the transition off. All
+   four were correct, and all four were answers to a question the board no longer asks.
 
-   HOVERING THE SELECTED TILE THEREFORE DOES NOTHING HERE, which is the one hole in this and is
-   covered elsewhere: its face on the wheel still brightens, so the pointer is still answered. */
-.tile.lit, .tile.sel{transform:translateY(calc(-1 * var(--lift)))}
-/* THE TILE KEEPS THE GROUND IT LEAVES. Hover is recomputed from what the pointer is OVER, so a
-   tile that slides out from under a pointer resting in its bottom few pixels un-hovers itself,
-   drops, re-hovers and shudders. This fills the strip it vacated: it is inside the transformed
-   box, so top:100% lands it exactly where the tile's lower edge used to be, and it belongs to the
-   tile for hit-testing. Found by driving the built page with the pointer on the bottom edge. */
-.tile.lit::after, .tile.sel::after{content:"";position:absolute;left:0;right:0;top:100%;height:var(--lift)}
-@media (prefers-reduced-motion:reduce){.tile{transition:none}}
+   WHICH LEAVES COLOUR DOING THE WHOLE JOB. Hover is the plate, selection is the plate and the
+   gold rim, and nothing on the ribbon moves at any time. That is a weaker hover than movement
+   was -- motion is the loudest signal there is and it is the one thing that cannot be mistaken
+   for a state -- but it is the quieter board, and the eight tiles now hold a fixed line. There
+   is also a real gain hidden in it: a tile that never moves cannot slide out from under the
+   pointer, so the hit-testing problem the ::after was patching cannot occur at all.
+
+   NOTHING BELOW CARED EITHER WAY. The lift was a transform, so the road, the cards and the
+   wheel never felt it; removing it frees no space and closes none. The 16 above the ribbon that
+   the tile used to rise into is simply air again. */
+
 /* THE PLACEHOLDER IS A DISC; THE REAL SEAL IS NOT. The wax seals are drawn with a scalloped,
    irregular rim, so the container's own circle would show through at every bay of it and the
    round crop would shear the peaks off. Once a picture lands the container stops drawing -- the
-   same correction the Tithe tokens needed, and the one tokens/README.md warns about. */
+   same correction the Tithe's three resources needed before they left the board, and the one
+   tokens/README.md warns about. */
 .seal{position:absolute;border-radius:50%;background:radial-gradient(70% 70% at 36% 30%,#6e2d26,#3d1512);
   border:1px solid #1f0b09;display:grid;place-items:center;cursor:pointer}
 /* THE EMPTY SLOT IS DRAWN THE SIZE THE SEAL WILL BE, not the size of its box. Every disc on this
@@ -140,23 +188,40 @@ body.full{background:#000}
 /* THE MARK'S EDGE, chosen in the icon lab: dashed, in the guides' own colour, 2 px. It sits
    inside the mark's box -- everything here is border-box -- so the drawing gives up 2 px each
    side rather than growing past where geometry.py placed it. */
-.seal.filled{background:none;border:var(--seal-border) dashed var(--guide);border-radius:4px}
+/* NO FRAME, AND NO GROUND. These are cut-outs now -- the emblem with its painted black field
+   knocked out -- so the dashed edge that used to draw the SLOT has nothing to enclose, and a
+   plate behind a cut-out would be the only square left on a tile that is otherwise glass over a
+   landscape. Both are gone, and the mark is the drawing and nothing else. */
+.seal.filled{background:none;border:0}
 /* AND SOLID UNDER THE POINTER. The dashes close up and NOTHING else changes -- same colour, same
    2 px, same box -- so the mark does not move or recolour, it just firms up. That restraint is
    the point: the border is already carrying the resting state, and a hover that also changed the
    width would shift the artwork inside it by a pixel, because this is a border-box.
 
-   NO .tok RULE BESIDE IT, deliberately. The Tithe's three resources are `tok` and draw no border
-   at all; this is the duty tiles' marks, which is what was asked for. Nor does the icon lab get
-   one: its marks are a sizing preview and are not clickable, so a hover state there would be an
-   interaction that page does not have. */
+   THE ICON LAB DOES NOT GET ONE: its marks are a sizing preview and are not clickable, so a
+   hover state there would be an interaction that page does not have. (It said "nor the Tithe's
+   three resources" too, until those left the board.) */
 /* AND THE CHOSEN MARK STAYS SOLID, by the same rule rather than a second one -- the pattern the
-   tiles use for lift and selection, for the same reason: one declaration cannot drift from
+   tiles use for hover and selection, for the same reason: one declaration cannot drift from
    itself. The pointer and the choice say the same thing here, which is right, because a mark
    under the pointer is what the chosen one would look like if you pressed it.
 
    An EMPTY slot is unaffected, as it is by the hover: there is no icon to firm up. */
-.seal.filled:hover, .seal.filled.on{border-style:solid}
+/* LIT RATHER THAN FRAMED, by the same rule the controls column uses. The frame used to carry
+   both states -- dashed at rest, solid under the pointer and when chosen -- and with it gone the
+   mark needs another way to answer. Brightness is what the three controls already do, so the
+   board has one way of saying "this one", not two.
+
+   SAME NUMBERS AS .mark, deliberately: .88 at rest and 1.12 lit. A mark and a control are the
+   same size and the same artwork now, and they should respond the same amount.
+
+   HOVER AND CHOSEN LOOK ALIKE, which is right here and was right before: a mark under the
+   pointer is what the chosen one would look like if you pressed it. The tile's own plate and
+   gold rim are what say which duty is selected; this says which action within it. (It read
+   "lift and gradient" until the lift was taken off the ribbon.) */
+.seal.filled{filter:brightness(.88);transition:filter .12s ease}
+.seal.filled:hover, .seal.filled.on{filter:brightness(1.12)}
+@media (prefers-reduced-motion:reduce){.seal.filled{transition:none}}
 .seal img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
 .seal.filled img{border-radius:0;object-fit:contain}
 /* A CUT-OUT BRINGS NO GROUND, so the board gives it one. A wax disc is a thing you could pick up
@@ -167,7 +232,13 @@ body.full{background:#000}
    out of the tile. THE TILE NOW CARRIES THE SAME PURPLE, so this rule draws nothing you can see
    on today's board -- it is kept because it is what makes the mark right if the tile's colour
    ever moves away from the plate's. */
-.seal.plate{background:var(--plate);border-radius:4px}
+/* THE PLATE PAINTS NOTHING NOW. attribution.json still records which marks are cut-outs and
+   which carry their own ground, and the page still carries the word through -- that is a fact
+   about the artwork and worth keeping. What changed is what the board does with it: a ground
+   behind a cut-out was right when the mark sat in a framed slot on a flat tile, and is wrong now
+   that the tile is glass over a valley and the mark has no frame. The rule is kept, emptied, so
+   that the day a mark needs a ground again there is one place to put it. */
+.seal.plate{background:none}
 /* THE ROAD. Reserved for the Merchant and empty on purpose -- it is the space the shorter
    ribbon freed, held open so the cards below it did not move. */
 /* THE STRIP IS A PLACE, NOT A SURFACE, NOW THAT THERE IS A PICTURE BEHIND IT. It used to paint
@@ -175,10 +246,16 @@ body.full{background:#000}
    part of the valley that had to show was the one part covered up. It keeps its rect, because the
    Merchant still needs somewhere to be told to walk. */
 #road{position:absolute;background:transparent;border:0}
-#backdrop{position:absolute;background-size:100% 100%;background-position:center;border-radius:4px}
-/* A PLATE BELONGS TO ITS TILE, NOT TO THE BOARD. The selected tile lifts, and a plate left on
-   --plate turned back into the visible square this whole arrangement exists to get rid of -- on
-   the one tile you are looking at.
+/* SQUARE AT THE TOP, ROUNDED AT THE FOOT. The 4px was a softening for a picture floating
+   inside a black canvas; the top edge is the canvas's own edge now, so a radius there would cut
+   two small notches of black into the one place the picture was extended to reach. The bottom
+   corners still float above the cards and keep it. */
+#backdrop{position:absolute;background-size:100% 100%;background-position:center;
+  border-radius:0 0 4px 4px}
+/* A PLATE BELONGS TO ITS TILE, NOT TO THE BOARD. The selected tile takes a gradient, and a plate
+   left on --plate turned back into the visible square this whole arrangement exists to get rid
+   of -- on the one tile you are looking at. (It said "the selected tile lifts" while the ribbon
+   still moved; the reason survives the lift, because it was never the movement that did it.)
 
    AND ON A GRADIENT IT CAN ONLY BE NOTHING. A ground is invisible when it is the same colour as
    what it sits on; against a gradient there is no one colour to be, so --plate-lit would match at
@@ -188,7 +265,7 @@ body.full{background:#000}
 
    NOT `background:none` BY ACCIDENT EITHER: these marks are cut-outs with real alpha, so what
    shows through here is the gradient, which is the ground. */
-.tile.sel .seal.plate{background:transparent}
+.tile.sel .seal.plate{background:none}
 
 /* ---- the two action cards -------------------------------------------------------------- */
 /* ISOLATED, AND THAT IS A FIX RATHER THAN A TIDY-UP. The `lift` overlay below is
@@ -260,6 +337,34 @@ body.full{background:#000}
   color:var(--ink);font:700 15px/1 ui-monospace,monospace;
   filter:brightness(.88);transition:filter .12s ease}
 .mark:hover{filter:brightness(1.12)}
+/* THE GROUND UNDER A CONTROL, and it is .panel's -- the same border, radius and colour the Take
+   Tithe box and the City wear. The three marks used to stand on nothing: every other object in
+   this row has a ground, and the canvas here is black because the backdrop ends at the foot of
+   the ribbon, well above it.
+
+   NOT THE DUTY TILE'S PLATE, which was the other candidate and fails twice. A tile is GLASS --
+   55% of --plate over the picture behind it -- and there is no picture behind this row, so the
+   same treatment carried down is a dark colour at 55% over black and very nearly invisible.
+   And a tile means "selectable, takes the gold rim when chosen"; Show Map and Hire Building are
+   never chosen, so it would promise a state they cannot enter.
+
+   DRAWN AS ::before AT A NEGATIVE INSET rather than as a box of its own, because the mark's rect
+   is geometry's and the artwork fills it. The pad is handed in from GEO.marks.pad -- it is
+   CONTROL_PAD there, and geometry had to learn about it: two 6s round two marks is 12 of box
+   where the column has 6 of air, so the column is spaced as three BOXES now and the marks sit
+   inside them.
+
+   z-index UNDER THE ARTWORK AND SAFE THERE. `.mark` carries a filter, which makes it a stacking
+   context, so the -1 cannot escape behind the board -- it lands between the mark's own (absent)
+   background and its img. The filter also means the ground dims and brightens WITH the emblem on
+   hover, which is right: the control is one object and responds as one.
+
+   AND IT COMES AND GOES WITH THE COMMIT. `.mark.off{display:none}` takes the element, and the
+   ground is part of the element, so the commit's box appears at the moment the commit does --
+   which is the whole point of its sitting apart from the other two. */
+.mark::before{content:"";position:absolute;z-index:-1;
+  inset:calc(-1 * var(--control-pad));
+  border:1px solid #46413a;border-radius:5px;background:#0e0d0b}
 /* A STAND-IN LOOKS LIKE ONE. A control with no cut filed yet borrows Allocation's mark, and the
    whole reason that is better than drawing nothing is that a wrong emblem is visibly wrong --
    which only holds if it does not look as settled as the two beside it. Half-lit says provisional
@@ -283,20 +388,12 @@ body.full{background:#000}
 /* Take Tithe stands in a row with the two action names, so it is tracked like them rather than
    like the City's label below it. The City keeps the panel tracking above. */
 #tithe .lb{letter-spacing:.11em}
-.tok{position:absolute;border-radius:50%;overflow:hidden;background:radial-gradient(70% 70% at 35% 30%,#3c3527,#241d14);
-  border:1px solid #6b5c3e;display:grid;place-items:center;cursor:pointer;
-  color:#e4d6b4;font:700 15px/1 ui-monospace,monospace}
-.tok img{width:100%;height:100%;object-fit:contain;display:block;background:none;border:0}
-/* EACH PNG IS THE COMPLETE MARK -- its rim, its disc and its motif are painted into the artwork,
-   which tokens/README.md says in as many words. A container with a disc of its own behind it and
-   a border around it gives every one of them two rims, and it did. The disc and border below are
-   for the LETTER fallback only, and `.filled` takes them off the moment a picture is there.
-
-   THE CLASS IS `filled` AND NOT `art` BECAUSE `.art` IS THE BIG CARD. A token marked `.art`
-   matched the card's own rule -- `overflow:hidden;background:#000;cursor:pointer` -- and only
-   looked right because the line below happened to win on specificity. A second container, the
-   seal, would have inherited the same accident. */
-.tok.filled{background:none;border:0;border-radius:0}
+/* THE .tok RULES ARE GONE WITH THE THREE RESOURCES. They described a grey disc with a rim, a
+   letter fallback inside it, and a `.filled` override that took both off the moment a picture
+   landed -- a correction tokens/README.md warns about, because each PNG paints its own rim and a
+   container with a second one gives every token two. None of that has anything to draw: the
+   Tithe holds a label. Kept out rather than left behind, so that `tok` cannot come back meaning
+   something else. */
 .pawn{position:absolute;display:grid;place-items:center}
 .pawn svg{width:100%;height:100%;display:block;overflow:visible}
 .pawn .n{position:absolute;font:700 17px/1 Georgia,serif;color:#1b1a16;text-shadow:0 1px 0 #ffffff40}
@@ -319,8 +416,8 @@ body.full{background:#000}
 
 /* EDIT MODE is a mode, and it says so. In play the board must not look editable; while images
    are being replaced every slot that can take one is outlined, so there is no guessing. */
-body.editing .art,body.editing .seal,body.editing .tok{outline:1px dashed #6f6350;cursor:copy}
-body.editing .art.drop,body.editing .seal.drop,body.editing .tok.drop{outline:2px solid var(--line)}
+body.editing .art,body.editing .seal{outline:1px dashed #6f6350;cursor:copy}
+body.editing .art.drop,body.editing .seal.drop{outline:2px solid var(--line)}
 </style>
 
 <div id=bar>
@@ -465,12 +562,17 @@ function drawTiles(){
     var t = GEO.tiles[d.slug];
     var tile = el("div", "tile", box(t));
     tile.id = "tile-" + d.slug;
-    // THE LINE HEIGHT IS SET, not left to the font. geometry.py measures the seals from where
-    // this line of type ends, and with no line-height in the CSS the browser used Georgia's own
-    // and drew 15px where the module had worked on 16.
-    var nm = el("div", "nm", {top: px(GEO.ribbon.nameTop), fontSize: px(GEO.ribbon.nameSize),
-                              lineHeight: String(GEO.ribbon.nameLh)}, tile);
-    nm.textContent = d.name;
+    // THE CORNER COMES FROM GEOMETRY, not from the stylesheet. The old tile wore a flat 4px and
+    // the rule could own that, because 4 at 154 wide and 4 at 74 wide are both "slightly
+    // softened". This corner is a PROPORTION of the box -- 0.12 of its width -- so a number
+    // typed into the CSS would be the box's shape stated in a second place, and would stop
+    // following the box the first time the box changed.
+    tile.style.borderRadius = px(GEO.ribbon.radius);
+    // THE DUTY'S NAME IS NOT PRINTED. It had a line of its own across the top of the tile, and
+    // geometry measured the marks from where that line ended; the tile is the marks and the box
+    // round them now, so there is no line and nothing measures one. The name is kept as the
+    // tile's title so the board can still be read by pointing at it.
+    tile.title = d.name;
     var info = dutyOf(d.slug);
     var n = info ? info.actions : 1;
     // THE DIAGONAL IS NOT WORKED OUT HERE. geometry.py hands over both arrangements already
@@ -578,6 +680,10 @@ function drawMarks(){
     var label = said.name || name;
     var src = IMAGES["control:" + name] || placeholder;
     var e = el("div", "mark", box(at));
+    // THE PAD IS GEOMETRY'S, handed to the stylesheet rather than typed in it. The ground is
+    // drawn at a negative inset of exactly the distance geometry left round the mark, so a
+    // number in the CSS would be the second place that distance was stated.
+    e.style.setProperty("--control-pad", px(M.pad));
     e.id = "mark-" + name;
     e.dataset.kind = "mark"; e.dataset.mark = name;
     e.title = said.shortLabel ? label + " \u2014 " + said.shortLabel : label;
@@ -598,26 +704,10 @@ function drawSide(){
   var p = el("div", "panel", box(t));
   p.id = "tithe";
   p.addEventListener("click", function(){ if (!S.editing) select("tithe"); });
-  // EVERY NUMBER IN THIS COLUMN COMES FROM GEO. The three seals used to start at a 21 typed
-  // here and the label sat on a 14, which is how the column survived the seals going from 64 to
-  // 78 without anybody noticing the label had been pushed at.
-  t.order.forEach(function(name, i){
-    var at = t.slots[i];
-    // THE SEAL, NOT THE COIN. A seal on this board means a thing you can take, and its colour
-    // says which kind -- red for a duty action, grey for a resource. The Tithe column is the
-    // third choice beside the two actions, so it speaks the same language they do. The coin is
-    // still built in and is the fallback, and a letter is the fallback to that, because the
-    // page has to stay usable with no assets at all.
-    var k = IMAGES["seal:" + name] ? "seal:" + name
-          : IMAGES["token:" + name] ? "token:" + name : null;
-    var e = el("div", "tok", {left: px(at.x), top: px(at.y),
-                              width: px(at.size), height: px(at.size)}, p);
-    e.dataset.kind = "token"; e.dataset.slot = name;
-    if (k) { var im = document.createElement("img"); im.src = IMAGES[k];
-             e.appendChild(im); e.classList.add("filled"); }
-    else e.textContent = name.slice(0, 1).toUpperCase();
-    wireDrop(e);
-  });
+  // THE THREE RESOURCES ARE GONE AND SO IS THE LOOP THAT DREW THEM. It read wheat, stone and
+  // silver out of GEO.tithe.order and placed each at GEO.tithe.slots[i] -- geometry no longer
+  // publishes either, so this cannot quietly half-work: the page would throw on `t.order` rather
+  // than draw three empty discs. The box is its label, and what goes in it is open.
   var lb = el("div", "lb", {top: px(t.labelTop), fontSize: px(t.labelSize),
                             lineHeight: String(t.lh)}, p);
   lb.textContent = "Take Tithe";
@@ -940,8 +1030,10 @@ function takeFile(file, target){
     PENDING.push(rec);
     // Shown at once from the original; the browser scales it to the box. The bytes kept for the
     // save are untouched.
-    var key = rec.kind === "token" ? ("token:" + rec.slot) : ("art:" + rec.duty + ":" + rec.slot);
-    if (rec.kind === "seal") key = "seal:" + rec.duty + ":" + rec.slot;
+    // NO "token" KIND ANY MORE. The Tithe's three resources were the only droppable thing that
+    // was not a duty's art or seal, and nothing on the board carries that kind now.
+    var key = rec.kind === "seal" ? ("seal:" + rec.duty + ":" + rec.slot)
+                                  : ("art:" + rec.duty + ":" + rec.slot);
     IMAGES[key] = r.result;
     var info = dutyOf(rec.duty);
     if (info && info[rec.slot]) info[rec.slot][rec.kind === "seal" ? "seal" : "art"] = key;
@@ -960,7 +1052,7 @@ function manifest(){
       if (a && a.sealFile) seals[slug + "/" + slot] = a.sealFile;
     });
   });
-  return {art: art, seals: seals, tokens: GEO.tithe.order.slice(),
+  return {art: art, seals: seals,
           acolytes: S.occupancy, city: S.city,
           selected: {duty: S.duty, slot: S.slot}};
 }
@@ -1022,8 +1114,17 @@ function drawPhases(){
   });
 }
 
+// THE VALLEY GOES IN FIRST, FULL STOP. These are `#board > *` with no z-index, so the order
+// they are appended in IS the order they stack -- and the backdrop is the one thing here that is
+// meant to be covered by everything else.
+//
+// drawStatus() USED TO COME BEFORE IT, and got away with it for as long as the picture started
+// at the top of the TILES: the status line sits at y 10 and the backdrop began at 55, so the two
+// never met and the order was invisible. Extending the picture to the top of the canvas made
+// them overlap and the backdrop painted straight over the line -- a caption that simply was not
+// there any more, with nothing in the console to say why.
 function draw(){
-  drawStatus(); drawBackdrop(); drawTiles(); drawRoad(); drawArt(); drawMarks(); drawSide();
+  drawBackdrop(); drawStatus(); drawTiles(); drawRoad(); drawArt(); drawMarks(); drawSide();
   drawWheel(); render();
 }
 
@@ -1058,11 +1159,7 @@ function fit(){
 board.style.width = px(GEO.canvas.width);
 board.style.height = px(GEO.canvas.height);
 board.style.setProperty("--solid", String(GEO.ribbon.solidFraction));
-// THE MARK'S FRAME, FROM GEOMETRY. It was a 2 typed into .seal.filled, which was nobody's business
-// but this file's until the controls column was sized off it: a mark in that column is a tile's
-// mark MINUS this frame, so the same number now sets a border here and a width there. Two owners
-// would mean the column quietly stopping being the artwork it is supposed to equal.
-board.style.setProperty("--seal-border", px(GEO.ribbon.sealBorder));
+
 document.getElementById("buildTag").textContent = "build " + BUILD.version;
 document.getElementById("bEdit").addEventListener("click", function(){
   S.editing = !S.editing;

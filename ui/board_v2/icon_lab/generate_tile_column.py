@@ -60,19 +60,24 @@ GEO = dict(G.as_dict()["ribbon"], border=G.BORDER,
 
 # THE GAP THE PAGE OPENS ON, OWNED ONCE. It is the slider's starting value and it is the number
 # the fit arithmetic below uses, and those have to be the same number or the build reports on a
-# page nobody is looking at. It does one more job than its name suggests: it is the space under
-# the duty's name as well as the space between the two marks, so the column hangs from the name at
-# the same rhythm it keeps inside itself.
-GAP = 15
+# page nobody is looking at. It does one more job than its name suggests: it is the space between
+# the two marks AND, at twice itself, the air the tile keeps round them -- so the box hugs the
+# pair at the rhythm the pair keeps inside itself.
+#
+# IT IS THE BOARD'S OWN NUMBER NOW, NOT 15. It was 15 while the page's job was to propose a tile
+# the board did not have, and the second job was the space under the duty's NAME. There is no
+# name, the board's tile is derived from exactly this arithmetic, and a page that opened on a
+# gap the board does not use would be drawing a tile the board does not draw.
+GAP = G.SEAL_INSET
 
-# AND THE HEIGHT THE PAGE OPENS ON, WHICH IS NOT RIBBON_H. It used to start at the board's own
-# ribbon, so the first thing on screen was the board you have. The board you have does not fit a
-# column -- that is the finding -- so starting there means opening on the problem every time and
-# dragging to the answer before you can look at anything. 265 is a height worth looking at: at the
-# gap above it leaves five pixels spare.
+# AND THE BAND HEIGHT THE PAGE OPENS ON, WHICH IS RIBBON_H AGAIN. It was 265 -- not the board's
+# ribbon, deliberately: the board of the day did not fit a column at all, so opening there meant
+# opening on the problem every time and dragging to the answer before you could look at anything.
+# The band holds the tile with room over now, so the board you have IS a thing worth looking at,
+# and starting anywhere else would make the page disagree with it for no reason.
 # NOTHING HERE MOVES THE BOARD. RIBBON_H in geometry.py is untouched and the readout still names
 # it beside this one, so the page cannot be mistaken for the board it is proposing.
-START_H = 265
+START_H = G.RIBBON_H
 
 # AND THE MARK SIZE THE PAGE OPENS ON, WHICH IS THE BOARD'S. Unlike the two above it this one is
 # not a number chosen for the page -- it is read straight from geometry.py, so the page opens on
@@ -160,23 +165,39 @@ def main():
     print("  %d tiles, %d marks, opening at %d px (geometry.py's SEAL)"
           % (len(duties), sum(len(d["slots"]) for d in duties), START_SEAL))
 
-    # WHETHER IT FITS, SAID ON EVERY BUILD. The page shows it, but a build that printed nothing
-    # while the marks overflowed their tile would be a build that looked fine.
-    name_h = round(GEO["nameSize"] * GEO["nameLh"])
-    top = GEO["nameTop"] + name_h + GAP
-    avail = GEO["innerH"] - top - GEO["sealInset"]
-    if 2 * START_SEAL > avail:
-        print("  two marks of %d need %d px and the tile has %d under its name"
-              % (START_SEAL, 2 * START_SEAL, avail))
-        want = top + 2 * START_SEAL + GAP + GEO["sealInset"] + 2 * G.BORDER
-        grew = want - G.RIBBON_H
+    # WHAT THE COLUMN ASKS FOR, SAID ON EVERY BUILD. It used to be said only when the marks
+    # overflowed the tile, which meant the one line that states this build's whole purpose --
+    # pricing a ribbon against a mark size -- printed nothing at all for every size that fits. A
+    # build that reports only on failure is a build you cannot read while it is working.
+    #
+    # AND THAT IS WHERE THE PRICE STOPPED BEING TESTABLE. The mark went to 50, two of them fit the
+    # tile with 36 to spare, and the guard that holds the slider and this arithmetic to the same
+    # gap had nothing to read. Hiding a number behind a condition hides its guard with it.
+    # THE TILE IS DERIVED FROM THE MARK, which is what this arithmetic became. It used to add a
+    # name band, a gap, two marks and an inset and ask whether that fitted a tile of a given
+    # height; the tile has no name band and is not given a height -- it is the pair plus the air,
+    # and the question is whether the BAND holds it.
+    pad = 2 * GAP
+    avail = GEO["height"]
+    want = 2 * START_SEAL + GAP + 2 * pad
+    grew = want - G.RIBBON_H
+    print("  a column wants RIBBON_H of about %d against today's %d" % (want, G.RIBBON_H))
+    if want > avail:
+        print("  a tile round two marks of %d is %d tall and the band is %d"
+              % (START_SEAL, want, avail))
+    if grew > 0:
+        # WHAT IT WOULD COST, because the number above on its own reads as free. Nothing below the
+        # ribbon shrinks, it moves; the wheel takes whatever the canvas has left, so the wheel is
+        # what pays, and it narrows by its aspect as it loses height.
         tall = G.WHEEL_H - grew
-        print("  a column wants RIBBON_H of about %d against today's %d" % (want, G.RIBBON_H))
-        # AND WHAT THAT WOULD COST, because the number above on its own reads as free. Nothing
-        # below the ribbon shrinks, it moves; the wheel takes whatever the canvas has left, so the
-        # wheel is what pays, and it narrows by its aspect as it loses height.
         print("  which the wheel would pay for: %d x %d becomes %d x %d"
               % (G.WHEEL_W, G.WHEEL_H, round(tall / G.WHEEL_RATIO), tall))
+    else:
+        # OR WHAT IT GIVES BACK. The ribbon is held at its height on purpose, so this is spare
+        # rather than a saving anybody has taken -- and saying so is what keeps the choice visible
+        # instead of letting it look like nobody noticed.
+        print("  %d px of the ribbon's height is spare at this mark size; RIBBON_H is held at %d"
+              % (-grew, G.RIBBON_H))
 
     if a.open:
         webbrowser.open(OUT.as_uri())
