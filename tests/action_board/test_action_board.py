@@ -32,6 +32,21 @@ def _load(name: str):
     return mod
 
 
+def decls_for(page: str, sel: str) -> str:
+    """Every declaration the page makes for one exact selector, comments stripped, joined.
+
+    EVERY RULE WITH THE SELECTOR, NOT THE FIRST ONE FOUND, and that distinction has bitten. A
+    selector gets written more than once when its parts arrive for different reasons -- .seal
+    .filled is written twice, once to take the old ground away and once to light it, each with
+    its own paragraph. The cascade reads all of them; a guard that reads the first one passes or
+    fails on where a line happened to be typed.
+    """
+    css = re.sub(r"/\*.*?\*/", " ", page, flags=re.S)
+    found = re.findall(re.escape(sel) + r"\{([^}]*)\}", css)
+    assert found, "%s has no rule" % sel
+    return ";".join(found)
+
+
 @pytest.fixture(scope="module")
 def geo():
     return _load("geometry")
@@ -103,44 +118,61 @@ def test_the_card_is_exactly_two_to_one(geo):
     600 x 320 box took 6.25% of the width. Falsified by changing ART_W or ART_H alone.
     """
     assert geo.ART_W / geo.ART_H == pytest.approx(2.0, abs=1e-9)
-    # THE ROW NO LONGER FILLS THE WORKING WIDTH, AND THAT IS THE CHANGE. It used to run X0 to
-    # X0 + WORK_W, with the Tithe spanning the last two tiles; it now runs from the FIRST tile's
-    # centre to the LAST tile's, so it is hung under the eight rather than butted against them.
+    # THE ROW STARTS ON THE RIBBON'S FIRST COLUMN. It ran from the first tile's CENTRE for a
+    # while, which hung the row under the eight rather than butting it against them -- and meant
+    # nothing on the board shared a vertical line with anything else.
     #
-    # AND IT NOW ENDS IN THE CONTROLS COLUMN. Cards, gap, cards, gap, Tithe, gap, marks -- the
-    # three marks took the row's last 72px and the Tithe paid for them, which is the whole of
-    # what "tighten Take Tithe" came to. A row that balanced without the column would mean the
-    # marks were hanging off the end of it.
-    assert (geo.ART_W * 2 + 2 * geo.ART_GAP + geo.TITHE_W + geo.GAP + geo.MARKS_W) == geo.ROW_W, (
-        "the two cards, their gaps, the Tithe and the controls column do not fill the row")
-    # BOTH ENDS HANG OFF THE RIBBON: the first tile's centre at the left, and the eighth tile's
-    # MARK at the right. It briefly ended at the working edge instead, while the controls column
-    # was pinned there -- which made the row's right edge agree with the page rather than with the
-    # eight tiles the row belongs to, and left no two emblems on the board sharing an axis.
-    assert geo.ROW_X == geo.X0 + geo.TILE_W // 2, (
-        "the row no longer starts at the first tile's centre")
+    # ON THE COLUMN, NOT ON THE DRAWN TILE, WHICH IS A REAL LOSS AND IS WRITTEN DOWN AS ONE.
+    # They were one x while the tile filled its column. The tile is 74 and centred, so the card's
+    # left edge now agrees with where the ribbon BEGINS -- the backdrop's edge, the unit the
+    # cards are three of -- and not with any drawn box. Following the box instead would push the
+    # row 40 right and leave 28 before the controls, under GAP_WIDE.
+    assert geo.ROW_X == geo.X0, (
+        "the card row starts at %d and the ribbon's first column at %d" % (geo.ROW_X, geo.X0))
+    assert geo.art_slots()["actionA"]["x"] == geo.ROW_X, "the first card is not at the row's left"
+    assert geo.ART_W == 3 * geo.SLICE_W + 2 * geo.TILE_GAP, (
+        "a card is %d wide, which is not three of the ribbon's columns" % geo.ART_W)
+    # AND IT STILL ENDS IN THE CONTROLS COLUMN -- the eighth tile's mark, carried down. Both ends
+    # of the row now land on a tile: Clerical's left edge and Allocation's mark.
     assert geo.ROW_END == geo.MARKS_X + geo.MARKS_W, (
         "the row ends at %d and the controls column at %d"
         % (geo.ROW_END, geo.MARKS_X + geo.MARKS_W))
+    # THE ROW IS NO LONGER PACKED, AND THAT IS THE CHANGE. It used to be cards, gap, cards, gap,
+    # Tithe, gap, marks with nothing over, so the Tithe was whatever the others did not want.
+    # Pulling the row left by 77 while the column stayed on Allocation's mark opened real air
+    # between the Tithe and the controls, and the Tithe is now DECLARED rather than derived.
+    #
+    # SO THE ASSERTION IS THAT THE SLACK IS THERE, not that the parts sum to the whole: a sum that
+    # balanced would mean either the Tithe had silently grown into the air or the column had been
+    # dragged off its tile. check() owns how much slack is enough; this owns that it exists.
+    packed = geo.ART_W * 2 + 2 * geo.ART_GAP + geo.TITHE_W + geo.GAP + geo.MARKS_W
+    assert packed < geo.ROW_W, (
+        "the row is packed edge to edge again (%d in a row of %d), so either the Tithe took the "
+        "air or the column left the eighth tile" % (packed, geo.ROW_W))
+    assert geo.TITHE_X + geo.TITHE_W < geo.MARKS_X - geo.GAP, (
+        "the Tithe ends at %d and the column starts at %d, which is a gap rather than the space "
+        "the row was moved to open" % (geo.TITHE_X + geo.TITHE_W, geo.MARKS_X))
     # AND IT STOPS SHORT OF THE MARGIN, which is the visible price and the thing somebody will be
     # tempted to "fix" by stretching the Tithe into it. The strip is the tile's own right margin
     # round its mark, carried down -- not a round number, and not nothing.
     assert geo.ROW_END < geo.X0 + geo.WORK_W, (
         "the row reaches the working edge again, so the column is back on the margin")
-    # THE CARDS ARE STILL EXACTLY THREE TILES, and that is the assertion the column has to pass.
-    # ART_H is half ART_W and the wheel takes what the cards leave, so finding 72px by shaving a
-    # few pixels off each card -- the cheap way, and the one that looks harmless in a diff --
-    # would have shortened the cards, shortened the row and moved the wheel. The Tithe paid for
-    # the whole column instead, which is what "tighten Take Tithe" meant.
-    assert geo.ART_W == 3 * geo.TILE_W + 2 * geo.TILE_GAP, (
-        "a card is %d wide and three tiles are %d -- the column was paid for out of the cards"
-        % (geo.ART_W, 3 * geo.TILE_W + 2 * geo.TILE_GAP))
+    # THE CARDS ARE STILL EXACTLY THREE TILES. ART_H is half ART_W and the wheel takes what the
+    # cards leave, so paying for anything on this row by shaving a few pixels off each card -- the
+    # cheap way, and the one that looks harmless in a diff -- would shorten the cards, shorten the
+    # row and move the wheel.
+    assert geo.ART_W == 3 * geo.SLICE_W + 2 * geo.TILE_GAP, (
+        "a card is %d wide and three columns are %d -- the row was paid for out of the cards"
+        % (geo.ART_W, 3 * geo.SLICE_W + 2 * geo.TILE_GAP))
     assert geo.TITHE_W < geo.TILE_PITCH, (
         "the Tithe is %d and a tile and a gap is %d, so nothing was tightened"
         % (geo.TITHE_W, geo.TILE_PITCH))
-    # AND THE CARD IS MEASURED OFF THE RIBBON, which is what makes its edges land on tile edges.
-    assert geo.ART_W == 3 * geo.TILE_W + 2 * geo.TILE_GAP, (
-        "a card is %d wide, which is not three duty tiles and their two gaps" % geo.ART_W)
+    # AND THE CARD IS MEASURED OFF THE RIBBON, which is what makes its edges land on column
+    # edges. On COLUMNS, not on drawn tiles: three tiles and two gaps is 254 now, and the card is
+    # three of the units the ribbon is divided into, which is what it always was.
+    assert geo.ART_W == 3 * geo.SLICE_W + 2 * geo.TILE_GAP, (
+        "a card is %d wide, which is not three of the ribbon's columns and their two gaps"
+        % geo.ART_W)
 
 
 def test_the_wheel_takes_its_shape_from_the_asset_and_not_from_here(geo):
@@ -598,24 +630,49 @@ def test_two_seals_do_not_fit_in_a_row_which_is_why_they_are_a_column(geo):
 
     It was a diagonal, which bought its separation out of the tile's WIDTH and so had a ceiling
     the ribbon could not raise: at SEAL 100 the pair overlapped by 47.5px. A column buys it out of
-    the ribbon's HEIGHT, which is a number that can be moved. Falsified by shrinking SEAL until a
-    row fits across the tile -- at which point this test says so and the marks should go back in a
-    row, because stacking would then be costing ribbon height for nothing.
+    the ribbon's HEIGHT, which is a number that can be moved.
+
+    THE ORIGINAL FALSIFICATION HAS NOW FIRED, AND THE REASON HAS MOVED RATHER THAN GONE. This read
+    "falsified by shrinking SEAL until a row fits across the tile -- at which point this test says
+    so and the marks should go back in a row, because stacking would then be costing ribbon height
+    for nothing". The mark is 50 now: 2 x 50 + 16 is 116 against 140 of room, so a row DOES fit,
+    and the test said so.
+
+    What it was guarding was the COST, not the arrangement: a column was worth having only while
+    the ribbon's height was being spent to get it. It is not being spent. RIBBON_H is held at 186
+    -- a deliberate choice, so the tiles did not change height when the marks shrank -- and a
+    stacked pair needs only SNUG_RIBBON_H. The column is drawn in height the tile already has.
+    So stacking now costs nothing and the original argument has no force either way.
+
+    FALSIFIED NOW BY TAKING THAT SPARE AWAY: shrink RIBBON_H to what a stacked pair actually needs
+    and the column starts costing height again, with a row sitting there that fits. Then this test
+    fails and the question is live once more. Whether a row LOOKS better in a tile this tall is a
+    judgement and is not asserted here -- nothing in the drawings can settle it.
     """
-    assert 2 * geo.SEAL + geo.GAP > geo.TILE_INNER_W - 2 * geo.SEAL_INSET, (
-        "two marks and a gap now fit across the tile, so the column is buying nothing")
+    fits = 2 * geo.SEAL + geo.GAP <= geo.TILE_INNER_W - 2 * geo.SEAL_INSET
+    assert not fits or geo.RIBBON_H > geo.SNUG_RIBBON_H, (
+        "a row of two marks fits across the tile (%d of %d) AND the ribbon is down to the %d a "
+        "column needs, so the column is now buying its height out of the tile for nothing"
+        % (2 * geo.SEAL + geo.GAP, geo.TILE_INNER_W - 2 * geo.SEAL_INSET, geo.SNUG_RIBBON_H))
     a, b = geo.seal_slots(2)
     assert b["x"] == a["x"], "the two marks are not in one column"
     assert b["y"] == a["y"] + geo.SEAL + geo.SEAL_INSET, (
         "the second mark is not one inset below the first")
 
 
-def test_a_seal_stays_inside_its_tile_and_clear_of_the_duty_name(geo):
-    """Falsified by raising SEAL or lowering RIBBON_H: check() names which seal left the box."""
+def test_a_seal_stays_inside_the_tile_drawn_round_it(geo):
+    """Falsified by raising SEAL or shrinking the tile: check() names which seal left the box.
+
+    IT USED TO SAY "AND CLEAR OF THE DUTY NAME", and the name is what has gone. The tile had a
+    line of type across the top and a mark had to start below where it ended; the tile is the
+    pair and the air round it now, so the only thing a mark has to be clear of is the box's own
+    edge -- which is TILE_PAD away by construction and asserted anyway, because construction is
+    two expressions agreeing and not one fact.
+    """
     assert geo.check() == [], "\n".join(geo.check())
     for n in (1, 2):
         for s in geo.seal_slots(n):
-            assert s["y"] >= geo.TILE_NAME_BOTTOM
+            assert s["y"] >= geo.SEAL_INSET
             assert 0 <= s["x"] and s["x"] + s["size"] <= geo.TILE_INNER_W
             assert s["y"] + s["size"] <= geo.TILE_INNER_H
 
@@ -640,12 +697,26 @@ def test_the_top_seal_clears_the_name_as_far_as_the_lower_one_clears_the_edge(ge
     Falsified by starting the top seal at TILE_NAME_BOTTOM again, which is where it began.
     MEASURED INSIDE THE BORDER, because that is where a child of the tile is placed -- the tile
     is a border-box and TILE_W and RIBBON_H are its outer size.
+
+    EQUAL AIR, NOT ONE INSET. It WAS one inset top and bottom, and that was the same claim while
+    the tile was exactly as tall as the pair asked for: nothing was left over, so centring the
+    pair and hanging it from the name put it in the same place. The tile keeps its height now and
+    the mark is 50, so there are 56 spare -- and the two rules have come apart. Hanging gives all
+    56 to the bottom; this asserts the half-and-half. What it must never be is NO air, which is
+    where it began.
     """
     a, b = geo.seal_slots(2)
-    above = a["y"] - geo.TILE_NAME_BOTTOM
+    above = a["y"]
     below = geo.TILE_INNER_H - (b["y"] + geo.SEAL)
     assert above == below, "%d above the top seal and %d below the lower one" % (above, below)
-    assert above == geo.SEAL_INSET, "the seals use a margin of their own again"
+    assert above >= geo.SEAL_INSET, (
+        "%d above the top seal, which is tighter than the tile's own inset of %d"
+        % (above, geo.SEAL_INSET))
+    # AND IT IS THE ROOM THAT SAYS HOW MUCH, not a number typed here. Asked of the tile the same
+    # way seal_slots() asks it, so a change to the tile's height or the mark's size moves both.
+    room = geo.TILE_INNER_H
+    assert above == (room - (2 * geo.SEAL + geo.SEAL_INSET)) // 2, (
+        "the pair is not centred in the %d of room the tile gives it" % room)
     # ACROSS, THEY ARE CENTRED, NOT INSET. On the diagonal one mark was pushed to each side and the
     # side margin WAS the inset; in a column both sit in the middle of the tile and what is left at
     # the sides is whatever the tile is wider than the mark. Equal is the claim, not equal to six.
@@ -741,34 +812,39 @@ def test_every_disc_the_board_draws_fills_the_same_fraction_of_its_square(geo):
     assert not bad, "\n".join(bad)
 
 
-def test_every_plate_the_board_draws_fills_its_square(geo):
-    """The other half of the rule, so neither kind of mark goes unmeasured.
+def test_no_mark_on_a_tile_is_given_a_ground(gen):
+    """The rule this replaces, and why it went.
 
-    A plate is trimmed to its own mark and padded to a square, so its longer side spans the slot.
-    One that measured well under 1.0 arrived untrimmed and would sit small beside its neighbours --
-    which is exactly how the first pair of these came in, at 0.77 and 0.92.
+    A mark recorded `ground: board` is a cut-out: it carries no ground of its own, so the board
+    used to paint one behind it -- and that is why the old guard here required such a mark to fill
+    at least 0.98 of its square. A plate behind a trimmed drawing shows as a dark rectangle with
+    the emblem floating inside it, which is worse than no plate at all.
 
-    THIS TEST CAUGHT THE CLASSIFIER, not a picture. On the day it was written every mark in the
-    tree failed it, because the generator was deciding disc or plate by looking for an alpha
-    channel and a round disc in a square file has one. What is measured here is the silhouette;
-    what decides which list a file is in is the record. Keep those two apart.
+    THE PLATE IS NOT PAINTED ANY MORE. The marks are cut-outs on a tile that is glass over a
+    landscape, and a ground behind one would be the only square left on it. So the requirement
+    that a cut-out fill its square goes too -- it existed only to make the plate safe -- and in
+    its place this asserts the thing that now has to stay true: nothing paints a ground.
+
+    THE RECORD STILL SAYS WHICH IS WHICH, and that is deliberate. `ground` is a fact about the
+    artwork, not about today's styling; the rule is kept and emptied so there is one place to put
+    a ground back if a mark ever needs one.
+
+    Falsified by giving .seal.plate a colour again.
     """
-    pytest.importorskip("numpy")
-    pytest.importorskip("PIL")
-    _discs, plates = _marks()
-    # NO SKIP. The skip that used to be here fired the moment the plates moved folders, and a
-    # green run said nothing was wrong. This tree has plates; if it ever genuinely has none, the
-    # honest change is to delete this test, not to let it pass by looking away.
-    assert plates, ("no mark in %s is recorded as standing on the board's ground, and two are"
-                    % ", ".join(_load("generate_action_board").mark_folders()))
-    board = ROOT / "ui" / "board_v2"
-    bad = []
-    for p in plates:
-        f = _solid_fraction(p)
-        if f < 0.98:
-            bad.append("%s fills %.3f of its square; a plate is trimmed to fill it"
-                       % (p.relative_to(board).as_posix(), f))
-    assert not bad, "\n".join(bad)
+    page = TMPL.read_text(encoding="utf-8")
+    css = re.sub(r"/\*.*?\*/", " ", page, flags=re.S)
+    m = re.search(r"\.seal\.plate\{([^}]*)\}", css)
+    assert m, ".seal.plate is gone entirely -- the record's `ground` now reaches nothing"
+    body = m.group(1).replace(" ", "")
+    assert "background:none" in body or "background:transparent" in body, (
+        "a mark is being given a ground again: %s" % m.group(1).strip())
+    assert "var(--plate)" not in body, (
+        "the plate colour is back behind the marks: %s" % m.group(1).strip())
+    # AND THE RECORDS STILL CARRY THE WORD, so the distinction survives the styling change.
+    rec = json.loads((ROOT / "ui" / "board_v2" / "attribution.json").read_text(encoding="utf-8"))
+    grounds = {e.get("ground") for k, e in rec["files"].items() if "/cutouts/" in k}
+    assert grounds == {"board"}, (
+        "the cut-outs no longer record what ground they need: %s" % sorted(grounds))
 
 
 def test_the_mark_the_board_draws_is_the_one_the_record_points_at(gen):
@@ -862,9 +938,16 @@ def test_a_slot_that_has_an_icon_is_drawn_with_the_icon(gen):
 
     The test above derives its expectation from markFolders, so it moves whenever that list
     moves -- reverse the list and it still passes while the board quietly goes back to wax. This
-    one says the thing the list exists to achieve: where a slot has both kinds filed, the icon is
-    what the board draws. That is this tree's direction, and when the direction changes this test
-    is what you change, on purpose, rather than discovering it later on the board.
+    one says the thing the list exists to achieve, with the ladder written out HERE rather than
+    read off the list: where a slot has more than one kind filed, this is the one the board draws.
+
+    THE LADDER MOVED ONE RUNG, ON PURPOSE, WHICH IS WHAT THIS TEST IS FOR. It used to end at the
+    icon; it now ends at the cutout -- the same emblem with its painted black field taken off, so
+    it sits on whatever is behind it instead of carrying a square of its own. Fourteen fields were
+    fourteen different shapes, which read as fourteen accidents rather than one set.
+
+    So when the direction changes again, THIS is the line you edit, deliberately, rather than
+    finding out on the board that a folder sorted later than you expected.
     """
     rec = json.loads(gen.ATTRIB_FILE.read_text(encoding="utf-8"))["files"]
     kinds = {}
@@ -880,15 +963,24 @@ def test_a_slot_that_has_an_icon_is_drawn_with_the_icon(gen):
         kinds.setdefault((parts[0], {"left": "actionA", "right": "actionB"}[side]),
                          set()).add(parts[1])
 
-    both = {k for k, v in kinds.items() if {"seals", "icons"} <= v}
-    assert both, "no slot has both a seal and an icon, so this is not yet testing anything"
+    # THE LADDER, BEST LAST, AND THE INFIX THE FILENAME CARRIES FOR EACH RUNG. Written here and
+    # nowhere else in this test, so changing the direction is one line.
+    LADDER = (("seals", "_seal_"), ("icons", "_icon_"), ("cutouts", "_cutout_"))
+
     _images, by_duty, _notes = gen.bundled_seals()
     wrong = []
-    for duty, slot in sorted(both):
+    tested = 0
+    for (duty, slot), have in sorted(kinds.items()):
+        rungs = [r for r in LADDER if r[0] in have]
+        if len(rungs) < 2:
+            continue                      # nothing filed to choose between, so nothing to claim
+        tested += 1
+        folder, infix = rungs[-1]
         drawn = by_duty.get(duty, {}).get(slot)
-        if not drawn or "_icon_" not in drawn[1]:
-            wrong.append("%s %s has an icon filed and the board draws %s"
-                         % (duty, slot, drawn[1] if drawn else "nothing"))
+        if not drawn or infix not in drawn[1]:
+            wrong.append("%s %s has a %s filed and the board draws %s"
+                         % (duty, slot, folder.rstrip("s"), drawn[1] if drawn else "nothing"))
+    assert tested, "no slot has two kinds filed, so this is not yet testing anything"
     assert not wrong, "\n".join(wrong)
 
 
@@ -968,39 +1060,118 @@ def test_a_container_stops_drawing_once_a_picture_lands_in_it():
     The Tithe tokens had exactly this and it showed as a double rim. The class is `filled` and
     NOT `art`, because `.art` is the big card's own rule -- a token marked `.art` was picking up
     `background:#000` and only looked right by specificity. Falsified by reusing `art`.
+
+    ONE CONTAINER LEFT WHERE THERE WERE TWO. `.tok` was the Tithe's three resources and it is
+    gone with them; the fault is not, because the duty marks are still pictures in containers
+    that would draw behind them. What this test loses is a second witness to the same rule, so
+    the remaining one carries it -- and `.tok` is named in the sweep below, so the rule cannot
+    come back half-applied under its old name.
     """
     page = TMPL.read_text(encoding="utf-8")
     css = re.sub(r"/\*.*?\*/", " ", page, flags=re.S)
-    for sel in (".seal.filled{", ".tok.filled{"):
-        assert sel in css, "%s is gone, so that container draws behind its own artwork" % sel
+    assert ".seal.filled{" in css, (
+        ".seal.filled is gone, so that container draws behind its own artwork")
+    assert ".tok" not in css, (
+        "the Tithe's token container is back in the stylesheet with nothing drawing it")
     code = re.sub(r"(?m)^\s*//.*$", "", page)
     assert 'classList.add("art")' not in code, (
         "a small container is marked `art` again, which is the big card's class")
 
 
-def test_the_board_draws_the_mark_edge_the_icon_lab_settled_on():
-    """Two pages, one rule, and the lab is the one that decides it.
+def test_the_tile_prints_no_name_and_takes_its_corner_from_geometry():
+    """What the tile became when the duty names came off it, asserted at both ends.
 
-    THE EDGE WAS CHOSEN IN icon_lab/tile_column.html.tmpl -- dashed, in the guides' own colour --
-    and the board has to draw the same thing or the lab stops being where that question is
-    answered and becomes a page that looks like the board used to. Falsified by giving the board
-    a colour of its own, a solid border, or by letting --guide be written out twice.
+    THE NAME WAS A LINE OF TYPE ACROSS THE TOP and geometry measured the marks from where it
+    ended. It is off the board. A page that printed it again would not fail anything else here --
+    the marks are placed from seal_slots() and would simply be drawn over the top of it -- so
+    this is the only thing standing between "removed" and "removed until somebody puts it back".
+
+    AND IT IS NOT GONE WITHOUT TRACE. Eight unlabelled boxes are unreadable until the landscape
+    behind them carries the identification, so the name is the tile's title: invisible, costs
+    nothing, and answers the question by pointing.
+
+    THE CORNER IS GEOMETRY'S, which is the same argument the frame lost and won. The old tile wore
+    a flat 4px and the stylesheet could own that, because 4 at 154 wide and 4 at 74 wide are both
+    "slightly softened". This corner is 0.12 OF THE BOX, so a number typed into the CSS is the
+    box's shape stated twice and stops following the box the moment the box moves.
+
+    Falsified by printing the name, by dropping the title, or by typing a radius into the page.
     """
     page = TMPL.read_text(encoding="utf-8")
-    css = re.sub(r"/\*.*?\*/", " ", page, flags=re.S)
-    assert re.search(r"--guide:#[0-9a-fA-F]{6}", css), "--guide is not defined at the root"
-    assert len(re.findall(r"--guide:#[0-9a-fA-F]{6}", css)) == 1, (
-        "the guide colour is written out more than once, so the two rules can disagree")
-    m = re.search(r"\.seal\.filled\{([^}]*)\}", css)
-    assert m, ".seal.filled is gone"
-    assert "dashed var(--guide)" in m.group(1), (
-        "the mark's edge is not the guides' dashed line: %s" % m.group(1).strip())
-    # AND IT IS THE LAB'S COLOUR, read from the lab rather than copied into this test, so the two
-    # files cannot drift apart while both of their own guards stay green.
-    lab = (ROOT / "ui" / "board_v2" / "icon_lab" / "tile_column.html.tmpl").read_text("utf-8")
-    want = re.search(r"--guide:(#[0-9a-fA-F]{6})", lab).group(1)
-    got = re.search(r"--guide:(#[0-9a-fA-F]{6})", css).group(1)
-    assert got == want, "the board's guide is %s and the icon lab's is %s" % (got, want)
+    code = re.sub(r"/\*.*?\*/", " ", page, flags=re.S)
+    code = re.sub(r"<!--.*?-->", " ", code, flags=re.S)
+    code = re.sub(r"(?m)^\s*//.*$", " ", code)
+    body = code.split("function drawTiles()")[1].split("\nfunction ")[0]
+
+    # NOTHING IN THE TILE IS GIVEN TEXT AT ALL. The first version of this read assignments of the
+    # form `name.textContent = ...`, which a mutation walked straight through by writing
+    # `el("div", "nm", tile).textContent = d.name` -- the character before `.textContent` is a
+    # bracket, not a word character, and the pattern wanted a name there. The claim does not need
+    # to know what is being assigned to: the tile draws pictures, so any text in it is the thing
+    # that was removed coming back.
+    assert "textContent" not in body, (
+        "the tile writes text into itself again: %s"
+        % re.findall(r".{0,60}textContent.{0,40}", body))
+    # AND THE NAME IS USED ONCE, FOR THE TITLE AND NOTHING ELSE.
+    rest = body.replace("tile.title = d.name;", " ")
+    assert "d.name" not in rest, (
+        "the duty's name is read somewhere other than the title: %s"
+        % re.findall(r".{0,60}d\.name.{0,30}", rest))
+    # THE TILE'S OWN .nm RULE, NOT EVERY .nm ON THE PAGE. The action CARD still prints its
+    # action's name across the top and `.art .nm` is that rule -- banning the class outright
+    # would be banning the card's caption, which is a different thing that did not change.
+    assert not re.search(r"\.tile\s+\.nm\b", code), (
+        "the duty name's own rule is back in the stylesheet, so something is meant to print it")
+    assert re.search(r"tile\.title\s*=\s*d\.name", body), (
+        "the tile no longer carries the duty's name at all, so eight boxes say nothing")
+
+    # AND THE CORNER COMES FROM GEOMETRY, read off the assignment so a literal cannot hide in it.
+    corner = re.search(r"tile\.style\.borderRadius\s*=\s*([^;]+);", body)
+    assert corner, "nothing sets the tile's corner, so it falls back to the stylesheet's"
+    assert "GEO.ribbon.radius" in corner.group(1), (
+        "the tile's corner is typed into the page: %s" % corner.group(1).strip())
+    # AND THE STYLESHEET DOES NOT STATE ONE FOR IT EITHER, or the two disagree the first time
+    # either moves and whichever wins is an accident of specificity.
+    assert not re.search(r"\.tile\{[^}]*border-radius", code), (
+        "the .tile rule carries a radius of its own beside the one geometry sets")
+
+
+def test_a_mark_on_a_tile_has_no_edge_and_is_lit_like_a_control(gen):
+    """The dashed edge is gone, and what replaced it has to be the controls' rule, not a new one.
+
+    The edge did two jobs: it drew the SLOT a mark sits in, and it carried both states -- dashed
+    at rest, solid under the pointer and when chosen. With cut-outs on a tile that is glass over a
+    landscape there is no slot to draw, so the edge went; and that left the states with nothing to
+    say them.
+
+    BRIGHTNESS, AND THE SAME NUMBERS THE CONTROLS USE. The three marks in the controls column
+    already answer the pointer this way. A second way of saying "this one" would be two
+    vocabularies for one idea on a board where a tile mark and a control are now the same size and
+    the same artwork.
+
+    Falsified by giving the marks an edge again, or by lighting them to a different amount than
+    the column does.
+    """
+    page = TMPL.read_text(encoding="utf-8")
+
+    def decls(sel):
+        return decls_for(page, sel)
+
+    rest = decls(".seal.filled")
+    assert re.search(r"border:\s*0", rest), "a tile mark has an edge again: %s" % rest.strip()
+
+    def lit(sel):
+        d = decls(sel)
+        f = re.search(r"brightness\(([\d.]+)\)", d)
+        assert f, "%s does not light anything: %s" % (sel, d.strip())
+        return float(f.group(1))
+
+    # THE SAME AMOUNT IN BOTH PLACES, read off both rather than written here.
+    assert lit(".seal.filled") == lit(".mark"), "a mark rests at a different level to a control"
+    assert lit(".seal.filled:hover, .seal.filled.on") == lit(".mark:hover"), (
+        "a mark lights to a different level than a control does")
+    assert lit(".seal.filled:hover, .seal.filled.on") > lit(".seal.filled"), (
+        "lighting a mark does not make it brighter")
 
 
 def test_the_backdrop_is_stretched_to_its_rect_and_the_strip_stops_covering_it(geo):
@@ -1016,8 +1187,8 @@ def test_the_backdrop_is_stretched_to_its_rect_and_the_strip_stops_covering_it(g
     of the picture the road is painted on -- so the one part of the valley that must show was the
     one part covered up. It keeps its rect; it gives up its fill.
 
-    Falsified by `cover`/`contain`, by giving the strip a background again, or by drawing the
-    backdrop after the tiles so it covers them instead.
+    Falsified by `cover`/`contain`, by giving the strip a background again, or by drawing
+    anything into the board before the backdrop, which paints over it.
     """
     page = TMPL.read_text(encoding="utf-8")
     css = re.sub(r"/\*.*?\*/", " ", page, flags=re.S)
@@ -1038,18 +1209,173 @@ def test_the_backdrop_is_stretched_to_its_rect_and_the_strip_stops_covering_it(g
         "the road strip paints over the part of the picture the road is painted on: %s"
         % road.group(1).strip())
 
-    # DRAWN BEFORE THE TILES, so the board's own order puts it behind them. A z-index would work
-    # and would be a second place to look when something covers something else.
+    # DRAWN FIRST, NOT MERELY BEFORE THE TILES, and the difference cost a caption. These are
+    # `#board > *` with no z-index, so append order IS stack order -- and this read "before
+    # drawTiles()", which drawStatus() satisfied by sitting in front of the backdrop. That was
+    # invisible while the picture started at the top of the TILES and the status line sat at y 10
+    # in black air above it. The picture now reaches y 0, the two overlap, and the backdrop
+    # painted straight over the line: a caption that was simply not there, with nothing in the
+    # console to say so. Everything on this board stands in front of the valley, so the claim is
+    # that the valley goes in first.
     draw = code.split("function draw(")[1].split("\n}")[0]
-    assert "drawBackdrop()" in draw, "draw() never draws the backdrop"
-    assert draw.index("drawBackdrop()") < draw.index("drawTiles()"), (
-        "the backdrop is drawn after the tiles, so it covers them")
+    calls = re.findall(r"\b(draw[A-Z]\w*)\(\)", draw)
+    assert calls, "draw() draws nothing"
+    assert calls[0] == "drawBackdrop", (
+        "the valley is not the first thing drawn, so whatever precedes it is painted over: %s"
+        % calls)
 
-    # AND GEOMETRY OWNS WHERE IT GOES. The rect spans the ribbon and the strip together, and
-    # check() holds the picture's ground line to the strip -- this asserts the rect reaches both.
-    assert geo.BACKDROP["y"] == geo.RIBBON_Y, "the backdrop does not start at the tiles"
+    # AND GEOMETRY OWNS WHERE IT GOES. The rect runs from the top of the canvas to the foot of
+    # the strip, and it has to reach both: short at the top and the status line is back on black,
+    # short at the foot and there is a seam under the road.
+    assert geo.BACKDROP["y"] == 0, (
+        "the backdrop starts at %d, so there is black above it again" % geo.BACKDROP["y"])
+    assert geo.BACKDROP["y"] <= geo.STATUS["y"], "the status line is above the picture"
     assert geo.BACKDROP["y"] + geo.BACKDROP["height"] == geo.ROAD["y"] + geo.ROAD["height"], (
         "the backdrop does not reach the foot of the road strip")
+
+    # AND THE PICTURE IS SQUARE WHERE IT MEETS THE CANVAS'S EDGE. A radius on the top corners
+    # cuts two notches of black into the one place the rect was extended to reach.
+    radius = re.search(r"border-radius:\s*([^;}]+)", bd.group(1))
+    assert radius, "the backdrop has no corner rule, so it takes whatever it inherits"
+    tops = radius.group(1).split()[:2] if len(radius.group(1).split()) == 4 else None
+    assert tops == ["0", "0"], (
+        "the backdrop rounds the corners it shares with the canvas's top edge: %s"
+        % radius.group(1).strip())
+
+
+def test_a_tile_that_drifts_off_the_status_line_is_refused(monkeypatch):
+    """The one margin you can see up here, driven directly because nothing else can drive it.
+
+    The picture reaches the top of the canvas, so there is no black edge above the ribbon any
+    more and no panel edge below it: the gap between the status line and the tops of the eight
+    tiles is the only distance on this part of the board the eye has anything to measure against.
+
+    AND IT IS TRUE BY CONSTRUCTION, WHICH IS WHY THIS EXISTS. TILE_Y is RIBBON_Y and RIBBON_Y is
+    the status bar's foot plus GAP, so the complaint cannot fire for any value the module
+    produces -- the same dead-looking branch as the tile's two centrings, and dead for the same
+    good reason. It stops being dead the moment somebody hangs the tiles at a number of their
+    own, which is exactly what they did hang at until this turn.
+    """
+    g = _load("geometry")
+    assert g.check() == [], "the default board is not sound, so this test proves nothing"
+    monkeypatch.setattr(g, "TILE_Y", g.RIBBON_Y + 39)
+    bad = g.check()
+    assert any("under the status line" in line for line in bad), (
+        "the tiles hang 39 below where the gap puts them and check() did not say so: %s" % bad)
+
+
+def test_a_backdrop_that_does_not_reach_both_its_ends_is_refused(monkeypatch):
+    """check()'s two complaints about the picture, driven directly because nothing else can.
+
+    BOTH BRANCHES ARE UNREACHABLE THROUGH THE MODULE'S OWN NUMBERS. BACKDROP's y is the literal 0
+    and its height is the distance from there to the foot of the road, so the rect is right by
+    construction and disabling either condition changes no result anywhere -- which a mutation
+    run duly found, twice. That is the same shape as the tile's two centrings: a guard looks like
+    dead code exactly when the thing it guards is derived, and it stops being dead the moment
+    somebody types a number over the derivation.
+
+    AND THEY ARE TWO COMPLAINTS BECAUSE THEY CATCH TWO FAULTS. A picture that starts late leaves
+    the status line back on black -- the thing extending it was for -- and one that ends early
+    leaves a seam under the last tile. Either alone would be satisfied by the other's failure.
+    """
+    g = _load("geometry")
+    assert g.check() == [], "the default board is not sound, so this test proves nothing"
+
+    # STARTING AT THE TILES AGAIN, which is where it used to start and is the regression.
+    monkeypatch.setitem(g.BACKDROP, "y", g.RIBBON_Y)
+    monkeypatch.setitem(g.BACKDROP, "height", g.BACKDROP["height"] - g.RIBBON_Y)
+    bad = g.check()
+    assert any("the canvas top" in line for line in bad), (
+        "the picture starts below the top of the canvas and check() did not say so: %s" % bad)
+    monkeypatch.undo()
+
+    # AND TOO SHORT TO COVER WHAT STANDS ON IT. Reaching y 0 is not the same claim: a picture
+    # that starts at the top and stops above the ribbon satisfies the first half of the line
+    # above and leaves the eight tiles standing on black.
+    g = _load("geometry")
+    monkeypatch.setitem(g.BACKDROP, "height", g.RIBBON_Y + g.RIBBON_H - 1)
+    bad = g.check()
+    assert any("the ribbon it stands behind" in line for line in bad), (
+        "the picture stops short of the ribbon's foot and check() did not say so: %s" % bad)
+
+
+def test_the_status_line_reads_against_the_sky_it_is_actually_printed_on(gen):
+    """The one line of type on this board that does not sit on the board's own ground.
+
+    THE PICTURE REACHES THE TOP OF THE CANVAS, so these words are on painted SKY -- the lightest
+    surface anywhere here. Everything else is cream on dark and needs no thought; this needed a
+    colour change, and the colour that is right depends entirely on a file in another folder.
+
+    SO THE TWO ARE MEASURED AGAINST EACH OTHER rather than both being asserted against a number
+    typed here. The type's colour is read out of the stylesheet and the sky out of the shipped
+    backdrop, at the rows the status box actually covers. Pin either one alone and a replacement
+    picture with a night sky passes while the board goes unreadable -- which is exactly the kind
+    of change that arrives as "a new backdrop" and touches no code at all.
+
+    AND NO PLATE. A dark box behind the words would be the black strip across the top of the
+    picture that extending the picture removed, put back in the one place it was removed from.
+    Falsified by giving #status a ground, or by letting the pair fall under 4.5:1.
+    """
+    from PIL import Image
+    import numpy as np
+
+    page = TMPL.read_text(encoding="utf-8")
+    rule = decls_for(page, "#status")
+    for forbidden in ("background", "border", "backdrop-filter", "outline"):
+        assert forbidden not in rule, (
+            "the status line has a %s, which is the black strip the picture was extended to "
+            "remove: %s" % (forbidden, rule.strip()))
+
+    m = re.search(r"color:\s*#([0-9a-fA-F]{3,6})\b", rule)
+    assert m, "the status line states no colour of its own: %s" % rule.strip()
+    h = m.group(1)
+    if len(h) == 3:
+        h = "".join(c * 2 for c in h)
+    ink = tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+
+    # THE SHIPPED PICTURE, BY THE GENERATOR'S OWN RULE. Reading the newest file any other way
+    # would be a second answer to "which backdrop does the board draw".
+    found = sorted(f for f in gen.BACKDROP_DIR.glob("ribbon_backdrop_v*")
+                   if f.suffix.lower() in gen.image_suffixes())
+    assert found, "there is no backdrop to read, so this is testing nothing"
+    im = Image.open(found[-1]).convert("RGB")
+
+    geo = _load("geometry")
+    bd, st = geo.BACKDROP, geo.STATUS
+    assert bd["y"] <= st["y"], "the status line is above the picture, so there is nothing to read"
+    # THE ROWS THE BOX ACTUALLY COVERS, mapped through the stretch the page applies. The picture
+    # is drawn at the rect with background-size:100% 100%, so a board row is a file row scaled.
+    top = round((st["y"] - bd["y"]) / bd["height"] * im.height)
+    bot = round((st["y"] + st["height"] - bd["y"]) / bd["height"] * im.height)
+    band = np.asarray(im).astype(float)[top:bot]
+    assert band.size, "the status band maps to no rows of the picture"
+
+    def rel(c):
+        def f(u):
+            u = u / 255.0
+            return u / 12.92 if u <= 0.03928 else ((u + 0.055) / 1.055) ** 2.4
+        r, g, b = (f(x) for x in c)
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+    # THE WORST ROW, NOT THE AVERAGE. A mean is comfortable about a line that is readable at one
+    # end and not the other, which is how a gradient behind type gets through a guard.
+    #
+    # AND THAT STRICTNESS IS INSURANCE RATHER THAN A MEASURED NEED, which is worth saying because
+    # a mutation run says so: flipping this to take the BEST row instead changes no result. The
+    # sky behind these words is flat to within a tenth of a point -- 6.57 at its darkest against
+    # 6.69 at its lightest -- so on THIS picture the two readings are the same answer. It is kept
+    # because the next picture is the whole reason this test reads a file at all, and a sky with
+    # a gradient in it is the ordinary case, not the strange one.
+    worst = None
+    for row in band:
+        a, b = rel(ink), rel(row.mean(axis=0))
+        hi, lo = max(a, b), min(a, b)
+        c = (hi + 0.05) / (lo + 0.05)
+        if worst is None or c < worst:
+            worst = c
+    assert worst >= 4.5, (
+        "the status line reads at %.2f:1 against the sky it is printed on, and ordinary text "
+        "wants 4.5" % worst)
 
 
 def test_a_selected_tile_catches_light_and_its_marks_bring_no_ground_of_their_own():
@@ -1067,18 +1393,29 @@ def test_a_selected_tile_catches_light_and_its_marks_bring_no_ground_of_their_ow
     put a colour back on the ground while the tile is a gradient and fourteen squares return.
     The guard therefore reads both and fails if the ground paints any colour at all.
 
-    Falsified by giving the ground a colour or a variable, or by flattening the tile back to one
-    colour without saying so here.
+    AND THE SAME NOW GOES FOR THE SEVEN THAT ARE NOT SELECTED, which is new and is the second
+    half of this test. The unselected ground matched its flat tile exactly; the tile is glass
+    over the backdrop now, so there is no single colour to match there either. A mark brings no
+    ground anywhere on the board -- affordable because the mark is a cutout, the emblem on
+    transparency, which never needed a field of its own.
+
+    Falsified by giving either ground a colour or a variable, or by flattening the tile back to
+    one colour without saying so here.
     """
     page = TMPL.read_text(encoding="utf-8")
     css = re.sub(r"/\*.*?\*/", " ", page, flags=re.S)
 
-    sel = re.search(r"\.tile\.sel\{([^}]*)\}", css)
-    assert sel, ".tile.sel is gone"
-    assert "gradient" in sel.group(1), (
-        "the selected tile is filled with a flat colour again: %s" % sel.group(1).strip())
+    # THE SELECTOR CARRIES HOVER TOO NOW, so this reads every rule that names .tile.sel rather
+    # than matching one exact list. Pinning the list here would make the guard fail the next
+    # time a state joins or leaves the plate, which is a question about the plate's OWNERSHIP
+    # and belongs in the test below, not in a test about what the plate paints.
+    plate = "".join(b for s, b in re.findall(r"([^{}]+)\{([^}]*)\}", css)
+                    if ".tile.sel" in s and "background" in b)
+    assert plate, ".tile.sel paints no ground at all"
+    assert "gradient" in plate, (
+        "the selected tile is filled with a flat colour again: %s" % plate.strip())
     for want in ("var(--plate-lit)", "var(--plate)"):
-        assert want in sel.group(1), (
+        assert want in plate, (
             "the gradient does not read %s, so the picker's palette no longer reaches the "
             "selected tile" % want)
 
@@ -1092,39 +1429,233 @@ def test_a_selected_tile_catches_light_and_its_marks_bring_no_ground_of_their_ow
             "the mark ground carries a colour (%s) on a gradient tile, so every mark draws a "
             "rectangle where that colour stops matching: %s" % (forbidden, body.strip()))
 
-    # AND THE UNSELECTED GROUND STILL MATCHES ITS FLAT TILE, which is the case this one is derived
-    # from -- deleting that would make the squares appear on the other seven tiles instead.
+    # AND THE UNSELECTED GROUND IS NOW NOTHING TOO, which is where this reasoning ended up. It
+    # used to be var(--plate), matching the flat tile exactly -- invisible because it agreed with
+    # what it sat on. Then the tile became glass over the backdrop, so there was no longer one
+    # colour for it to agree with on ANY tile, selected or not, and the ground had the same
+    # nothing-to-match problem everywhere. What made that affordable is the mark itself: a cutout
+    # is the emblem on transparency and needs no field behind it.
     plain = re.search(r"\n\.seal\.plate\{([^}]*)\}", css)
-    assert plain and "var(--plate)" in plain.group(1), (
-        "an unselected mark's ground is no longer the plate's own colour, so it will show as a "
-        "square on every tile that is not selected")
+    assert plain, "an unselected mark's ground has no rule at all"
+    body = plain.group(1)
+    assert "transparent" in body or "none" in body, (
+        "an unselected mark's ground paints something: %s" % body.strip())
+    for forbidden in ("#", "var(", "rgb"):
+        assert forbidden not in body, (
+            "an unselected mark's ground carries a colour (%s) over a tile that is glass, so it "
+            "will show as a square on all seven: %s" % (forbidden, body.strip()))
 
 
-def test_the_pointer_closes_the_mark_s_dashes_and_moves_nothing_else():
-    """The hover firms the border up. It must not also resize it.
+def test_the_controls_are_two_groups_and_a_column_that_forgets_it_is_refused(monkeypatch):
+    """Show Map and Hire Building stand; the commit arrives. Spacing has to say so.
 
-    THE FAULT THIS IS FOR is a hover that sets `border` rather than `border-style` -- which looks
-    identical in a screenshot and is not the same thing. A mark is a border-box, so a hover that
-    restated the width would let a stale or rounded number through and shift the artwork inside by
-    a pixel as the pointer crossed it; one that restated the colour would quietly take the mark
-    off --guide for as long as you were looking at it, which is the one state you are looking at.
+    THE THREE USED TO BE ONE EVEN STACK at the foot of the row, and the cost was invisible
+    because nothing rendered wrong: the commit appearing simply extended a list upward, so the
+    one mark on this board whose APPEARANCE is the message read as a third sibling of two marks
+    that are always there. The pair moved to the titles' line and the commit stayed at the foot,
+    and the space between them is what makes the arrival news.
 
-    Falsified by widening or recolouring on hover, or by dropping the rule.
+    EVERY ONE OF check()'s FOUR COMPLAINTS HERE IS UNREACHABLE THROUGH THE MODULE'S OWN NUMBERS,
+    which is the shape this tree keeps meeting: mark_slots() derives the pair's top FROM
+    CAP_TEXT_FOOT and the commit's foot FROM the row, so check() is comparing each against the
+    expression that produced it and can only ever agree. Moving CAP_TEXT_FOOT does not help --
+    both sides move together. So the derivation itself is replaced, which is exactly what a
+    later edit to mark_slots() would do.
+
+    Falsified by stacking the three evenly again, by hanging the pair off the top of the row
+    rather than off the lettering, by letting the commit drift up with the pair, or by closing
+    the space between the two groups.
+    """
+    g = _load("geometry")
+    assert g.check() == [], "the default board is not sound, so this test proves nothing"
+    # THE FAKE SLOTS CARRY A BOX, because the real ones do and check() reads it. Built from the
+    # same y so a replacement column is internally consistent and the guards under test are the
+    # ones that fire, rather than a KeyError standing in for a complaint.
+    def slot(y):
+        return {"x": g.MARKS_X, "y": y + g.CONTROL_PAD, "width": g.MARK, "height": g.MARK,
+                "box": {"x": g.MARKS_X - g.CONTROL_PAD, "y": y,
+                        "width": g.CONTROL_BOX, "height": g.CONTROL_BOX}}
+
+    # ONE EVEN STACK AT THE FOOT, which is precisely what this layout replaced.
+    pitch = g.CONTROL_BOX + g.MARK_AIR
+    foot = g.ART_Y + g.ART_H - g.CONTROL_BOX
+    monkeypatch.setattr(g, "mark_slots", lambda: {
+        n: slot(foot - (2 - i) * pitch) for i, n in enumerate(g.MARKS_ORDER)})
+    bad = g.check()
+    assert any("the titles' feet" in line for line in bad), (
+        "the three are stacked evenly again and check() did not say so: %s" % bad)
+    assert any("reading as a third item" in line for line in bad), (
+        "the commit is back in the pair's list and check() did not say so: %s" % bad)
+    monkeypatch.undo()
+
+    # THE PAIR HUNG OFF THE TOP OF THE ROW INSTEAD OF OFF THE LETTERING. This is the near miss:
+    # six pixels out, nothing overlaps, and the only thing wrong is that the marks no longer
+    # line up with the three titles they sit beside.
+    g = _load("geometry")
+    monkeypatch.setattr(g, "mark_slots", lambda: {
+        "map": slot(g.ART_Y), "hire": slot(g.ART_Y + pitch), "commit": slot(foot)})
+    bad = g.check()
+    assert any("the titles' feet" in line for line in bad), (
+        "the pair hangs off the top of the row and check() did not say so: %s" % bad)
+    monkeypatch.undo()
+
+    # THE COMMIT CARRIED UP WITH THE PAIR, leaving the foot of the row empty.
+    g = _load("geometry")
+    top = g.CAP_TEXT_FOOT - g.MARK_AIR
+    monkeypatch.setattr(g, "mark_slots", lambda: {
+        n: slot(top + i * pitch) for i, n in enumerate(g.MARKS_ORDER)})
+    bad = g.check()
+    assert any("the action row ends at" in line for line in bad), (
+        "the commit left the foot of the row and check() did not say so: %s" % bad)
+    monkeypatch.undo()
+
+    # AND THE PAIR BROKEN APART, so "the standing controls" stops being one object.
+    g = _load("geometry")
+    monkeypatch.setattr(g, "mark_slots", lambda: {
+        "map": slot(g.CAP_TEXT_FOOT - g.MARK_AIR),
+        "hire": slot(g.CAP_TEXT_FOOT - g.MARK_AIR + pitch + 20),
+        "commit": slot(foot)})
+    bad = g.check()
+    assert any("two standing control boxes are" in line for line in bad), (
+        "the pair has come apart and check() did not say so: %s" % bad)
+
+
+def test_the_titles_line_is_one_fact_and_the_marks_read_it(monkeypatch):
+    """CAP_TEXT_FOOT exists so the caption and the controls cannot disagree about one line.
+
+    THE ALTERNATIVE WAS THE CONTROLS RE-DERIVING IT -- ART_Y + BORDER + CAP_PAD_Y + CAP_TEXT_H,
+    typed a second time in mark_slots(). Both copies would be correct on the day and the board
+    would look right; the fault arrives later, when somebody changes the caption's size or its
+    padding and only one of the two copies follows.
+
+    THE BAND IS NOT THE LINE, which is the other thing worth pinning. CAP_H includes the padding
+    UNDER the lettering, so a column aligned to the band sits 5px low against titles that look
+    aligned to nothing in particular.
+
+    AND IT IS THE BOX THAT LINES UP, NOT THE MARK. Each control stands in a .panel now, and the
+    box is the edge the eye follows -- a mark aligned to the titles inside a box that was not
+    would read as neither aligned nor deliberate. The mark sits CONTROL_PAD further down.
+    """
+    g = _load("geometry")
+    assert g.CAP_TEXT_FOOT == g.ART_Y + g.BORDER + g.CAP_PAD_Y + g.CAP_TEXT_H
+    assert g.CAP_TEXT_FOOT < g.ART_Y + g.CAP_H, (
+        "the titles' feet are at or below the caption band's foot, so one of the two is not "
+        "what it claims to be")
+    assert g.mark_slots()[g.MARKS_ORDER[0]]["box"]["y"] == g.CAP_TEXT_FOOT - g.MARK_AIR
+
+    # THE CAPTION GROWS AND THE MARKS FOLLOW. Nothing in the module reaches CAP_TEXT_FOOT except
+    # the Tithe's label height and this column, so a size change that moved one and not the
+    # other is the whole fault being guarded.
+    g = _load("geometry")
+    monkeypatch.setattr(g, "CAP_TEXT_FOOT", g.CAP_TEXT_FOOT + 11)
+    assert g.mark_slots()[g.MARKS_ORDER[0]]["box"]["y"] == g.CAP_TEXT_FOOT - g.MARK_AIR, (
+        "the standing controls did not follow the titles' line, so the two have separate "
+        "answers to where that line is")
+
+
+def test_hover_and_selection_differ_by_the_rim_alone():
+    """Two lit states, one plate between them, and exactly one thing telling them apart.
+
+    HOVER USED TO BE THE LIFT AND NOTHING ELSE, which measured one grey level on the rendered
+    tile -- 59 against an untouched 60 -- so a still frame answered the pointer with nothing.
+    Hover took the selected tile's plate. That cost the board its answer to "which one is in
+    play", which for a while was given by elimination: at most two tiles are lit, the one under
+    the pointer is the hovered one. True, and useless in a screenshot, where there is no
+    pointer. So selection took a gold rim and got the answer back.
+
+    WHICH LEAVES A SHAPE THAT IS EASY TO ERODE IN EITHER DIRECTION. Give hover anything of its
+    own -- a warmer border, a glow, a shade more opacity -- and the board has three appearances
+    and names for two. Let the plate be written twice and the same thing happens one edit later.
+    The rule being guarded is: ONE plate, shared; ONE extra declaration, on selection only.
+
+    AND THE RIM'S COLOUR IS ASSERTED, WHICH AN EARLIER VERSION OF THIS TEST REFUSED TO DO. The
+    refusal sounded principled -- which gold is taste, it was picked by rendering five against
+    real tiles, and a threshold here would be a second opinion. It was wrong, and the thing it
+    let through is in the history: the tile took a literal #9d7d35 while the selected wheel
+    face, the selected action card, the pressed toolbar button and .btn.primary all said
+    var(--line). Two golds 16.8 dE apart, both meaning "chosen", neither owning the word.
+
+    SO THE QUESTION THIS GUARDS IS NOT WHICH GOLD, IT IS WHETHER THE BOARD HAS ONE. The tile's
+    rim and the wheel face's stroke are read out of the page and required to be the same token,
+    so changing the colour stays a one-line edit to --line and changing it in one place only
+    does not. Retuning the shade is still free; splitting the vocabulary is not.
+
+    Falsified by giving .tile.lit a look of its own, by splitting the shared plate into two
+    rules, by dropping selection's rim so the two states collapse together again, or by letting
+    the tile and the wheel disagree about what gold means.
     """
     page = TMPL.read_text(encoding="utf-8")
     css = re.sub(r"/\*.*?\*/", " ", page, flags=re.S)
-    m = re.search(r"\.seal\.filled:hover[^{]*\{([^}]*)\}", css)
-    assert m, "a mark does not go solid under the pointer"
+
+    rules = [(s.strip(), b) for s, b in re.findall(r"([^{}]+)\{([^}]*)\}", css)]
+    paints = ("background", "border", "box-shadow", "filter", "opacity")
+
+    # NOT ::after, WHICH IS THE VACATED STRIP AND NOT A LOOK. Requiring the selector to end at
+    # the class matches it out; without that the hit-testing patch reads as a second plate.
+    def looks(cls):
+        return [(s, b) for s, b in rules
+                if re.search(re.escape(cls) + r"\s*(,|$)", s) and any(p in b for p in paints)]
+
+    lit, sel = looks(".tile.lit"), looks(".tile.sel")
+    # THE BODY COMES FROM THIS LIST, NOT FROM A LOOKUP BY SELECTOR. `.tile.lit, .tile.sel` is
+    # written twice -- once for the plate and once for the lift -- so a dict keyed on the
+    # selector keeps whichever came last and this read the transform instead of the gradient.
+    shared = [(s, b) for s, b in lit if ".tile.sel" in s]
+    assert len(shared) == 1, (
+        "the lit plate is not one rule shared by both states (%s), so hover and selection can "
+        "drift into a third appearance the board has no name for" % [s for s, _ in lit])
+    assert "gradient" in shared[0][1], (
+        "the shared rule is not the plate, so hover may be carrying something else entirely")
+    shared = [s for s, _ in shared]
+
+    # HOVER OWNS NOTHING. Every rule that paints it must be the shared one.
+    assert [s for s, _ in lit] == shared, (
+        "hover has a look of its own as well as the shared plate (%s), which is the third "
+        "appearance this guard exists to prevent" % [s for s, _ in lit if s not in shared])
+
+    # SELECTION OWNS EXACTLY ONE THING, AND IT IS THE RIM.
+    own = [(s, b) for s, b in sel if s not in shared]
+    assert len(own) == 1, (
+        "selection is distinguished by %d rules, not by the single rim: %s"
+        % (len(own), [s for s, _ in own]))
+    body = own[0][1]
+    decls = {d.split(":")[0].strip(): d.split(":", 1)[1].strip()
+             for d in body.split(";") if ":" in d}
+    assert set(decls) == {"border-color"}, (
+        "selection's own rule sets %s; the rim is meant to be the whole of it, and anything "
+        "else here is a second signal saying the same thing" % sorted(decls))
+
+    # ONE GOLD ACROSS THE BOARD. Read from the wheel rather than typed here: a literal in this
+    # file would be a third place the colour is written down, which is the fault being guarded.
+    face = [b for s, b in rules if "#wheel" in s and ".sel" in s]
+    assert face, "the selected wheel face has no rule, so there is nothing to agree with"
+    gold = re.search(r"stroke:\s*([^;]+)", face[0])
+    assert gold, "the selected wheel face no longer draws a stroke"
+    assert decls["border-color"] == gold.group(1).strip(), (
+        "the selected tile's rim is %s but the selected wheel face's is %s -- two colours for "
+        "one meaning, which is how the board ends up with no word for 'chosen'"
+        % (decls["border-color"], gold.group(1).strip()))
+
+
+def test_the_pointer_lights_a_mark_and_moves_nothing_else(gen):
+    """Whatever says "this one", it must not shift the drawing by a pixel.
+
+    This was about the dashed edge closing up: same colour, same width, same box, so the mark
+    firmed up without moving. The edge has gone and brightness took over, and the requirement
+    survives the change unaltered -- these sit at geometry's own rect, and anything that touched
+    the box would move the artwork inside it.
+
+    Falsified by scaling, insetting or re-bordering a mark on hover.
+    """
+    page = TMPL.read_text(encoding="utf-8")
+    css = re.sub(r"/\*.*?\*/", " ", page, flags=re.S)
+    m = re.search(r"\.seal\.filled:hover, \.seal\.filled\.on\{([^}]*)\}", css)
+    assert m, "the hover and chosen states have no rule"
     body = m.group(1)
-    assert "solid" in body, "the hover rule does not make the edge solid: %s" % body.strip()
-    for forbidden, why in (("px", "a width"), ("#", "a colour"), ("var(", "another variable")):
-        assert forbidden not in body, (
-            "the hover rule carries %s as well as the style (%s), so the mark changes size or "
-            "hue under the pointer instead of only firming up" % (why, body.strip()))
-    # AND THE RESTING RULE IS STILL THE ONE THAT OWNS THE WIDTH AND THE COLOUR.
-    rest = re.search(r"\.seal\.filled\{([^}]*)\}", css).group(1)
-    assert "dashed" in rest and "var(--guide)" in rest, (
-        "the resting mark is no longer the guides' dashed line: %s" % rest.strip())
+    assert "brightness(" in body, "the pointer does not light the mark: %s" % body.strip()
+    for moves in ("width", "height", "transform", "padding", "margin", "inset", "border-width"):
+        assert moves not in body, (
+            "hovering a mark changes %s, so the drawing inside it moves: %s" % (moves, body.strip()))
 
 
 def test_the_tile_colour_is_one_of_the_icon_labs_plates_taken_whole():
@@ -1239,78 +1770,66 @@ def test_a_sound_in_the_tree_says_where_it_came_from():
         "sfx/README.md records no licence for any of it")
 
 
-def test_a_hovered_tile_rises_without_taking_any_room_to_do_it():
-    """The lift is a transform, it rides on the cross-highlight, and it gives back what it takes.
+def test_the_ribbon_holds_still_and_a_tile_that_moves_is_refused():
+    """The tiles do not move. Not on hover, not on selection, not at all.
 
-    THREE CLAIMS, AND EACH ONE IS A FAULT AVOIDED.
+    THEY USED TO. A hovered tile rose 6px, a selected tile stayed up at the same height, and the
+    reasoning was sound: movement is the loudest signal there is and the only one that cannot be
+    mistaken for a state, since a state does not rise. It was removed anyway -- the eight tiles
+    now hold a fixed line and colour does the whole job.
 
-    It is a TRANSFORM, so the tile moves what it draws and not what it reserves. Everything below
-    RIBBON_Y is derived from it, so a lift written as a height, a margin or a top would ripple
-    down through the road, the cards and the wheel -- or fight the inline `top` the generator
-    writes from geometry.
+    SO THIS TEST IS THE OLD ONE TURNED OVER. It used to assert the lift existed, was a transform
+    rather than a height, rode on `.lit` so the wheel raised a tile for free, and gave back the
+    strip it vacated. Every one of those clauses is now a thing that must NOT be there, and the
+    cheapest way for the lift to come back is for someone to reach for the obvious property --
+    `top`, `margin-top`, `translateY` -- without knowing it was ever deliberate.
 
-    It rides on `.lit`, which is what makes "lift it when its wheel face is hovered" free.
-    lightFace() already answers which duty the pointer is on from either end, so the second
-    direction needs no listener of its own; one would be the two-places-one-fact fault that class
-    exists to prevent.
+    THE THREE PIECES OF MACHINERY GO TOO, and they are checked because a half-removal is worse
+    than either state. `--lift` was the distance; `.tile.lit::after` refilled the strip so a
+    pointer on the tile's bottom edge did not set off an un-hover / drop / re-hover shudder; the
+    reduced-motion rule turned the transition off for readers who asked for less movement. Left
+    behind, the ::after is an invisible 6px band hanging under every lit tile, still catching
+    hit-tests for a tile that no longer moves.
 
-    And `::after` refills the strip the tile vacates, because hover is recomputed from what the
-    pointer is OVER: slide a tile out from under a pointer resting in its lowest few pixels and it
-    un-hovers, drops, re-hovers and shudders. Measured in a browser, and the first measurement was
-    wrong -- with a perfectly still pointer nothing re-hit-tests and it looks fine. Moving the
-    pointer a pixel, as a hand does, flickers across a band exactly --lift tall.
+    WHAT IS KEPT IS THE CROSS-HIGHLIGHT. `.lit` still exists and still carries the plate, and
+    lightFace() still sets it from either end, so hovering a wheel face still lights its tile.
+    Removing the movement was not removing the link.
 
-    Falsified by lifting with anything but a transform, by hanging it off a second listener, or by
-    letting the strip and the lift stop being the same number.
+    Falsified by giving a tile a transform or any offsetting property in any state, by leaving
+    --lift or the vacated-strip ::after behind, or by moving `lit` onto the tile's own :hover and
+    cutting the wheel out of it.
     """
     page = TMPL.read_text(encoding="utf-8")
     css = re.sub(r"/\*.*?\*/", " ", page, flags=re.S)
-    assert len(re.findall(r"--lift:\s*\d+px", css)) == 1, "--lift is not defined exactly once"
 
-    lit = re.search(r"\.tile\.lit[^{]*\{([^}]*)\}", css)
-    assert lit, ".tile.lit is gone"
-    assert "transform:translateY" in lit.group(1), (
-        "the tile does not rise by a transform: %s" % lit.group(1).strip())
-    assert "var(--lift)" in lit.group(1), "the lift is not read from --lift"
-    for owned in ("top:", "bottom:", "margin", "height:"):
-        assert owned not in lit.group(1), (
-            "the lift sets %s, which is geometry's to place, not the hover's to move" % owned)
+    assert "--lift" not in css, (
+        "--lift is back, so something is measuring a distance a tile is meant to travel")
 
-    # THE SELECTED TILE RISES BY THE SAME RULE, which is what stops a click moving anything. You
-    # are pointing at a tile when you click it, so it is already up; if selection had a height of
-    # its own the tile would jerk under your finger at the moment you pressed it. Asserted as ONE
-    # RULE rather than two equal values, because two values that happen to match today are exactly
-    # how they stop matching tomorrow.
-    assert re.search(r"\.tile\.lit\s*,\s*\.tile\.sel\s*\{"
-                     r"|\.tile\.sel\s*,\s*\.tile\.lit\s*\{", css), (
-        "the hover and the selection do not rise by the same rule, so clicking a tile you are "
-        "pointing at will move it")
-    sel = re.search(r"\.tile\.sel\{([^}]*)\}", css)
-    if sel:
-        assert "transform" not in sel.group(1), (
-            "the selected tile has a transform of its own as well: %s" % sel.group(1).strip())
+    # THE PROPERTY, NOT THE WORD. `transition:transform` would be the lift's timing rather than a
+    # lift, and an earlier version of this guard counted it and named the wrong fault. Both are
+    # gone now and both would be wrong to have, but the message should still be the true one.
+    for sel, body in re.findall(r"([^{}]+)\{([^}]*)\}", css):
+        if ".tile" not in sel:
+            continue
+        for prop in ("transform", "margin-top", "margin-bottom", "translate"):
+            assert not re.search(r"(^|[;\s])%s\s*:" % prop, body), (
+                "`%s` on `%s` moves a tile, and the ribbon is meant to hold still: %s"
+                % (prop, sel.strip(), body.strip()))
 
-    strip = re.search(r"\.tile\.lit::after[^{]*\{([^}]*)\}", css)
-    assert strip, (
-        "the tile does not give back the strip it rises out of, so a pointer in its bottom few "
-        "pixels will un-hover it and the tile will shudder")
-    assert "top:100%" in strip.group(1), "the strip is not where the tile's lower edge was"
-    assert "height:var(--lift)" in strip.group(1), (
-        "the strip's height is not --lift itself, so it can stop matching the distance the tile "
-        "rises: %s" % strip.group(1).strip())
+    assert "::after" not in css.split(".tile.lit")[-1][:200], (
+        "the vacated-strip ::after is still under a lit tile -- an invisible band catching "
+        "hit-tests for a movement that no longer happens")
 
-    # THE SECOND DIRECTION IS NOT A SECOND LISTENER. If a future change moves the lift onto its
-    # own :hover rule, this still passes the CSS checks above and the wheel stops lifting tiles.
+    # AND THE CROSS-HIGHLIGHT SURVIVES THE REMOVAL, which is the part most at risk: `.lit` now
+    # does one job instead of two, and a reader tidying up could reasonably conclude it does
+    # none. It carries the plate, and the wheel is half of where it comes from.
     code = re.sub(r"(?m)^\s*//.*$", "", page)
     assert ".tile:hover" not in css, (
-        "the lift is on the tile's own :hover, so hovering a wheel face no longer raises it")
+        "hover is on the tile's own :hover, so hovering a wheel face no longer lights it")
     face = code.split("function lightFace(")[1].split("\nfunction ")[0]
     assert 'classList.toggle("lit"' in face and "tile" in face, (
-        "lightFace() no longer sets `lit` on the tile, so the lift has lost the half of its "
-        "wiring that comes from the wheel")
-
-    assert re.search(r"@media\s*\(prefers-reduced-motion:\s*reduce\)", css), (
-        "the tile animates with no way for a reader who asked for less motion to turn it off")
+        "lightFace() no longer sets `lit` on the tile, so the cross-highlight has lost the half "
+        "of its wiring that comes from the wheel")
 
 
 def test_clicking_a_mark_selects_the_action_it_stands_for():
@@ -1419,26 +1938,36 @@ def test_the_road_is_drawn_and_nothing_below_it_moved(geo):
     """The strip is empty on purpose, which is exactly why it needs a guard.
 
     Nothing is drawn in it yet, so there is no artwork whose absence would be noticed and no
-    layout that would visibly break if it quietly stopped being reserved. What it is FOR is the
-    room the shorter ribbon freed: the ribbon came down from 242 to 186, and rather than letting
-    the cards, the confirm row and the wheel all ride up 56 pixels, the road holds it open.
+    layout that would visibly break if it quietly stopped being reserved.
 
-    Falsified by deleting the strip, by flattening it, or by drawing it anywhere but between the
-    ribbon and the cards.
+    IT IS NO LONGER A ROW OF ITS OWN, AND THE TEST'S NAME IS NOW HALF WRONG. The strip used to
+    sit BETWEEN the ribbon and the cards with a gap either side, holding open the room a shorter
+    ribbon had freed so that nothing below it rode up. It is inside the band now -- the part of
+    the valley below the tiles, which is the ground the Merchant actually walks on -- and
+    everything below it moved up by the whole row it used to occupy. That was the point of the
+    change, so "nothing below it moved" is the one thing this can no longer claim.
 
-    AND THE HEIGHT IS ASSERTED SEPARATELY, because the two position lines below cannot see it:
-    ART_Y is DERIVED from ROAD_H, so setting the road to zero moves the cards up and both lines
-    go on passing. Mutating it to 0 is what found that. There is no honest way to assert "the
-    cards did not move" from inside a file where they are measured off the thing that moved, so
-    what is asserted instead is the weaker true thing: a road thinner than a gap is not a road.
+    WHAT SURVIVES IS WHAT IT WAS ALWAYS REALLY FOR: that the strip exists, spans what the eight
+    tiles span, is thick enough to read as a road rather than a rule, and lies where the picture
+    has painted ground for it -- between the tiles' foot and the picture's own foot.
+
+    Falsified by deleting the strip, by flattening it, or by putting it outside the picture.
     """
     assert geo.ROAD["height"] >= geo.GAP, (
-        "the road is %d tall, which is thinner than the gaps either side of it -- it would read "
+        "the road is %d tall, which is thinner than the gaps on this board -- it would read "
         "as a rule rather than as a strip the Merchant travels along" % geo.ROAD["height"])
-    assert geo.ROAD["y"] == geo.RIBBON_Y + geo.RIBBON_H + geo.GAP, (
-        "the road is not under the ribbon")
-    assert geo.ART_Y == geo.ROAD["y"] + geo.ROAD["height"] + geo.GAP, (
-        "the cards are not under the road")
+    assert geo.ROAD["y"] == geo.TILE_Y + geo.TILE_H, (
+        "the road does not start at the tiles' foot")
+    assert geo.ROAD["y"] + geo.ROAD["height"] == geo.RIBBON_Y + geo.RIBBON_H, (
+        "the road does not reach the foot of the band")
+    # AND IT IS INSIDE THE PICTURE, which is what lets it stop being a row. A strip below the
+    # backdrop would be a band of black with a Merchant walking along it.
+    bd = geo.BACKDROP
+    assert bd["y"] <= geo.ROAD["y"] and \
+        geo.ROAD["y"] + geo.ROAD["height"] <= bd["y"] + bd["height"], (
+        "the road runs outside the picture, so the Merchant has no painted ground")
+    assert geo.ART_Y == bd["y"] + bd["height"] + geo.GAP, (
+        "the cards are not one gap under the picture")
     # FULL WIDTH, because the Merchant rides the eight duty tiles and the strip is the road it
     # travels along -- so it spans what they span rather than what the card row does.
     assert geo.ROAD["x"] == geo.X0 and geo.ROAD["width"] == geo.WORK_W, (
@@ -1456,10 +1985,20 @@ def test_a_label_sits_the_same_distance_from_the_top_of_whatever_box_it_is_in(ge
     They were 14 and 6, and nothing anywhere said they were meant to agree, so they didn't --
     which showed as the ribbon's titles floating lower than the captions beside them. Falsified
     by typing a number into either one instead of taking INSET.
+
+    THE DUTY'S NAME IS NO LONGER ONE OF THEM. It was the first half of this pair, and the pair is
+    what the test is named for; the names are off the board, so TILE_NAME_TOP is gone and the
+    claim narrows to the boxes that still print a label. What the tile contributes instead is its
+    MARKS: the air round them is the same inset, twice, which is the same kind of claim about the
+    same number and is why this is still one test.
     """
-    assert geo.TILE_NAME_TOP == geo.INSET
     assert geo.CAP_PAD_Y == geo.INSET
+    assert geo.TITHE_LABEL_TOP == geo.INSET - geo.BORDER, (
+        "the Tithe's label is no longer the caption's inset, measured inside its border")
     assert geo.SEAL_INSET == geo.INSET, "the seals use a margin of their own again"
+    assert geo.TILE_PAD == 2 * geo.SEAL_INSET, (
+        "the air round a tile's marks is %d and the marks keep %d between themselves, so the "
+        "tile has a margin of its own again" % (geo.TILE_PAD, geo.SEAL_INSET))
 
 
 def test_the_two_wax_discs_clear_each_other_and_not_merely_their_boxes(geo):
@@ -1491,69 +2030,60 @@ def test_the_two_wax_discs_clear_each_other_and_not_merely_their_boxes(geo):
 # plus the label's band comes to 298 in a box of 295. So the gap is a REMAINDER rather than a
 # choice, and these are what stop the label being pushed quietly out of the bottom.
 
-def test_a_tithe_seal_is_a_duty_mark_unless_the_box_will_not_take_one(geo):
-    """Falsified by giving TOKEN a figure of its own, or by letting one escape token_cap().
-
-    THEY USED TO BE FLATLY EQUAL and this test used to say so. It cannot any more, and the reason
-    is worth keeping rather than deleting: at one tile wide with the three in a column, what binds
-    is the box's HEIGHT, and that height is ART_H -- a number chosen for the artwork. 72 does not
-    fit three times with its gaps, so a Tithe resource is 66.
-
-    The claim that replaces it is the one actually worth holding: a token is the mark's size, and
-    the ONLY thing that may make it smaller is the box it has to fit in. A figure of TOKEN's own
-    would pass `TOKEN <= SEAL` and fails here.
-    """
-    assert geo.TOKEN == geo.token_cap(geo.SEAL), "TOKEN did not come out of token_cap()"
-    assert geo.TOKEN <= geo.SEAL, (
-        "a Tithe resource is %d against a duty mark of %d -- it may never be the bigger of the two"
-        % (geo.TOKEN, geo.SEAL))
-    # WHERE THE BOX IS NOT THE CONSTRAINT, THE TWO ARE STILL EQUAL. Without this the test above
-    # would pass just as well for a cap that always shaved a few pixels off for no reason.
-    small = geo.SEAL // 2
-    assert geo.token_cap(small) == small, (
-        "a mark of %d leaves the box room to spare and still came back as %d"
-        % (small, geo.token_cap(small)))
-    # AND THE CAP BITES ON HEIGHT, not on width. The width term alone reports 67 and would let a
-    # column of three overflow the box by 11, which is the fault this function was written for.
-    assert geo.token_cap(10 ** 6) == geo.TOKEN, (
-        "an absurd mark size came back as something other than the box's own limit")
+# test_a_tithe_seal_is_a_duty_mark_unless_the_box_will_not_take_one IS GONE WITH THE DISCS, and
+# the reasoning deserves to outlive them because it is the best worked example in this file of a
+# derived size earning its keep.
+#
+# THE CLAIM WAS: a Tithe resource is the duty mark's size, and the ONLY thing that may make it
+# smaller is the box it has to fit in. A figure of its own would have passed "TOKEN <= SEAL" and
+# failed here. Three of them stood in a column whose height is ART_H -- a number chosen for the
+# artwork, not for them -- so at a mark of 72 the box bound at 66, and at a mark of 50 it did not
+# bind at all. The test therefore asked for the binding case DELIBERATELY rather than reading it
+# off the board, because a guard that only exercises whichever term happens to bind today stops
+# covering the other one the day the board moves.
+#
+# AND THE HEIGHT TERM WAS THE ONE THAT HAD BEEN WRONG. token_cap()'s width term divided by two,
+# left from a side-by-side arrangement, and agreed with the right answer by luck until the Tithe
+# narrowed to 120 -- at which point the discs silently went from 66 to 50. A mutation run later
+# walked straight through the first replacement for this guard, which asserted the cap was under
+# the WIDTH limit: dividing the height by two gives 99, still under the width's 106, while three
+# tokens needed 309 in a box of 211. What finally held it was measuring the COLUMN -- three of
+# them and their insets against the room -- which is the question the function exists to answer.
 
 
-def test_three_tithe_seals_and_their_label_fit_the_box_they_are_in(geo):
-    """Falsified by picking a gap instead of deriving one, or by growing TOKEN again.
+def test_the_tithe_is_one_duty_column_wide_and_holds_only_its_label(geo):
+    """What is left of the Tithe once the three resources are off it, asserted so it stays left.
 
-    check() names the overlap; this also pins the shape of the arithmetic so a future change has
-    to go through the derivation rather than round the numbers until they look close enough.
+    THIS REPLACES test_three_tithe_seals_and_their_label_fit_the_box_they_are_in, and the thing
+    it was guarding is worth recording. The three discs grew from 64 to 78 because a seal is a
+    seal whatever it stands for, and at 78 three of them plus two gaps plus the label's band came
+    to 298 in a box of 295 -- so the gap had to be a REMAINDER rather than a choice, laid out
+    from the fixed parts, or the label got pushed quietly out of the bottom. That arithmetic has
+    no subject now.
+
+    WHAT REPLACES IT IS THE WIDTH, which is the half of the Tithe that is still a claim. The box
+    was 120 because 120 was what a packed row had left after the cards and the controls; nothing
+    inside it asks for a width any more, so it takes one duty's column -- the unit the cards are
+    three of and the tile used to be one of. A number typed here instead would be the only
+    unexplained width on the board.
     """
     assert geo.check() == [], "\n".join(geo.check())
-    # THE LABEL IS ABOVE THE SEALS NOW, so the two ends that can collide have swapped: the label
-    # must finish before the column starts, and the column must finish inside the box.
-    # ASK THE SLOTS, NOT A STACK. A row, then a triangle, now a column -- and the arrangement has
-    # changed under this test three times without it needing an edit, because it reads the slots
-    # rather than rebuilding their arithmetic. That is the mistake the first version made.
-    label_end = geo.TITHE_LABEL_TOP + geo.TITHE_LABEL_H
-    slots = geo.token_slots()
-    assert len(slots) == 3, "the Tithe no longer offers three resources"
-    top = min(d["y"] for d in slots)
-    end = max(d["y"] + d["size"] for d in slots)
-    assert top >= label_end, (
-        "the label ends at %d and the seals start at %d" % (label_end, top))
-    assert end <= geo.TITHE_INNER_H - geo.INSET, (
-        "the seals end at %d and the box's inner edge is at %d"
-        % (end, geo.TITHE_INNER_H - geo.INSET))
-    assert geo.TOKEN <= geo.TITHE_W - 2 * geo.INSET, "a seal of %d does not fit a box %d wide" \
-        % (geo.TOKEN, geo.TITHE_W)
-    # AND THE COLUMN IS CENTRED IN WHAT IS LEFT UNDER THE LABEL, rather than hung from the top
-    # with the slack falling to the bottom. Measured off the slots, so it survives the next
-    # rearrangement the way the block above did.
-    #
-    # WITHIN A PIXEL, AND THE PIXEL IS REAL RATHER THAN SLOP: the column's own slack is 1, which
-    # cannot be halved into two integer positions. Writing this as an equality failed, and the
-    # honest reading of that failure is that the board is centred and the arithmetic is odd.
-    above = top - (label_end + geo.INSET)
-    below = (geo.TITHE_INNER_H - geo.INSET) - end
-    assert abs(above - below) <= 1, (
-        "the column has %d above it and %d below" % (above, below))
+    assert geo.TITHE_W == geo.SLICE_W, (
+        "the Tithe is %d wide and a duty's column is %d" % (geo.TITHE_W, geo.SLICE_W))
+    # AND NOTHING IS PLACED IN IT. The discs were handed to the page already positioned, which is
+    # how a drawing stops inventing a layout -- and is also how a removed thing comes back: a
+    # page given three rects is one line from drawing them.
+    t = geo.as_dict()["tithe"]
+    for gone in ("token", "order", "spread", "slots"):
+        assert gone not in t, (
+            "the Tithe still publishes %r, so the three resources can be drawn again by "
+            "accident" % gone)
+    # THE LABEL IS STILL HUNG FROM THE TOP AND STILL FITS. It is the only thing in the box, so
+    # the only way it can be wrong is by not having room -- which it cannot fail at today and
+    # could the moment somebody shortens the box to suit its new emptiness.
+    assert geo.TITHE_LABEL_TOP + geo.TITHE_LABEL_H <= geo.TITHE_INNER_H, (
+        "the label ends at %d in a box %d deep"
+        % (geo.TITHE_LABEL_TOP + geo.TITHE_LABEL_H, geo.TITHE_INNER_H))
 
 
 def test_the_tithe_column_states_no_numbers_of_its_own(gen):
@@ -1571,12 +2101,14 @@ def test_the_tithe_column_states_no_numbers_of_its_own(gen):
     # confirm that used to follow it has gone. The marker moved; the boundary did not.
     body = page.split("var t = GEO.tithe;")[1].split("var c = GEO.city;")[0]
     body = re.sub(r"(?m)^\s*//.*$", " ", body)
-    # t.tokenY AND t.tokenGap ARE GONE WITH THE STACK. Where each resource sits is handed over
-    # placed, as the duty tile's marks already were, so the page reads positions rather than
-    # recomputing a layout from a start and a repeat.
-    for key in ("t.slots", "t.labelTop", "t.order"):
+    # t.slots AND t.order WENT WITH THE THREE RESOURCES, and they were the two this test was
+    # really about: where each disc sat was handed over placed, as the duty tile's marks are, so
+    # the page read positions rather than recomputing a layout from a start and a repeat. There
+    # is nothing to place now, so what is asserted is the absence -- a page that still named
+    # t.slots would be one holding positions for things geometry does not publish.
+    for key in ("t.labelTop", "t.labelSize"):
         assert key in body, "the Tithe column no longer takes %s from GEO" % key
-    for gone in ("t.tokenY", "t.tokenGap", "t.tokenX"):
+    for gone in ("t.tokenY", "t.tokenGap", "t.tokenX", "t.slots", "t.order", "t.token"):
         assert gone not in body, (
             "%s is back in the template, so the page is laying the Tithe out itself again" % gone)
     # WHICH EDGE IT IS BOUND TO, not merely that the number is read. `bottom: px(t.labelTop)` takes
@@ -1603,7 +2135,11 @@ def test_a_bordered_box_measures_its_children_inside_its_border(geo):
     """
     assert geo.inner(100, 50) == (100 - 2 * geo.BORDER, 50 - 2 * geo.BORDER)
     for name, inner_wh, outer_wh in (
-            ("the duty tile", (geo.TILE_INNER_W, geo.TILE_INNER_H), (geo.TILE_W, geo.RIBBON_H)),
+            # THE TILE'S OWN HEIGHT, NOT THE BAND'S. These were one number while the tile filled
+            # its column top to bottom; the tile is 74 x 130 hanging inside a band of 186, so
+            # reading RIBBON_H here would be measuring the box's children against a box that is
+            # not the box -- which is this test's own fault, met from the other direction.
+            ("the duty tile", (geo.TILE_INNER_W, geo.TILE_INNER_H), (geo.TILE_W, geo.TILE_H)),
             ("the City", (geo.CITY_INNER_W, geo.CITY_INNER_H), (geo.SIDE_W, geo.CITY_H)),
             ("the Tithe", (geo.TITHE_INNER_W, geo.TITHE_INNER_H),
              (geo.TITHE_W, geo.ART_H))):
@@ -1857,18 +2393,24 @@ def test_a_single_mark_stands_on_the_same_line_as_everyone_elses_first(geo):
         "a single mark sits at x=%d and a first-of-two at x=%d" % (one["x"], first_of_two["x"]))
 
 
-def test_the_tile_carries_the_same_plate_the_marks_are_grounded_on(gen):
-    """Falsified by leaving the tile near-black under a mark that is given a ground of its own.
+def test_the_tile_is_the_plate_seen_through_glass_and_the_mark_adds_nothing_behind_itself(gen):
+    """Falsified by painting a ground behind a mark again, or by making the tile opaque.
 
-    A cut-out brings no ground, so the board supplies one -- and while the tile was #0b0a09 that
-    ground was a visible square sitting behind each mark. The tile carries the colour now, so the
-    square stops being a square and the mark simply sits on the tile. The two have to be the SAME
-    colour, which is why it is a variable rather than a literal written twice: this asserts they
-    cannot drift, not that either is any particular value.
+    THE NAME OF THIS TEST HAS CHANGED TWICE AND BOTH TIMES FOR THE SAME REASON: the claim kept
+    outliving its own wording. It was "the same purple" when the plate was purple; then "the same
+    plate the marks are grounded on" when the plate went slate and a mark still had a ground. A
+    mark has no ground now, so being grounded on the same thing is not a claim any more.
 
-    IT USED TO BE CALLED "the same purple". The plate has been slate since the picker's palette
-    was taken up, and the name outlived the colour -- which is the whole reason the rule is a
-    variable, so it is a poor thing for its own guard to have got wrong.
+    WHAT SURVIVES IS ONE FACT ABOUT THE TILE. It is --plate at --tile-alpha: the plate's colour,
+    seen through glass, with the backdrop behind it. That is what makes a ground behind a mark
+    wrong rather than merely unnecessary -- there is no single colour for one to match, at any
+    height of any tile, so it would draw a square wherever it stopped agreeing.
+
+    AND THE MARK ADDS NOTHING. A cutout is the emblem on transparency; it needs no field, and the
+    board gives it none. Both grounds, selected and not, are asserted in
+    test_a_selected_tile_catches_light_and_its_marks_bring_no_ground_of_their_own; what is
+    asserted here is only that the RULES exist to say so, so that neither tile can silently fall
+    back to the other's.
     """
     page = TMPL.read_text(encoding="utf-8")
     assert "--plate:" in page, "the plate's colour is no longer named on :root"
@@ -1877,25 +2419,10 @@ def test_the_tile_carries_the_same_plate_the_marks_are_grounded_on(gen):
     assert tile, "the tile has no rule of its own"
     assert "var(--plate)" in tile.group(1), (
         "the duty tile is not drawn from the plate: %s" % " ".join(tile.group(1).split()))
-    assert ".seal.plate{background:var(--plate)" in page, (
-        "the mark's ground is no longer drawn from the plate the tile is")
-
-    # THEY ARE NO LONGER THE SAME COLOUR, AND THAT IS THE POINT NOW. The tile became glass over
-    # the backdrop -- --plate at --tile-alpha -- and the mark's ground stayed opaque, so a cut-out
-    # keeps a solid dark field to read against instead of competing with a lit valley. What still
-    # cannot drift is the SOURCE: both are drawn from --plate, so changing the palette moves both.
-    # The original claim, that the two match exactly, was true only while nothing was behind them.
     assert "--tile-alpha" in tile.group(1), (
         "the tile is opaque again, so the backdrop behind it cannot be seen at all: %s"
         % " ".join(tile.group(1).split()))
-    # THE SELECTED TILE IS NOT ASSERTED HERE, AND THAT IS DELIBERATE. This line used to pin
-    # `.tile.sel .seal.plate{background:var(--plate-lit)}`, which was right while a selected tile
-    # was one flat colour and is wrong now that it is a gradient -- there is no single colour for
-    # the ground to match, so the ground has to be nothing at all. The rule still holds, it is
-    # just no longer "the same colour": it is "whatever the tile is showing".
-    #
-    # That case lives in test_a_selected_tile_catches_light_and_its_marks_bring_no_ground_of_
-    # their_own, in one place rather than half-stated in two.
+    assert _re.search(r"\n\.seal\.plate\{", page), "the mark's ground has no rule of its own"
     assert ".tile.sel .seal.plate{" in page, (
         "the selected tile's ground has no rule of its own, so it keeps the unselected one and "
         "the square comes back the moment the tile stops being that colour")
@@ -1964,37 +2491,50 @@ def test_the_controls_are_one_column_of_marks_and_the_old_buttons_are_gone(geo, 
     # the page has nothing left to work out.
     marks = geo.as_dict()["marks"]
     assert list(marks["order"]) == list(geo.MARKS_ORDER), "the column's order is not geometry's"
-    # A CONTROL IS A TILE'S MARK WITHOUT ITS FRAME. The marks are border-box, so a SEAL-sized mark
-    # on a tile shows SEAL - 2*SEAL_BORDER of artwork; a control carries no frame, so it IS that
-    # size. Asserted as the subtraction rather than as 68, because 68 is the answer and this is
-    # the reason -- and because the column was 72 for a while, which drew the same emblem four
-    # pixels larger than the tile above it was drawing it.
+    # A CONTROL IS A TILE'S MARK, FULL STOP. This used to be SEAL - 2*SEAL_BORDER: a mark on a
+    # tile wore a frame and was border-box, so it showed that much artwork, and a control with no
+    # frame had to be that size to come out the same. Neither wears a frame now, so the correction
+    # has nothing left to correct and the two are one number -- which is the better state, since a
+    # subtraction that evaluates to the thing it is subtracted from is a trap waiting for whoever
+    # next changes one side of it.
     # READ OFF THE RECTS, because the rects are the only place the size is published. It was also
     # published as a bare `size` beside them for a while and read by nobody -- one number stated
     # twice, which is how two numbers start.
     for name in marks["order"]:
         assert marks[name]["width"] == marks[name]["height"] == geo.MARK, (
             "%s is not a MARK-sized square" % name)
-        assert marks[name]["width"] == geo.SEAL - 2 * geo.SEAL_BORDER, (
-            "a control is %d and a tile's mark shows %d of artwork inside its frame"
-            % (marks[name]["width"], geo.SEAL - 2 * geo.SEAL_BORDER))
+        assert marks[name]["width"] == geo.SEAL, (
+            "a control is %d and a tile's mark is %d" % (marks[name]["width"], geo.SEAL))
     assert "size" not in marks, (
         "the column's size is published beside the rects as well as in them, so the two can drift")
     # AND IT STANDS ON ALLOCATION'S, to the pixel. This is the claim the section is built on: the
     # column is the eighth tile's artwork carried down, not merely near it or centred under it.
-    tile_x = geo.X0 + (geo.TILES - 1) * geo.TILE_PITCH
-    art_x = tile_x + geo.BORDER + geo.seal_slots(1)[0]["x"] + geo.SEAL_BORDER
+    # ASKED OF tile_x(), which is two steps from the pitch now: the column, then the tile centred
+    # in it, then the mark centred in the tile. Adding BORDER to the pitch directly -- which is
+    # what this did -- lands 40 to the left of the mark and calls a correct board broken.
+    art_x = geo.tile_x(geo.TILES - 1) + geo.BORDER + geo.seal_slots(1)[0]["x"]
     for name in marks["order"]:
         assert marks[name]["x"] == art_x, (
             "%s is at %d and Allocation's artwork at %d" % (name, marks[name]["x"], art_x))
-    # THE AIR BETWEEN THEM IS THE AIR A TILE KEEPS BETWEEN PICTURES, which is SEAL_INSET plus the
-    # two frames it spends -- 10, not the 6 the boxes are apart. Matching the 6 matches the
-    # arithmetic and not the eye, and the column did exactly that at first.
-    ys = [marks[n]["y"] for n in marks["order"]]
-    air = ys[1] - ys[0] - marks[marks["order"][0]]["height"]
-    assert air == geo.SEAL_INSET + 2 * geo.SEAL_BORDER, (
-        "the controls are %d apart and a tile's marks keep %d of clear air"
-        % (air, geo.SEAL_INSET + 2 * geo.SEAL_BORDER))
+    # THE AIR BETWEEN THEM IS THE AIR A TILE KEEPS BETWEEN PICTURES, and that is now the same 6
+    # the boxes are apart. It was SEAL_INSET plus the two frames the pair spent -- 10 of clear
+    # space between two framed pictures where the boxes were 6 apart -- and matching the 6 back
+    # then matched the arithmetic and not the eye, which the column did at first. With no frames
+    # the clear space and the box gap are the same number again.
+    # AND IT IS MEASURED BETWEEN THE BOXES, which is the change. It used to be between the marks,
+    # because a mark was all there was; each one now stands in a .panel of its own, so the gap
+    # the eye sees is box to box and the marks sit a pad further apart than they look. Measured
+    # on the marks this reads 18 and means nothing.
+    #
+    # AND ONLY WITHIN THE STANDING PAIR. The commit is deliberately far below -- check() holds
+    # that distance to GAP_WIDE, and it is what makes its arrival read as news -- so a loop over
+    # all three would be asserting the two-group layout away.
+    boxes = [marks[n]["box"] for n in marks["order"]]
+    for a, b in zip(boxes[:-2], boxes[1:-1]):
+        air = b["y"] - (a["y"] + a["height"])
+        assert air == geo.SEAL_INSET, (
+            "two standing control boxes are %d apart and a tile keeps %d of clear air"
+            % (air, geo.SEAL_INSET))
     # AND THE OLD OBJECTS ARE NOT STILL THERE UNUSED. A rect left in as_dict() with nothing
     # drawing it is the state this page spent a version in before anyone noticed.
     published = geo.as_dict()
@@ -2021,17 +2561,24 @@ def test_the_controls_are_one_column_of_marks_and_the_old_buttons_are_gone(geo, 
         "%d marks play the confirm cue" % body.count('sfx("confirm")'))
     assert "name === COMMIT" in body, "the cue is not bound to the commit mark in particular"
 
-    # THE FRAME IS GEOMETRY'S NUMBER, NOT THE STYLESHEET'S. SEAL_BORDER sets a border here and a
-    # WIDTH in the controls column, so a `2px` typed back into this rule is two owners for one
-    # fact: the border would move and the column would go on being sized off the old value, which
-    # renders perfectly and quietly stops the control being the artwork it is supposed to equal.
-    # The ordinary no-geometry guard cannot see this -- it bans the board's three- and four-digit
-    # numbers, and this one is a 2.
-    rule = page.split(".seal.filled{")[1].split("}")[0]
-    assert "var(--seal-border)" in rule, (
-        "the mark's frame is typed into the stylesheet again: %r" % rule)
-    assert "GEO.ribbon.sealBorder" in code, (
-        "nothing sets --seal-border from geometry, so the rule above falls back to nothing")
+    # THERE IS NO FRAME, AND THE WAY THAT IS HELD HAS TURNED OVER. The frame used to be geometry's
+    # number -- SEAL_BORDER set a border in the stylesheet and a WIDTH in the column -- so this
+    # asserted that the rule read var(--seal-border) rather than a typed 2px, because two owners
+    # of one fact meant the border could move while the column went on being sized off the old
+    # value: a page that renders perfectly with the control no longer equal to the artwork.
+    #
+    # NOW THE FACT IS THAT THERE IS NO NUMBER AT ALL, so what has to be asserted is the absence,
+    # at both ends: the stylesheet must not grow a border back, and geometry must not go on
+    # publishing one for it to grow back FROM. A leftover sealBorder in the ribbon dict is the
+    # half-done state this whole test exists to catch.
+    rule = decls_for(page, ".seal.filled")
+    assert re.search(r"border:\s*0", rule), "the mark's frame is back: %r" % rule
+    assert not re.search(r"border(-\w+)?:\s*[1-9]", rule), (
+        "the mark has been given a border width again: %r" % rule)
+    assert "--seal-border" not in code, (
+        "the page still carries --seal-border, so a frame can come back in one line")
+    assert "sealBorder" not in json.dumps(geo.as_dict()), (
+        "geometry still publishes sealBorder, which is a frame width for a mark that has no frame")
 
     # AND NOTHING IN THE PAGE STILL REACHES FOR WHAT GEOMETRY DROPPED.
     for gone in ("GEO.confirm", "GEO.showMap", "GEO.hire", "GEO.standing", "fitConfirm",
@@ -2303,37 +2850,16 @@ def test_the_phase_row_is_rebuilt_rather_than_added_to():
 # reassigns module globals and the `geo` fixture is module-scoped -- a test that configured the
 # shared one would quietly change the board every test after it measures.
 
-def test_the_tithe_tokens_move_with_the_tile_marks():
-    """A seal and a coin are one size, so one lever has to move both.
-
-    THE BUG THIS IS POINTED AT is a flag that resizes the eight tiles' marks and leaves the
-    Tithe's three where they were, which reads as a layout fault rather than as a setting -- the
-    exact thing the comment above TOKEN in geometry.py was written for. Falsified by having
-    configure() set SEAL alone.
-    """
-    g = _load("geometry")
-    # MEASURED BELOW THE TITHE BOX'S OWN LIMIT, so the two are free to be equal and this test is
-    # about the lever rather than about the cap. At the default they are NOT equal -- the column
-    # of three is height-bound at 66 against a mark of 72 -- and a test that set 70 here would be
-    # asserting the cap's number while believing it was asserting the lever's.
-    small = 40
-    assert g.token_cap(small) == small, "%d is capped, so this test proves nothing" % small
-    g.configure(seal=small)
-    assert g.SEAL == small, "configure() did not set the mark size"
-    assert g.TOKEN == small, (
-        "the Tithe's tokens stayed at their old size while the tile marks moved")
-    assert g.TOKEN_SPREAD == small + g.INSET, "the spacing the three tokens stand on did not follow"
-    assert g.as_dict()["ribbon"]["seal"] == small, "the page is still told the old size"
-    assert g.as_dict()["tithe"]["token"] == small, "the page is still told the old token size"
-    # AND ABOVE THE CAP THE LEVER STOPS AT THE BOX rather than running past it. The flag may make
-    # the Tithe's resources smaller than the duty marks; it may never make them not fit.
-    g.configure(seal=g.SEAL)
-    big = g.token_cap(10 ** 6) + 10
-    g.configure(seal=big)
-    assert g.SEAL == big, "configure() did not set the mark size"
-    assert g.TOKEN == g.token_cap(big) < big, (
-        "a mark of %d put a Tithe resource of %d in a box that cannot hold three"
-        % (big, g.TOKEN))
+# test_the_tithe_tokens_move_with_the_tile_marks IS GONE WITH THE THREE RESOURCES. It held one
+# lever to two sizes: a flag that resized the eight tiles' marks and left the Tithe's discs where
+# they were reads as a layout fault rather than as a setting, so configure() had to move TOKEN
+# with SEAL, and above the box's cap the lever had to stop at the box rather than run past it.
+#
+# THE CLAIM IT MADE HAS NOT GONE, ONLY ITS SECOND SUBJECT. "One lever moves everything on the
+# mark's chain" is now test_setting_the_mark_size_moves_everything_derived_from_it_and_nothing_
+# else, which derives that chain from the source instead of listing it -- so the tile, which took
+# the discs' place as the thing that must move with the mark, is covered without anybody
+# remembering to add it.
 
 
 def test_a_mark_too_big_for_the_tile_is_refused_rather_than_drawn():
@@ -2354,44 +2880,210 @@ def test_a_mark_too_big_for_the_tile_is_refused_rather_than_drawn():
     """
     g = _load("geometry")
     assert g.check() == [], "the default board is not sound, so this test proves nothing"
-    # THE DEFAULT MARK IS THE BIGGEST THE TILE TAKES AT THE TILE'S OWN RHYTHM, which is what it
-    # means for RIBBON_H to be derived from it rather than chosen.
-    fits = (g.TILE_INNER_H - g.TILE_NAME_BOTTOM - 3 * g.SEAL_INSET) // 2
-    assert g.SEAL == fits, (
-        "the tile holds a mark of %d and the board draws %d, so the ribbon's height is no longer "
-        "the height of what it holds" % (fits, g.SEAL))
+    # THE TILE IS NO LONGER EXACTLY AS TALL AS WHAT IT HOLDS, and that is a decision rather than a
+    # drift. This read `SEAL == fits` -- the default mark was the biggest the tile would take at
+    # the tile's own rhythm, because RIBBON_H was derived from the mark. The mark went to 50 and
+    # the tile KEPT its height, so there are 22 of headroom and the two numbers have come apart.
+    #
+    # WHAT IS ASSERTED INSTEAD IS THE DIRECTION, which is the half that matters to this test: the
+    # board's mark must be one the tile takes. Equality would now fail on a deliberate choice;
+    # dropping the line altogether would let the default drift over the thresholds below and
+    # leave them measuring a board that was already broken.
+    fits = (g.RIBBON_H - (g.TILE_Y - g.RIBBON_Y) - g.SEAL_INSET - 2 * g.TILE_PAD) // 2
+    assert g.SEAL <= fits, (
+        "the band holds a mark of %d and the board draws %d, so the default board is over the "
+        "first threshold before this test starts" % (fits, g.SEAL))
 
-    # ONE PIXEL OVER: still inside the tile, no longer at its rhythm.
+    # ONE PIXEL OVER, AND THE BAND IS WHAT IT IS OVER. The complaint used to be about the TILE:
+    # a mark could crowd its box and then leave it, two thresholds three pixels apart, and the
+    # board was visibly wrong for the sizes in between while check() said nothing. Neither can
+    # happen now -- the tile is DERIVED from the mark, so a mark can no more overflow its tile
+    # than a hand can outgrow its glove. What it can still outgrow is the band the tile hangs in,
+    # which is declared, and that is the one threshold left.
     g.configure(seal=fits + 1)
     bad = g.check()
-    assert any("leaves" in line and "inside a tile" in line for line in bad), (
-        "a %d px mark leaves less under it than the pair keep between them and check() did not "
-        "say so: %s" % (fits + 1, bad))
+    assert any("past the band" in line for line in bad), (
+        "a %d px mark asks for a tile taller than the band and check() did not say so: %s"
+        % (fits + 1, bad))
 
-    # FAR ENOUGH OVER TO LEAVE THE BOX, which is the complaint the --icons flag quotes back.
-    spills = g.TILE_INNER_H - g.TILE_NAME_BOTTOM - 2 * g.SEAL_INSET - g.SEAL_INSET // 2
-    g.configure(seal=spills)
+    # AND FAR OVER IT, which is the complaint the --icons flag quotes back. Asserted separately
+    # from the pixel above because a guard that only fires at the boundary and a guard that only
+    # fires far past it are different guards, and "it complains" would be satisfied by either.
+    g.configure(seal=fits * 2)
     bad = g.check()
-    assert bad, "a %d px mark overflows its tile and check() did not notice" % spills
-    # NOT just "a line mentioning seals". The Tithe's own guard also says "seals", and it fires at
-    # this size too -- so a looser match passed while the tile guard was disabled, which is what
-    # mutating RIBBON_H revealed. The complaint has to be about the TILE, and about SPANNING it.
-    assert any("spans" in line and "inside a tile" in line for line in bad), (
-        "check() complained, but not that the mark overflows its tile: %s" % bad)
+    assert any("past the band" in line for line in bad), (
+        "a %d px mark is far past the band and check() did not notice: %s" % (fits * 2, bad))
+    # THE TWO THRESHOLDS THAT WENT, recorded because losing a guard quietly is how the next one
+    # gets lost. The second was "the mark spans the tile", and it has no case left to catch: the
+    # tile grows with the mark, so seal_slots() keeps the pair inside its box at every size. The
+    # guard is still in check() -- it costs nothing and it is the thing that would notice
+    # seal_slots() and the tile's derivation disagreeing -- but nothing drives it from here.
+    # NOT JUST "A LINE SAYING spans". The controls column has a complaint of its own at this size
+    # and it says "spans" too, so a looser match reported the tile guard firing when it was the
+    # column's -- which is the same fault this test's old version was written against, met from
+    # the opposite side.
+    assert not any("spans" in line and "inside a tile" in line for line in bad), (
+        "a mark has left its own tile, which the tile being derived from it should make "
+        "impossible: %s" % bad)
 
 
-def test_setting_the_mark_size_does_not_move_anything_else():
-    """One lever, not a settings system. Falsified by configure() touching a second number.
+def test_a_pair_hung_from_the_name_instead_of_centred_is_refused(monkeypatch):
+    """The other half of the tile's complaint, which no mark size can reach.
 
-    THE SIZE HAS TO BE ONE ALL THREE MOVE FOR. At 70 the Tithe's cap holds TOKEN at 66 where it
-    already was, so `moved` came back as {"SEAL"} alone -- which passes a subset check and would
-    have let configure() quietly stop moving the token at all.
+    check() minds two different things about the pair -- that it is centred in the room under the
+    name, and that it keeps at least the tile's own inset at both ends -- and the test above walks
+    the mark size up until the SECOND one fires. The first cannot be reached that way at all:
+    seal_slots() centres the pair by construction, so every size it is asked for comes back
+    centred, however tight. A mutation run is what found this: breaking the centring condition
+    changed no result anywhere, because nothing was asking the question.
+
+    SO THE DERIVATION IS BROKEN DIRECTLY. The placement is replaced with the rule it REPLACED --
+    hang the pair one inset below the name and leave the remainder at the foot, which is what this
+    did while the tile was exactly as tall as the pair asked for and is wrong now that it is not.
+    That is the real regression this complaint guards, and it arrives by somebody editing
+    seal_slots(), not by moving the one lever.
     """
     g = _load("geometry")
-    before = {k: v for k, v in vars(g).items() if k.isupper() and isinstance(v, (int, float))}
+    assert g.check() == [], "the default board is not sound, so this test proves nothing"
+
+    def hung(n):
+        top = g.SEAL_INSET
+        out = [{"x": (g.TILE_INNER_W - g.SEAL) // 2, "y": top, "size": g.SEAL}]
+        if n == 2:
+            out.append({"x": out[0]["x"], "y": top + g.SEAL + g.SEAL_INSET, "size": g.SEAL})
+        return out
+
+    monkeypatch.setattr(g, "seal_slots", hung)
+    bad = g.check()
+    assert any("not centred" in line for line in bad), (
+        "the pair hangs from the name with all the spare height at the foot and check() did not "
+        "say so: %s" % bad)
+    # AND IT IS THE CENTRING THAT COMPLAINED, not the tightness -- the two were one condition and
+    # one message until a mark of 73 showed the message naming the wrong fault. A pair hung from
+    # the name is roomy at the top and merely lopsided.
+    assert not any("tighter than" in line for line in bad), (
+        "check() called a roomy pair tight, so the two complaints are back to one: %s" % bad)
+
+
+def test_a_tile_hung_off_centre_in_its_column_is_refused(monkeypatch):
+    """The other centring, and it is unreachable by the one lever for exactly the same reason.
+
+    There are two centrings between the ribbon's pitch and a mark: the tile in its column, and
+    the pair in the tile. Both are true by construction -- tile_x() and seal_slots() each divide
+    the room in half -- so no mark size can make either fail, and check()'s complaints about them
+    look like dead code until something breaks the derivation. A mutation run found this one
+    exactly as it found the pair's: disabling the condition changed no result anywhere.
+
+    WHAT THEY GUARD IS THE PAIR OF EXPRESSIONS AGREEING, not the arithmetic of either. tiles()
+    places the box and MARKS_X places the controls off the same two divisions; if tile_x() stops
+    centring, every mark on the ribbon slides 40 to the left while each box still looks
+    correctly drawn, and the controls column goes with them.
+    """
+    g = _load("geometry")
+    assert g.check() == [], "the default board is not sound, so this test proves nothing"
+    monkeypatch.setattr(g, "tile_x", lambda i: g.X0 + i * g.TILE_PITCH)
+    bad = g.check()
+    assert any("from one side of its column" in line for line in bad), (
+        "every tile is jammed against the left of its column and check() did not say so: %s"
+        % bad)
+
+
+def _seal_derived(src):
+    """Every module-level constant whose value is an expression over SEAL, read off the source.
+
+    WHY THIS IS PARSED RATHER THAN LISTED. The list it replaces was typed -- {"SEAL", "TOKEN",
+    "TOKEN_SPREAD"} -- and a typed list of what a lever moves is a list of what somebody
+    remembered. Six more constants came to hang off SEAL when the controls column was placed off
+    Allocation's mark, configure() went on moving three of them, and the typed list PASSED: it
+    was asserting the omission. The board it produced put the column where the old mark had been
+    and check() reported a strip of 52 against a margin of 41, which reads as a broken board
+    rather than as a flag that did half its job.
+
+    TRANSITIVELY, AND THROUGH CALLS. MARKS_W is MARK is SEAL, so the chain has to be followed; and
+    MARKS_X asks seal_slots() rather than naming SEAL at all, so a function that reads SEAL makes
+    its callers derived too. Both were real cases here, not hypotheticals.
+    """
+    import ast
+    tree = ast.parse(src)
+
+    def names_in(node):
+        return {n.id for n in ast.walk(node) if isinstance(n, ast.Name)}
+
+    reads_seal = {f.name for f in tree.body
+                  if isinstance(f, (ast.FunctionDef, ast.AsyncFunctionDef))
+                  and "SEAL" in names_in(f)}
+
+    derived = {"SEAL"}
+    for node in tree.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        touched = names_in(node.value)
+        if not (touched & derived or touched & reads_seal):
+            continue
+        for t in node.targets:
+            # TUPLE TARGETS TOO, which is how two of these slipped through. TILE_INNER_W and
+            # TILE_INNER_H are assigned together off one call -- `A, B = inner(...)` -- so the
+            # target is a Tuple and not a Name, and a walker that only looked at Names declared
+            # them not derived while configure() dutifully moved them. The guard then failed for
+            # configure() doing the right thing, which is the most expensive kind of wrong guard.
+            for n in (t.elts if isinstance(t, ast.Tuple) else [t]):
+                if isinstance(n, ast.Name) and n.id.isupper():
+                    derived.add(n.id)
+    return derived
+
+
+def test_setting_the_mark_size_moves_everything_derived_from_it_and_nothing_else():
+    """One lever, not a settings system -- but a lever that reaches everything on its own chain.
+
+    Falsified in BOTH directions, which is the point: configure() touching a number that does not
+    hang off the mark, and configure() leaving one that does.
+
+    THE SIZE HAS TO BE ONE THEY ALL MOVE FOR. At 70 the Tithe's cap holds TOKEN at 66 where it
+    already was, so a size that changed nothing but SEAL would satisfy a subset check and let
+    configure() quietly stop moving the token at all. 40 moves every one of them.
+    """
+    g = _load("geometry")
+    want = _seal_derived(pathlib.Path(g.__file__).read_text(encoding="utf-8"))
+    assert len(want) > 1, "nothing was found to hang off the mark, so this is testing nothing"
+
+    # DICTS AS WELL AS NUMBERS, which the chain made necessary. ROAD is a rect published as a
+    # dict and it is now derived from the mark; a sweep that looked only at ints and floats could
+    # not see it move, so the parsed chain named it and the comparison could never contain it --
+    # the guard failed for a reason that was its own blind spot rather than configure()'s.
+    def snap():
+        return {k: (dict(v) if isinstance(v, dict) else v) for k, v in vars(g).items()
+                if k.isupper() and isinstance(v, (int, float, dict, tuple))}
+    before = snap()
     g.configure(seal=40)
-    after = {k: v for k, v in vars(g).items() if k.isupper() and isinstance(v, (int, float))}
+    after = snap()
     moved = {k for k in before if before[k] != after[k]}
-    assert moved == {"SEAL", "TOKEN", "TOKEN_SPREAD"}, (
-        "configure() changed %s; it may only move the mark size and what is derived from it"
-        % sorted(moved))
+    assert moved == want, (
+        "configure() moved %s and the mark's own chain is %s -- it left %s standing at the old "
+        "size and moved %s that is not derived from the mark"
+        % (sorted(moved), sorted(want), sorted(want - moved), sorted(moved - want)))
+
+
+def test_setting_the_mark_size_to_the_size_it_already_is_changes_nothing():
+    """configure() restates its derivations, so this is what holds the two copies together.
+
+    EVERY LINE IN configure() IS A SECOND COPY of an expression the module body already has, and
+    two copies of one expression is the shape of fault this file exists to prevent. They are kept
+    rather than factored out because each one in the body carries the paragraph that explains it,
+    and a function would take the number away from its reason.
+
+    SO THE DUPLICATION IS ASSERTED INSTEAD OF AVOIDED. Setting the mark to the size it already is
+    must leave the module byte for byte as it was: if configure()'s copy of MARKS_X ever says
+    something different from the body's, this is where the two stop agreeing.
+    """
+    g = _load("geometry")
+    def snap():
+        return {k: (dict(v) if isinstance(v, dict) else v) for k, v in vars(g).items()
+                if k.isupper() and isinstance(v, (int, float, dict, tuple))}
+    before = snap()
+    g.configure(seal=g.SEAL)
+    after = snap()
+    drifted = {k: (before[k], after[k]) for k in before if before[k] != after[k]}
+    assert not drifted, (
+        "configure() asked for the size the board already draws and changed %s, so its copy of "
+        "one of these expressions disagrees with the module's" % drifted)
+    assert g.check() == [], "\n".join(g.check())

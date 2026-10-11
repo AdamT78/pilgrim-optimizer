@@ -64,7 +64,6 @@ OUT = HERE / "generated" / "action_board.html"
 TEXT_FILE = BOARD / "duty_text.json"
 ATTRIB_FILE = BOARD / "attribution.json"
 ART_DIR = BOARD / "duty_actions"
-TOKEN_DIR = BOARD / "tokens" / "resources"
 SFX_DIR = BOARD / "sfx"
 BACKDROP_DIR = BOARD / "backdrop"
 CONTROL_DIR = BOARD / "controls" / "icons"
@@ -149,7 +148,7 @@ ART_JPEG_Q = 82
 # write the same keys into the same documents. The placement sheet learned this the hard way:
 # its offline path once wrote the wire payload under the name of the placement file, a shape that
 # file never has. tests/action_board/test_action_board.py pins the two against this list.
-MANIFEST_KEYS = ("art", "seals", "tokens", "acolytes", "city", "selected")
+MANIFEST_KEYS = ("art", "seals", "acolytes", "city", "selected")
 # What one new picture carries when it is posted. The BYTES ARE THE ORIGINAL, never the
 # downscaled copy the page is displaying -- see the note on imageFromFile in the template. A save
 # that posted what it was showing would quietly replace 1120 x 560 masters with 590 x 295 JPEGs.
@@ -429,40 +428,14 @@ def ground_of(where: str, entry: dict) -> str:
     return g
 
 
-def bundled_tokens() -> tuple[dict, list]:
-    """The three Tithe resources, in both treatments, at twice their drawn size.
-
-    TWO SETS OF ART FOR THE SAME THREE THINGS, and that is deliberate. `seal_*` is a grey wax
-    seal and `token_*` is a coin. The board's rule is that a SEAL is something you can take and
-    its colour says which kind -- red for a duty action, grey for a resource -- so the Tithe
-    column, which is the third choice beside the two actions, draws seals. The coins stay here
-    because they are what a resource looks like once it is yours rather than on offer, which is
-    a different job on a different surface.
-
-    Both are loaded and the page prefers the seal, so swapping back is a one-line change in the
-    template rather than a rebuild of the assets.
-    """
-    notes: list = []
-    out: dict = {}
-    if not TOKEN_DIR.is_dir():
-        return out, ["no tokens/resources/ at %s, so the Tithe column draws letters" % TOKEN_DIR]
-    for kind in ("seal", "token"):
-        for name in G.TOKEN_ORDER:
-            # THE EXTENSION IS NOT PART OF THE NAME. These were "%s_%s.png" and the day the
-            # prints became WebP the Tithe column fell back to drawing letters, with a note
-            # saying the files were missing while they sat right there.
-            found = [f for f in (TOKEN_DIR / ("%s_%s%s" % (kind, name, sfx))
-                                 for sfx in image_suffixes()) if f.is_file()]
-            if not found:
-                notes.append("%s_%s is missing in every format this tree reads"
-                             % (kind, name))
-                continue
-            f = found[0]
-            out["%s:%s" % (kind, name)] = _inline(f, (G.TOKEN * 2, G.TOKEN * 2), "PNG")
-    if not any(k.startswith("seal:") for k in out):
-        notes.append("no resource seals found, so the Tithe column falls back to the coins")
-    return out, notes
-
+# bundled_tokens() IS GONE WITH THE THREE RESOURCES. It loaded each of wheat, stone and silver in
+# BOTH treatments -- `seal_*`, a grey wax seal, and `token_*`, a coin -- because the board's rule
+# is that a seal is something you can TAKE and its colour says which kind, so the Tithe drew
+# seals while the coins stayed loaded as a one-line swap. Nothing in the Tithe is drawn now.
+#
+# tokens/resources/ IS UNTOUCHED ON DISK, and so is its README. The art is not the thing that was
+# removed -- the arrangement was -- and a resource still has to look like something the moment it
+# is owned rather than on offer. This build simply no longer inlines it.
 
 def bundled_controls() -> tuple[dict, list]:
     """The three marks in the controls column, at twice the size they are drawn.
@@ -567,11 +540,10 @@ def build() -> tuple[str, list]:
         raise SystemExit("the template is not at %s" % TMPL)
     art, by_duty, notes = bundled_art()
     seals, seal_by_duty, snotes = bundled_seals()
-    tokens, tnotes = bundled_tokens()
     sfx, xnotes = bundled_sfx()
     backdrop, bnotes = bundled_backdrop()
     controls, cnotes = bundled_controls()
-    notes += snotes + tnotes + xnotes + bnotes + cnotes
+    notes += snotes + xnotes + bnotes + cnotes
 
     text = duty_text()
     duties = {}
@@ -602,7 +574,7 @@ def build() -> tuple[str, list]:
         "__GEOMETRY__": json.dumps(G.as_dict()),
         "__DUTIES__": json.dumps(duties),
         "__CONTROLS__": json.dumps(control_text()),
-        "__IMAGES__": json.dumps({**art, **seals, **tokens, **controls}),
+        "__IMAGES__": json.dumps({**art, **seals, **controls}),
         "__SFX__": json.dumps(sfx),
         "__BACKDROP__": json.dumps(backdrop),
         "__WHEEL_SVG__": json.dumps(wheel_svg()),
@@ -832,9 +804,6 @@ def save(sent: dict) -> list:
             sub_dir = mark_subdir(img["duty"], img["slot"])
             folder = ART_DIR / img["duty"] / sub_dir
             stem = "%s_%s_%s" % (img["duty"], img["slot"], re.sub(r"s$", "", sub_dir))
-        elif img["kind"] == "token":
-            folder = TOKEN_DIR
-            stem = "token_%s" % img["slot"]
         else:
             raise ValueError("a picture of kind %r has nowhere to go" % img["kind"])
         folder.mkdir(parents=True, exist_ok=True)
@@ -852,8 +821,8 @@ def save(sent: dict) -> list:
         MANIFEST.parent.mkdir(parents=True, exist_ok=True)
         MANIFEST.write_text(json.dumps({
             "note": "What the action board shows: which recorded file fills each slot, and where "
-                    "the acolytes stand. PATHS, NOT BYTES -- the pictures live in duty_actions/ "
-                    "and tokens/, and a manifest carrying them would be megabytes nobody can "
+                    "the acolytes stand. PATHS, NOT BYTES -- the pictures live in duty_actions/, "
+                    "and a manifest carrying them would be megabytes nobody can "
                     "read a diff of. Written by ui/board_v2/action_board, read by whatever "
                     "draws the real board.",
             "version": BUILD_VERSION,
@@ -913,7 +882,8 @@ def main() -> None:
                              "what pays for it, so the fix is not a bigger number here -- price the "
                              "ribbon in ui/board_v2/icon_lab/generate_tile_column.py first."
                              % (a.icons, "\n  ".join(bad)))
-        print("  marks at %d px instead of the usual (Tithe tokens at %d)" % (G.SEAL, G.TOKEN))
+        print("  marks at %d px instead of the usual, in tiles of %d x %d"
+              % (G.SEAL, G.TILE_W, G.TILE_H))
 
     page, notes = build()
     OUT.parent.mkdir(parents=True, exist_ok=True)

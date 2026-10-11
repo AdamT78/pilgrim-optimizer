@@ -100,6 +100,41 @@ def master_of(rel: str, entry: dict | None = None) -> str:
     return "%s/%s/%s.png" % (folder, MASTERS, re.sub(r"_(v\d+)$", r"_master_\1", stem))
 
 
+def origin_of(rel: str, entry: dict, rec: dict) -> str | None:
+    """The archive a shipped mark can be re-made from, following derivation to get there.
+
+    A THIRD KIND OF FILE ARRIVED AND THE SECOND RULE DID NOT COVER IT. A mark used to be one of
+    two things: a cut, which has a master beside it, or a master. The cutouts are neither -- each
+    one is a SCRIPT'S OUTPUT, made from the shipped icon by knockout_icons.py, and there is no
+    hand-made original of a cutout to file because nobody drew one. Asking master_of() for one
+    gives a path that will never exist, which is how fourteen cutouts came to be reported as marks
+    with no master: true by that rule, and the wrong question.
+
+    SO THE QUESTION IS ASKED ONE STEP BACK. A cutout records `derivedFrom`, the print it was made
+    from; that print has a master; and re-framing a cutout means going back to that master and
+    coming forward again. This follows the chain and answers with the master at the end of it, so
+    the guarantee the lab is actually after -- that the framing of every mark on the board can
+    still be revisited -- holds for a derived file as much as for a drawn one.
+
+    None MEANS THE CHAIN IS BROKEN, which is a fault worth naming rather than an answer: a file
+    that says it came from something nobody wrote down has no provenance at all, and a cycle is
+    the same fault with extra steps.
+    """
+    seen = set()
+    while entry.get("derivedFrom"):
+        if rel in seen:
+            return None
+        seen.add(rel)
+        duty = rel.split("/")[0]
+        want = "/%s" % entry["derivedFrom"]
+        found = [k for k in rec if k.endswith(want) and "/%s/" % duty in k]
+        if len(found) != 1:
+            return None
+        rel = found[0].split("duty_actions/", 1)[-1]
+        entry = rec[found[0]]
+    return master_of(rel, entry)
+
+
 def slot_in_name(name: str) -> str | None:
     """Which of a duty's two actions a file is for, from its own name.
 

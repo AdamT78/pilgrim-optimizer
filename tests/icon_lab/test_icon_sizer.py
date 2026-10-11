@@ -64,6 +64,12 @@ def test_every_master_the_lab_points_at_is_really_there(gen, rec):
     Falsified by committing a mark whose master is filed under any other name and recording no
     `master` for it. The lab would still work -- it says so in its notes and carries on -- but the
     framing of that mark could then only be revisited by cutting a cut.
+
+    AND THE CHAIN IS FOLLOWED, which is what the cutouts made necessary. A cutout has no master of
+    its own and never will: no one drew it, a script made it from the shipped icon. What it has is
+    `derivedFrom`, and the icon at the other end has a master -- so the guarantee still holds, one
+    step further back. Asking master_of() directly reported all fourteen as missing, which was the
+    right answer to the wrong question; origin_of() asks the question that was meant.
     """
     folders = _mark_folders()
     missing = []
@@ -74,9 +80,19 @@ def test_every_master_the_lab_points_at_is_really_there(gen, rec):
         parts = rel.split("/")
         if len(parts) < 3 or parts[1] not in folders or "masters" in parts:
             continue
-        if not (ART / gen.master_of(rel, e)).is_file():
+        origin = gen.origin_of(rel, e, rec)
+        if origin is None:
+            missing.append("%s  (says it came from %r and nothing is filed under that name)"
+                           % (rel, e.get("derivedFrom")))
+        elif not (ART / origin).is_file():
             missing.append(rel)
     assert not missing, "no master filed for:\n" + "\n".join(missing)
+    # AND AT LEAST ONE OF THEM GOT THERE BY DERIVATION, or the walk above proves nothing about the
+    # chain and this test is the one it replaced.
+    derived = [p for p, e in rec.items()
+               if p.startswith("duty_actions/") and e.get("derivedFrom")
+               and e.get("slot") in ("left", "right")]
+    assert derived, "no mark on the board is derived from another, so the chain is untested"
 
 
 def test_a_file_says_which_action_it_is_for(gen):
@@ -618,7 +634,10 @@ def test_the_tile_column_opens_at_geometrys_mark_size(column):
     tmpl = _code(COL_TMPL)
     assert "var size = V('size');" in tmpl, "the mark size is not read from its slider"
     assert "__START_SEAL__" in tmpl, "the slider no longer opens on a value filled in at build time"
-    assert "Math.floor((avail - gap) / 2)" in tmpl, \
+    # WHAT WOULD FIT, READ OFF THE BAND AND THE AIR. This matched the old expression
+    # verbatim -- the room under the duty's name, less a gap, halved. There is no name; the
+    # biggest mark is what the band leaves after the gap between the pair and the air round it.
+    assert re.search(r"couldBe: Math\.floor\(\(h - gap - 2 \* pad\) / 2\)", tmpl), \
         "the page no longer says what size WOULD fit, which is the useful half of a refusal"
     assert "__GEO__" in tmpl, "the geometry is no longer filled in at build time"
     assert "GEO.seal" in tmpl, \
@@ -656,13 +675,21 @@ def test_the_tile_column_says_when_a_column_does_not_fit(column, capsys, monkeyp
     # at GAP, and this read sealInset: two arithmetics for one layout, which agreed only because
     # at the old ribbon height both of them said "does not fit". The board got taller and they
     # stopped agreeing, and the test went red for the page being right.
-    avail = g["innerH"] - (g["nameTop"] + round(g["nameSize"] * g["nameLh"]) + column.GAP) \
-        - g["sealInset"]
+    avail = g["height"]
+    # THE HEIGHT IS NOW PRICED ON EVERY BUILD, so what distinguishes the two cases is the
+    # COMPLAINT, not whether anything was printed. This asked for silence when the column fits,
+    # and silence was the wrong thing to ask for: the one line stating what this build is for --
+    # the ribbon a column wants against the ribbon there is -- was hidden behind the failure,
+    # so every size that fits reported nothing and the guard holding that arithmetic to the
+    # slider's gap had nothing to read.
+    assert "RIBBON_H" in out, "the build no longer prices the column at all:\n%s" % out
     if 2 * column.G.SEAL > avail:
-        assert "need" in out and "RIBBON_H" in out, \
-            "two marks do not fit and the build said nothing:\n%s" % out
+        assert "need" in out, \
+            "two marks do not fit and the build did not say so:\n%s" % out
     else:
-        assert "RIBBON_H" not in out, "the build warned about a column that fits:\n%s" % out
+        assert "need" not in out, "the build complained about a column that fits:\n%s" % out
+        assert "spare" in out, \
+            "the column fits and the build did not say how much of the ribbon is spare:\n%s" % out
 
 
 def test_the_tile_column_opens_on_a_proposal_and_says_so(column, monkeypatch, tmp_path):
@@ -702,12 +729,13 @@ def test_the_tile_column_opens_on_a_proposal_and_says_so(column, monkeypatch, tm
 
     # THE PROPOSAL HAS TO BE ONE. A START_H that does not fit the column it exists to show is
     # worse than opening on the board, because it looks like the answer and is not.
-    geo = column.GEO
-    top = geo["nameTop"] + round(geo["nameSize"] * geo["nameLh"]) + column.GAP
-    avail = (column.START_H - 2 * column.G.BORDER) - top - geo["sealInset"]
-    assert 2 * column.G.SEAL + column.GAP <= avail, \
-        "the page opens on a height where the column still does not fit: needs %d, has %d" % (
-            2 * column.G.SEAL + column.GAP, avail)
+    # THE TILE IS DERIVED FROM THE MARK, so what has to fit is the tile in the BAND. This read
+    # the room under the duty's name inside a tile of START_H; there is no name, and START_H is
+    # the band rather than the tile.
+    need = 2 * column.G.SEAL + column.GAP + 2 * (2 * column.GAP)
+    assert need <= column.START_H, \
+        "the page opens on a band where the tile still does not fit: needs %d, has %d" % (
+            need, column.START_H)
 
     # LAST, BECAUSE IT MOVES THE NUMBER EVERYTHING ABOVE READS. str(START_H) and a typed "265" are
     # the same bytes while START_H is 265, so the only way to tell them apart is to change it --
@@ -764,12 +792,12 @@ def test_the_tile_column_says_who_pays_for_a_taller_tile(column, capsys, monkeyp
     monkeypatch.setattr(_sys, "argv", ["generate_tile_column.py"])
     assert column.main() == 0
     out = capsys.readouterr().out
-    avail = geo["innerH"] - (geo["nameTop"] + round(geo["nameSize"] * geo["nameLh"])
-                             + geo["sealInset"]) - geo["sealInset"]
-    if 2 * G.SEAL <= avail:
-        pytest.skip("a column already fits, so there is no height to price")
-    want = (geo["nameTop"] + round(geo["nameSize"] * geo["nameLh"]) + column.GAP
-            + 2 * G.SEAL + column.GAP + geo["sealInset"] + 2 * G.BORDER)
+    # THE TILE IS THE PAIR PLUS THE AIR, which is the arithmetic the build now prints. This
+    # rebuilt the old model -- a name band, a gap, two marks, an inset -- and would have gone on
+    # agreeing with a build that had stopped doing any of it.
+    want = 2 * G.SEAL + column.GAP + 2 * (2 * column.GAP)
+    if want <= G.RIBBON_H:
+        pytest.skip("the tile already fits the band, so there is no height to price")
     tall = G.WHEEL_H - (want - G.RIBBON_H)
     assert "%d x %d becomes %d x %d" % (G.WHEEL_W, G.WHEEL_H,
                                         round(tall / G.WHEEL_RATIO), tall) in out, \
@@ -799,19 +827,31 @@ def test_the_height_slider_actually_moves_the_tiles(column):
     assert "V('tall')" in col.group(1), \
         "the column no longer reads the height slider, so only its label moves"
 
+    # THE SLIDER MOVES THE BAND NOW, NOT THE TILE, and that is the change rather than a
+    # loosening. The tile WAS the band -- one height, one slider -- so this asserted that each
+    # tile's height came from c.h. The tile is derived from its marks and the slider sets the
+    # band the tiles stand in, so what has to follow c.h is the band; what has to follow the
+    # marks is the tile. Both are asserted, because dropping either is how the slider goes back
+    # to moving only its own label.
+    band = re.findall(r"\bribbon\.style\.height = ([^;]+);", tmpl)
+    assert len(band) >= 2, \
+        "the band's height is set in fewer places than it is drawn, so one of build() and " \
+        "place() leaves it behind: %s" % band
+    for rhs in band:
+        assert "c.h" in rhs, \
+            "the band takes its height from something other than the column: %s" % rhs.strip()
+        assert "GEO.height" not in rhs, \
+            "the band is pinned to RIBBON_H, so the slider moves a number and not a band"
     sets = re.findall(r"tile\.style\.height = ([^;]+);", tmpl)
     assert len(sets) >= 2, \
-        "the tile's height is set in fewer places than it is drawn, so one of build() and " \
-        "place() leaves it behind: %s" % sets
+        "the tile's height is set in fewer places than it is drawn: %s" % sets
     for rhs in sets:
-        assert "c.h" in rhs, \
-            "a tile takes its height from something other than the column: %s" % rhs.strip()
-        assert "GEO.height" not in rhs, \
-            "a tile is pinned to RIBBON_H, so the slider moves a number and not a tile"
+        assert "c.tileH" in rhs, \
+            "a tile takes its height from something other than its marks: %s" % rhs.strip()
 
     # AND THE PAGE HAS TO GROW WITH THEM, or taller tiles slide under the note below.
-    assert re.search(r"scroll'\)\.style\.height = \(c\.h \* s", tmpl), \
-        "the scroller still reserves geometry's height, so the tiles overflow the page"
+    assert re.search(r"scroll'\)\.style\.height = \(Math\.max\(c\.h, c\.tileH\) \* s", tmpl), \
+        "the scroller reserves one of the two heights, so whichever is taller overflows the page"
 
     # AND A PRICE WORTH NOTICING IS MARKED. Not an error -- nothing is broken by a smaller wheel --
     # but a cost rendered in the same grey as everything else is a cost you read past, which is
@@ -847,10 +887,15 @@ def test_one_gap_does_both_jobs_and_every_first_mark_shares_a_line(column, capsy
     """
     tmpl = _code(COL_TMPL)
     col = re.search(r"function column\(\)\{(.*?)\n\}", tmpl, re.S).group(1)
-    assert re.search(r"top = GEO\.nameTop \+ nameH \+ gap", col), \
-        "the space under the name is not the gap, so the two spacings can drift apart again"
-    assert "sealInset" not in col.split("var top")[0], \
-        "something above the name's own inset is deciding where the column starts"
+    # THE GAP'S SECOND JOB IS THE AIR NOW, not the space under a name that is not printed --
+    # and it is TWICE itself, which is what geometry.py does (TILE_PAD = 2 * SEAL_INSET). One
+    # lever, both distances, exactly as before; the distance it is the second of has changed.
+    assert re.search(r"var pad = 2 \* gap;", col), \
+        "the air round the pair is not the gap doubled, so the two spacings can drift apart again"
+    assert re.search(r"var tileH = 2 \* size \+ gap \+ 2 \* pad;", col), \
+        "the tile's height is not the pair plus the gap plus the air"
+    assert "sealInset" not in col, \
+        "something other than the slider is deciding the tile's spacing"
 
     place = re.search(r"function place\(\)\{(.*?)\n\}", tmpl, re.S).group(1)
     assert ".length" not in place, \
@@ -875,14 +920,16 @@ def test_one_gap_does_both_jobs_and_every_first_mark_shares_a_line(column, capsy
     # while GAP is 8 and the old literal was 8 too -- the two are indistinguishable until the
     # number changes. So change it, and require the slider and the height the build asks for to
     # move together.
-    G, geo = column.G, column.GEO
+    G = column.G
     monkeypatch.setattr(column, "GAP", 20)
     assert column.main() == 0
     built = out_file.read_text(encoding="utf-8")
     assert 'id=gap type=range min="0" max="40" value="20"' in built, \
         "the slider did not follow the gap"
-    want = (geo["nameTop"] + round(geo["nameSize"] * geo["nameLh"]) + 20
-            + 2 * G.SEAL + 20 + geo["sealInset"] + 2 * G.BORDER)
+    # AND THE GAP DOES ITS SECOND JOB IN THE ANSWER. A gap of 20 has to show up five times over
+    # -- once between the marks and twice at each end as the air -- so a build that moved the
+    # slider and kept its own number for the air would land 48 px away from this.
+    want = 2 * G.SEAL + 20 + 2 * (2 * 20)
     assert "RIBBON_H of about %d" % want in capsys.readouterr().out, \
         "the build's arithmetic kept a gap of its own, so it reports on a page nobody is looking at"
 
