@@ -4,8 +4,10 @@ There are few of them on purpose. This tool is deliberately small and most of wh
 visible the moment you open it; what is NOT visible is the handful of rules it is built on, and
 those are what erode. Each test below names the failure it exists to catch and how to falsify it.
 """
+import ast
 import importlib.util
 import json
+import math
 import pathlib
 import re
 import sys
@@ -1446,6 +1448,121 @@ def test_a_selected_tile_catches_light_and_its_marks_bring_no_ground_of_their_ow
             "will show as a square on all seven: %s" % (forbidden, body.strip()))
 
 
+def test_the_status_type_fits_its_box_and_moves_nothing_when_it_grows(monkeypatch):
+    """Two halves of one arrangement: the type is free to change, and it is not free to overflow.
+
+    THE BOX AND THE TYPE ARE BOTH DECLARED, with no arithmetic between them, which is deliberate
+    and is why this test exists. STATUS["height"] is what the whole board hangs off -- RIBBON_Y
+    is its foot plus a GAP -- so deriving the box from the font would let a type tweak quietly
+    relay the ribbon, the picture, the cards and the wheel. Keeping them separate means a bigger
+    font costs nothing downstream, and the price of that is that nothing stops it being clipped
+    except a guard.
+
+    AND THE CLIPPING IS SILENT, which is what makes it worth a test rather than a comment.
+    #status is a single nowrap line with overflow:hidden, so an oversized font does not wrap,
+    push or throw -- the descenders are shaved and the board renders as though nothing is wrong.
+
+    WEIGHT IS NOT PART OF IT. A line box comes from the family's ascent and descent, which bold
+    does not change, so the guard has one number and not one per weight.
+
+    Falsified by raising the font past its box, by shrinking the box under its font, or by
+    deriving one from the other so that changing the type moves the board.
+    """
+    g = _load("geometry")
+    assert g.check() == [], "the default board is not sound, so this test proves nothing"
+    assert g.STATUS_LINE <= g.STATUS["height"]
+
+    # THE SIZE MOVES NOTHING, AND THIS IS READ OFF THE SOURCE RATHER THAN DRIVEN.
+    #
+    # THE OBVIOUS VERSION OF THIS TEST CANNOT FAIL, which a mutation run proved: snapshot every
+    # number, set g.STATUS_SIZE = 22 on an imported module, and compare. The module is a flat
+    # script -- STATUS["height"] was computed the moment it was imported -- so assigning the
+    # font afterwards re-evaluates nothing and the snapshot always matches. Deriving the box
+    # from the type passed that test untouched.
+    #
+    # SO THE QUESTION IS ASKED OF THE SYNTAX: does the expression that sets the box's height
+    # mention the type at all? That is the whole of "the box is declared", and it is the only
+    # form of the question a linear module can actually answer.
+    src = (ROOT / "ui/board_v2/action_board/geometry.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    typenames = {"STATUS_SIZE", "STATUS_LH", "STATUS_LINE"}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        if not any(isinstance(t, ast.Name) and t.id == "STATUS" for t in node.targets):
+            continue
+        used = {n.id for n in ast.walk(node.value) if isinstance(n, ast.Name)}
+        assert not (used & typenames), (
+            "the status BOX is computed from %s, so changing the font now moves RIBBON_Y and "
+            "everything under it -- the box is meant to be declared"
+            % sorted(used & typenames))
+        break
+    else:
+        raise AssertionError("no assignment to STATUS found, so this checked nothing")
+
+    # THE FONT OUTGROWING THE BOX IS REFUSED. 25 is the first size that does not fit: 25 * 1.19
+    # rounds up to 30 in a box of 29, and 24 fits with nothing to spare.
+    g3 = _load("geometry")
+    monkeypatch.setattr(g3, "STATUS_SIZE", 25)
+    monkeypatch.setattr(g3, "STATUS_LINE", math.ceil(25 * g3.STATUS_LH))
+    bad = g3.check()
+    assert any("the type is clipped" in line for line in bad), (
+        "a 25px status line in a 29px box was accepted: %s" % bad)
+
+    # AND THE BOX SHRINKING UNDER THE FONT IS THE SAME FAULT FROM THE OTHER END, which a guard
+    # written as "the font is at most N" would miss entirely.
+    g4 = _load("geometry")
+    monkeypatch.setattr(g4, "STATUS", dict(g4.STATUS, height=g4.STATUS_LINE - 1))
+    assert any("the type is clipped" in line for line in g4.check()), (
+        "the box was shrunk under its own type and check() did not say so: %s" % g4.check())
+
+
+def test_the_status_line_has_one_owner_for_its_size_and_one_for_its_weight():
+    """The size is geometry's because it has a constraint; the weight is the stylesheet's.
+
+    THE SPLIT IS THE POINT. A size in the CSS would be a second answer to a number check() holds
+    against the box, and the two would part company the first time one was edited. A weight in
+    geometry.py would be a style fact in a file about space, with nothing to constrain it.
+
+    Falsified by hard-coding a font-size on #status, or by the page ceasing to read the size out
+    of the manifest.
+    """
+    page = TMPL.read_text(encoding="utf-8")
+    css = re.sub(r"/\*.*?\*/", " ", page, flags=re.S)
+    rule = decls_for(page, "#status")
+
+    assert re.search(r"font-weight:\s*(bold|[5-9]00)", rule), (
+        "the status line states no weight of its own: %s" % rule.strip())
+    assert not re.search(r"font-size:\s*\d", rule), (
+        "the status line hard-codes a font-size, which geometry already owns and check() holds "
+        "against the box: %s" % rule.strip())
+
+    # AND THE PAGE TAKES THE SIZE FROM THE MANIFEST, which is the other end of the same fact.
+    draw = page.split("function drawStatus(")[1].split("\n}")[0]
+    assert "s.size" in draw, "drawStatus() no longer reads the size out of geometry: %s" % draw
+    geo = _load("geometry")
+    assert geo.as_dict()["status"]["size"] == geo.STATUS_SIZE
+    assert css.count("font-family:Georgia") >= 1
+
+    # AND THE LINE HEIGHT IS SET RATHER THAN INHERITED, which is not tidiness -- it is the
+    # difference between check() measuring the box against a number the browser uses and against
+    # a number nobody uses.
+    #
+    # THE BUG IT CLOSES, because it is not obvious from the code: body carries `font:13px/1.4`,
+    # and a UNITLESS line-height inherits as the RATIO. So #status laid out at 1.4 x its own
+    # size -- 25.2px at 18 -- while geometry asserted 22. Both numbers were defensible and only
+    # one was real. Caught by measuring the built page, not by reading either file.
+    assert "lineHeight" in draw, (
+        "drawStatus() does not set a line height, so the box inherits body's 1.4 ratio and lays "
+        "out taller than the line check() holds against STATUS['height']: %s" % draw)
+    assert "s.line" in draw, (
+        "the line height is set from something other than geometry's own STATUS_LINE: %s" % draw)
+    assert geo.as_dict()["status"]["line"] == geo.STATUS_LINE
+    assert not re.search(r"line-height", decls_for(page, "#status")), (
+        "#status states a line-height in CSS as well, which is the second owner this just "
+        "removed")
+
+
 def test_the_controls_are_two_groups_and_a_column_that_forgets_it_is_refused(monkeypatch):
     """Show Map and Hire Building stand; the commit arrives. Spacing has to say so.
 
@@ -1744,13 +1861,17 @@ def test_the_hover_cue_fires_on_the_duty_changing_not_on_every_crossing():
 def test_a_sound_in_the_tree_says_where_it_came_from():
     """The same rule the pictures live under, applied to the one asset class that escaped it.
 
-    `tests/layout_lab/test_board_v2_attribution.py` holds every image in ui/board_v2/ to a record
-    in attribution.json, and it walks by SUFFIX -- png, jpg, webp, svg, gif, avif. A .ogg is
-    invisible to it. So the sounds arrived in a tree whose whole discipline is that an asset
-    nobody can account for gets dropped, and nothing would have noticed.
+    THE GAP THIS WAS WRITTEN FOR IS NOW CLOSED, and the note is kept because the closing is the
+    interesting part. attribution.json's walk reads assetDirs and a suffix set, and for as long
+    as the board had sound it listed neither sfx/ nor .ogg -- so tile.ogg and confirm.ogg sat
+    unrecorded for months, not by decision but because the guard could not see them. Both halves
+    are fixed: assetDirs names sfx/, ASSET_SUFFIXES names the audio extensions, and every clip
+    now carries a full record like every picture.
 
-    This is the cheap version of that rule rather than an extension of attribution.json: every
-    sound has to be named in its own README, which is where the licence and the cut are recorded.
+    SO WHY KEEP THIS ONE. Because the record and the README answer different questions. The
+    record says what licence a file carries and what its sha256 is; the README says what the clip
+    IS, how it was cut, and which of those decisions were got wrong first -- the normalising, the
+    3 dB-hot mono sum, the pointless fade-in. A reader reaching for a sound wants the second.
     Falsified by dropping a clip into sfx/ and saying nothing about it.
     """
     sfx = ROOT / "ui" / "board_v2" / "sfx"
@@ -1768,6 +1889,155 @@ def test_a_sound_in_the_tree_says_where_it_came_from():
             "what licence it carries" % p.name)
     assert "CC0" in said or "licence" in said.lower() or "license" in said.lower(), (
         "sfx/README.md records no licence for any of it")
+
+
+def test_every_sound_keeps_the_verbatim_name_it_was_downloaded_as():
+    """The handle on re-fetching a sound, now that nothing in the tree holds the sound itself.
+
+    THIS GUARD IS THE PRICE OF DELETING sfx/masters/. While the masters were committed, the
+    question "what was this cut from" had a physical answer sitting next to the cut. They were
+    removed on the grounds that an audio master is a third-party DOWNLOAD rather than model
+    output, and a download can be fetched again -- which is true exactly as long as the name you
+    would type into the search box is written down somewhere.
+
+    IT WAS NOT, AND THE PROSE HAD ALREADY DRIFTED. `source` is free text and three of the six had
+    quietly stopped being the filename: both Pixabay entries had lost the `freesound_community-`
+    prefix that actually finds them, and the two Sonniss entries had been reflowed from
+    `METLMvmt_  Tinkering Antique Lock_344 Audio_Antique Small Metals.wav` into prose of the form
+    "..., 344 Audio - Antique Small Metals pack", which is lossy -- "344 Audio - Antiques - Books"
+    gives a reader no way to tell where the creator's name ends and the pack's begins, and the
+    pack FOLDER turns out to be called "Antique Books" while the file says "Antiques - Books".
+
+    SO THE FIX IS A FIELD, NOT BETTER PROSE. `source` goes on saying where a thing came from in
+    words; `originalFilename` holds the exact string and is not allowed to paraphrase. A
+    paraphrase is what the last one was, and it read as a filename right up until someone tried
+    to use it as one.
+
+    Falsified by adding a clip whose record names no original, or by "tidying" one of these into
+    a description.
+    """
+    rec = json.loads((ROOT / "ui" / "board_v2" / "attribution.json")
+                     .read_text(encoding="utf-8"))["files"]
+    sfx = {k: v for k, v in rec.items() if k.startswith("sfx/")}
+    assert sfx, "no sound is on the provenance record at all"
+
+    AUDIO = (".wav", ".mp3", ".ogg", ".flac", ".aif", ".aiff", ".m4a")
+    missing, unnamed = [], []
+    for key, entry in sorted(sfx.items()):
+        name = entry.get("originalFilename")
+        if not name:
+            missing.append(key)
+        elif not name.lower().endswith(AUDIO):
+            unnamed.append("%s -> %r" % (key, name))
+
+    assert not missing, (
+        "%d sound record(s) do not say what file they were downloaded as: %s.\n"
+        "sfx/masters/ was deleted on the understanding that every source can be fetched again. "
+        "That only holds while the name is written down, so give each one an `originalFilename` "
+        "with the exact filename, extension included, and an `originalPath` saying which bundle "
+        "or site it sits in." % (len(missing), ", ".join(missing)))
+
+    assert not unnamed, (
+        "%d `originalFilename` value(s) are not filenames -- they have no audio extension, which "
+        "is what a description looks like: %s.\n"
+        "This field is the literal name as downloaded. Put the prose in `source`."
+        % (len(unnamed), "; ".join(unnamed)))
+
+
+def test_a_sound_slot_draws_the_highest_version_and_a_hardcoded_one_is_refused(tmp_path):
+    """Filing a v02 has to be the switch, the way it already is for a control.
+
+    THE BENCH DID NOT DO THIS AND NOBODY KNEW. It resolved every slot by writing the literal
+    `_sfx_v01.ogg`, in three places. Everywhere else in the tree a new cut is `_v02` rather than
+    a rewrite of `_v01` -- a file whose sha256 is recorded cannot be replaced in place without
+    the record describing bytes that are gone -- and `bundled_controls()` takes the highest vNN
+    for that reason. Sound was the exception, so the first time a second take was filed the page
+    went on drawing the first one and showed no sign of it. There is no error to see: a
+    hardcoded v01 that exists resolves perfectly well.
+
+    BOTH HALVES ARE CHECKED, because either alone is passable and wrong. The function must pick
+    the highest version off a real directory, AND the module must not contain the literal that
+    was the bug -- a caller that goes back to spelling `_sfx_v01.ogg` would make the function
+    correct and unused.
+
+    Falsified by resolving a slot to a fixed version, or by comparing versions as strings, where
+    v10 sorts below v9.
+    """
+    gen = ROOT / "ui" / "board_v2" / "sfx_lab" / "generate_sound_bench.py"
+    if not gen.is_file():
+        pytest.skip("no sound bench in this tree")
+    spec = importlib.util.spec_from_file_location("_sfxgen", gen)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    # v9 IS UNPADDED ON PURPOSE AND IS THE WHOLE POINT OF THIS FIXTURE. The tree writes v01, v02,
+    # and across two zero-padded digits a string comparison gives the right answer by accident:
+    # "10" > "02" is lexically true because '1' > '0'. So a set of v01/v02/v10 does NOT catch a
+    # string comparison, which an earlier version of this test asserted that it did. Widths have
+    # to differ for the bug to show -- "9" > "10" lexically, 9 < 10 numerically.
+    for name in ("alpha_sfx_v01.ogg", "alpha_sfx_v02.ogg", "alpha_sfx_v9.ogg",
+                 "alpha_sfx_v10.ogg", "beta_sfx_v03.ogg", "alpha_sfx_vXX.ogg", "alpha.ogg"):
+        (tmp_path / name).write_bytes(b"")
+
+    got = mod.newest_version(tmp_path, "alpha")
+    assert got is not None and got.name == "alpha_sfx_v10.ogg", (
+        "the slot resolved to %r; v10 is the highest version present and is what should be "
+        "drawn. Comparing the version as a STRING is the likely cause: '9' > '10' lexically, so "
+        "a ninth take would outrank a tenth." % (got.name if got else None))
+    assert mod.newest_version(tmp_path, "beta").name == "beta_sfx_v03.ogg"
+    assert mod.newest_version(tmp_path, "gamma") is None, (
+        "a slot with no clip at all must resolve to None, not to a guess")
+
+    src = gen.read_text(encoding="utf-8")
+    body = re.sub(r'""".*?"""', "", src, flags=re.S)
+    body = re.sub(r"#.*", "", body)
+    stuck = re.findall(r'["\'][^"\']*_sfx_v0*1\.ogg[^"\']*["\']', body)
+    assert not stuck, (
+        "the module still spells a fixed version somewhere outside a docstring: %s.\n"
+        "That is the bug this test exists for -- it resolves fine, draws the wrong take, and "
+        "says nothing. Resolve slots through newest_version()." % stuck)
+
+
+def test_no_sound_claims_a_licence_its_own_source_contradicts():
+    """A licence is a claim about what may ship, so the entry must not argue with itself.
+
+    WRITTEN BECAUSE ONE DID, FOR WEEKS. Ordain's record named creator "344 Audio" under the
+    Sonniss bundle licence while its own `source` field described "a generated scissor sound" --
+    and the generated reading was the true one. The file is scissor_1.mp3, which sits loose in
+    the downloads folder outside any pack, and carries none of the
+    CATEGORY_Description_Creator_Pack naming every real Sonniss source here has. It is ElevenLabs
+    output, whose commercial use is tier-dependent, so the wrong licence was not a filing error:
+    it asserted a royalty-free grant over a file that did not have one.
+
+    WHAT THIS CAN AND CANNOT CHECK. It cannot know where a file really came from. It can refuse
+    the specific shape that hid this one -- a record whose licence says bundle and whose source
+    says generated, or the reverse -- which is the contradiction that was sitting in plain sight
+    and that nobody read as a contradiction.
+
+    Falsified by filing a clip under one origin and describing it as another.
+    """
+    rec = json.loads((ROOT / "ui" / "board_v2" / "attribution.json")
+                     .read_text(encoding="utf-8"))["files"]
+    GENERATED = re.compile(r"\bgenerat(ed|ive)\b|\bai[- ]generated\b|elevenlabs|chatgpt|openai",
+                           re.I)
+    BOUGHT = ("sonniss-gameaudiogdc", "pixabay", "cc0")
+
+    clashes = []
+    for key, entry in sorted(rec.items()):
+        if not key.startswith("sfx/"):
+            continue
+        licence = entry.get("licence", "")
+        said = " ".join(str(entry.get(f, "")) for f in ("source", "originalFilename"))
+        if licence in BOUGHT and GENERATED.search(said):
+            clashes.append("%s: licence %r but its source calls it generated -- %r"
+                           % (key, licence, entry.get("source", "")[:90]))
+        if "generated" in licence and not GENERATED.search(said):
+            clashes.append("%s: licence %r but nothing in its source says it was generated"
+                           % (key, licence))
+
+    assert not clashes, (
+        "%d sound record(s) name a licence their own source contradicts:\n  %s"
+        % (len(clashes), "\n  ".join(clashes)))
 
 
 def test_the_ribbon_holds_still_and_a_tile_that_moves_is_refused():
@@ -2356,8 +2626,13 @@ def test_every_walk_finds_an_image_whatever_it_is_encoded_as(gen):
     assert ".png" in want and ".webp" in want, want
     doc = json.loads(gen.ATTRIB_FILE.read_text(encoding="utf-8"))
     assert tuple(doc["imageSuffixes"]) == tuple(want), "the reader and the file disagree"
-    # Every recorded file is one this tree can actually open.
-    bad = [p for p in doc["files"] if pathlib.Path(p).suffix.lower() not in set(want) | {".svg"}]
+    # EVERY RECORDED *PICTURE* IS ONE THIS TREE CAN OPEN. The record now also holds sounds, and
+    # this guard had no idea: it read the whole files map and called every .ogg unreadable. The
+    # suffix list it checks against is imageSuffixes, so audio was never in scope -- the fault was
+    # testing the wrong population, not the wrong suffixes.
+    AUDIO = {".ogg", ".mp3", ".wav", ".flac"}
+    bad = [p for p in doc["files"]
+           if pathlib.Path(p).suffix.lower() not in set(want) | {".svg"} | AUDIO]
     assert not bad, "recorded but unreadable: %s" % ", ".join(bad)
 
 
