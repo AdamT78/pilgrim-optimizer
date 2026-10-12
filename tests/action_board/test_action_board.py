@@ -4,8 +4,10 @@ There are few of them on purpose. This tool is deliberately small and most of wh
 visible the moment you open it; what is NOT visible is the handful of rules it is built on, and
 those are what erode. Each test below names the failure it exists to catch and how to falsify it.
 """
+import ast
 import importlib.util
 import json
+import math
 import pathlib
 import re
 import sys
@@ -1444,6 +1446,121 @@ def test_a_selected_tile_catches_light_and_its_marks_bring_no_ground_of_their_ow
         assert forbidden not in body, (
             "an unselected mark's ground carries a colour (%s) over a tile that is glass, so it "
             "will show as a square on all seven: %s" % (forbidden, body.strip()))
+
+
+def test_the_status_type_fits_its_box_and_moves_nothing_when_it_grows(monkeypatch):
+    """Two halves of one arrangement: the type is free to change, and it is not free to overflow.
+
+    THE BOX AND THE TYPE ARE BOTH DECLARED, with no arithmetic between them, which is deliberate
+    and is why this test exists. STATUS["height"] is what the whole board hangs off -- RIBBON_Y
+    is its foot plus a GAP -- so deriving the box from the font would let a type tweak quietly
+    relay the ribbon, the picture, the cards and the wheel. Keeping them separate means a bigger
+    font costs nothing downstream, and the price of that is that nothing stops it being clipped
+    except a guard.
+
+    AND THE CLIPPING IS SILENT, which is what makes it worth a test rather than a comment.
+    #status is a single nowrap line with overflow:hidden, so an oversized font does not wrap,
+    push or throw -- the descenders are shaved and the board renders as though nothing is wrong.
+
+    WEIGHT IS NOT PART OF IT. A line box comes from the family's ascent and descent, which bold
+    does not change, so the guard has one number and not one per weight.
+
+    Falsified by raising the font past its box, by shrinking the box under its font, or by
+    deriving one from the other so that changing the type moves the board.
+    """
+    g = _load("geometry")
+    assert g.check() == [], "the default board is not sound, so this test proves nothing"
+    assert g.STATUS_LINE <= g.STATUS["height"]
+
+    # THE SIZE MOVES NOTHING, AND THIS IS READ OFF THE SOURCE RATHER THAN DRIVEN.
+    #
+    # THE OBVIOUS VERSION OF THIS TEST CANNOT FAIL, which a mutation run proved: snapshot every
+    # number, set g.STATUS_SIZE = 22 on an imported module, and compare. The module is a flat
+    # script -- STATUS["height"] was computed the moment it was imported -- so assigning the
+    # font afterwards re-evaluates nothing and the snapshot always matches. Deriving the box
+    # from the type passed that test untouched.
+    #
+    # SO THE QUESTION IS ASKED OF THE SYNTAX: does the expression that sets the box's height
+    # mention the type at all? That is the whole of "the box is declared", and it is the only
+    # form of the question a linear module can actually answer.
+    src = (ROOT / "ui/board_v2/action_board/geometry.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    typenames = {"STATUS_SIZE", "STATUS_LH", "STATUS_LINE"}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        if not any(isinstance(t, ast.Name) and t.id == "STATUS" for t in node.targets):
+            continue
+        used = {n.id for n in ast.walk(node.value) if isinstance(n, ast.Name)}
+        assert not (used & typenames), (
+            "the status BOX is computed from %s, so changing the font now moves RIBBON_Y and "
+            "everything under it -- the box is meant to be declared"
+            % sorted(used & typenames))
+        break
+    else:
+        raise AssertionError("no assignment to STATUS found, so this checked nothing")
+
+    # THE FONT OUTGROWING THE BOX IS REFUSED. 25 is the first size that does not fit: 25 * 1.19
+    # rounds up to 30 in a box of 29, and 24 fits with nothing to spare.
+    g3 = _load("geometry")
+    monkeypatch.setattr(g3, "STATUS_SIZE", 25)
+    monkeypatch.setattr(g3, "STATUS_LINE", math.ceil(25 * g3.STATUS_LH))
+    bad = g3.check()
+    assert any("the type is clipped" in line for line in bad), (
+        "a 25px status line in a 29px box was accepted: %s" % bad)
+
+    # AND THE BOX SHRINKING UNDER THE FONT IS THE SAME FAULT FROM THE OTHER END, which a guard
+    # written as "the font is at most N" would miss entirely.
+    g4 = _load("geometry")
+    monkeypatch.setattr(g4, "STATUS", dict(g4.STATUS, height=g4.STATUS_LINE - 1))
+    assert any("the type is clipped" in line for line in g4.check()), (
+        "the box was shrunk under its own type and check() did not say so: %s" % g4.check())
+
+
+def test_the_status_line_has_one_owner_for_its_size_and_one_for_its_weight():
+    """The size is geometry's because it has a constraint; the weight is the stylesheet's.
+
+    THE SPLIT IS THE POINT. A size in the CSS would be a second answer to a number check() holds
+    against the box, and the two would part company the first time one was edited. A weight in
+    geometry.py would be a style fact in a file about space, with nothing to constrain it.
+
+    Falsified by hard-coding a font-size on #status, or by the page ceasing to read the size out
+    of the manifest.
+    """
+    page = TMPL.read_text(encoding="utf-8")
+    css = re.sub(r"/\*.*?\*/", " ", page, flags=re.S)
+    rule = decls_for(page, "#status")
+
+    assert re.search(r"font-weight:\s*(bold|[5-9]00)", rule), (
+        "the status line states no weight of its own: %s" % rule.strip())
+    assert not re.search(r"font-size:\s*\d", rule), (
+        "the status line hard-codes a font-size, which geometry already owns and check() holds "
+        "against the box: %s" % rule.strip())
+
+    # AND THE PAGE TAKES THE SIZE FROM THE MANIFEST, which is the other end of the same fact.
+    draw = page.split("function drawStatus(")[1].split("\n}")[0]
+    assert "s.size" in draw, "drawStatus() no longer reads the size out of geometry: %s" % draw
+    geo = _load("geometry")
+    assert geo.as_dict()["status"]["size"] == geo.STATUS_SIZE
+    assert css.count("font-family:Georgia") >= 1
+
+    # AND THE LINE HEIGHT IS SET RATHER THAN INHERITED, which is not tidiness -- it is the
+    # difference between check() measuring the box against a number the browser uses and against
+    # a number nobody uses.
+    #
+    # THE BUG IT CLOSES, because it is not obvious from the code: body carries `font:13px/1.4`,
+    # and a UNITLESS line-height inherits as the RATIO. So #status laid out at 1.4 x its own
+    # size -- 25.2px at 18 -- while geometry asserted 22. Both numbers were defensible and only
+    # one was real. Caught by measuring the built page, not by reading either file.
+    assert "lineHeight" in draw, (
+        "drawStatus() does not set a line height, so the box inherits body's 1.4 ratio and lays "
+        "out taller than the line check() holds against STATUS['height']: %s" % draw)
+    assert "s.line" in draw, (
+        "the line height is set from something other than geometry's own STATUS_LINE: %s" % draw)
+    assert geo.as_dict()["status"]["line"] == geo.STATUS_LINE
+    assert not re.search(r"line-height", decls_for(page, "#status")), (
+        "#status states a line-height in CSS as well, which is the second owner this just "
+        "removed")
 
 
 def test_the_controls_are_two_groups_and_a_column_that_forgets_it_is_refused(monkeypatch):

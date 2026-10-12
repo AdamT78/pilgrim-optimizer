@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import pathlib
 import re
+from math import ceil
 
 HERE = pathlib.Path(__file__).resolve().parent
 BOARD = HERE.parent
@@ -69,11 +70,41 @@ def inner(width: int, height: int) -> tuple:
     return width - 2 * BORDER, height - 2 * BORDER
 
 # ---- the upper text box ----------------------------------------------------------------------
-# It holds the phase's line now and the hovered action's wording later. At 16 the type needs 19px
-# of line (15 ascent, 4 descent) inside 29, so it is centred with 5 clear above and below and
-# nothing can be clipped -- which is what it was doing at the size this replaced.
+# It holds the phase's line now and the hovered action's wording later.
+#
+# THE BOX IS DECLARED AND THE TYPE IS NOT DERIVED FROM IT, which is the thing to understand before
+# changing either. STATUS["height"] is what the tiles hang off -- RIBBON_Y is its foot plus a GAP
+# -- so growing the BOX moves the whole board down. Growing the TYPE moves nothing: it eats the
+# air inside the box, and past a certain size it is simply clipped, silently.
+#
+# SO THE FIT IS A GUARD RATHER THAN A DERIVATION. check() holds the line against the box. Deriving
+# the box from the type instead would mean a font tweak quietly relaying the board, which is the
+# same fault RIBBON_H is declared to avoid: a thing that outgrows its container should be refused,
+# not accommodated.
 STATUS = {"x": X0, "y": 10, "width": WORK_W, "height": 29}
-STATUS_SIZE = 16
+STATUS_SIZE = 18
+
+# HOW TALL A LINE OF IT IS, as a multiple of the size. NOT MEASURED HERE, and that is worth being
+# honest about: Georgia is a Mac font and is not installed in the Linux container this tree is
+# usually built in, where it falls back to the default serif and reports 1.06 -- a number that
+# would pass a guard the real font fails. document.fonts.check("16px Georgia") answers TRUE on
+# that fallback, so it cannot be used to tell the difference either.
+#
+# 1.19 IS THIS FILE'S OWN EARLIER MEASUREMENT, taken on a Mac with the real font: the note here
+# used to read "at 16 the type needs 19px of line (15 ascent, 4 descent)", and 19/16 is 1.1875.
+# Rounded UP, because the only direction that costs anything is underestimating.
+STATUS_LH = 1.19
+STATUS_LINE = ceil(STATUS_SIZE * STATUS_LH)      # 22 at 18, inside a box of 29
+
+# AND THE PAGE IS GIVEN THIS LINE RATHER THAN LEFT TO INHERIT ONE, which is the correction that
+# made the number above mean anything. body sets `font:13px/1.4`, and a UNITLESS line-height is
+# inherited as the ratio, not as the computed px -- so the status line was being laid out at
+# 18 * 1.4 = 25.2, while this file was asserting it needed 22. Measured on the built page.
+#
+# THE GUARD WAS THEREFORE CHECKING THE WRONG NUMBER, and generously: at size 21 it would have
+# computed 25 against a box of 29 and passed, while the page actually asked for 29.4 and clipped.
+# drawStatus() now sets lineHeight from this, so what the browser lays out and what check() holds
+# against the box are one number.
 
 # ---- the eight duty tiles ---------------------------------------------------------------------
 # A SLICE IS NOT A TILE, AND THEY USED TO BE THE SAME NUMBER. The ribbon divides the working width
@@ -888,7 +919,7 @@ def as_dict() -> dict:
     return {
         "canvas": {"width": CANVAS_W, "height": CANVAS_H},
         "gap": GAP, "gapWide": GAP_WIDE, "x0": X0, "workW": WORK_W,
-        "status": dict(STATUS, size=STATUS_SIZE),
+        "status": dict(STATUS, size=STATUS_SIZE, line=STATUS_LINE),
         "road": dict(ROAD),
         "backdrop": dict(BACKDROP, ground=BACKDROP_GROUND),
         # NO nameSize, nameTop OR nameLh. The duty names are off the board, and a size published
@@ -1062,6 +1093,22 @@ def check() -> list:
     if TILE_Y - (STATUS["y"] + STATUS["height"]) != GAP:
         bad.append("the tiles sit %d under the status line and the board's gap is %d"
                    % (TILE_Y - (STATUS["y"] + STATUS["height"]), GAP))
+    # THE STATUS LINE FITS ITS BOX, which nothing else checks and nothing visible reports. The
+    # type's size and the box's height are two declared numbers with no arithmetic between them,
+    # so the only thing standing between a larger font and a clipped one is this.
+    #
+    # IT IS THE FAILURE THAT LOOKS LIKE SUCCESS. Overflow here does not push anything, wrap, or
+    # throw -- #status is one nowrap line with overflow:hidden, so the descenders are simply
+    # shaved off and the board still renders. At 24 it fits with nothing to spare; at 25 the line
+    # wants 30 in a box of 29 and the tails of the g and the y go.
+    #
+    # AND IT IS WEIGHT-INDEPENDENT ON PURPOSE. A line box comes from the family's own ascent and
+    # descent, which bold does not change, so there is no second number for the bold the status
+    # line is set in.
+    if STATUS_LINE > STATUS["height"]:
+        bad.append("the status line wants %d px of line at size %d and its box is %d high, so "
+                   "the type is clipped" % (STATUS_LINE, STATUS_SIZE, STATUS["height"]))
+
     # AND THE SLACK IS WHERE IT WAS PUT. Pulling the row onto the tile's edge moved the cards and
     # the Tithe 77 left while the controls stayed on Allocation's mark, so the room they used to
     # share falls between the Tithe and the column. That is the intent; what would not be is the

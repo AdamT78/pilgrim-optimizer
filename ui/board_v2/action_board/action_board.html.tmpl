@@ -86,8 +86,13 @@ body.full{background:#000}
    THE PAIRING IS MEASURED, NOT ASSUMED. The guard reads this colour out of the stylesheet and
    the sky out of the shipped backdrop file, so a darker picture arriving under black type fails
    rather than quietly disappearing. */
+/* BOLD, AND THE WEIGHT LIVES HERE WHILE THE SIZE LIVES IN geometry.py. That split is not
+   arbitrary: the SIZE has to fit the box, and check() holds it against STATUS["height"], so it
+   is a number with a constraint on it. The weight has no constraint -- a line box comes from the
+   family's ascent and descent, which bold does not change -- so it is a style fact and belongs
+   in the stylesheet with the colour and the family. */
 #status{display:grid;place-items:center;text-align:center;
-  font-family:Georgia,serif;color:#000;white-space:nowrap;overflow:hidden}
+  font-family:Georgia,serif;font-weight:700;color:#000;white-space:nowrap;overflow:hidden}
 
 /* ---- the eight duty tiles -------------------------------------------------------------- */
 /* THE TILE IS GLASS OVER THE VALLEY. --plate at --tile-alpha rather than a colour of its own, so
@@ -536,7 +541,11 @@ function lightFace(slug){
 // DRAWING. Every element is placed once, from GEO, and then only its contents change.
 function drawStatus(){
   var s = GEO.status;
-  var e = el("div", null, Object.assign(box(s), {fontSize: px(s.size)}));
+  // THE LINE HEIGHT IS SET, NOT INHERITED. body's `font:13px/1.4` passes down a RATIO, so this
+  // box was laying out at 1.4 x its own font size -- 25.2 at 18 -- while geometry held it to the
+  // 22 the face needs. One of the two had to give, and it is the inherited one: geometry owns
+  // the number check() measures against the box, so the page is told it rather than guessing.
+  var e = el("div", null, Object.assign(box(s), {fontSize: px(s.size), lineHeight: px(s.line)}));
   e.id = "status";
   var t = el("span", null, null, e); t.id = "statusText"; t.style.position = "static";
 }
