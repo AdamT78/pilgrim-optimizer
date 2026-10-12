@@ -103,12 +103,14 @@ unless that is turned off, so the clip is not exclusive to this project.
 
 | file | from | what it is |
 | --- | --- | --- |
-| `duty_actions/ordination_actionA_sfx_v02.ogg` | ElevenLabs, `Sharp_metallic_sciss_#1-1791837288330.wav` | **Ordain.** Three snips at 210, 616 and 1282 ms. Unedited but for the container, and no MP3 anywhere in the chain. |
-| `duty_actions/ordination_actionA_sfx_v01.ogg` | ElevenLabs, `scissor_1.mp3` | *Superseded by v02, kept.* Five events, two strong snips 526 ms apart. |
+| `duty_actions/ordination_actionA_sfx_v03.ogg` | ElevenLabs, `Sharp_metallic_sciss_#1-1791837288330.wav` | **Ordain.** Three snips at 210, 616 and 1282 ms, cut to 1550 ms. No MP3 anywhere in the chain. |
+| `duty_actions/ordination_actionA_sfx_v02.ogg` | ElevenLabs, same WAV | *Superseded by v03, kept.* The full 2000 ms, of which the last ~470 were silence. |
+| `duty_actions/ordination_actionA_sfx_v01.ogg` | ElevenLabs, `scissor_1.mp3` | *Superseded, kept.* Five events, two strong snips 526 ms apart. |
 | `duty_actions/allocation_actionA_sfx_v01.ogg` | 344 Audio, *Antique Small Metals* | **Allocation.** The first 300 ms of *Tinkering Antique Lock*: two clicks at 12 and 172 ms, a settle at 236, quiet by 278. Allocation has one action, and this is two clicks and done. |
 | `duty_actions/clerical_actionB_sfx_v01.ogg` | Pixabay, `freesound_community` | **Silversmith.** *bing1*, a struck bell, 758 ms. Unedited but for the container — and the master is already mono, so it is *not* summed. |
 | `tithe/wheat_sfx_v01.ogg` | InMotionAudio, *Velcro* | **Wheat.** *VelcroRip29*, unedited but for the container. |
-| `tithe/silver_sfx_v01.ogg` | Pixabay, `freesound_community` | **Silver.** *coins-falling-013*, 720 ms. Unedited but for the container. See the head-silence note below before using it. |
+| `tithe/silver_sfx_v02.ogg` | Pixabay, `freesound_community` | **Silver.** *coins-falling-013*, head trimmed to 425 ms so it speaks at once. |
+| `tithe/silver_sfx_v01.ogg` | Pixabay, `freesound_community` | *Superseded by v02, kept.* The full 720 ms, with 299 ms of silence on the front. |
 | `buildings/library_sfx_v01.ogg` | 344 Audio, *Antiques — Books* | **Library.** One second of *Pile Of Antique Books Falling Over 8* from 0.806 s. |
 
 ### There are no masters here, and that is a departure
@@ -200,21 +202,43 @@ v02 peaks at **−0.1 dB** and its source touches 0.0 dBFS at exactly one sample
 three, so it is hot but not clipped. Its last ~500 ms are silence; trimming would save 4 KB and
 has not been done, since a tail costs nothing in response time the way a head does.
 
-### Silver does not start for 299 ms, and that is a real defect
+### Silver's 299 ms of silence, and the fix
 
-`tithe/silver_sfx_v01.ogg` was taken **as downloaded**, and as downloaded its first 299 ms are
-silence: the clip peaks at **−47.6 dB over its first 150 ms** and does not actually speak until a
-third of a second in. The rule this set is being built to — *identity lands in the first ~150 ms* —
-is the one thing it fails, and it fails it completely rather than narrowly.
+`tithe/silver_sfx_v01.ogg` was taken **as downloaded**, and as downloaded its first 299 ms were
+silence: it peaked at **−47.6 dB across its first 150 ms** and did not speak until a third of a
+second in. That is the one rule this set is built around — *identity lands in the first ~150 ms*
+— and it failed it outright rather than narrowly. Exactly the fault `buildings/library_sfx_v01
+.ogg` had and had cut out of it, where the master's first 826 ms were silence.
 
-This is the fault `buildings/library_sfx_v01.ogg` already had and had cut out of it: that master's
-first 826 ms were silence, so the head was removed rather than shipped as a pause the board would
-appear not to have heard. The same fix is one line here — trim 0.299 s from the front, leaving a
-421 ms clip — and it has deliberately **not** been applied, because the file was asked for as it
-is. Recorded here so the next person does not rediscover it by wondering why Silver feels broken.
+**v02 cuts it**, starting at 295 ms of the master — 6 ms ahead of the first sample above −50 dB,
+so no attack is clipped — with a 2 ms ramp seating the opening sample the way Allocation's cut
+does. First 150 ms now peak at **−7.9 dB**.
 
-Silver is also the only clip in the set at **24 kHz**, so it is band-limited at 12 kHz and will
-read duller than everything around it. Nothing can be done about that short of a different source.
+Nothing else moved, which is worth stating because trimming silence looks like it should change
+the level and must not. The peak is **−7.9 dB in both versions**: no gain was applied. The mean
+rose from −33.2 to −31.1 dB, which is arithmetic rather than loudness — the same energy divided
+by less file.
+
+Silver remains the only clip in the set at **24 kHz**, so it is band-limited at 12 kHz and reads
+duller than everything around it. No edit fixes that; only a different source would.
+
+### Ordain's dead tail
+
+`v02` ran the full 2000 ms it was generated at, but its content stopped at 1527 — the last ~470 ms
+were silence, carried as base64 inside a `data:` URI. **v03 ends at 1550 ms** with a 20 ms cosine
+fade across 1530–1550, which costs nothing because the signal is already under −60 dB by then. It
+saves 4 KB.
+
+The thing to check when trimming a tail is that you have not taken a transient with it. The three
+snips sit at **210, 616 and 1282 ms in both versions**, unmoved, and the final millisecond of v03
+reads −80.6 dB, so there is no edge for a click to live on.
+
+A tail is a lesser fault than a head, which is why this one waited: silence at the front delays
+the board's answer, silence at the back is only bytes.
+
+**Both cuts were taken from the original downloads rather than from the shipped `.ogg`.** Re-cutting
+a Vorbis file to Vorbis is a second lossy pass for nothing when the source is still on disk — and
+`originalFilename` is what made it findable.
 
 ### What "as is" still costs
 
