@@ -21,7 +21,13 @@ TREE = ROOT / "ui" / "board_v2"
 RECORD = TREE / "attribution.json"
 
 # What counts as an asset here. Source, documentation and the empty-folder markers are not.
-ASSET_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".svg", ".gif", ".avif"}
+# AUDIO COUNTS AS AN ASSET, which this set did not say for as long as the board had no sound
+# worth recording. tile.ogg and confirm.ogg were cut months ago and sat unrecorded the whole
+# time -- not because anyone decided they needed no provenance, but because the walk could not
+# see them: assetDirs did not list sfx/ and this set held only picture suffixes. Both halves had
+# to change or the guard goes on passing by looking away.
+ASSET_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".svg", ".gif", ".avif",
+                  ".ogg", ".mp3", ".wav", ".flac"}
 
 # BUILD OUTPUT IS NOT A NEW ASSET. ui/.gitignore declares every `generated/` directory under ui/
 # to be output, and a generator that writes an image into one is copying a file that is already

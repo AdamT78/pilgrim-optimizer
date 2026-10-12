@@ -1861,13 +1861,17 @@ def test_the_hover_cue_fires_on_the_duty_changing_not_on_every_crossing():
 def test_a_sound_in_the_tree_says_where_it_came_from():
     """The same rule the pictures live under, applied to the one asset class that escaped it.
 
-    `tests/layout_lab/test_board_v2_attribution.py` holds every image in ui/board_v2/ to a record
-    in attribution.json, and it walks by SUFFIX -- png, jpg, webp, svg, gif, avif. A .ogg is
-    invisible to it. So the sounds arrived in a tree whose whole discipline is that an asset
-    nobody can account for gets dropped, and nothing would have noticed.
+    THE GAP THIS WAS WRITTEN FOR IS NOW CLOSED, and the note is kept because the closing is the
+    interesting part. attribution.json's walk reads assetDirs and a suffix set, and for as long
+    as the board had sound it listed neither sfx/ nor .ogg -- so tile.ogg and confirm.ogg sat
+    unrecorded for months, not by decision but because the guard could not see them. Both halves
+    are fixed: assetDirs names sfx/, ASSET_SUFFIXES names the audio extensions, and every clip
+    now carries a full record like every picture.
 
-    This is the cheap version of that rule rather than an extension of attribution.json: every
-    sound has to be named in its own README, which is where the licence and the cut are recorded.
+    SO WHY KEEP THIS ONE. Because the record and the README answer different questions. The
+    record says what licence a file carries and what its sha256 is; the README says what the clip
+    IS, how it was cut, and which of those decisions were got wrong first -- the normalising, the
+    3 dB-hot mono sum, the pointless fade-in. A reader reaching for a sound wants the second.
     Falsified by dropping a clip into sfx/ and saying nothing about it.
     """
     sfx = ROOT / "ui" / "board_v2" / "sfx"
@@ -1885,6 +1889,155 @@ def test_a_sound_in_the_tree_says_where_it_came_from():
             "what licence it carries" % p.name)
     assert "CC0" in said or "licence" in said.lower() or "license" in said.lower(), (
         "sfx/README.md records no licence for any of it")
+
+
+def test_every_sound_keeps_the_verbatim_name_it_was_downloaded_as():
+    """The handle on re-fetching a sound, now that nothing in the tree holds the sound itself.
+
+    THIS GUARD IS THE PRICE OF DELETING sfx/masters/. While the masters were committed, the
+    question "what was this cut from" had a physical answer sitting next to the cut. They were
+    removed on the grounds that an audio master is a third-party DOWNLOAD rather than model
+    output, and a download can be fetched again -- which is true exactly as long as the name you
+    would type into the search box is written down somewhere.
+
+    IT WAS NOT, AND THE PROSE HAD ALREADY DRIFTED. `source` is free text and three of the six had
+    quietly stopped being the filename: both Pixabay entries had lost the `freesound_community-`
+    prefix that actually finds them, and the two Sonniss entries had been reflowed from
+    `METLMvmt_  Tinkering Antique Lock_344 Audio_Antique Small Metals.wav` into prose of the form
+    "..., 344 Audio - Antique Small Metals pack", which is lossy -- "344 Audio - Antiques - Books"
+    gives a reader no way to tell where the creator's name ends and the pack's begins, and the
+    pack FOLDER turns out to be called "Antique Books" while the file says "Antiques - Books".
+
+    SO THE FIX IS A FIELD, NOT BETTER PROSE. `source` goes on saying where a thing came from in
+    words; `originalFilename` holds the exact string and is not allowed to paraphrase. A
+    paraphrase is what the last one was, and it read as a filename right up until someone tried
+    to use it as one.
+
+    Falsified by adding a clip whose record names no original, or by "tidying" one of these into
+    a description.
+    """
+    rec = json.loads((ROOT / "ui" / "board_v2" / "attribution.json")
+                     .read_text(encoding="utf-8"))["files"]
+    sfx = {k: v for k, v in rec.items() if k.startswith("sfx/")}
+    assert sfx, "no sound is on the provenance record at all"
+
+    AUDIO = (".wav", ".mp3", ".ogg", ".flac", ".aif", ".aiff", ".m4a")
+    missing, unnamed = [], []
+    for key, entry in sorted(sfx.items()):
+        name = entry.get("originalFilename")
+        if not name:
+            missing.append(key)
+        elif not name.lower().endswith(AUDIO):
+            unnamed.append("%s -> %r" % (key, name))
+
+    assert not missing, (
+        "%d sound record(s) do not say what file they were downloaded as: %s.\n"
+        "sfx/masters/ was deleted on the understanding that every source can be fetched again. "
+        "That only holds while the name is written down, so give each one an `originalFilename` "
+        "with the exact filename, extension included, and an `originalPath` saying which bundle "
+        "or site it sits in." % (len(missing), ", ".join(missing)))
+
+    assert not unnamed, (
+        "%d `originalFilename` value(s) are not filenames -- they have no audio extension, which "
+        "is what a description looks like: %s.\n"
+        "This field is the literal name as downloaded. Put the prose in `source`."
+        % (len(unnamed), "; ".join(unnamed)))
+
+
+def test_a_sound_slot_draws_the_highest_version_and_a_hardcoded_one_is_refused(tmp_path):
+    """Filing a v02 has to be the switch, the way it already is for a control.
+
+    THE BENCH DID NOT DO THIS AND NOBODY KNEW. It resolved every slot by writing the literal
+    `_sfx_v01.ogg`, in three places. Everywhere else in the tree a new cut is `_v02` rather than
+    a rewrite of `_v01` -- a file whose sha256 is recorded cannot be replaced in place without
+    the record describing bytes that are gone -- and `bundled_controls()` takes the highest vNN
+    for that reason. Sound was the exception, so the first time a second take was filed the page
+    went on drawing the first one and showed no sign of it. There is no error to see: a
+    hardcoded v01 that exists resolves perfectly well.
+
+    BOTH HALVES ARE CHECKED, because either alone is passable and wrong. The function must pick
+    the highest version off a real directory, AND the module must not contain the literal that
+    was the bug -- a caller that goes back to spelling `_sfx_v01.ogg` would make the function
+    correct and unused.
+
+    Falsified by resolving a slot to a fixed version, or by comparing versions as strings, where
+    v10 sorts below v9.
+    """
+    gen = ROOT / "ui" / "board_v2" / "sfx_lab" / "generate_sound_bench.py"
+    if not gen.is_file():
+        pytest.skip("no sound bench in this tree")
+    spec = importlib.util.spec_from_file_location("_sfxgen", gen)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    # v9 IS UNPADDED ON PURPOSE AND IS THE WHOLE POINT OF THIS FIXTURE. The tree writes v01, v02,
+    # and across two zero-padded digits a string comparison gives the right answer by accident:
+    # "10" > "02" is lexically true because '1' > '0'. So a set of v01/v02/v10 does NOT catch a
+    # string comparison, which an earlier version of this test asserted that it did. Widths have
+    # to differ for the bug to show -- "9" > "10" lexically, 9 < 10 numerically.
+    for name in ("alpha_sfx_v01.ogg", "alpha_sfx_v02.ogg", "alpha_sfx_v9.ogg",
+                 "alpha_sfx_v10.ogg", "beta_sfx_v03.ogg", "alpha_sfx_vXX.ogg", "alpha.ogg"):
+        (tmp_path / name).write_bytes(b"")
+
+    got = mod.newest_version(tmp_path, "alpha")
+    assert got is not None and got.name == "alpha_sfx_v10.ogg", (
+        "the slot resolved to %r; v10 is the highest version present and is what should be "
+        "drawn. Comparing the version as a STRING is the likely cause: '9' > '10' lexically, so "
+        "a ninth take would outrank a tenth." % (got.name if got else None))
+    assert mod.newest_version(tmp_path, "beta").name == "beta_sfx_v03.ogg"
+    assert mod.newest_version(tmp_path, "gamma") is None, (
+        "a slot with no clip at all must resolve to None, not to a guess")
+
+    src = gen.read_text(encoding="utf-8")
+    body = re.sub(r'""".*?"""', "", src, flags=re.S)
+    body = re.sub(r"#.*", "", body)
+    stuck = re.findall(r'["\'][^"\']*_sfx_v0*1\.ogg[^"\']*["\']', body)
+    assert not stuck, (
+        "the module still spells a fixed version somewhere outside a docstring: %s.\n"
+        "That is the bug this test exists for -- it resolves fine, draws the wrong take, and "
+        "says nothing. Resolve slots through newest_version()." % stuck)
+
+
+def test_no_sound_claims_a_licence_its_own_source_contradicts():
+    """A licence is a claim about what may ship, so the entry must not argue with itself.
+
+    WRITTEN BECAUSE ONE DID, FOR WEEKS. Ordain's record named creator "344 Audio" under the
+    Sonniss bundle licence while its own `source` field described "a generated scissor sound" --
+    and the generated reading was the true one. The file is scissor_1.mp3, which sits loose in
+    the downloads folder outside any pack, and carries none of the
+    CATEGORY_Description_Creator_Pack naming every real Sonniss source here has. It is ElevenLabs
+    output, whose commercial use is tier-dependent, so the wrong licence was not a filing error:
+    it asserted a royalty-free grant over a file that did not have one.
+
+    WHAT THIS CAN AND CANNOT CHECK. It cannot know where a file really came from. It can refuse
+    the specific shape that hid this one -- a record whose licence says bundle and whose source
+    says generated, or the reverse -- which is the contradiction that was sitting in plain sight
+    and that nobody read as a contradiction.
+
+    Falsified by filing a clip under one origin and describing it as another.
+    """
+    rec = json.loads((ROOT / "ui" / "board_v2" / "attribution.json")
+                     .read_text(encoding="utf-8"))["files"]
+    GENERATED = re.compile(r"\bgenerat(ed|ive)\b|\bai[- ]generated\b|elevenlabs|chatgpt|openai",
+                           re.I)
+    BOUGHT = ("sonniss-gameaudiogdc", "pixabay", "cc0")
+
+    clashes = []
+    for key, entry in sorted(rec.items()):
+        if not key.startswith("sfx/"):
+            continue
+        licence = entry.get("licence", "")
+        said = " ".join(str(entry.get(f, "")) for f in ("source", "originalFilename"))
+        if licence in BOUGHT and GENERATED.search(said):
+            clashes.append("%s: licence %r but its source calls it generated -- %r"
+                           % (key, licence, entry.get("source", "")[:90]))
+        if "generated" in licence and not GENERATED.search(said):
+            clashes.append("%s: licence %r but nothing in its source says it was generated"
+                           % (key, licence))
+
+    assert not clashes, (
+        "%d sound record(s) name a licence their own source contradicts:\n  %s"
+        % (len(clashes), "\n  ".join(clashes)))
 
 
 def test_the_ribbon_holds_still_and_a_tile_that_moves_is_refused():
@@ -2473,8 +2626,13 @@ def test_every_walk_finds_an_image_whatever_it_is_encoded_as(gen):
     assert ".png" in want and ".webp" in want, want
     doc = json.loads(gen.ATTRIB_FILE.read_text(encoding="utf-8"))
     assert tuple(doc["imageSuffixes"]) == tuple(want), "the reader and the file disagree"
-    # Every recorded file is one this tree can actually open.
-    bad = [p for p in doc["files"] if pathlib.Path(p).suffix.lower() not in set(want) | {".svg"}]
+    # EVERY RECORDED *PICTURE* IS ONE THIS TREE CAN OPEN. The record now also holds sounds, and
+    # this guard had no idea: it read the whole files map and called every .ogg unreadable. The
+    # suffix list it checks against is imageSuffixes, so audio was never in scope -- the fault was
+    # testing the wrong population, not the wrong suffixes.
+    AUDIO = {".ogg", ".mp3", ".wav", ".flac"}
+    bad = [p for p in doc["files"]
+           if pathlib.Path(p).suffix.lower() not in set(want) | {".svg"} | AUDIO]
     assert not bad, "recorded but unreadable: %s" % ", ".join(bad)
 
 
