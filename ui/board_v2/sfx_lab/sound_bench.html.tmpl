@@ -132,6 +132,22 @@ D.buildings.forEach(function(b){
   }
   h.push(b.clip ? card(b.clip, b.name + " — " + b.clip.label, 0.5) : empty(b.name));
 });
+
+// MISC HAS NO COVERAGE BAR, AND THAT IS THE POINT OF IT. Every section above counts against a
+// denominator the game supplies -- three resources, fourteen actions, twenty-four buildings --
+// so a gap in them is a thing still to do. Misc has no denominator: it is sound that was kept
+// without a slot, either because it was replaced by something better or because it has not found
+// its home yet. Printing "4 of 4" there would be meaningless, and printing nothing says the
+// right thing.
+if (D.misc && D.misc.length){
+  h.push("<h2>Misc</h2>",
+         '<p class=setnote>Kept, but not assigned to a slot. Nothing here is played by the ' +
+         'board. A clip lands here when it is superseded or when it is worth having before ' +
+         'there is somewhere to put it.</p>');
+  D.misc.forEach(function(m){
+    h.push(card(m, m.label, 0.5));
+  });
+}
 document.getElementById("body").innerHTML = h.join("");
 
 CL.forEach(function(c){ var a = new Audio(c.src); a.volume = c.gain; A.push(a); });

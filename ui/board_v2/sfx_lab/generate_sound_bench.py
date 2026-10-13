@@ -167,12 +167,32 @@ def main() -> int:
         return None if p is None else clip("%s/%s" % (folder, p.name), p.stem)
 
     gains = board_gains()
+    # THE GENERAL CUES ARE A SET AND NOT THREE FILES, which is why this is a list of sets rather
+    # than a flat list of slots. A set is a complete answer to "what does the interface sound
+    # like" and the slots inside one were levelled against each other; comparing set 1's confirm
+    # with set 2's select is not a comparison anyone wants to make.
+    #
+    # SET 2 HAS NO HOVER AND THAT IS SHOWN, not hidden. It is drawn as a gap, the same as a duty
+    # action with no clip, because a set missing a slot is an incomplete answer and the page
+    # should say so -- the alternative is a set that looks finished and goes quiet on hover.
     sets = [
         {"id": "v1", "name": "Kenney interface sounds", "chosen": True,
          "note": "cut from one CC0 montage, levelled against each other, never normalised",
          "slots": [("hover", clip("tile.ogg", "tile.ogg"), gains.get("hover", .12)),
                    ("select", clip("tile.ogg", "tile.ogg -- the same clip, louder"), gains.get("select", .5)),
                    ("confirm", clip("confirm.ogg", "confirm.ogg"), gains.get("confirm", .7))]},
+        {"id": "v2", "name": "ElevenLabs set", "chosen": False,
+         "note": "generated, not cut; no hover, and both cues run 2 s against the Kenney set's "
+                 "70 ms -- a different idea of an interface, not a longer version of this one",
+         # RESOLVED, NOT SPELLED OUT. Writing "general/set2_select_sfx_v01.ogg" here was the
+         # first version of this and the version guard refused it -- correctly, because a set's
+         # slot is a slot like any other: file a v02 of this cue and a literal would go on
+         # drawing v01 with nothing to show for it. Set 1 above names `tile.ogg` and
+         # `confirm.ogg` directly because those predate the convention and carry no version at
+         # all, which is a different thing from naming one and freezing it.
+         "slots": [("hover", None, gains.get("hover", .12)),
+                   ("select", newest("general", "set2_select"), gains.get("select", .5)),
+                   ("confirm", newest("general", "set2_confirm"), gains.get("confirm", .7))]},
     ]
     tithe = [{"name": n, "clip": newest("tithe", k)}
              for k, n in (("wheat", "Wheat"), ("stone", "Stone"), ("silver", "Silver"))]
@@ -185,9 +205,20 @@ def main() -> int:
         duties.append({"name": d["name"], "actions": acts})
     builds = [dict(b, clip=newest("buildings", b["key"])) for b in buildings()]
 
+    # MISC IS DISCOVERED, NOT DECLARED, which is what separates it from every other section. The
+    # tithe resources, the duty actions and the buildings all come from a list the game owns, so
+    # the bench can say "2 of 3" and mean it. Nothing owns the misc list: a clip is here because
+    # somebody kept it, and the only way to know what is here is to look.
+    misc = []
+    for stem in sorted({re.sub(r"_sfx_v\d+$", "", p.stem) for p in (SFX / "misc").glob("*.ogg")}):
+        c = newest("misc", stem)
+        if c:
+            misc.append(c)
+
     tmpl = (LAB / "sound_bench.html.tmpl").read_text(encoding="utf-8")
     page = tmpl.replace("__DATA__", json.dumps(
-        {"sets": sets, "tithe": tithe, "duties": duties, "buildings": builds}))
+        {"sets": sets, "tithe": tithe, "duties": duties, "buildings": builds,
+         "misc": misc}))
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(page, encoding="utf-8")
 
@@ -197,6 +228,8 @@ def main() -> int:
     print("  actions   %d of %d" % (sum(1 for d in duties for a in d["actions"] if a["clip"]),
                                     sum(len(d["actions"]) for d in duties)))
     print("  buildings %d of %d" % (have(builds), len(builds)))
+    # NO "n of m" HERE: misc has no denominator, so a count is the only honest line.
+    print("  misc      %d kept, unassigned" % len(misc))
     for n in notes:
         print("  NOTE:", n)
     if args.open:
