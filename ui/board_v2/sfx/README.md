@@ -26,7 +26,9 @@ Both contain the whole of their sound with silence to spare, so neither is a tru
 
 Mono as `(L + R) / 2`, **no fade in**, a short fade out, **no normalising**, Vorbis q6. Each is
 under 5 KB. Three of those four decisions were got wrong first and are only here because the
-mistakes were audible.
+mistakes were audible. **One clip now breaks two of them on purpose** — see *Mint, the one
+clip with gain and EQ* below — and it is an exception with its numbers written down, not a
+change of practice.
 
 **No normalising.** The first cuts were peak-normalised to −1 dBFS, which is the reflex for a
 sound effect and is wrong for a set of one-shots recorded together: it throws away the one thing
@@ -124,6 +126,8 @@ unless that is turned off, so the clip is not exclusive to this project.
 | `misc/shears_sfx_v01.ogg` | ElevenLabs, `scissor_1.mp3` | *Was the first Ordain cue, now unassigned.* Five events, two strong snips 526 ms apart. The one file here nothing can re-fetch. |
 | `misc/mechanism_one_cycle_sfx_v01.ogg` | Bluezone, *Steampunk Mechanical Sounds* (GDC **2023**) | *Never held a slot.* The first 960 ms of Taxation's source — one cycle, cut inside its own pause. Kept beside the two-cycle version that ships. |
 | `misc/many_coins_sfx_v01.ogg` | CB Sound Design, *Essential Sounds Vol.01 Coins* (GDC **2023**) | *Never held a slot.* 497 ms of coins, as is. Dual mono stored as stereo — the channels are identical, so summing is lossless. |
+| `misc/wood_groan_long_sfx_v01.ogg` | Pixabay, `voicebosch` | *Never held a slot.* 1230 ms from take 5 of the Pulpit master — a different take, sharing no material with the cue. Lost to Pulpit on shape, not quality: a wash where a cue wants an event. |
+| `misc/shrine_bell_sfx_v01.ogg` | Pixabay, `konpeito_sound` | *Never held a slot.* A suzu — the bell cluster on a rope — 1180 ms from 0.420–1.600 s. Cut for Build Shrine and not taken for it; the slot stays open. |
 | `duty_actions/construct_actionA_sfx_v01.ogg` | 344 Audio, *Nuts And Bolts* (GDC **2023**) | **Construct Building.** Two hammer blows on a chisel at 20 and 376 ms, cut from a 21.9 s take of 56 strikes. Mono master, not summed. |
 | `duty_actions/construct_actionB_sfx_v01.ogg` | Pixabay, `freesound_community` | **Construct Road.** *brick-dropped-on-other-bricks*, 224 ms cut from 3480. Touch, drop, bounce. Left channel only — the right one is dead. |
 | `tithe/wheat_sfx_v01.ogg` | InMotionAudio, *Velcro* | **Wheat.** *VelcroRip29*, unedited but for the container. |
@@ -138,6 +142,10 @@ unless that is turned off, so the clip is not exclusive to this project.
 | `buildings/well_sfx_v01.ogg` | Pixabay, `tanweraman` | **Well.** A stone dropped in water, 1104 ms, as is. Strikes at 300 ms, swallowed at 700. |
 | `buildings/quarry_sfx_v01.ogg` | Justsoundeffects, *Stones and Debris* (GDC **2023**) | **Quarry.** Loose stone settling, 1315 ms from 11.365–12.680 s — the tail of take 1 of five. Eight stones, no dominant impact, and no fade: it ends inside the library's own silence. |
 | `buildings/chapel_sfx_v01.ogg` | Marek Klemczak *(disputed — see record)*, *ARTA Cinematic Sound FX* (GDC **2023**) | **Chapel.** A low swell, 947 ms from 300–1250 ms. The darkest clip in the set and the first non-diegetic one. Trimmed because the master carried both a dead head and a dead tail. |
+| `buildings/confession_box_sfx_v01.ogg` | Rogue Waves, *Creaking Door* (GDC **2024**) | **Confession Box.** A wooden door shut, 895 ms from 4.585–5.460 s of an open-and-close take. Two impacts 156 ms apart — frame, then latch. The creak before it was passed over. |
+| `buildings/pulpit_sfx_v01.ogg` | Pixabay, `voicebosch` | **Pulpit.** Wood creaking under weight, 707 ms from take 3 of seven. Three creaks at 20, 340 and 720 ms. No fade at either end. |
+| `buildings/mint_sfx_v01.ogg` | Pixabay, `sunovia` | **Mint.** A silver chime, 1265 ms from 0.185–1.450 s. **The one clip here with EQ and gain** — a 1.2 kHz high-pass and +22.3 dB, both recorded in its entry. |
+| `buildings/mill_sfx_v01.ogg` | Pixabay, `freesound_community` | **Mill.** A cog wheel, 1415 ms from 69.295–70.710 s. Two full turns at 0.645 s. The flattest spectrum here — seven octave bands inside 5.7 dB. |
 
 ### There are no masters here, and that is a departure
 
@@ -319,9 +327,11 @@ because a dead channel and a cancelling one look alike from a distance and need 
 | --- | --- | --- |
 | both channels alive, correlation high | 2 | sum as `(L+R)/2` |
 | both alive, correlation near −1 | 2 | do **not** sum; they cancel |
+| both alive, correlation moderately negative | 2 | sum anyway if the loss buys definition — see Mill |
 | both alive, correlation near **0** | 2 | sum, but it costs **3 dB** — see below |
 | one channel dead | 2 (nominally) | take the live channel alone |
 | genuinely one channel | 1 | use as is; summing is a 6 dB cut |
+| one signal written twice | 2 (nominally) | sum or take one; both are free |
 
 **The uncorrelated case is a third behaviour, not a borderline version of the other two.**
 Devotion's master correlates at −0.0081: the channels are independent rather than opposed. Summing
@@ -329,6 +339,29 @@ two independent signals at half amplitude each loses exactly 3 dB, which is what
 it also discards the width that was the point of recording it that way. It is still worth summing
 by this set's convention, but a reading near zero should be expected to cost 3 dB rather than
 treated as an anomaly.
+
+**A negative correlation is not automatically a veto, and Mill is why that row got a
+neighbour.** Its channels correlate at −0.405 and summing costs 1.46 dB, which by the table above
+is a reason to take one channel instead. It was summed anyway. What cancels in a partial
+negative is the *diffuse* half of the field — here the wind — while a point source near the
+centre survives, so the mono sum has a **crest factor of 14.8 dB against the left channel's 12.9
+and the right's 9.9**. The cog clacks stand further above the background after summing than in
+either channel alone.
+
+The rule the table states is about protecting level, and that is usually the thing at risk. On a
+recording where the subject is a point source inside a diffuse field, level is instead what you
+spend to buy definition, and the number to look at is the crest factor rather than the peak.
+Near −1 the original advice stands: there the two channels *are* the same signal inverted and
+summing leaves nothing.
+
+**And the last row is not a stereo file at all.** `misc/many_coins` found this case first:
+two bit-identical channels, correlation 1.0000, a sum costing 0.00 dB. Pulpit's master is the
+same thing arriving by a different route — a mono source written twice and then MP3'd, so the
+channels differ by at most 3 LSB, about −80 dB, which is the decoder rounding rather than a
+recording. It gets its own row because it is the one case where the choice does not matter:
+sum it or take one channel, and the result is the same either way. The reason to recognise it
+is not the decision but the *reading* — a 0.00 dB sum would otherwise look like a measurement
+that failed, and an equality check would miss the MP3 variant entirely.
 
 ### The levels, which are the thing to protect
 
@@ -357,16 +390,16 @@ the other two at the peak, which is the band-limited 24 kHz source showing, not 
 
 ### Set 2, recovered
 
-The board's interface cues come in **sets**, and there are two. Set 1 is the Kenney montage the
+The board's interface cues come in **sets**, and there are three. Set 1 is the Kenney montage the
 board actually plays. Set 2 is `general/set2_select_sfx_v01.ogg` and
 `general/set2_confirm_sfx_v01.ogg` — ElevenLabs output, **not in use**, and with **no hover at
-all**, which the bench draws as a gap rather than hiding.
+all**, which the bench draws as a gap rather than hiding. Set 3 is below.
 
-| | set 1 (in use) | set 2 |
-| --- | --- | --- |
-| hover | 67 ms | — |
-| select | 67 ms | 2000 ms |
-| confirm | 77 ms | 2000 ms |
+| | set 1 (in use) | set 2 | set 3 |
+| --- | --- | --- | --- |
+| hover | 67 ms | — | 71 ms |
+| select | 67 ms | 2000 ms | 742 ms |
+| confirm | 77 ms | 2000 ms | 1222 ms |
 
 **Twenty-five times the length**, which makes set 2 a different idea of an interface rather than a
 longer version of this one. A two-second select on a board where selection resolves nothing until
@@ -380,6 +413,60 @@ hashing the clips embedded in an earlier standalone bench still sitting in the p
 downloads: its third and fourth clips hash identically to these two. Their provenance was then
 confirmed rather than inferred — the lesson Ordain taught, where a generic name and a missing
 source became a wrong licence that stood for weeks.
+
+### Set 3, where the select is the confirm's own tail
+
+`general/set3_hover_sfx_v01.ogg`, `general/set3_select_sfx_v01.ogg` and
+`general/set3_confirm_sfx_v01.ogg` are all cut from one Pixabay drum track, **not in use**. It is
+the only set besides the one shipping that answers all three slots — set 2 still has no hover.
+The hover was added last and only works because it is filtered; see below.
+
+What makes this set different from the other two is that its two cues are not siblings but
+**nested**. Both are cut to the same sample at 17.800 s, so the select's 742 ms are the confirm's
+*last* 742 ms, identical bar the select's own 8 ms ramp, and the confirm adds 477 ms of run-up in
+front. Selecting asks and confirming answers on the same landing.
+
+That is the proposal and it is also the risk. The bench fires a set at hover 0 ms, select 700,
+confirm 2300, so a player hears the identical 742 ms twice about a second and a half apart.
+Whether that reads as a rhyme or as a repeat is the thing to judge, and it cannot be judged slot
+by slot. **Two shorter confirms were cut and rejected** on exactly that axis: one starting a beat
+later, and one starting on the off-beat at 17.080, which was only 130 ms longer than the select
+and stopped being a separate cue at all.
+
+**The windows were chosen on the beat grid, not by duration.** The kick is regular at 0.310 s —
+193 BPM — and every cut starts on a hit. Finding that grid took band-splitting below 180 Hz: a
+plain onset detector finds almost nothing on this file, because the mix never drops far enough
+between hits for a level jump to register. Both cues also end 580 ms past the track's final beat
+and inside its own reverb, so what rings after the landing is the recording rather than a fade.
+
+### The hover is the hardest slot, and the only one with a measurable spec
+
+A hover fires on every pointer move, plays at gain **0.12** against confirm's 0.7, and must stop
+before the next one starts. `tile.ogg` has done that job unexamined since the beginning; measured,
+it turns out to be a tight specification:
+
+| | length | crest | 20 dB down in | peak below 200 Hz |
+| --- | --- | --- | --- | --- |
+| `tile.ogg` — in use | 67 ms | 17.1 dB | 16 ms | −47.9 dB |
+| set 3 hover | 71 ms | 18.2 dB | 12 ms | −101.2 dB |
+| the same window, unfiltered | 60 ms | 10.2 dB | 36 ms | **−6.7 dB** |
+
+**The last column is the one that decides it.** A hover has essentially no low end, and a drum
+track is nothing but low end — the raw window carries 41 dB more energy below 200 Hz than
+`tile.ogg` does, which is a kick on every pointer move. Crest factor and decay time say the same
+thing more gently: 10.2 dB and 36 ms against 17.1 and 16.
+
+**So set 3's hover is the tree's second filtered clip**, and the Mint test is what let it through:
+the kick is under 200 Hz, the tick is above 2 kHz, and the band between them is 7 dB down, so
+nothing worth keeping shares a band with what was removed. Filtered, it measures *better* than the
+cue in use on both transient figures.
+
+**The window was found by search rather than by ear.** All fifteen beat and off-beat positions on
+the track's 0.310 s grid were cut to 60 ms, high-passed and scored; 15.040 won outright. The
+runner-up was 17.065, which is exactly where the select opens, and was passed over to keep the
+hover from sharing material with the rest of the set. **There is no unfiltered answer anywhere in
+that file** — it runs full mix from sample 0 to its last beat, with no intro and no breakdown, so
+no window of it is free of kick.
 
 ### `misc/`, which is the one folder with no denominator
 
@@ -433,6 +520,51 @@ the space, and it is the one a tidying pass is most likely to sweep up — the w
 Both deleted records are kept at `"state": "absent"` with their `sha256`, so a re-derivation can
 be checked against the bytes that were here.
 
+### Mint, the one clip with gain — and the first of two with EQ
+
+Almost every sound here is cut, summed and encoded, nothing more. Mint is high-passed at
+1.2 kHz and lifted 22.3 dB, and both are departures from rules stated at the top of this file.
+They are recorded here rather than inside the entry alone because the next person to want an
+exception should be able to see what it cost to make this one — and one of them already has:
+set 3's hover is filtered too, on the test this section set. **Mint remains the only clip with
+gain.**
+
+**The EQ was free, and that is unusual enough to be the reason it was allowed.** The master holds
+two layers that do not overlap. A drone lives entirely in 200–600 Hz; it is running at 0.00 s
+before the chime begins and still at −61 dB at 2.20 s after the chime has stopped. The chime
+lives above 2 kHz and peaks in 9–16 kHz. Between them, 1–2 kHz is empty — 31 dB under the chime.
+So a gentle high-pass removes the drone *completely* and costs the chime **1.01 dB**. That is a
+separation, not a compromise, and the test for any future filter is the same: if the thing being
+removed and the thing being kept share a band, the answer is no.
+
+Two things fell out of it that a trim could not have given. The clip now starts from **true
+silence**, so it needs no declick and no fade in. And its tail reaches −80 dB on its own, where
+the drone had been holding the floor up at −61.
+
+**The gain was necessary rather than free, and it is the real precedent.** The cut peaks at
+−35.28 dB. The board gives every building the same gain, so at that level the file is not quiet,
+it is absent — 18 dB below Quarry, which is itself the quietest thing shipping. The options were
+to gain it, to give the board a per-clip gain it does not have, or to drop the clip.
+
+**The ungained peak is written into the record, and that is the part that matters.** This tree
+proves nothing was touched by checking the shipped peak against the master's. Applying gain
+destroys that check unless the number it *should* have matched is written down, so
+`modifications` carries −35.28 dB explicitly. A gained clip without that figure would be
+unverifiable forever.
+
+**Apply gain before quantising, not after.** The version auditioned was built the wrong way
+round — written to 16-bit at −35 dB, then multiplied — and at that level the fade tail fell under
+the least significant bit and quantised to literal zeros: 2878 of 2880 samples in one 60 ms
+window were exactly 0. Multiplying zero by 13 leaves zero. The shipped file applies the gain in
+floating point and is 15.8 dB louder in that tail, and the difference is signal rather than
+noise. Neither version is audible down there; the point is that a quiet 16-bit intermediate
+silently throws away what you are about to amplify.
+
+**What does not follow from any of this.** Nothing else gets gained because it is a bit quiet.
+Scriptorium, Devotion, Chapel, Quarry and Pulpit all sit between −11.7 and −17.2 dB and all keep
+their levels, because they can be heard — the argument here was audibility, not preference, and
+it only applied because the shortfall was 18 dB rather than 5.
+
 ### Fading a tail: length is not the variable that matters
 
 Devotion's first cut used a 150 ms fade and sounded cut off. The diagnosis is measurable: that
@@ -454,6 +586,53 @@ Same window, same length, same peak. The fade simply arranges for the unavoidabl
 happen 12 dB further down, where nothing hears it. **The rule, then: a fade must put the clip well
 under −40 dB before its final 150 ms** — and the length needed to do that depends on how loud the
 source still is at the cut point, not on any fixed figure.
+
+**And when every candidate clears the bar, measure how much of the clip is envelope.** Five
+windows were cut from the shrine bell and all five ended 30 dB or more below their own peak, so
+the rule above separated none of them. What did was the fraction of the clip being shaped: 14%
+for the longest, 37% and 40% for the two middle ones, and **73%** for the version faded in over
+its opening — nearly three quarters of that clip would have been envelope rather than recording.
+
+The reason the fraction climbs is arithmetic, not taste. The bell decays 1.56 dB per 100 ms on
+its own, so the earlier a window stops the further it still has to fall and the more of the
+ending the fade has to invent: at 2.1 s the material is 25 dB down and 300 ms finishes it; at
+1.3 s it is 11 dB down and needs 650. **Shorter is paid for in envelope**, and past about half
+the clip what you are hearing is the fade rather than the instrument.
+
+**There is also a length below which no fade is graceful, and it is set by the material.**
+Confession Box's shut is two impacts 156 ms apart with a rattle behind them, and the first
+window cut for it ran 475 ms and ended at −12.9 dB — the Devotion fault again. Lengthening it
+to 665 ms reached −45.4, but only by steepening the curve, because the rattle is still at
+−10 dB where that fade has to start. The window that works runs to 5.46 s, where the settle
+has fallen to −25 dB on its own and an ordinary fade lands it.
+
+So the question to ask of a short window is not "is the attack intact" but **"what is the
+level at the moment I have to stop"** — and that is a property of the recording, not of the
+edit. Below about 665 ms this clip had no graceful ending available at any fade setting:
+cutting at 5.06 s meant fading through the latch itself. A clip can be too short for its own
+material, and no amount of curve-shaping fixes it.
+
+**The −40 dB in that rule is absolute, and this clip showed that it should not be.** Mint's
+ungained cut peaks at −35.28 dB, so the *entire clip* is already within 5 dB of −40 and the rule
+is satisfied by doing nothing whatever. The figure only ever worked because every clip before it
+peaked somewhere near 0.
+
+Measured properly — how far a clip has fallen **below its own peak** when it stops — the shipped
+set is not uniform either:
+
+| | ends below its own peak | |
+| --- | --- | --- |
+| `tile`, `confirm`, Allocation, Stone | 0.0–0.3 dB | short cues: the whole clip *is* the last 150 ms |
+| Scriptorium, Construct Road, Grain Store | 7–11 dB | cut inside a continuing texture |
+| Chapel, Pulpit, Mint, Ordain v03, Taxation | 30–34 dB | events with a faded tail |
+| Confession Box, Produce Wheat, Construct Building | 44–48 dB | faded well into the decay |
+| Quarry, Produce Stone, Inquisition, Bank | 59–71 dB | ran down into real silence |
+
+So there is no single threshold to state, and the honest reading is narrower than the old rule
+pretended: **a clip with a tail should end 30 dB or more under its own peak, and a clip without
+one is exempt because the question does not arise.** The absolute figure stays usable as a quick
+check for anything peaking above about −10 dB, which is most of the tree, and is meaningless
+below that.
 
 **The best fade is often no fade, and the silences in a library file say where to find one.**
 Quarry's master is 63 s and reads as one long recording. It is not: it is **five separate takes**
