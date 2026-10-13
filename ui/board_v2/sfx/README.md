@@ -550,8 +550,10 @@ it. Three other clips have no inter-sample headroom left.
 **The target is −24 LUFS because that is where set 1 already sits.** `tile.ogg` measures −24.4
 and `confirm.ogg` −22.5, and that is the one interface set the board plays and nobody has
 complained about. Normalising to −24 moves those two by 0.4 and 1.5 dB, lands 36 of 38 clips
-exactly on target, and drops the spread to 5.1 dB. Of the two that fall short one misses by
+exactly on target, and drops the spread to 5.2 dB. Of the two that fall short one misses by
 0.6 dB; the other is `rock_dropping` again, 5.1 dB short because its crest factor is 28.1 dB.
+(5.2 rather than 5.1 because `gainDb` is stored to a tenth of a decibel; the unrounded trims
+would give 5.11. The shipped figure is the one the field produces.)
 A sparse transient cannot be made to match a sustained sound by gain alone, and the alternatives
 — limiting it, or re-cutting it — are decisions rather than arithmetic.
 
