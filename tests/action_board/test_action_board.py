@@ -2040,6 +2040,205 @@ def test_no_sound_claims_a_licence_its_own_source_contradicts():
         % (len(clashes), "\n  ".join(clashes)))
 
 
+def test_no_sound_record_credits_two_creators_at_once():
+    """`creator` names who made the file. One file has one, so a field naming two is wrong twice.
+
+    WRITTEN BECAUSE THREE RECORDS CARRIED "344 Audio / InMotionAudio" FOR MONTHS. They are three
+    different masters by two different people -- the Velcro rip is InMotionAudio's, the lock and
+    the books are 344 Audio's -- and the slashed string was a leftover from a pass that described
+    all three together in one sitting. It is not an ambiguity that was honestly recorded: each
+    record's own `originalPath` names the pack folder, and the pack folder names the creator, so
+    the right answer was sitting in the next field the whole time.
+
+    THE DAMAGE IS THE SAME SHAPE AS ORDAIN'S, which is why this is worth a guard rather than a
+    quiet fix. Ordain sat under the wrong creator because nobody re-read a field that looked
+    plausible. A slashed pair looks even more plausible -- it reads as careful hedging -- while
+    being strictly less true than either name alone. Hedging belongs in `source`, where Chapel's
+    genuinely disputed credit is written out in prose; it does not belong in the field other
+    things key off.
+
+    WHAT THIS CANNOT CHECK is whether a single name is the RIGHT one. It refuses the shape that
+    cannot be right under any reading, which is two names in a field defined to hold one.
+
+    THE SEPARATOR SET IS WIDER THAN IT LOOKS AND WAS WIDENED BY A MUTATION. The first version
+    required whitespace on both sides, which caught "A / B" and "A and B" and let "A, B" straight
+    through -- a comma is written tight against the name before it. Six mutations were refused and
+    the seventh passed, which is the only reason the gap was found rather than shipped.
+
+    Falsified by putting "A / B", "A and B" or "A, B" back in any creator field.
+    """
+    rec = json.loads((ROOT / "ui" / "board_v2" / "attribution.json")
+                     .read_text(encoding="utf-8"))["files"]
+    doubled = ["%s: creator %r" % (k, v.get("creator", ""))
+               for k, v in sorted(rec.items())
+               if k.startswith("sfx/") and re.search(r"(\s+(/|&|\+|\band\b)|,)\s+",
+                                                    str(v.get("creator", "")))]
+    assert not doubled, (
+        "%d sound record(s) name more than one creator; one file has one creator, and "
+        "originalPath's pack folder says which:\n  %s" % (len(doubled), "\n  ".join(doubled)))
+
+
+def test_a_sonniss_record_agrees_with_its_own_path_about_which_bundle_it_came_from():
+    """Two fields state the bundle. They are written by hand, months apart, so they can disagree.
+
+    `originalPath` carries it as a directory -- `Sonniss.com-GDC2023-GameAudioBundle3of14/...` --
+    and `licenceNote` carries it as prose, "GameAudioGDC 2023 bundle, archive 3 of 14". The path
+    is the fact, copied from disk; the note is a sentence somebody typed. When a batch of clips
+    is filed in one sitting the note gets pasted from the previous record, which is exactly how a
+    wrong year or a wrong archive number arrives.
+
+    IT IS A LIVE RISK AND NOT A HYPOTHETICAL. The bundles differ in size -- 2026 ships five
+    archives, 2024 nine, 2023 fourteen -- so "archive 3 of 14" pasted onto a 2026 clip names an
+    archive that does not exist, and the licence grant is per bundle. The README already records
+    one stale year that reached this tree by the same route.
+
+    THE FIVE OLDEST SONNISS NOTES OMITTED THE ARCHIVE ENTIRELY, saying only "GameAudioGDC 2026
+    bundle", which is why this asserts on the year unconditionally and on the archive only where
+    the note offers one. They were normalised when this test was written; the clause stays
+    conditional so that the test is about agreement rather than about phrasing.
+
+    Falsified by editing either field's year, or an archive number the note states.
+    """
+    rec = json.loads((ROOT / "ui" / "board_v2" / "attribution.json")
+                     .read_text(encoding="utf-8"))["files"]
+    bad = []
+    for key, entry in sorted(rec.items()):
+        if not key.startswith("sfx/") or entry.get("licence") != "sonniss-gameaudiogdc":
+            continue
+        path = re.search(r"GDC(\d{4})-GameAudioBundle(\d+)of(\d+)",
+                         str(entry.get("originalPath", "")))
+        if not path:
+            bad.append("%s: licence is sonniss but originalPath names no bundle -- %r"
+                       % (key, entry.get("originalPath", "")))
+            continue
+        note = str(entry.get("licenceNote", ""))
+        year = re.search(r"GameAudioGDC (\d{4})", note)
+        if not year:
+            bad.append("%s: licenceNote states no bundle year" % key)
+        elif year.group(1) != path.group(1):
+            bad.append("%s: path says GDC %s, licenceNote says %s"
+                       % (key, path.group(1), year.group(1)))
+        arc = re.search(r"archive (\d+) of (\d+)", note)
+        if arc and arc.groups() != path.groups()[1:]:
+            bad.append("%s: path says archive %s of %s, licenceNote says %s of %s"
+                       % (key, path.group(2), path.group(3), arc.group(1), arc.group(2)))
+    assert not bad, (
+        "%d Sonniss record(s) disagree with their own originalPath about the bundle:\n  %s"
+        % (len(bad), "\n  ".join(bad)))
+
+
+# WHICH FIELD ANSWERS WHICH SUPERLATIVE. `measured` carries all three numbers in prose, so the
+# claim and its evidence live in the same string and are still parsed apart -- the claim is a
+# sentence somebody wrote, the number is a reading.
+_RANKED = {"quietest": ("peak", +1), "loudest": ("peak", -1),
+           "darkest": ("centroid", +1), "brightest": ("centroid", -1),
+           "longest": ("ms", -1), "shortest": ("ms", +1)}
+_SCOPED = re.compile(r"\b(in|of|across) the (set|tree)\b", re.I)
+# A SENTENCE MAY NAME A CATEGORY AND STILL SAY "in the set", and then it is ranking inside that
+# category: "the longest duty action in the set" is not a claim about the tithe cues. The folder
+# IS the category, so the comparison narrows to it rather than the test having to be switched off.
+_FAMILY = ((r"\bduty action", "sfx/duty_actions/"), (r"\bbuilding", "sfx/buildings/"),
+           (r"\btithe", "sfx/tithe/"), (r"\bmisc\b", "sfx/misc/"),
+           (r"\binterface cue|\bgeneral set", "sfx/general/"))
+
+
+def _sound_readings(rec):
+    """peak dB, spectral centroid and length, pulled out of each present record's `measured`."""
+    out = {}
+    for key, entry in rec.items():
+        if not key.startswith("sfx/") or entry.get("state") != "present":
+            continue
+        said = entry.get("measured", "") or ""
+        got = {}
+        for name, pat in (("peak", r"peak (-?[\d.]+) *dB"),
+                          ("centroid", r"[Cc]entroid (\d+) *Hz"),
+                          ("ms", r"^(\d+) *ms")):
+            m = re.search(pat, said)
+            if m:
+                got[name] = float(m.group(1))
+        out[key] = got
+    return out
+
+
+def test_no_sound_claims_a_rank_in_the_set_that_the_set_contradicts():
+    """"The quietest clip in the set" is a claim about every OTHER file, so adding one breaks it.
+
+    THIS BUG HAS LANDED THREE TIMES AND NEVER ONCE AS A TYPO. Scriptorium was the quietest clip
+    until Devotion arrived; Devotion was the darkest until Chapel arrived; Devotion was the
+    quietest again until Quarry arrived, and Quarry's own record never mentioned taking the title
+    because the person filing it was looking at Quarry. Every one of those sentences was true when
+    written and was falsified by a file landing somewhere else in the tree. Nothing re-reads the
+    old record at that moment -- that is the whole shape of the fault.
+
+    IT IS THE SAME FAULT AS THE README'S STALE "GDC 2026", and that one was written off as
+    uncatchable because it was a claim about scope. This kind is not: a superlative scoped to the
+    set is checkable against the set, since `measured` already carries the number that decides it
+    on every record. The three readings parsed here -- peak, centroid, length -- are exactly the
+    three the prose makes rank claims about.
+
+    THE TRIGGER IS DELIBERATELY NARROW. It fires only on a sentence that says "in the set", "in
+    the tree" or "of the set", because the records are full of superlatives scoped to something
+    smaller and all of them are fine: Quarry's "the loudest of them" means of its own eight
+    stones, Chapel's "the quietest sample run before the swell" means within the clip, and
+    Inquisition's "brightest of the metallic cues" names the three cues it is ranking against.
+    Those are claims about material the record itself bounds, and widening this to catch them
+    would make it fire on sentences that cannot go stale.
+
+    A SENTENCE THAT NAMES A CATEGORY IS RANKED INSIDE IT. "The longest duty action in the set"
+    tripped the first version of this, correctly by the letter and wrongly in substance -- it is
+    true, and set2's two-second select that beat it is an interface cue. The folder is the
+    category, so naming one narrows the comparison instead of disabling the check, and the claim
+    stays guarded against the next duty action rather than being rewritten to dodge a test.
+
+    WHAT IT CANNOT CHECK, AND THIS IS A REAL HOLE: a rank claim that omits the scope phrase. The
+    trigger needs "in the set", "in the tree" or "of the set" in the sentence, so a bare "the
+    quietest building cue" slips past. That is not hypothetical either -- rewriting Scriptorium's
+    stale sentence to dodge this test produced exactly such a claim, false on the day it was
+    written, and only a mutation run caught it. The trigger stays narrow because widening it
+    fires on the many superlatives correctly scoped to a clip's own contents, but a rank sentence
+    that avoids naming its scope avoids this check and should be written with the scope in it.
+
+    IT ALSO CANNOT CHECK a rank claim made in sfx/README.md, which has the same disease and no
+    field to read. Three of the stale sentences fixed on the day this was written were there.
+
+    Falsified by writing a true superlative and then filing a clip that beats it.
+    """
+    rec = json.loads((ROOT / "ui" / "board_v2" / "attribution.json")
+                     .read_text(encoding="utf-8"))["files"]
+    reading = _sound_readings(rec)
+    wrong = []
+    for key, entry in sorted(rec.items()):
+        if key not in reading:
+            continue
+        blob = " ".join(str(entry.get(f, "")) for f in ("measured", "modifications", "role"))
+        for sentence in re.split(r"(?<=[.;])\s+", blob):
+            if not _SCOPED.search(sentence):
+                continue
+            for word, (metric, sign) in _RANKED.items():
+                if not re.search(r"\b%s\b" % word, sentence, re.I):
+                    continue
+                mine = reading[key].get(metric)
+                if mine is None:
+                    wrong.append("%s: claims %r but its own record states no %s"
+                                 % (key, word, metric))
+                    continue
+                within = ""
+                for pat, folder in _FAMILY:
+                    if re.search(pat, sentence, re.I):
+                        within = folder
+                        break
+                beaten = [(o, r[metric]) for o, r in reading.items()
+                          if o != key and metric in r and o.startswith(within)
+                          and (r[metric] < mine if sign > 0 else r[metric] > mine)]
+                if beaten:
+                    o, val = sorted(beaten, key=lambda kv: kv[1] * sign)[0]
+                    wrong.append("%s: claims %r %s but %s is %s (%s vs %s)"
+                                 % (key, word, metric, o, word, val, mine))
+    assert not wrong, (
+        "%d rank claim(s) scoped to the whole set are no longer true -- a later clip beat them "
+        "and nobody re-read the older record:\n  %s" % (len(wrong), "\n  ".join(sorted(set(wrong)))))
+
+
 def test_the_ribbon_holds_still_and_a_tile_that_moves_is_refused():
     """The tiles do not move. Not on hover, not on selection, not at all.
 
