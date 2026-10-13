@@ -87,7 +87,12 @@ def probe(path: pathlib.Path, entry: dict) -> dict:
     if facts["ms"] == 0 and m:
         facts["ms"] = int(m.group(1))
     pk = re.search(r"peak\s*([-\d.]+)\s*dB", entry.get("measured", "") or "")
+    # THE PLAYBACK TRIM COMES FROM THE RECORD, NOT FROM THE AUDIO. sfx_levels.py measures
+    # loudness and writes `gainDb`; this script still touches no decoder. A clip without the
+    # field is drawn at 0 dB rather than guessed at, which is how a newly filed clip announces
+    # that nobody has measured it yet.
     facts.update(peak=pk.group(1) if pk else None, mean=None,
+                 gainDb=entry.get("gainDb"),
                  bytes=path.stat().st_size,
                  src="data:%s;base64,%s" % (MIME.get(path.suffix.lower(), "audio/ogg"),
                                             base64.b64encode(path.read_bytes()).decode("ascii")))
@@ -232,7 +237,7 @@ def main() -> int:
     tmpl = (LAB / "sound_bench.html.tmpl").read_text(encoding="utf-8")
     page = tmpl.replace("__DATA__", json.dumps(
         {"sets": sets, "tithe": tithe, "duties": duties, "buildings": builds,
-         "misc": misc}))
+         "misc": misc, "targetLufs": -24.0}))
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(page, encoding="utf-8")
 
@@ -244,6 +249,15 @@ def main() -> int:
     print("  buildings %d of %d" % (have(builds), len(builds)))
     # NO "n of m" HERE: misc has no denominator, so a count is the only honest line.
     print("  misc      %d kept, unassigned" % len(misc))
+    drawn = [c for c in ([s for st in sets for _, s, _ in st["slots"]]
+                         + [t["clip"] for t in tithe]
+                         + [a["clip"] for d in duties for a in d["actions"]]
+                         + [b["clip"] for b in builds] + misc) if c]
+    unmeasured = [c["file"] for c in drawn if c.get("gainDb") is None]
+    print("  levelled  %d of %d drawn clips carry a gainDb" % (len(drawn) - len(unmeasured),
+                                                               len(drawn)))
+    for f in unmeasured:
+        print("  NOTE: %s has no gainDb -- run sfx_lab/sfx_levels.py" % f)
     for n in notes:
         print("  NOTE:", n)
     if args.open:

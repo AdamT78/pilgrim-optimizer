@@ -2325,6 +2325,56 @@ def test_a_sound_record_describes_the_file_that_is_actually_there():
         % (len(off), "\n  ".join(off)))
 
 
+def test_every_sound_carries_a_measured_playback_trim():
+    """`gainDb` is how loud the board plays a clip, and it must exist and must be measured.
+
+    THE SET WAS LEVELLED BY PEAK FOR A YEAR AND PEAK IS NOT LOUDNESS. misc/rock_dropping peaks
+    at -4.0 dBFS, an ordinary-looking level, and is the third quietest thing in the tree at
+    -32.1 LUFS: it is a sparse transient, so the peak is the impact and the ear hears the air.
+    Chapel and Silversmith share a tile and their records called them 16.1 dB apart by peak;
+    by loudness they are 26.1. Across the set, 31.9 dB of loudness was hiding inside 17.1 dB
+    of peak.
+
+    SO THE LEVEL LIVES IN A FIELD. sfx_lab/sfx_levels.py measures the loudest 200 ms of
+    K-weighted energy and writes the trim that brings each clip to -24 LUFS, clamped so true
+    peak cannot pass -1 dBTP. The audio is never touched, which is what keeps every file
+    verifiable against its master -- the check that has caught three filing errors.
+
+    THE FIRST HALF OF THIS TEST NEEDS NO DECODER and is the half that will actually fire: a
+    clip filed without being measured is the easy mistake, and the bench already prints a NOTE
+    for one. The second half re-measures and is skipped where ffmpeg is absent, which includes
+    the Mac this repo is usually edited on.
+
+    Falsified by filing a clip without running sfx_levels.py, or by hand-editing a gainDb.
+    """
+    rec = json.loads((ROOT / "ui" / "board_v2" / "attribution.json")
+                     .read_text(encoding="utf-8"))["files"]
+    sounds = [k for k, v in sorted(rec.items())
+              if k.startswith("sfx/") and v.get("state") == "present" and k.endswith(".ogg")]
+    missing = [k for k in sounds if not isinstance(rec[k].get("gainDb"), (int, float))]
+    assert not missing, (
+        "%d sound(s) have no measured gainDb; run ui/board_v2/sfx_lab/sfx_levels.py:\n  %s"
+        % (len(missing), "\n  ".join(missing)))
+
+    if shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None:
+        pytest.skip("ffmpeg/ffprobe not on PATH; the re-measurement half needs a decoder")
+
+    spec = importlib.util.spec_from_file_location(
+        "sfx_levels", ROOT / "ui" / "board_v2" / "sfx_lab" / "sfx_levels.py")
+    levels = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(levels)
+
+    drifted = []
+    for key in sounds:
+        want = levels.gain_for(levels.profile(ROOT / "ui" / "board_v2" / key))
+        got = float(rec[key]["gainDb"])
+        if abs(want - got) > 0.5:
+            drifted.append("%s: record says %+.1f dB, re-measures %+.1f" % (key, got, want))
+    assert not drifted, (
+        "%d gainDb value(s) no longer match the audio they describe:\n  %s"
+        % (len(drifted), "\n  ".join(drifted)))
+
+
 def test_the_ribbon_holds_still_and_a_tile_that_moves_is_refused():
     """The tiles do not move. Not on hover, not on selection, not at all.
 
