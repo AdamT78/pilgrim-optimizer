@@ -520,6 +520,60 @@ the space, and it is the one a tidying pass is most likely to sweep up — the w
 Both deleted records are kept at `"state": "absent"` with their `sha256`, so a re-derivation can
 be checked against the bytes that were here.
 
+### Levelling: peak was the wrong number, and `gainDb` is the fix
+
+This set was levelled by peak from the beginning, and **peak does not measure loudness**.
+Measured properly, **31.9 dB of loudness variation was hiding inside 17.1 dB of peak
+variation**, which is why the ear kept disagreeing with the figures in these records.
+
+The clearest case is not one of the obviously quiet clips. `misc/rock_dropping` peaks at
+−4.0 dBFS — louder at the peak than Bank, Brewery or Grain Store, nothing in its entry
+suggesting a problem — and measures **−32.1 LUFS**, third quietest in the tree, within 2 dB of
+Chapel. It is a rock landing and then air: peak sees the impact, the ear integrates the air.
+And the Chapel/Silversmith tile, recorded here as 16.1 dB apart by peak, is **26.1 dB apart**
+by loudness. The recorded figure understated it by ten decibels.
+
+**The measure is M200**: the loudest 200 ms of K-weighted energy, ITU-R BS.1770-4 weighting,
+ungated. Each of those choices changes the answer, and `sfx_lab/sfx_levels.py` carries the
+reasoning in full — the weighting coefficients are re-derived at each file's own rate because a
+quarter of this tree is 24 or 96 kHz; gating is off because BS.1770's relative gate can discard
+a 70 ms cue; and the window is 200 ms rather than the standard's 400 because 400 is a programme
+measure that over-penalises short cues by about 3 dB. A clip shorter than the window is
+zero-padded deliberately, which applies the ear's own temporal integration rather than working
+around it.
+
+**The ceiling is true peak, and finding it found a live bug.**
+`duty_actions/ordination_actionA_sfx_v03.ogg` reads −0.1 dBFS and measures **+0.75 dBTP** — it
+is over full scale and clips on playback today. Sample-peak measurement could not have found
+it. Three other clips have no inter-sample headroom left.
+
+**The target is −24 LUFS because that is where set 1 already sits.** `tile.ogg` measures −24.4
+and `confirm.ogg` −22.5, and that is the one interface set the board plays and nobody has
+complained about. Normalising to −24 moves those two by 0.4 and 1.5 dB, lands 36 of 38 clips
+exactly on target, and drops the spread to 5.2 dB. Of the two that fall short one misses by
+0.6 dB; the other is `rock_dropping` again, 5.1 dB short because its crest factor is 28.1 dB.
+(5.2 rather than 5.1 because `gainDb` is stored to a tenth of a decibel; the unrounded trims
+would give 5.11. The shipped figure is the one the field produces.)
+A sparse transient cannot be made to match a sustained sound by gain alone, and the alternatives
+— limiting it, or re-cutting it — are decisions rather than arithmetic.
+
+**It is a field, not a re-render.** Writing gain into the audio would destroy the check this
+tree leans on hardest, that a shipped clip's peak matches its master's. `gainDb` in
+`attribution.json` keeps every byte verifiable, keeps one owner per fact — the file owns the
+audio, the record owns the playback level — and is reversible.
+
+**And it makes the board's own gains mean what they say.** The board applies
+`SFX_GAIN = {hover: 0.12, select: 0.5, confirm: 0.7}` at playback, and set 1 works *because*
+its two files are near-matched and that gain does the role balance. Set 3 bakes 12.5 dB of
+hover-to-confirm imbalance into its files and then gets the role gain on top. Normalising every
+file to one loudness and leaving the balance to `SFX_GAIN` removes the double accounting.
+
+**Still to do.** The bench applies `gainDb`; the board does not yet, and today that would change
+only `tile.ogg` by +0.4 dB and `confirm.ogg` by −1.5, since those are the only two clips it
+plays. Mint keeps its +22.3 dB baked in — the field is measured from the file as it stands, so
+nothing double-counts, but re-cutting it ungained and moving that number into `gainDb` would
+retire the one gain exception in the tree.
+
 ### Mint, the one clip with gain — and the first of two with EQ
 
 Almost every sound here is cut, summed and encoded, nothing more. Mint is high-passed at
