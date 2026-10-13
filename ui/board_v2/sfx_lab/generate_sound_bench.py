@@ -193,6 +193,20 @@ def main() -> int:
          "slots": [("hover", None, gains.get("hover", .12)),
                    ("select", newest("general", "set2_select"), gains.get("select", .5)),
                    ("confirm", newest("general", "set2_confirm"), gains.get("confirm", .7))]},
+        {"id": "v3", "name": "Drum figure", "chosen": False,
+         # THE SELECT IS THE CONFIRM'S OWN TAIL, which no other set does and which is the whole
+         # idea rather than an economy. Both are cut to the same sample at 17.800 s of one
+         # recording, so the select is literally the confirm's last 742 ms and the confirm adds
+         # 477 ms of run-up in front of it. Selecting asks and confirming answers with the same
+         # landing. It is also the risk: play them 1.6 s apart, as the board does, and a listener
+         # hears the identical 742 ms twice.
+         "note": "cut from one Pixabay drum track on its own beat grid; the select is the "
+                 "confirm's last 742 ms, so the pair resolves onto the same landing. THE ONLY "
+                 "COMPLETE SET BESIDES THE ONE IN USE -- its hover is a filtered tick, because "
+                 "no window of this track is a hover until the kick is taken out of it",
+         "slots": [("hover", newest("general", "set3_hover"), gains.get("hover", .12)),
+                   ("select", newest("general", "set3_select"), gains.get("select", .5)),
+                   ("confirm", newest("general", "set3_confirm"), gains.get("confirm", .7))]},
     ]
     tithe = [{"name": n, "clip": newest("tithe", k)}
              for k, n in (("wheat", "Wheat"), ("stone", "Stone"), ("silver", "Silver"))]

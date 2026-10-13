@@ -10,8 +10,10 @@ import json
 import math
 import pathlib
 import re
+import shutil
 import sys
 
+import numpy as np
 import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -2237,6 +2239,90 @@ def test_no_sound_claims_a_rank_in_the_set_that_the_set_contradicts():
     assert not wrong, (
         "%d rank claim(s) scoped to the whole set are no longer true -- a later clip beat them "
         "and nobody re-read the older record:\n  %s" % (len(wrong), "\n  ".join(sorted(set(wrong)))))
+
+
+def test_a_sound_record_describes_the_file_that_is_actually_there():
+    """`measured` opens with a length and a peak. They should describe the bytes beside them.
+
+    THE POINT IS NOT PRECISION, IT IS IDENTITY. A record is the only thing saying what a clip is;
+    if it drifts far enough from the file it stops describing it at all, and the way that happens
+    is a re-cut landing on disk while the entry keeps the old numbers. This refuses a record whose
+    figures belong to a different take.
+
+    THE TOLERANCES ARE WIDE ON PURPOSE AND EACH ONE IS A MEASUREMENT FACT, not slack. Three of
+    them were found by running this check and getting four false alarms before it was written:
+
+    DECODE AT THE FILE'S OWN RATE. Resampling an Ogg to a common rate before measuring moves the
+    peak, and not slightly: Inquisition is 96 kHz, and read at 48 it measures -5.61 dB against
+    its true -3.66, because the resampler discards the content that was making the peak. The
+    first version of this check resampled everything to 48 kHz and reported Inquisition as 1.95 dB
+    out. The record was right and the check was wrong.
+
+    FLOAT AND int16 DISAGREE BY UP TO ~0.3 dB. Vorbis decodes to float and overshoots on sharp
+    transients -- already recorded in Construct Building's entry -- so a float read of Taxation,
+    mechanism_one_cycle or Scriptorium comes back 0.30 dB above the int16 read their records were
+    taken from. Neither is wrong; they are different questions.
+
+    VORBIS PADS, AND OLD ENTRIES STATE THE SOURCE SPAN. The encoder returns a few milliseconds
+    more than it was given, so the older records read about 3 ms short, and two of them -- Silver
+    v02 and the Wheat tithe -- state the span that was cut rather than the length that decodes,
+    putting them 18 and 11 ms out. Newer entries state the decoded length. Both conventions are in
+    the tree and neither is being rewritten.
+
+    So the bar is 0.5 dB and 25 ms: loose enough that every convention in use passes, tight enough
+    that a record pointing at the wrong take cannot.
+
+    Falsified by editing a length or peak in attribution.json beyond those margins.
+    """
+    import subprocess
+
+    root = ROOT / "ui" / "board_v2"
+    rec = json.loads((root / "attribution.json").read_text(encoding="utf-8"))["files"]
+
+    def native(path):
+        """The clip at its own sample rate, decoded to float -- see the docstring for why both."""
+        info = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "stream=sample_rate,channels",
+             "-of", "csv=p=0", str(path)], capture_output=True, text=True).stdout.strip()
+        rate, chans = (int(x) for x in info.split(",")[:2])
+        raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(path),
+                              "-f", "f32le", "-acodec", "pcm_f32le", "-"],
+                             capture_output=True).stdout
+        samples = np.frombuffer(raw, dtype=np.float32).astype(float)
+        if chans > 1:
+            samples = samples.reshape(-1, chans).mean(axis=1)
+        return samples, rate
+
+    if shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None:
+        pytest.skip("ffmpeg/ffprobe not on PATH; this check needs a decoder")
+
+    off = []
+    for key, entry in sorted(rec.items()):
+        if not key.startswith("sfx/") or entry.get("state") != "present":
+            continue
+        if not key.endswith(".ogg"):
+            continue
+        said = entry.get("measured", "") or ""
+        want_ms = re.match(r"(\d+) *ms", said)
+        want_pk = re.search(r"peak (-?[\d.]+) *dB", said)
+        if not (want_ms or want_pk):
+            continue
+        a, rate = native(root / key)
+        if a.size == 0:
+            off.append("%s: decoded to nothing" % key)
+            continue
+        got_ms = round(1000 * a.size / rate)
+        got_pk = 20 * math.log10(max(float(np.abs(a).max()), 1e-12))
+        if want_ms and abs(int(want_ms.group(1)) - got_ms) > 25:
+            off.append("%s: record says %s ms, the file is %d"
+                       % (key, want_ms.group(1), got_ms))
+        if want_pk and abs(float(want_pk.group(1)) - got_pk) > 0.5:
+            off.append("%s: record says peak %s dB, the file is %.2f"
+                       % (key, want_pk.group(1), got_pk))
+
+    assert not off, (
+        "%d record(s) state figures that do not describe the file beside them:\n  %s"
+        % (len(off), "\n  ".join(off)))
 
 
 def test_the_ribbon_holds_still_and_a_tile_that_moves_is_refused():
