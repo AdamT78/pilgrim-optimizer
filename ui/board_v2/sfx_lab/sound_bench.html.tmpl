@@ -62,35 +62,22 @@ input[type=range]{width:104px;accent-color:var(--gold)}
 the tree, so it cannot disagree with what ships.</p>
 <div class=lvl>
   <button id=lvlBtn aria-pressed="false">levelling: off</button>
-  <span class=lvlnote id=lvlNote>playing every clip at its slider value, which is how the set
-  sounds today &mdash; 31.9 dB of loudness between the quietest and the loudest.</span>
+  <span class=g>monitor <input type=range id=monitor min=-12 max=18 step=1 value=0>
+    <span id=monv>0 dB</span></span>
+  <span class=lvlnote id=lvlNote>every clip at its slider value, which is how the set sounds
+  today &mdash; 31.9 dB of loudness between the quietest and the loudest.</span>
 </div>
 <div id=body></div>
 <div class=warn><b>Levelling, not normalising.</b> These clips keep their natural levels because
 what makes a set work is how loud they are <em>relative to each other</em>. Match a new clip by
 ear against the ones here; never peak-normalise one on its own.</div>
 <script>
-var D = __DATA__, A = [], CL = [], cur = null, curBtn = null;
-var LEVELLED = false, MAXLIFT = 0;
+var D = __DATA__, CL = [];
+var LEVELLED = false, MONITOR = 1;
 
 function esc(s){ return String(s == null ? "" : s)
   .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
 
-// THE TRIM IS SHOWN AS A NUMBER AND APPLIED AS A RATIO, and the ratio is not the number.
-// HTML Audio.volume stops at 1, so a clip wanting +12.3 dB cannot simply be turned up.
-// Levelled mode therefore anchors on whichever clip needs the MOST lift: every clip is set
-// relative to that one, so the loudest trim lands at the slider value and everything else
-// comes down to meet it. The relative result is exact -- all 38 end up equally loud -- and
-// only the monitoring level is lower, which is what the slider is for.
-function maxLift(){
-  var m = 0;
-  CL.forEach(function(c){ if (c.gainDb != null && c.gainDb > m) m = c.gainDb; });
-  return m;
-}
-function volumeOf(c){
-  if (!LEVELLED || c.gainDb == null) return c.gain;
-  return c.gain * Math.pow(10, (c.gainDb - MAXLIFT) / 20);
-}
 function card(c, label, gain, seq, cue){
   var i = CL.length; CL.push({src: c.src, gain: gain, seq: seq, cue: cue, gainDb: c.gainDb});
   // THE MEAN IS OPTIONAL. It comes from the record and the record does not always carry one;
@@ -183,49 +170,87 @@ if (D.misc && D.misc.length){
 }
 document.getElementById("body").innerHTML = h.join("");
 
-MAXLIFT = maxLift();
-CL.forEach(function(c){ var a = new Audio(c.src); a.volume = volumeOf(c); A.push(a); });
+// PLAYBACK IS WEBAUDIO, NOT <audio>, AND THE FIRST VERSION OF THIS PAGE GOT IT WRONG.
+// HTML Audio.volume is hard-capped at 1, so a clip wanting +12.3 dB could not be turned up
+// and "levelled" could only mean turning everything DOWN to meet the quietest -- which cost
+// the median clip 15.9 dB and made the whole idea sound like a regression. A GainNode has no
+// such cap. The board already plays this way; the bench now matches it.
+//
+// NOTHING CAN CLIP: sfx_levels.py clamps every gainDb so the clip's true peak lands at or
+// under -1 dBTP, and the slider sits below unity on top of that.
+var AC = null, BUF = [], ready = false, playing = null, srcNode = null;
 
-// THE A/B IS THE POINT OF THIS PAGE NOW. Off is how the set sounds today; on is what the
-// gainDb fields in attribution.json would do. Nothing here changes a file.
+function prepare(){
+  if (AC) return Promise.resolve();
+  var C = window.AudioContext || window.webkitAudioContext;
+  if (!C) return Promise.reject();
+  AC = new C();
+  return Promise.all(CL.map(function(c, i){
+    var raw = atob(c.src.split(",")[1]);
+    var b = new Uint8Array(raw.length);
+    for (var k = 0; k < raw.length; k++) b[k] = raw.charCodeAt(k);
+    return AC.decodeAudioData(b.buffer).then(function(buf){ BUF[i] = buf; },
+                                             function(){ BUF[i] = null; });
+  })).then(function(){ ready = true; });
+}
+function gainOf(i){
+  var c = CL[i];
+  var g = c.gain * MONITOR;
+  if (LEVELLED && c.gainDb != null) g *= Math.pow(10, c.gainDb / 20);
+  return g;
+}
+function stop(){
+  if (srcNode){ try { srcNode.stop(); } catch (e) {} srcNode = null; }
+  if (playing !== null){
+    var b = document.querySelector('button.play[data-i="' + playing + '"]');
+    if (b){ b.classList.remove("on"); b.textContent = "play"; }
+    playing = null;
+  }
+}
+function fire(i, onend){
+  if (!ready || !BUF[i]) return;
+  if (AC.state === "suspended") AC.resume();
+  var s = AC.createBufferSource(), g = AC.createGain();
+  s.buffer = BUF[i]; g.gain.value = gainOf(i);
+  s.connect(g); g.connect(AC.destination); s.start();
+  if (onend) s.onended = onend;
+  return s;
+}
+
+
 document.getElementById("lvlBtn").addEventListener("click", function(){
   LEVELLED = !LEVELLED;
   this.setAttribute("aria-pressed", String(LEVELLED));
   this.textContent = "levelling: " + (LEVELLED ? "on" : "off");
   document.getElementById("lvlNote").innerHTML = LEVELLED
-    ? 'every clip trimmed to <b>' + D.targetLufs.toFixed(0) + ' LUFS</b>. Anchored on the '
-      + 'biggest lift (+' + MAXLIFT.toFixed(1) + ' dB) because browser volume stops at 1, so '
-      + 'the whole page is quieter &mdash; raise your output, the point is that they now match.'
-    : 'playing every clip at its slider value, which is how the set sounds today &mdash; '
-      + '31.9 dB of loudness between the quietest and the loudest.';
-  CL.forEach(function(c, i){
-    A[i].volume = Math.max(0, Math.min(1, volumeOf(c)));
-    var r = document.querySelector('input[type=range][data-i="' + i + '"]');
-    var g = document.getElementById("gv" + i);
-    if (r) r.value = A[i].volume.toFixed(2);
-    if (g) g.textContent = A[i].volume.toFixed(2);
-  });
+    ? 'every clip trimmed to <b>' + D.targetLufs.toFixed(0) + ' LUFS</b> by its own gainDb. '
+      + 'Quiet clips go UP, loud ones come down; the median clip moves about 3.6 dB quieter '
+      + 'because most of the set was running hot. Use the monitor control to match levels '
+      + 'before judging.'
+    : 'every clip at its slider value, which is how the set sounds today &mdash; 31.9 dB of '
+      + 'loudness between the quietest and the loudest.';
 });
-function stop(){
-  if (cur !== null){ A[cur].pause(); A[cur].currentTime = 0;
-    var b = document.querySelector('button.play[data-i="' + cur + '"]');
-    if (b){ b.classList.remove("on"); b.textContent = "play"; } cur = null; }
-}
+
+var mon = document.getElementById("monitor");
+mon.addEventListener("input", function(){
+  MONITOR = Math.pow(10, (+mon.value) / 20);
+  document.getElementById("monv").textContent = (+mon.value > 0 ? "+" : "") + (+mon.value) + " dB";
+});
+
 document.querySelectorAll("button.play").forEach(function(b){
   b.addEventListener("click", function(){
-    var i = +b.dataset.i, again = (cur === i);
+    var i = +b.dataset.i, again = (playing === i);
     stop(); if (again) return;
-    cur = i; b.classList.add("on"); b.textContent = "stop";
-    A[i].currentTime = 0; A[i].play(); A[i].onended = stop;
+    prepare().then(function(){
+      playing = i; b.classList.add("on"); b.textContent = "stop";
+      srcNode = fire(i, function(){ if (playing === i) stop(); });
+    });
   });
 });
-document.querySelectorAll('input[type=range]').forEach(function(r){
+document.querySelectorAll('input[type=range][data-i]').forEach(function(r){
   r.addEventListener("input", function(){
     var i = +r.dataset.i;
-    A[i].volume = +r.value;
-    CL[i].gain = LEVELLED && CL[i].gainDb != null
-      ? (+r.value) / Math.pow(10, (CL[i].gainDb - MAXLIFT) / 20)   // keep the base coherent
-      : +r.value;
+    CL[i].gain = +r.value;
     document.getElementById("gv" + i).textContent = (+r.value).toFixed(2);
   });
 });
@@ -233,11 +258,14 @@ document.querySelectorAll('input[type=range]').forEach(function(r){
 // interaction rather than a metronome: you brush a tile, you choose it, you think, you commit.
 var ORDER = {hover: 0, select: 700, confirm: 2300}, pending = [];
 document.querySelectorAll("button.seq").forEach(function(b){
+  var set = b.dataset.set;
   b.addEventListener("click", function(){
     pending.forEach(clearTimeout); pending = []; stop();
-    CL.forEach(function(c, i){
-      if (c.seq !== b.dataset.set || !(c.cue in ORDER)) return;
-      pending.push(setTimeout(function(){ A[i].currentTime = 0; A[i].play(); }, ORDER[c.cue]));
+    prepare().then(function(){
+      CL.forEach(function(c, i){
+        if (c.seq !== set || !(c.cue in ORDER)) return;
+        pending.push(setTimeout(function(){ fire(i); }, ORDER[c.cue]));
+      });
     });
   });
 });
