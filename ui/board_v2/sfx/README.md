@@ -81,10 +81,20 @@ Gains live in the template, on the clips' natural levels: hover 0.12, select 0.5
 
 The interface cues above are the whole of what the board plays today. What follows is the set
 being gathered for the rest of it: one clip per duty action, per tithe resource and per building.
-Most of it is **Sonniss GameAudioGDC 2026** material — royalty-free for personal and commercial
-game use, modification and unlimited projects, with no attribution required. The per-file entry in
+Most of it is **Sonniss GameAudioGDC** material — royalty-free for personal and commercial game
+use, modification and unlimited projects, with no attribution required. The per-file entry in
 `../attribution.json` still names the bundle and pack, because where a thing came from is a
 separate question from whether credit is owed.
+
+**Which GDC bundle is a per-file fact, not a property of the set, and this paragraph used to get
+it wrong.** It read "Sonniss GameAudioGDC **2026**" while Brewery and Stone were being added from
+the **2024** archive — the records had the year right in both `licenceNote` and `originalPath`,
+and the prose here restated it and went stale the moment the set stopped being uniform. The year
+is no longer named in this paragraph at all. It lives in each record and in the per-file table
+below, which has one owner each; the licence entry in `attribution.json` is deliberately
+year-agnostic, since the terms are the same across bundles and only the contents differ. Sonniss
+ships a different set of packs each year under separate archives, so `originalPath` naming the
+year is what makes a source findable again.
 
 **Two are not, and the difference is a condition rather than a credit.** Silver and Silversmith
 come from **Pixabay**, under the Pixabay Content License: commercial use and modification
@@ -104,14 +114,19 @@ unless that is turned off, so the clip is not exclusive to this project.
 | file | from | what it is |
 | --- | --- | --- |
 | `duty_actions/ordination_actionA_sfx_v03.ogg` | ElevenLabs, `Sharp_metallic_sciss_#1-1791837288330.wav` | **Ordain.** Three snips at 210, 616 and 1282 ms, cut to 1550 ms. No MP3 anywhere in the chain. |
-| `duty_actions/ordination_actionA_sfx_v02.ogg` | ElevenLabs, same WAV | *Superseded by v03, kept.* The full 2000 ms, of which the last ~470 were silence. |
-| `duty_actions/ordination_actionA_sfx_v01.ogg` | ElevenLabs, `scissor_1.mp3` | *Superseded, kept.* Five events, two strong snips 526 ms apart. |
 | `duty_actions/allocation_actionA_sfx_v01.ogg` | 344 Audio, *Antique Small Metals* | **Allocation.** The first 300 ms of *Tinkering Antique Lock*: two clicks at 12 and 172 ms, a settle at 236, quiet by 278. Allocation has one action, and this is two clicks and done. |
 | `duty_actions/clerical_actionB_sfx_v01.ogg` | Pixabay, `freesound_community` | **Silversmith.** *bing1*, a struck bell, 758 ms. Unedited but for the container — and the master is already mono, so it is *not* summed. |
+| `duty_actions/produce_actionB_sfx_v02.ogg` | Bluezone, *Annihilation — Mech* (GDC **2023**) | **Produce Stone.** *annihilation_debris_falling_rock_001*, 1800 ms, as is. A cascade rather than one impact. The longest and heaviest clip in the set. |
+| `misc/rock_dropping_sfx_v01.ogg` | Sonic Bat, *Videogame Foley Essentials Vol. II* (GDC **2024**) | *Was Produce Stone, now unassigned.* *Medium Rock Dropping 011*, 599 ms. Impact at 4 ms. Moved, not re-cut. |
+| `misc/shears_sfx_v01.ogg` | ElevenLabs, `scissor_1.mp3` | *Was the first Ordain cue, now unassigned.* Five events, two strong snips 526 ms apart. The one file here nothing can re-fetch. |
+| `duty_actions/construct_actionA_sfx_v01.ogg` | 344 Audio, *Nuts And Bolts* (GDC **2023**) | **Construct Building.** Two hammer blows on a chisel at 20 and 376 ms, cut from a 21.9 s take of 56 strikes. Mono master, not summed. |
+| `duty_actions/construct_actionB_sfx_v01.ogg` | Pixabay, `freesound_community` | **Construct Road.** *brick-dropped-on-other-bricks*, 224 ms cut from 3480. Touch, drop, bounce. Left channel only — the right one is dead. |
 | `tithe/wheat_sfx_v01.ogg` | InMotionAudio, *Velcro* | **Wheat.** *VelcroRip29*, unedited but for the container. |
 | `tithe/silver_sfx_v02.ogg` | Pixabay, `freesound_community` | **Silver.** *coins-falling-013*, head trimmed to 425 ms so it speaks at once. |
-| `tithe/silver_sfx_v01.ogg` | Pixabay, `freesound_community` | *Superseded by v02, kept.* The full 720 ms, with 299 ms of silence on the front. |
+| `tithe/stone_sfx_v01.ogg` | Bluezone, *Stone Impact* (GDC **2024**) | **Stone.** The first 560 ms of *stone_impact_041* — the impact and the stones that follow it. No fade-in; the master starts at exactly zero. |
 | `buildings/library_sfx_v01.ogg` | 344 Audio, *Antiques — Books* | **Library.** One second of *Pile Of Antique Books Falling Over 8* from 0.806 s. |
+| `buildings/brewery_sfx_v01.ogg` | Eiravaein Works, *Flask* (GDC **2024**) | **Brewery.** A glass bottle uncorked — squeak, pop, slosh, settle. 70–920 ms of the master, head and tail trimmed, nothing else. |
+| `buildings/bank_sfx_v01.ogg` | Pixabay, `universfield` | **Bank.** *coin-drop*, 1296 ms, as is. Stereo master, correctly summed. The set's second coin sound; see below. |
 
 ### There are no masters here, and that is a departure
 
@@ -252,15 +267,166 @@ already mono, where `0.5*c0 + 0.5*c1` with no second channel means `0.5*c0` — 
 that looks like nothing in a waveform and sounds like the clip losing its nerve. Caught by
 comparing the shipped peak against the source's.
 
+**It has since tried to happen three more times**, and every time the check caught it rather than
+the ear. Silversmith's `bing1`, Brewery's flask and Produce Stone's rock are all mono downloads;
+run through the downmix they read −6.3, −10.4 and −10.0 dB against true peaks of −0.3, −4.4 and
+−4.0. The habit that works is to probe the channels *before* converting — `ffprobe` for the
+channel count, and the left/right correlation to confirm a stereo file is safe to sum — rather
+than to apply one filter chain to everything and inspect afterwards. The sources here are split
+almost evenly between mono and stereo, so neither default is right, and the mono ones give no
+sign of the mistake: a 6 dB drop looks like nothing in a waveform.
+
+**The cheap confirmation is the peak.** A clip that was meant to pass through unedited should come
+back with the master's peak to within the codec's own tenth of a decibel. Where it does not, either
+a downmix or a gain happened that was not intended, and the number says which.
+
+**And the channel count is not enough, which Construct Road proved.** Its master *declares* stereo
+and is not one: left peaks at −0.5 dB, right at −73.6, and the two correlate at −0.0004. Summed,
+it would have come out at −6.5 dB — the identical 6 dB loss, wearing a disguise that `ffprobe
+channels=2` walks straight past. The file wants its **left channel alone**.
+
+So the check that actually works is three numbers, not one: the channel count, then **each
+channel's own peak**, then the correlation between them. One channel 70 dB under the other means
+take the live one; a correlation near zero on a file that claims stereo means the same. A single
+summary figure is not enough — the loss heuristic used here first called this file *safe to sum*,
+because a dead channel and a cancelling one look alike from a distance and need opposite handling.
+
+| | channels | what to do |
+| --- | --- | --- |
+| both channels alive, correlation high | 2 | sum as `(L+R)/2` |
+| both alive, correlation near −1 | 2 | do **not** sum; they cancel |
+| one channel dead | 2 (nominally) | take the live channel alone |
+| genuinely one channel | 1 | use as is; summing is a 6 dB cut |
+
 ### The levels, which are the thing to protect
 
 | | peak | mean |
 | --- | --- | --- |
 | `tile.ogg` · `confirm.ogg` | −2.4 · −1.3 dB | |
-| Ordain · Allocation · Library | −2.8 · −2.2 · −2.3 dB | |
+| Ordain · Allocation · Library | −0.1 · −2.2 · −2.3 dB | |
 | Wheat | −0.2 dB | |
 | Silversmith | −0.3 dB | −12.7 dB |
-| Silver | −7.9 dB | −33.2 dB |
+| Silver | −7.9 dB | −31.1 dB |
+| Brewery | −4.3 dB | −20.5 dB |
+| Stone | −1.4 dB | −21.9 dB |
+
+**The three tithe cues, which are the one group meant to be told apart from each other:**
+
+| | length | peak | centroid |
+| --- | --- | --- | --- |
+| Wheat — velcro rip | 417 ms | −0.2 dB | 8878 Hz |
+| Silver — coins falling | 443 ms | −7.9 dB | 7091 Hz |
+| Stone — rubble landing | 559 ms | −1.4 dB | 6226 Hz |
+
+Stone is the darkest, which is the right direction. But Silver sits only 870 Hz above it, so these
+two are separated by *texture* — a jingle against a thud — rather than by brightness, and that is
+worth knowing before anyone reaches for EQ to tell them apart. Silver is also 6 dB quieter than
+the other two at the peak, which is the band-limited 24 kHz source showing, not a gain.
+
+### Set 2, recovered
+
+The board's interface cues come in **sets**, and there are two. Set 1 is the Kenney montage the
+board actually plays. Set 2 is `general/set2_select_sfx_v01.ogg` and
+`general/set2_confirm_sfx_v01.ogg` — ElevenLabs output, **not in use**, and with **no hover at
+all**, which the bench draws as a gap rather than hiding.
+
+| | set 1 (in use) | set 2 |
+| --- | --- | --- |
+| hover | 67 ms | — |
+| select | 67 ms | 2000 ms |
+| confirm | 77 ms | 2000 ms |
+
+**Twenty-five times the length**, which makes set 2 a different idea of an interface rather than a
+longer version of this one. A two-second select on a board where selection resolves nothing until
+Confirm is a real proposal, not an oversight, and that is the question the set poses. Set 2's two
+cues also sit 5.5 dB apart where set 1's sit 1.1 dB apart, so the two were levelled on different
+assumptions and should be judged whole rather than slot by slot.
+
+**They were recovered rather than found.** Neither file carries source metadata beyond an ffmpeg
+encoder tag, and the names `select.mp3` and `confirm.mp3` say nothing. They were identified by
+hashing the clips embedded in an earlier standalone bench still sitting in the project owner's
+downloads: its third and fourth clips hash identically to these two. Their provenance was then
+confirmed rather than inferred — the lesson Ordain taught, where a generic name and a missing
+source became a wrong licence that stood for weeks.
+
+### `misc/`, which is the one folder with no denominator
+
+Every other group here counts against a list the game owns — three tithe resources, fourteen duty
+actions, twenty-four buildings — so the bench can say *2 of 3* and a gap means work still to do.
+`misc/` has no such list. A clip is in it because somebody kept it, and the only way to know what
+is there is to look, so the bench discovers the folder's contents rather than being told them and
+prints a count instead of a coverage bar.
+
+**The board plays nothing from `misc/`.** It is for sound that was worth keeping without a slot:
+superseded by something better, or found before there was anywhere to put it.
+
+A clip arrives here by being **moved, not re-cut.** `rock_dropping_sfx_v01.ogg` is byte-identical
+to the file that was `duty_actions/produce_actionB_sfx_v01.ogg`, and its record carries the same
+`sha256` it always had — which is how the move was checked, and why the record was rekeyed rather
+than rewritten.
+
+**The version number does not restart when a slot empties.** Produce Stone's new cue is `v02` even
+though `v01` has left the folder, because a version is the slot's history and not a count of the
+files currently in it. Reusing `v01` for different bytes would make every earlier reference to it
+ambiguous.
+
+### Not every superseded clip is worth keeping, and the test is recoverability
+
+Three clips were sitting in slot folders that the bench had stopped drawing. They were not one
+case, and treating them as one would have cost the only copy of something.
+
+`tithe/silver_sfx_v01.ogg` **was deleted.** Its source is a named Pixabay download that anybody
+can fetch again, and v02's record states the cut exactly, so the file was a convenience.
+
+`duty_actions/ordination_actionA_sfx_v02.ogg` **was deleted**, after checking rather than
+assuming: over their common span v02 and v03 correlate at **r = 1.00000**, and the 450 ms v02 held
+beyond v03 peaks at **−62.1 dB**. It was half a second of silence in a file of its own.
+
+`duty_actions/ordination_actionA_sfx_v01.ogg` **was kept**, and moved to `misc/shears_sfx_v01
+.ogg`. Three things separate it from the other two. Its source is a loose mp3 with no catalogue
+behind it. Its record says NOT REPRODUCIBLE — ElevenLabs output whose prompt was never written
+down and whose generation has aged out, which was proved when the same brief returned a completely
+different take. And it is not a superseded *cut* at all: against v03 it correlates at **−0.0029**,
+a different sound that lost its job rather than an earlier trim of the current one.
+
+**So the question to ask of a dead clip is not "is it still used" but "what exists if this goes".**
+A catalogue page, a sibling file that contains it, or nothing at all. Only the third kind is worth
+the space, and it is the one a tidying pass is most likely to sweep up — the whole exercise saved
+40 KB from a 534 MB repository, which is no reason to spend an irreplaceable file.
+
+Both deleted records are kept at `"state": "absent"` with their `sha256`, so a re-derivation can
+be checked against the bytes that were here.
+
+### The first duty with both actions voiced
+
+Construct has sound on `actionA` and `actionB`, and they play from the same tile — the first pair
+in the set that a player will hear against each other rather than minutes apart.
+
+| | length | centroid | 85% rolloff |
+| --- | --- | --- | --- |
+| Construct Building — chisel | 690 ms | 2144 Hz | 3658 Hz |
+| Construct Road — brick | 224 ms | 3373 Hz | 5777 Hz |
+
+An octave apart in brightness and 3:1 in length, which is comfortably enough. **This is the
+comparison worth running whenever a duty's second action gets a sound**: the set's other pairs are
+still half empty, so nothing has had to be told apart at this distance before, and a collision
+here would be far more noticeable than one between two different duties.
+
+### Two coin sounds, and why that turned out to be fine
+
+Silver is coins falling and Bank is a coin dropped, which looked like a collision waiting to
+happen. Measured, it is not:
+
+| | centroid | 85% rolloff |
+| --- | --- | --- |
+| Silver — coins falling | 7091 Hz | 9811 Hz |
+| Bank — a coin dropped | 11051 Hz | 16207 Hz |
+
+Nearly 4 kHz apart, and the reason is an accident rather than a choice: Silver's download is
+24 kHz and band-limited at 12, while Bank's is 48 kHz with its top octave intact. The same
+limitation that makes Silver the dullest thing in the set is what keeps these two apart. Worth
+knowing because **replacing Silver with a full-bandwidth source would create the collision this
+table says does not exist** — the thing to check then is Bank, not Wheat or Stone.
 
 Wheat and Silversmith are the hottest by about two decibels and may want pulling down once there
 is more of the set to hear it against. **That would be a re-render, not a gain in the page**: the
