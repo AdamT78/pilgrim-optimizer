@@ -116,9 +116,14 @@ unless that is turned off, so the clip is not exclusive to this project.
 | `duty_actions/ordination_actionA_sfx_v03.ogg` | ElevenLabs, `Sharp_metallic_sciss_#1-1791837288330.wav` | **Ordain.** Three snips at 210, 616 and 1282 ms, cut to 1550 ms. No MP3 anywhere in the chain. |
 | `duty_actions/allocation_actionA_sfx_v01.ogg` | 344 Audio, *Antique Small Metals* | **Allocation.** The first 300 ms of *Tinkering Antique Lock*: two clicks at 12 and 172 ms, a settle at 236, quiet by 278. Allocation has one action, and this is two clicks and done. |
 | `duty_actions/clerical_actionB_sfx_v01.ogg` | Pixabay, `freesound_community` | **Silversmith.** *bing1*, a struck bell, 758 ms. Unedited but for the container — and the master is already mono, so it is *not* summed. |
+| `duty_actions/clerical_actionA_sfx_v01.ogg` | Federico Soler Fernandez, *Complex Cinematic Mystery Sounds* (GDC **2023**) | **Devotion.** The last 1.6 s of a 47 s cue, dying away. The quietest clip in the set at −16.4 dB. |
+| `duty_actions/taxation_actionA_sfx_v01.ogg` | Bluezone, *Steampunk Mechanical Sounds* (GDC **2023**) | **Taxation.** *mechanism_metal_008*, 1700 ms, as is. A mechanism turning twice, with a 140 ms pause between. Single-action duty, so no tile-mate. |
+| `duty_actions/produce_actionA_sfx_v01.ogg` | Bluezone, *Forest Textures* (GDC **2023**) | **Produce Wheat.** *foliage_impact_short_012*, 1291 ms, as is. An impact and *then* a rustle — a stroke and stalks falling. The widest stereo source in the set. |
 | `duty_actions/produce_actionB_sfx_v02.ogg` | Bluezone, *Annihilation — Mech* (GDC **2023**) | **Produce Stone.** *annihilation_debris_falling_rock_001*, 1800 ms, as is. A cascade rather than one impact. The longest and heaviest clip in the set. |
 | `misc/rock_dropping_sfx_v01.ogg` | Sonic Bat, *Videogame Foley Essentials Vol. II* (GDC **2024**) | *Was Produce Stone, now unassigned.* *Medium Rock Dropping 011*, 599 ms. Impact at 4 ms. Moved, not re-cut. |
 | `misc/shears_sfx_v01.ogg` | ElevenLabs, `scissor_1.mp3` | *Was the first Ordain cue, now unassigned.* Five events, two strong snips 526 ms apart. The one file here nothing can re-fetch. |
+| `misc/mechanism_one_cycle_sfx_v01.ogg` | Bluezone, *Steampunk Mechanical Sounds* (GDC **2023**) | *Never held a slot.* The first 960 ms of Taxation's source — one cycle, cut inside its own pause. Kept beside the two-cycle version that ships. |
+| `misc/many_coins_sfx_v01.ogg` | CB Sound Design, *Essential Sounds Vol.01 Coins* (GDC **2023**) | *Never held a slot.* 497 ms of coins, as is. Dual mono stored as stereo — the channels are identical, so summing is lossless. |
 | `duty_actions/construct_actionA_sfx_v01.ogg` | 344 Audio, *Nuts And Bolts* (GDC **2023**) | **Construct Building.** Two hammer blows on a chisel at 20 and 376 ms, cut from a 21.9 s take of 56 strikes. Mono master, not summed. |
 | `duty_actions/construct_actionB_sfx_v01.ogg` | Pixabay, `freesound_community` | **Construct Road.** *brick-dropped-on-other-bricks*, 224 ms cut from 3480. Touch, drop, bounce. Left channel only — the right one is dead. |
 | `tithe/wheat_sfx_v01.ogg` | InMotionAudio, *Velcro* | **Wheat.** *VelcroRip29*, unedited but for the container. |
@@ -127,6 +132,12 @@ unless that is turned off, so the clip is not exclusive to this project.
 | `buildings/library_sfx_v01.ogg` | 344 Audio, *Antiques — Books* | **Library.** One second of *Pile Of Antique Books Falling Over 8* from 0.806 s. |
 | `buildings/brewery_sfx_v01.ogg` | Eiravaein Works, *Flask* (GDC **2024**) | **Brewery.** A glass bottle uncorked — squeak, pop, slosh, settle. 70–920 ms of the master, head and tail trimmed, nothing else. |
 | `buildings/bank_sfx_v01.ogg` | Pixabay, `universfield` | **Bank.** *coin-drop*, 1296 ms, as is. Stereo master, correctly summed. The set's second coin sound; see below. |
+| `buildings/scriptorium_sfx_v01.ogg` | Pixabay, `freesound_community` | **Scriptorium.** A signature being written — 757 ms taken from 360–1120 ms of a 3.74 s take, holding four of its eight strokes. The quietest clip in the set. |
+| `buildings/inquisition_sfx_v01.ogg` | David Dumais Audio, *Melee Weapons Pack 1* (GDC **2023**) | **Inquisition.** A blade sheathed, 914 ms, as is. The widest stereo source in the set, and the only master carrying an embedded PNG. |
+| `buildings/grain_store_sfx_v01.ogg` | Eneas Mentzel, *Debris & Rubble* (GDC **2023**) | **Grain Store.** Dry branches rummaged, 845 ms from 225–1070 ms. Started late on purpose: the source ramps in. |
+| `buildings/well_sfx_v01.ogg` | Pixabay, `tanweraman` | **Well.** A stone dropped in water, 1104 ms, as is. Strikes at 300 ms, swallowed at 700. |
+| `buildings/quarry_sfx_v01.ogg` | Justsoundeffects, *Stones and Debris* (GDC **2023**) | **Quarry.** Loose stone settling, 1315 ms from 11.365–12.680 s — the tail of take 1 of five. Eight stones, no dominant impact, and no fade: it ends inside the library's own silence. |
+| `buildings/chapel_sfx_v01.ogg` | Marek Klemczak *(disputed — see record)*, *ARTA Cinematic Sound FX* (GDC **2023**) | **Chapel.** A low swell, 947 ms from 300–1250 ms. The darkest clip in the set and the first non-diegetic one. Trimmed because the master carried both a dead head and a dead tail. |
 
 ### There are no masters here, and that is a departure
 
@@ -267,6 +278,19 @@ already mono, where `0.5*c0 + 0.5*c1` with no second channel means `0.5*c0` — 
 that looks like nothing in a waveform and sounds like the clip losing its nerve. Caught by
 comparing the shipped peak against the source's.
 
+**Wide stereo sources cost more to sum, and three arrived in a row**: 1.02 dB for Taxation's
+mechanism, 1.04 for Produce Wheat's foliage, 1.52 for Inquisition's blade, against 0.1–0.4 dB for
+everything before them. Each was summed anyway — it is the convention for a genuinely stereo
+source, and taking one channel of a wide recording changes its character more than a decibel does.
+**That was written here as a trend and it was not one.** Well's download then *gained* 0.16 dB and
+Quarry's 96 kHz master cost 0.43, the second-cheapest sum in the tree. What the figures actually
+track is how the individual source was miked, which has no direction to it. Read the number per
+file; there is nothing to extrapolate.
+
+**One master carried an embedded PNG**, cover art as a second stream inside the WAV. The encode
+has to select the audio stream explicitly or ffmpeg may carry it along; Inquisition's record notes
+the check that the shipped file holds one stream and it is Vorbis.
+
 **It has since tried to happen three more times**, and every time the check caught it rather than
 the ear. Silversmith's `bing1`, Brewery's flask and Produce Stone's rock are all mono downloads;
 run through the downmix they read −6.3, −10.4 and −10.0 dB against true peaks of −0.3, −4.4 and
@@ -295,8 +319,16 @@ because a dead channel and a cancelling one look alike from a distance and need 
 | --- | --- | --- |
 | both channels alive, correlation high | 2 | sum as `(L+R)/2` |
 | both alive, correlation near −1 | 2 | do **not** sum; they cancel |
+| both alive, correlation near **0** | 2 | sum, but it costs **3 dB** — see below |
 | one channel dead | 2 (nominally) | take the live channel alone |
 | genuinely one channel | 1 | use as is; summing is a 6 dB cut |
+
+**The uncorrelated case is a third behaviour, not a borderline version of the other two.** Devotion's
+master correlates at −0.0081: the channels are independent rather than opposed. Summing two
+independent signals at half amplitude each loses exactly 3 dB, which is what was measured, and it
+also discards the width that was the point of recording it that way. It is still worth summing by
+this set's convention, but a reading near zero should be expected to cost 3 dB rather than treated
+as an anomaly.
 
 ### The levels, which are the thing to protect
 
@@ -357,8 +389,11 @@ actions, twenty-four buildings — so the bench can say *2 of 3* and a gap means
 is there is to look, so the bench discovers the folder's contents rather than being told them and
 prints a count instead of a coverage bar.
 
-**The board plays nothing from `misc/`.** It is for sound that was worth keeping without a slot:
-superseded by something better, or found before there was anywhere to put it.
+**The board plays nothing from `misc/`.** It is for sound that was worth keeping without a slot: superseded by something better, found before there was anywhere to put it, or — with
+`mechanism_one_cycle_sfx_v01.ogg` — a second reading of a source that ships in another shape.
+That last kind never held a slot at all. It is there so a shape decision stays reversible by
+listening rather than by re-fetching and re-cutting, which is the cheapest form of keeping an
+option open.
 
 A clip arrives here by being **moved, not re-cut.** `rock_dropping_sfx_v01.ogg` is byte-identical
 to the file that was `duty_actions/produce_actionB_sfx_v01.ogg`, and its record carries the same
@@ -397,6 +432,60 @@ the space, and it is the one a tidying pass is most likely to sweep up — the w
 Both deleted records are kept at `"state": "absent"` with their `sha256`, so a re-derivation can
 be checked against the bytes that were here.
 
+### Fading a tail: length is not the variable that matters
+
+Devotion's first cut used a 150 ms fade and sounded cut off. The diagnosis is measurable: that
+fade dropped **57 dB in 150 ms**, where the material decays about **1.7 dB per 100 ms** on its own
+— roughly twenty times steeper than the sound.
+
+The obvious fix is a longer fade, and the obvious metric is dB per 100 ms. **Both are wrong.** Any
+fade that reaches true silence is infinitely steep in dB at its very end, so every candidate looks
+equally bad by that measure, including good ones.
+
+What decides whether a stop is audible is **how loud the clip still is when the collapse happens**:
+
+| | at 300 ms out | 150 ms | 100 ms |
+| --- | --- | --- | --- |
+| 150 ms fade (sounded cut) | −25.8 dB | −28.4 | −33.7 |
+| 900 ms fade (shipped) | −33.1 dB | −40.4 | −45.3 |
+
+Same window, same length, same peak. The fade simply arranges for the unavoidable collapse to
+happen 12 dB further down, where nothing hears it. **The rule, then: a fade must put the clip well
+under −40 dB before its final 150 ms** — and the length needed to do that depends on how loud the
+source still is at the cut point, not on any fixed figure.
+
+**The best fade is often no fade, and the silences in a library file say where to find one.**
+Quarry's master is 63 s and reads as one long recording. It is not: it is **five separate takes**
+divided by true digital silence, which an envelope at 250 ms shows instantly as five runs of
+−240 dB. That changes the job from "find a window" to "find a window per take", and it hands over
+something better than any fade — a take's tail decays into the silence the engineer left after it,
+so a window ending just inside that silence stops because *the recording* stopped. Three of the
+five candidates cut this way needed no fade at all and measure −60 dB or lower across their final
+150 ms without anything being shaped.
+
+So the first pass on any long source is an envelope looking for the gaps, before any listening.
+Takes are nearly always separated by digital silence rather than by room tone, which makes them
+free to find, and a boundary found this way is worth more than a good fade: there is no shaped
+decay to be judged, because there is no shaping. **The counter-case is in the same batch** — the
+cathedral ambience never fell below its own room tone anywhere, so every window of it had to be
+faded. Continuous recordings have no seams; library takes usually do.
+
+### The second duty with both actions voiced
+
+`produce` now has sound on both actions too, and the pair separates on a different axis from
+construct's.
+
+| | length | centroid | <250 Hz |
+| --- | --- | --- | --- |
+| Produce Wheat — foliage | 1291 ms | 5361 Hz | 2.2% |
+| Produce Stone — debris | 1800 ms | 3674 Hz | 21.3% |
+
+**Weight does the work here, not duration.** Construct's two cues are 3:1 apart in length;
+these are 1.4:1, which on its own would not be enough. What separates them is that the stone
+carries ten times the low end — one lands, the other scatters. Worth noting because the obvious
+check when filling a duty's second slot is "are they different lengths", and here that check
+would have passed the pair on a margin too thin to rely on.
+
 ### The first duty with both actions voiced
 
 Construct has sound on `actionA` and `actionB`, and they play from the same tile — the first pair
@@ -411,6 +500,102 @@ An octave apart in brightness and 3:1 in length, which is comfortably enough. **
 comparison worth running whenever a duty's second action gets a sound**: the set's other pairs are
 still half empty, so nothing has had to be told apart at this distance before, and a collision
 here would be far more noticeable than one between two different duties.
+
+### How close two sounds are is a ratio, not a difference — and I had it wrong
+
+Several records here name a clip's "nearest neighbour" by the gap in spectral centroid, measured in
+hertz. **That ranking is unreliable and the ones written before Grain Store should be read with
+that in mind.** Pitch distance is relative: 300 Hz between two cues at 2.7 and 3.0 kHz is nearly
+two semitones and plainly audible, while 300 Hz between two at 8.9 and 9.2 kHz is half a semitone
+and very nearly nothing. Ranking by hertz systematically overstates how close low pairs are and
+understates high ones.
+
+Ranked properly, by semitones between centroids, the tightest pairs in the set are not the ones
+that got flagged:
+
+| | apart | |
+| --- | --- | --- |
+| Inquisition · Ordain v03 | 0.2 st | 109 Hz |
+| Taxation · Stone | 0.3 st | 100 Hz |
+| Grain Store · Ordain v03 | 0.3 st | 162 Hz |
+| Construct Building · `confirm` | 0.4 st | 50 Hz |
+| Allocation · Construct Road | 0.4 st | 83 Hz |
+
+**The fourth row is the one worth acting on.** `confirm` is not a duty cue heard occasionally — it
+plays on every confirmation, so a duty action sitting within half a semitone of it is the
+adjacency most often heard in practice. Nothing in the one-at-a-time checks would have surfaced
+it, because `confirm` was never the neighbour anybody thought to look at.
+
+**And all of this is still a weak proxy.** A centroid is one number describing a whole spectrum:
+two sounds can share one and be nothing alike, which is exactly what is claimed for Taxation and
+Silversmith. It should prompt a listen, never settle one. What it is good for is pointing at which
+*pairs* to listen to, and the list above is a better answer to that than anything written above it.
+
+### Quarry proved the paragraph above, and it is worse than "a weak proxy"
+
+The sentence "two sounds can share a centroid and be nothing alike" was written as a caution. The
+Quarry cue is the case where it actually happened, and the gap is not subtle:
+
+| | centroid | 85% rolloff | where the energy actually is |
+| --- | --- | --- | --- |
+| Quarry — settling rubble | 3733 Hz | 1112 Hz | **62.7% in 500–1000 Hz** |
+| Produce Stone — rubble landing | 3674 Hz | 709 Hz | **53.7% in 125–250 Hz**, 16.5% below 125 |
+
+By centroid these are **0.3 semitones apart** — tied for the tightest pair in the set, and between
+two stone cues, which is exactly the collision anyone would dread. By where the mass sits they are
+**two octaves apart**. Both readings are correct arithmetic; only one describes a sound.
+
+The reason is that a centroid is a *weighted mean*, and a mean does not locate a skewed
+distribution. Both clips have a long thin tail pulling the mean away from their peak — Quarry's
+tail reaches up, Produce Stone's reaches up further from much lower down — and the two means
+happen to land in the same place from opposite directions. Nothing about the sounds is similar.
+Quarry puts 6.5% of its energy below 250 Hz and Produce Stone puts 70.2% there.
+
+**The rule this leaves:** a centroid quoted on its own is not a reading. Quote it with the 85%
+rolloff, and **where the two disagree by more than roughly a factor of three, discard the
+centroid** — on this pair the rolloffs are 1112 against 709, which is 7.8 semitones and agrees
+with the ear. Better still, name the octave band holding the most energy, which is the only one of
+the three numbers that cannot be dragged somewhere the sound is not. The same test clears Quarry
+against the rest of the stone family at a glance: Construct Road puts 61.3% of its energy in
+4000–8000 Hz, the Stone tithe spreads 33.5% into 2000–4000.
+
+**This does not retract the semitone correction above it** — ranking by ratio instead of by hertz
+is still right, and hertz is still wrong. It narrows what is being ranked. The earlier fix made
+the *arithmetic* on centroids honest; this one says the centroid was the wrong input to that
+arithmetic whenever a clip's spectrum is lopsided, which for falling stone is always.
+
+**And the band share is not a safe replacement for it either.** Chapel arrived one clip later with
+73.3% of its energy below 125 Hz, which read as a clip that would not reproduce on a laptop
+speaker at all. It does. Filtering the audio rather than counting FFT bins shows the octave bands
+sitting within about 3 dB of each other *at the peak* — the share figures are driven by rms, where
+a 37 Hz fundamental dominates everything regardless of how audible it is — and modelling a
+second-order speaker rolloff costs the clip 2.3 dB at 200 Hz and 5.1 dB at 400. Thinned, not gone.
+
+So the honest summary of this whole section is narrower than any of the three fixes in it: **every
+single-number summary of a spectrum has now misled here at least once.** Centroid in hertz,
+centroid in semitones, and energy share by band have each produced a confident wrong answer about
+a clip that was sitting right there to be played. They are useful for choosing which *pairs* to
+listen to and for nothing else. Where a number is going to decide something, filter the audio and
+measure what comes out.
+
+### Writing is a texture, which makes shortening it a different problem
+
+Every other clip here is an event with a decay, so making one shorter means cutting a tail and the
+thing to protect is the attack. `buildings/scriptorium_sfx_v01.ogg` is not that. A pen on paper has
+no transient to anchor on — what identifies it is the **rhythm of strokes**, so the test when
+trimming is not "is the attack intact" but "are there enough strokes left to read as writing rather
+than as a scrape".
+
+The master holds eight strokes across 3.74 s. The window kept holds four of them: the long 480 ms
+opening stroke and then three inside 230 ms at 20 ms spacing, which is unmistakably a pen moving.
+Two other windows were cut and rejected, and both failures are instructive — one began
+mid-signature so it arrived already underway, and one ended on the master's loudest sweep but was a
+single continuous scrape, the most at risk of reading as *something scraping* rather than *someone
+writing*.
+
+**It is also the quietest clip in the set, by a wide margin**, at −11.7 dB against everything
+else's −0.2 to −7.9. No gain was applied; the master's loudness simply lives in a final flourish
+this window excludes. Levelling it by ear is not optional here the way it can be elsewhere.
 
 ### Two coin sounds, and why that turned out to be fine
 
