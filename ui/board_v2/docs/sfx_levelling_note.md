@@ -51,6 +51,23 @@ BS.1770's absolute and relative gates exist to stop silence dragging down an hou
 On a 70 ms interface cue the relative gate can discard the cue itself. Gating is wrong at this
 scale and is switched off.
 
+**The same answer holds for a long ambient bed, for the opposite reason.** A cue is too short to
+survive the gate; a bed is too even to need it. Measured against the gated figure:
+
+| material | ungated | gated | delta | blocks kept |
+|---|---|---|---|---|
+| cathedral room tone | −40.61 | −40.59 | +0.02 | 247 of 247 |
+| windmill, continuous | −19.70 | −19.68 | +0.02 | 247 of 247 |
+| windmill, gusty span | −21.19 | −21.26 | −0.08 | 247 of 247 |
+| fire in a metal stove, 25 s loop | −35.97 | −35.96 | +0.01 | 247 of 247 |
+| drum track (control, not ambient) | −11.02 | −10.47 | +0.55 | 174 of 197 |
+
+A bed is continuous by construction, so the gate has nothing to discard — it only bites on
+material with more than 10 LU of internal spread, which the control shows. The argument is not
+that gating makes no difference here; it is that where it *would*, it discards the quiet floor
+the player hears for most of the clip and levels the bed by its gusts. **Ungated for both
+classes**, so a bed and a cue are at least measured in the same unit.
+
 ### A 200 ms window, with short clips zero-padded
 
 BS.1770's momentary window is 400 ms. That is a programme measure and **over-penalises short
@@ -219,12 +236,104 @@ lengths and the per-clip encode cost is tracked in the records at a few tenths o
 masters were deliberately deleted as re-fetchable third-party downloads, so the `.ogg` files are
 not an archival format — `originalFilename` and `originalPath` are the recovery path.
 
-The one thing that *is* uniform, and matters more than either: **every clip is mono, Vorbis q6.**
-That is the consistency a set levelled against itself needs.
+The one thing that *is* uniform, and matters more than either: **every clip is Vorbis q6.** That
+is the consistency a set levelled against itself needs. Every clip is also mono, which is the
+subject of the next section, because that one is about to stop being true on purpose.
 
 ---
 
-## 10. Not done
+## 10. Channels, and a fold that will go wrong
+
+**All 38 clips in the tree today are mono.** That was never a decision so much as an inheritance
+— interface cues are point events and carry no width — but the tool quietly depends on it.
+`load()` folds any multi-channel file with `reshape(-1, ch).mean(axis=1)` and measures the fold.
+For a mono file that is a no-op, so nothing has ever been wrong.
+
+**Ambient beds are meant to be stereo**, which makes the fold wrong rather than redundant.
+BS.1770 does not measure the mono fold of a stereo programme; it sums the weighted power of each
+channel. The two disagree, and the disagreement depends on how wide the material is:
+
+| L/R correlation | what the mono fold reads |
+|---|---|
+| +1.000 | 3.01 dB low |
+| +0.968 | 3.08 dB low |
+| +0.866 | 3.31 dB low |
+| +0.662 | 3.81 dB low |
+| 0.000 | 6.02 dB low |
+
+**The offset is harmless; the spread is not.** A flat 3 dB would vanish into the target and
+nobody would notice. But two beds of identical true loudness and different width come out of the
+tool with trims up to 3 dB apart — which is the exact failure the levelling exists to prevent,
+arriving through the back door. *Measure per channel and sum the powers when `ch > 1`.*
+
+**`true_peak()` reads the fold too, and the ceiling must not be optimistic.** The ceiling belongs
+to the louder channel. On the first bed source examined, L peaks at −6.11 dBFS and R at −5.04;
+the fold understates R by about half a decibel.
+
+**Container channels are not content channels.** That same source reports two channels and
+correlates at +0.9940 broadband, which reads as mono in a stereo wrapper — until you measure it
+per band, where 800 Hz–8 kHz sits at +0.72 to +0.75. The broadband figure is dominated by
+heavily correlated bass and hides real midrange width. Per-band correlation is the honest test
+for whether a bed source has a field worth carrying, and it lives with the channel table in
+`sfx/README.md`, which owns that check.
+
+---
+
+## 11. The bed target, which was chosen and then falsified
+
+Ambient beds arrived as a second class and got the full treatment: a second measure, a second
+target, and a `kind` field on the record so the two could not be confused. Two of those three
+survived contact with the second bed.
+
+**A bed is measured by integrated loudness, not M200, and that part holds.** M200 anchors a 25 s
+bed on its single loudest moment — 3.4 dB above integrated on a steady fire loop, 5 to 10 dB
+above across three spans of a cathedral recording. The gap varies with how peaky the material
+is, so using M200 on beds would shift the figure between two of them by about 5 dB for no reason
+a listener would recognise. The classes fail in opposite directions: a cue levelled by its
+average disappears, a bed levelled by its loudest fifth of a second sits too quiet for the other
+twenty-four.
+
+**The `kind` field holds too, with a better justification than it was given.** It was introduced
+to say which target applied. It now says something more useful — whether a trim is *derived* or
+*authored* — and that distinction is load-bearing, because `--write` must not recompute a number
+a person produced.
+
+**The target did not hold.** It was chosen the way −24 was, derived from the working set rather
+than picked round: dialling the Silversmith fire against its own cue put it at −39 LUFS, 9.0 dB
+under the cue. The second bed broke it. Trimmed to that same −39, the cathedral sat far forward
+of the fire.
+
+Before changing anything, five measures were checked to see whether a different one would have
+predicted it. Trim both beds to match on integrated loudness, then ask what the others say:
+
+| measure | cathedral against fire |
+|---|---|
+| integrated | 0.00 dB |
+| short-term p50 | −0.16 dB |
+| short-term p95 | +0.34 dB |
+| 1 s maximum | +0.63 dB |
+| M200 | +0.97 dB |
+| 3 s maximum | +1.01 dB |
+
+**The widest disagreement between any two is 1.0 dB, against roughly 5 dB heard.** No measure
+sitting in the corner would have got this right, which means the gap is not about windows or
+weighting. The cathedral has voices in it, and every loudness measure scores energy rather than
+salience. A voice sits forward of broadband crackle at equal LUFS, and nothing in BS.1770 knows
+that.
+
+So **a bed's `gainDb` is authored by ear**, and the tool's job for a bed is to record the level
+rather than choose it. `--one --kind bed` refuses to propose a trim and takes `--trim` to check
+one instead. `--write` skips beds entirely and reports how many it left alone — without that,
+the next run would have quietly overwritten the only part of a bed's record that takes a person
+to produce. `test_every_sound_carries_a_measured_playback_trim` makes the same split: it still
+demands that a bed *has* a trim, and checks the ceiling rather than re-deriving the number.
+
+**The one rule that is not taste is the ceiling.** Where a bed sits is a judgement; whether it
+clips is not. `ceiling_breach()` is what is left of the arithmetic.
+
+---
+
+## 12. Not done
 
 - **The board does not read `gainDb`.** Today that would change only `tile.ogg` by +0.4 dB and
   `confirm.ogg` by −1.5, since those are the only two clips it plays.
@@ -233,3 +342,15 @@ That is the consistency a set levelled against itself needs.
 - **`rock_dropping` stays 5.1 dB under the set.** It holds no slot, so this is not urgent.
 - **Ordain v03's +0.75 dBTP** is fixed only in the sense that its trim is −4.1 dB. The file
   itself still clips if anything plays it at unity.
+
+Still open for ambient:
+
+- **Bed plus cue can clip, and ducking cannot fix it.** Two files at the −1 dBTP ceiling sum
+  past it. The headroom problem is true peak rather than loudness, and a duck cannot help
+  because the cue's own attack *is* the peak. Not pressing while the two beds sit at −26 and
+  −45 dBTP after their trims, but it returns the moment a bed is authored loud.
+- **The board plays no bed yet.** `bundled_sfx()` inlines `tile.ogg` and `confirm.ogg` and
+  nothing else, so `generated/ambient_bench.html` is where beds are heard today.
+- **Whoever wires them in must pin `loopEnd`.** Chrome's `decodeAudioData` returns up to 17 ms
+  of Vorbis padding past the end, which loops as a dropout 30 dB below the bed. The reasoning
+  and the measurement are in `ambient_loop_note.md`.

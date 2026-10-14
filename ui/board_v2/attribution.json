@@ -2950,6 +2950,40 @@
       "modifications": "HIGH-PASSED AT 2 kHz, AND THE SECOND CLIP IN THIS TREE WITH EQ. Mint was the first; the test it set was that the thing removed and the thing kept must share no band, and that test passes here -- the kick sits under 200 Hz, the tick lives above 2 kHz, and the 200-2000 Hz band between them is 7 dB down. Half-octave raised-cosine transition, applied before the mono sum. Cut 15.032 to 15.092 s, 3 ms fade in, 18 ms fade out, 48 kHz kept, Vorbis q6, no level change. WITHOUT THE FILTER THIS IS NOT A HOVER AT ANY LENGTH, which is why the EQ is here and is not a preference. The raw window measures crest 10.2 dB and takes 36 ms to fall 20 dB, against tile.ogg's 17.1 and 16 ms, and sits at -6.7 dB below 200 Hz where tile.ogg is at -47.9. It is a kick, and a kick on every pointer move. Filtered it measures crest 18.2 and 12 ms, both better than the cue in use. THE WINDOW WAS CHOSEN BY SEARCH, NOT BY EAR FIRST. All fifteen beat and off-beat positions on the track's 0.310 s grid were cut to 60 ms, high-passed and scored on crest and on time to fall 20 dB. 15.040 won outright at 17.6 dB and 12 ms; the next best was 17.065, which is exactly where the select opens and was passed over for that reason. THERE IS NO UNFILTERED ANSWER ANYWHERE IN THE FILE: the track runs full mix from sample 0 to its last beat with no intro and no breakdown, so no window of it is free of kick.",
       "measured": "71 ms, peak -5.5 dB, mean -23.8 dB. Not clipped. Crest 18.2 dB and 20 dB of decay inside 12 ms, against tile.ogg's 17.1 dB and 16 ms -- a faster and more transient cue than the one the board plays. At the board's hover gain of 0.12 it lands at -23.9 dB effective, 3.1 dB under tile.ogg's -20.8. NOTHING BELOW 200 Hz: the band peak there is -101.2 dB, which is the filter's doing and is the single property that makes this usable. Centroid 6185 Hz, loudest band 2-6 kHz at -8.7 dB by peak. AGAINST ITS OWN SET: 71 ms against the select's 742 and the confirm's 1222, so set 3 has the same shape as set 1 -- a tick, then two longer cues -- rather than set 2's two equal two-second blocks.",
       "gainDb": 1.4
+    },
+    "sfx/ambient/silversmith_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "Coll Anderson",
+      "licence": "sonniss-gameaudiogdc",
+      "licenceNote": "Sonniss GameAudioGDC 2020 bundle. Taken as an individual file from the your.org mirror rather than out of one of the 14 numbered archives, so no archive number applies. Royalty-free: personal and commercial game use, modification and unlimited projects permitted, no attribution required. The files may not be resold or redistributed as sound effects, including edited versions, and may not be used to train AI or ML models.",
+      "source": "EFX SD Fire in Metal Stove 03.wav, Coll Anderson - Gentle Wind. The master's own metadata names C. A. Sound, Inc., which is Coll Anderson's company -- Sonniss lists him under the vendor slug casoundinc -- and that mismatch between the metadata name and the pack name is why this file took three attempts to place.",
+      "originalFilename": "EFX SD Fire in Metal Stove 03.wav",
+      "originalPath": "ftpmirror.your.org/pub/misc/sonniss2020/individual/Coll Anderson - Gentle Wind",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Silversmith -- fire in a metal stove",
+      "role": "the Silversmith ambient bed, which plays under the duty action rather than on it. Clerical actionB already has a 758 ms cue; this is the second axis, not a replacement for it.",
+      "modifications": "A SEAMLESS 25 s LOOP, not a trim. 25.000 s body starting at 15.50 s of the 87.5 s master, with the following 1.5 s folded back over the head as an EQUAL-POWER crossfade. Equal power rather than linear because the two shoulders are decorrelated (+0.047): linear drops 2.68 dB at the join and equal power 0.89, and a dip at the same point every lap is itself the loop marker the crossfade exists to hide. THE START TIME IS THE WHOLE DECISION. Searching every start in the master for the closest band match between the two shoulders, 15.50 s scores 0.70 dB RMS across five bands against a worst case of 11.06 and up to 15.4 dB in one band -- and the worst case's seam measures only -1.00 dB by level, so a level check rates it fine. Crossfade LENGTH barely matters by comparison: 0.25 s to 6 s moves the seam about a decibel. Resampled 96 -> 48 kHz on encode, which is a deliberate departure from this tree's keep-the-source-rate convention; see the README.",
+      "measured": "25000 ms, peak -9.47 dB, integrated -32.81 LUFS, true peak -9.47 dBTP, stereo 48 kHz, L/R correlation +0.9949",
+      "gainDb": -17.0,
+      "sha256": "842dc26f3493032eedb9d1f48ac0077bd56c545e9b9727407469a473fb3b7add"
+    },
+    "sfx/ambient/devotion_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "Alexander Kopeikin",
+      "licence": "sonniss-gameaudiogdc",
+      "licenceNote": "Sonniss GameAudioGDC 2016 bundle. Taken as an individual file from the your.org mirror rather than out of a numbered archive, so no archive number applies. Royalty-free: personal and commercial game use, modification and unlimited projects permitted, no attribution required. The files may not be resold or redistributed as sound effects, including edited versions, and may not be used to train AI or ML models.",
+      "source": "churches, service at Peter and Paul cathedral.wav, Alexander Kopeikin - St Petersburg. The master is 286 s and its own description reads 'choir singing, Russia, Saint Petersburg', recorded 2015-08-31.",
+      "originalFilename": "churches, service at Peter and Paul cathedral.wav",
+      "originalPath": "ftpmirror.your.org/pub/misc/sonniss2016/individual/Alexander Kopeikin - St Petersburg",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Devotion -- a cathedral between responses",
+      "role": "the Devotion ambient bed, which plays under clerical actionA. Cut from the quiet passage rather than the choir: the master alternates between full choir at -22 to -25 dB and long quiet stretches at -31 to -36, and only the quiet ones are a bed rather than a performance.",
+      "modifications": "A SEAMLESS 35 s LOOP. 35.000 s body starting at 81.50 s of the 286 s master, with the following 1.5 s folded back over the head as an equal-power crossfade. THE QUIET PASSAGE IS 80 s WIDE, not the 15 s it was first heard as -- everything from about 78 to 162 s sits between -31 and -36 dB -- so the loop did not have to be cramped. Searching that span, 81.50 s scores 0.42 dB RMS across five bands between its two shoulders, the closest match found in either bed's master, against a worst case of 6.26 in the same range. 35 s was preferred over the 25 s candidate because this material may carry intelligible voice and a longer loop repeats it less often; whether it does is a listening question that no measurement here settled -- syllabic modulation depth does not separate this passage from the choir, because the building's reverberation smears the syllables. Resampled 96 -> 48 kHz on encode, as above.",
+      "measured": "35000 ms, peak -18.50 dB, integrated -30.83 LUFS, true peak -18.49 dBTP, stereo 48 kHz, L/R correlation +0.5102",
+      "gainDb": -27.0,
+      "sha256": "600ad28e2d105301d71a8dc933407d6252ba7a576c3bb61901686fea6919a539"
     }
   },
   "assetDirs": [

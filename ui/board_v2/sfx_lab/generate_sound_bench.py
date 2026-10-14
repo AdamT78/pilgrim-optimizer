@@ -33,6 +33,7 @@ BOARD = ROOT / "ui" / "board_v2"
 SFX = BOARD / "sfx"
 LAB = BOARD / "sfx_lab"
 OUT = LAB / "generated" / "sound_bench.html"
+OUT_AMBIENT = LAB / "generated" / "ambient_bench.html"
 MIME = {".ogg": "audio/ogg", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".flac": "audio/flac"}
 
 # THE GAINS ARE THE BOARD'S, read from the template rather than typed here -- the page is where
@@ -58,7 +59,7 @@ def ogg_facts(path: pathlib.Path) -> dict:
     page simply shows less.
     """
     import struct
-    out = {"ms": 0, "sr": 0, "ch": 1}
+    out = {"ms": 0, "sr": 0, "ch": 1, "samples": 0}
     try:
         raw = path.read_bytes()
         i = raw.find(b"\x01vorbis")
@@ -68,6 +69,7 @@ def ogg_facts(path: pathlib.Path) -> dict:
         j = raw.rfind(b"OggS")
         if j >= 0 and out["sr"]:
             granule = struct.unpack_from("<q", raw, j + 6)[0]
+            out["samples"] = granule
             out["ms"] = round(granule * 1000 / out["sr"])
     except Exception:
         pass
@@ -142,6 +144,62 @@ def buildings() -> list:
         raise SystemExit("no %s -- the bench reads the engine's building list from there" % cfg)
     cat = json.loads(cfg.read_text(encoding="utf-8"))["catalogue"]
     return [{"key": e["id"], "name": e["name"], "level": int(e["level"])} for e in cat]
+
+
+# THE BED'S DUTY ACTION IS RESOLVED, NOT DECLARED. A bed is named for the action it plays
+# under -- `silversmith_sfx_v01.ogg` -- and duty_text.json already owns the mapping from that
+# name to `clerical_actionB`. A `duty` field on the record would be a second copy of a fact the
+# game already states, and the second copy is the one that goes stale.
+def duty_by_name() -> dict:
+    out = {}
+    for d in duty_actions():
+        for slot, name in d["actions"]:
+            out[re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")] = (d["key"], slot, name)
+    return out
+
+
+def ambient(rec: dict, notes: list) -> tuple:
+    """Every bed in sfx/ambient/, with the cue of the duty action it belongs to.
+
+    DISCOVERED LIKE misc/, COUNTED LIKE THE DUTY ACTIONS. The folder is the list -- nothing
+    declares which actions get a bed -- but the denominator is the duty-action list, because
+    "2 of 14 have a bed" is a plan and "2 beds exist" is not.
+    """
+    folder = SFX / "ambient"
+    by_name = duty_by_name()
+    beds, used = [], set()
+    if folder.is_dir():
+        for stem in sorted({re.sub(r"_sfx_v\d+$", "", p.stem) for p in folder.glob("*.ogg")}):
+            p = newest_version(folder, stem)
+            if p is None:
+                continue
+            key = "sfx/ambient/" + p.name
+            if key not in rec:
+                notes.append("%s has no attribution entry, left out" % key)
+                continue
+            e = rec[key]
+            facts = ogg_facts(p)
+            m = e.get("measured", "") or ""
+            num = lambda pat: (float(re.search(pat, m).group(1))
+                               if re.search(pat, m) else None)
+            hit = by_name.get(stem)
+            if hit:
+                used.add((hit[0], hit[1]))
+            cue_key = "%s_%s" % (hit[0], hit[1]) if hit else None
+            beds.append({
+                "file": p.name, "name": (e.get("title") or stem).split(" -- ")[0],
+                "duty": hit[2] if hit else None, "cue": cue_key,
+                "ms": facts["ms"], "sr": facts["sr"], "ch": facts["ch"],
+                "seconds": round(facts["samples"] / facts["sr"], 6) if facts["sr"] else 0,
+                "bytes": p.stat().st_size,
+                "integrated": num(r"integrated\s*(-?[\d.]+)\s*LUFS"),
+                "tp": num(r"true peak\s*(-?[\d.]+)\s*dBTP"),
+                "gainDb": e.get("gainDb"),
+                "src": base64.b64encode(p.read_bytes()).decode("ascii"),
+            })
+            if facts["samples"] == 0:
+                notes.append("%s: no granule position, so its loop cannot be pinned" % key)
+    return beds, used
 
 
 def main() -> int:
@@ -234,6 +292,41 @@ def main() -> int:
         if c:
             misc.append(c)
 
+    # THE AMBIENT PAGE IS A SECOND OUTPUT, NOT A SECTION. A bed loops and a cue does not, so
+    # the two need different players; and a bed is 500-750 KB against a cue's 10, so folding
+    # them in would take the page everyone opens from 0.8 MB to several. One generator, because
+    # the record gate, the version resolver and the Ogg reader are worth having once.
+    beds, used = ambient(rec, notes)
+    cues = {}
+    for b in beds:
+        if not b["cue"] or b["cue"] in cues:
+            continue
+        cp = newest_version(SFX / "duty_actions", b["cue"])
+        ck = None if cp is None else "sfx/duty_actions/" + cp.name
+        if cp is None or ck not in rec:
+            notes.append("%s has a bed but its own cue is not filed, so the bed has nothing "
+                         "to be set against" % b["cue"])
+            b["cue"] = None
+            continue
+        cues[b["cue"]] = {
+            "name": b["duty"] or b["cue"],
+            "gainDb": rec[ck].get("gainDb") or 0.0,
+            # THE SELECT GAIN, because that is the slot a duty-action cue plays in on the
+            # board, and it is read from the page rather than typed here for the same reason
+            # the bench's other gains are.
+            "role": gains.get("select", 0.5),
+            "src": base64.b64encode((BOARD / ck).read_bytes()).decode("ascii"),
+        }
+    slots = sum(len(d["actions"]) for d in duty_actions())
+    missing = ["%s (%s)" % (name, d["name"]) for d in duty_actions()
+               for slot, name in d["actions"]
+               if (d["key"], slot) not in used]
+    atmpl = (LAB / "ambient_bench.html.tmpl").read_text(encoding="utf-8")
+    OUT_AMBIENT.parent.mkdir(parents=True, exist_ok=True)
+    OUT_AMBIENT.write_text(atmpl.replace("__DATA__", json.dumps(
+        {"beds": beds, "cues": cues, "have": len(beds), "slots": slots,
+         "missing": missing})), encoding="utf-8")
+
     tmpl = (LAB / "sound_bench.html.tmpl").read_text(encoding="utf-8")
     page = tmpl.replace("__DATA__", json.dumps(
         {"sets": sets, "tithe": tithe, "duties": duties, "buildings": builds,
@@ -249,6 +342,8 @@ def main() -> int:
     print("  buildings %d of %d" % (have(builds), len(builds)))
     # NO "n of m" HERE: misc has no denominator, so a count is the only honest line.
     print("  misc      %d kept, unassigned" % len(misc))
+    print("  wrote %s  (%d KB)" % (OUT_AMBIENT, OUT_AMBIENT.stat().st_size // 1024))
+    print("  ambient   %d of %d duty actions have a bed" % (len(beds), slots))
     drawn = [c for c in ([s for st in sets for _, s, _ in st["slots"]]
                          + [t["clip"] for t in tithe]
                          + [a["clip"] for d in duties for a in d["actions"]]
@@ -262,6 +357,7 @@ def main() -> int:
         print("  NOTE:", n)
     if args.open:
         webbrowser.open(OUT.as_uri())
+        webbrowser.open(OUT_AMBIENT.as_uri())
     return 0
 
 

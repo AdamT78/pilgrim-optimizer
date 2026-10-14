@@ -1,0 +1,299 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Pilgrim - ambient beds</title>
+<style>
+ :root { --bg:#141210; --fg:#e8e2d8; --dim:#8c8378; --line:#2e2a26; --hot:#d08b3c; --ok:#6f9f5e; }
+ * { box-sizing:border-box }
+ body { margin:0; padding:28px 24px 60px; background:var(--bg); color:var(--fg);
+        font:14px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace; }
+ h1 { font-size:18px; font-weight:600; margin:0 0 4px }
+ h2 { font-size:14px; font-weight:600; margin:32px 0 4px; color:var(--hot) }
+ .sub { color:var(--dim); max-width:84ch; margin:0 0 14px }
+ table { border-collapse:collapse; width:100%; max-width:1180px; margin:10px 0 0 }
+ th,td { text-align:right; padding:6px 9px; border-bottom:1px solid var(--line); white-space:nowrap }
+ th { color:var(--dim); font-weight:500; font-size:11px; text-transform:uppercase;
+      letter-spacing:.05em }
+ td.l,th.l { text-align:left }
+ tr.sel td { background:#201c18 }
+ button { font:inherit; color:var(--fg); background:#241f1b; border:1px solid var(--line);
+          border-radius:3px; padding:4px 11px; cursor:pointer }
+ button:hover { border-color:var(--hot) }
+ button.on { background:var(--hot); border-color:var(--hot); color:#191511 }
+ .bar { position:relative; height:28px; background:#1b1815; border:1px solid var(--line);
+        border-radius:3px; max-width:1180px; margin:16px 0 8px; overflow:hidden }
+ .xf { position:absolute; top:0; bottom:0; left:0; background:rgba(208,139,60,.22);
+       border-right:1px solid var(--hot) }
+ .pl { position:absolute; top:0; bottom:0; width:2px; background:var(--ok) }
+ .ctl { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:14px 0 0 }
+ .ctl label { color:var(--dim) }
+ .big { font-size:13px; padding:7px 16px }
+ code { color:var(--hot) }
+ .note { color:var(--dim); font-size:12px; max-width:84ch }
+ .gap { color:var(--dim); font-style:italic }
+</style>
+
+<h1>Ambient beds</h1>
+<p class="sub">Every ambient bed in the tree, looping, at the gain its record carries, with the
+cue of the duty action it belongs to firing over the top at the level the board will play it.
+Built by <code>sfx_lab/generate_sound_bench.py</code> from the files on disk and the numbers in
+<code>attribution.json</code> — it decodes nothing, so it runs where ffmpeg does not.</p>
+
+<div id="rows"></div>
+
+<h2>Levels</h2>
+<p class="sub">One slider, and it moves the bed only. The cue is fixed at what the board will
+play — its filed trim times the select gain — so it is the reference you set the bed against.
+Use your system volume if the whole thing is too loud. <b>A bed's level is a judgement, not a
+measurement:</b> a target was tried and falsified, because at equal measured loudness a bed with
+voices in it sits forward of one without and no loudness measure scores that. Save writes the
+levels to a JSON file; load takes one back after this page is rebuilt.</p>
+
+<div class="ctl">
+  <button id="play" class="big">play</button>
+  <button id="seam" class="big">jump to 2.5 s before the wrap</button>
+  <span style="color:var(--dim)">lap <b id="lap">0</b></span>
+  <span style="color:var(--dim)"><b id="pos">0.00</b> / <b id="dur">0</b> s</span>
+</div>
+
+<div class="ctl">
+  <label>ambient level <input id="trim" type="range" min="-40" max="6" step="0.5" value="0"
+         style="width:320px"></label>
+  <span id="trimdb" style="color:var(--hot)"></span>
+  <span style="color:var(--dim)">&rarr; lands at <b id="lands"></b> LUFS</span>
+  <button id="reset">reset to the record</button>
+  <button id="save">save settings</button>
+  <label style="color:var(--dim)">load <input id="load" type="file" accept=".json"
+         style="width:170px"></label>
+</div>
+
+<div class="ctl">
+  <button id="fire" class="big">fire the cue</button>
+  <label><input id="rep" type="checkbox"> repeat every 6 s</label>
+  <span id="cuenote" style="color:var(--dim)"></span>
+</div>
+
+<p class="sub" id="settings" style="color:var(--ok)"></p>
+<p class="sub" id="loadnote" style="color:var(--dim)"></p>
+
+<div class="bar" id="bar">
+  <div class="xf" id="xf"></div>
+  <div class="pl" id="pl" style="left:0"></div>
+</div>
+
+<script>
+var D = __DATA__;
+var BEDS = D.beds, CUES = D.cues;
+var ctx = null, bufs = {}, cueBufs = {}, src = null;
+var master = null, bedGain = null, repTimer = null, TRIMS = {};
+var cur = BEDS.length ? BEDS[0].file : null, playing = false;
+var startT = 0, startOff = 0, lastPos = 0;
+// A FIXED BOOST, NOT A CONTROL. Everything plays at board levels and the cues sit 20-odd dB
+// under the files they came from, so without this the page is too quiet to judge. It applies
+// to bed and cue alike, which is why it is not a knob: one slider, and it can only move the
+// thing being decided.
+var MONITOR_DB = 6;
+
+function bed(f){ for (var i = 0; i < BEDS.length; i++) if (BEDS[i].file === f) return BEDS[i];
+                 return null; }
+function dur(){ var b = bed(cur); return b ? b.seconds : 1; }
+function cue(){ var b = bed(cur); return b && b.cue ? CUES[b.cue] : null; }
+
+BEDS.forEach(function(b){ TRIMS[b.file] = b.gainDb == null ? 0 : b.gainDb; });
+
+function b2ab(b64){
+  var s = atob(b64), n = s.length, a = new Uint8Array(n);
+  for (var i = 0; i < n; i++) a[i] = s.charCodeAt(i);
+  return a.buffer;
+}
+function init(cb){
+  if (ctx) { cb(); return; }
+  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  master = ctx.createGain(); master.gain.value = Math.pow(10, MONITOR_DB / 20);
+  master.connect(ctx.destination);
+  bedGain = ctx.createGain(); bedGain.connect(master);
+  setTrim();
+  var ck = Object.keys(CUES), left = BEDS.length + ck.length;
+  if (!left) { cb(); return; }
+  BEDS.forEach(function(b){
+    ctx.decodeAudioData(b2ab(b.src), function(buf){
+      bufs[b.file] = buf; if (--left === 0) cb();
+    }, function(){ left--; });
+  });
+  ck.forEach(function(k){
+    ctx.decodeAudioData(b2ab(CUES[k].src), function(buf){
+      cueBufs[k] = buf; if (--left === 0) cb();
+    }, function(){ left--; });
+  });
+}
+function stopSrc(){ if (src) { try { src.stop(); } catch (e) {} src.disconnect(); src = null; } }
+function playFrom(off){
+  stopSrc();
+  var b = bufs[cur]; if (!b) return;
+  src = ctx.createBufferSource();
+  src.buffer = b; src.loop = true;
+  // PIN THE LOOP TO THE FILE'S TRUE LENGTH. Chrome's decodeAudioData hands back a few hundred
+  // samples of Vorbis padding past the end -- 4 to 17 ms, near-silent on some files -- and a
+  // raw loop pads every wrap with a dropout measuring 30 dB below the bed. loopEnd is in
+  // seconds, which matters because the AudioContext runs at the device's rate, not the file's.
+  src.loopStart = 0; src.loopEnd = dur();
+  src.connect(bedGain);
+  startOff = off % dur(); startT = ctx.currentTime;
+  src.start(0, startOff);
+  playing = true;
+  document.getElementById("play").textContent = "stop";
+  document.getElementById("play").classList.add("on");
+}
+function stopAll(){
+  lastPos = posNow(); stopSrc(); playing = false;
+  document.getElementById("play").textContent = "play";
+  document.getElementById("play").classList.remove("on");
+}
+function elapsed(){ return playing ? (ctx.currentTime - startT) + startOff : lastPos; }
+function posNow(){ return elapsed() % dur(); }
+
+function fireCue(){
+  var c = cue(); if (!c || !ctx || !cueBufs[bed(cur).cue]) return;
+  var s = ctx.createBufferSource(), g = ctx.createGain();
+  s.buffer = cueBufs[bed(cur).cue];
+  g.gain.value = Math.pow(10, (c.gainDb || 0) / 20) * c.role;
+  s.connect(g); g.connect(master); s.start(0);
+}
+function setTrim(){
+  var t = +document.getElementById("trim").value;
+  TRIMS[cur] = t;
+  document.getElementById("trimdb").textContent =
+      (t >= 0 ? "+" : "−") + Math.abs(t).toFixed(1) + " dB";
+  var b = bed(cur), lands = b && b.integrated != null ? b.integrated + t : null;
+  document.getElementById("lands").innerHTML = lands == null ? "&mdash;"
+      : (lands < 0 ? "−" : "") + Math.abs(lands).toFixed(1);
+  if (bedGain) bedGain.gain.value = Math.pow(10, t / 20);
+  paintSettings();
+}
+function paintSettings(){
+  document.getElementById("settings").innerHTML = "levels &mdash; " + BEDS.map(function(b){
+    var t = TRIMS[b.file];
+    return b.name + " " + (t >= 0 ? "+" : "−") + Math.abs(t).toFixed(1) + " dB" +
+      (b.integrated == null ? "" : " (" + (b.integrated + t).toFixed(1) + " LUFS)") +
+      (Math.abs(t - (b.gainDb == null ? 0 : b.gainDb)) > 0.01 ? " <b>changed</b>" : "");
+  }).join(" &middot; ");
+}
+function paintCue(){
+  var c = cue();
+  document.getElementById("fire").textContent = c ? "fire the " + c.name + " cue" : "no cue";
+  document.getElementById("fire").disabled = !c;
+  document.getElementById("cuenote").innerHTML = c
+    ? "cue at its filed trim " + (c.gainDb > 0 ? "+" : "−") +
+      Math.abs(c.gainDb).toFixed(1) + " dB × the board's <b>select</b> gain " +
+      c.role.toFixed(2)
+    : "this bed's duty action has no cue filed, so there is nothing to set it against";
+}
+function pick(f){
+  var p = playing ? posNow() : lastPos;
+  cur = f; lastPos = p % dur();
+  document.querySelectorAll("tr[data-f]").forEach(function(tr){
+    tr.classList.toggle("sel", tr.getAttribute("data-f") === f); });
+  document.querySelectorAll("button[data-f]").forEach(function(b){
+    b.classList.toggle("on", b.getAttribute("data-f") === f); });
+  if (playing) playFrom(lastPos);
+  document.getElementById("trim").value = TRIMS[cur];
+  setTrim(); paintCue();
+}
+document.getElementById("play").onclick = function(){
+  if (playing) { stopAll(); return; }
+  init(function(){ playFrom(lastPos); });
+};
+document.getElementById("seam").onclick = function(){
+  init(function(){ playFrom(Math.max(0, dur() - 2.5)); });
+};
+document.getElementById("trim").oninput = setTrim;
+document.getElementById("reset").onclick = function(){
+  var b = bed(cur);
+  document.getElementById("trim").value = b.gainDb == null ? 0 : b.gainDb; setTrim();
+};
+document.getElementById("fire").onclick = function(){ init(fireCue); };
+document.getElementById("rep").onchange = function(){
+  if (repTimer) { clearInterval(repTimer); repTimer = null; }
+  if (this.checked) init(function(){ fireCue(); repTimer = setInterval(fireCue, 6000); });
+};
+// WHAT GETS SAVED IS WHAT THE RECORD NEEDS. A trim on its own cannot be checked later; with
+// the measured loudness and the true peak beside it, both the resulting level and the ceiling
+// check can be re-derived from the file without this page.
+document.getElementById("save").onclick = function(){
+  var out = {savedAt: new Date().toISOString(), page: "ambient_bench", monitorDb: MONITOR_DB,
+    beds: BEDS.map(function(b){
+      var t = TRIMS[b.file];
+      return {file: b.file, name: b.name, duty: b.duty, trimDb: +t.toFixed(1),
+              recordGainDb: b.gainDb, integratedLufs: b.integrated,
+              landsAtLufs: b.integrated == null ? null : +(b.integrated + t).toFixed(2),
+              truePeakDbtp: b.tp,
+              truePeakAfterTrimDbtp: b.tp == null ? null : +(b.tp + t).toFixed(2)};
+    })};
+  var blob = new Blob([JSON.stringify(out, null, 1)], {type: "application/json"});
+  var u = URL.createObjectURL(blob), a = document.createElement("a");
+  a.href = u; a.download = "ambient_levels.json";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(u); }, 2000);
+};
+document.getElementById("load").onchange = function(){
+  var f = this.files && this.files[0]; if (!f) return;
+  var r = new FileReader();
+  r.onload = function(){
+    try {
+      var j = JSON.parse(r.result), n = 0;
+      (j.beds || []).forEach(function(b){
+        var k = b.file in TRIMS ? b.file : null;
+        if (k) { TRIMS[k] = b.trimDb; n++; }
+      });
+      document.getElementById("trim").value = TRIMS[cur]; setTrim();
+      var extra = (j.beds || []).length - n;
+      document.getElementById("loadnote").textContent = "restored " + n +
+        (n === 1 ? " setting" : " settings") + " from " + f.name +
+        (extra > 0 ? " (" + extra + " in the file are not on this page)" : "");
+    } catch (e) {
+      document.getElementById("loadnote").textContent = "could not read " + f.name;
+    }
+  };
+  r.readAsText(f);
+};
+function tick(){
+  var d = dur(), p = posNow();
+  document.getElementById("pos").textContent = p.toFixed(2);
+  document.getElementById("dur").textContent = d.toFixed(0);
+  document.getElementById("lap").textContent = Math.floor(elapsed() / d);
+  document.getElementById("pl").style.left = (100 * p / d) + "%";
+  document.getElementById("xf").style.width = (100 * 1.5 / d) + "%";
+  requestAnimationFrame(tick);
+}
+
+(function build(){
+  var h = ["<h2>" + D.have + " of " + D.slots + " duty actions have a bed</h2>"];
+  if (!BEDS.length) {
+    h.push("<p class='sub gap'>No ambient beds in sfx/ambient/ yet.</p>");
+    document.getElementById("rows").innerHTML = h.join("");
+    return;
+  }
+  h.push("<table><tr><th class='l'>bed</th><th class='l'>duty action</th><th>length</th>" +
+         "<th>rate</th><th>ch</th><th>integrated</th><th>true peak</th><th>gainDb</th>" +
+         "<th>lands</th><th>size</th></tr>");
+  BEDS.forEach(function(b){
+    h.push("<tr data-f='" + b.file + "'><td class='l'><button data-f='" + b.file +
+      "' onclick=\"pick('" + b.file + "')\">" + b.name + "</button></td>" +
+      "<td class='l' style='color:var(--dim)'>" + (b.duty || "&mdash;") + "</td>" +
+      "<td>" + (b.ms / 1000).toFixed(0) + " s</td><td>" + b.sr + "</td><td>" +
+      (b.ch === 1 ? "mono" : b.ch + " ch") + "</td>" +
+      "<td>" + (b.integrated == null ? "&mdash;" : b.integrated.toFixed(2)) + "</td>" +
+      "<td>" + (b.tp == null ? "&mdash;" : b.tp.toFixed(2)) + "</td>" +
+      "<td>" + (b.gainDb == null ? "<span class=gap>none</span>"
+                : (b.gainDb > 0 ? "+" : "−") + Math.abs(b.gainDb).toFixed(1)) + "</td>" +
+      "<td>" + (b.integrated == null || b.gainDb == null ? "&mdash;"
+                : (b.integrated + b.gainDb).toFixed(1)) + "</td>" +
+      "<td>" + Math.round(b.bytes / 1024) + " KB</td></tr>");
+  });
+  h.push("</table>");
+  D.missing.forEach(function(m){
+    h.push("<p class='sub gap'>" + m + " has no bed</p>");
+  });
+  document.getElementById("rows").innerHTML = h.join("");
+  pick(cur); tick();
+})();
+</script>
