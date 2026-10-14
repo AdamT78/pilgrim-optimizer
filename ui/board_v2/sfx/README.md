@@ -363,6 +363,45 @@ sum it or take one channel, and the result is the same either way. The reason to
 is not the decision but the *reading* — a 0.00 dB sum would otherwise look like a measurement
 that failed, and an equality check would miss the MP3 variant entirely.
 
+### A bed asks the same three numbers a different question
+
+Everything above is about folding a stereo master down to mono safely, because every clip in this
+tree is a point event and mono is where they all end up. **Ambient beds are meant to stay
+stereo**, which turns the question around: not *is this safe to sum* but *is there a field here
+worth keeping*. The same three numbers answer both, and the correlation reading that settles the
+first misleads on the second.
+
+The first bed source examined — a fireplace, 96 kHz stereo, intended for Silversmith — reports
+two channels, L peaking at −6.11 dB against R's −5.04, and a broadband correlation of
+**+0.9940**. Against the table above that is the first row: both alive, correlation high, sum it.
+Read as an answer to the *bed* question it says there is no field here at all, and that is wrong.
+Measured per band:
+
+| band | L/R correlation |
+| --- | --- |
+| 20–200 Hz | +0.9958 |
+| 200–800 Hz | +0.9617 |
+| 800–3000 Hz | **+0.7456** |
+| 3000–8000 Hz | **+0.7218** |
+| 8000–20000 Hz | +0.8655 |
+| broadband | +0.9940 |
+
+There is real width through the midrange and the broadband figure hides it, because the heavily
+correlated bass dominates the sum. Same failure as every other single-number spectrum summary
+here — filter the audio and measure what comes out. It was reported in conversation as
+*effectively mono* on the strength of that one number before the bands were looked at.
+
+**The shape of the column is the test, not any single number in it.** Correlated in the bass and
+decorrelated through the mids and top is what a well-made spaced pair looks like, and it is what
+you want: low frequencies carry no directional information, so decorrelating them buys no width
+and costs mono compatibility. A source reading near 1.0 in *every* band is mono in a stereo
+wrapper and should be summed like any cue. A source reading low in the *bass* has a phase problem
+rather than a field.
+
+The table above still governs cues, which stay mono. This governs beds, which do not — and the
+tool that measures them has to stop folding channels first, which is
+`../docs/sfx_levelling_note.md` §10.
+
 ### The levels, which are the thing to protect
 
 | | peak | mean |
@@ -869,6 +908,54 @@ Analysing these with `ffmpeg -ac 1 -f f32le` and taking the maximum reports the 
 same files reports −0.3 and −0.4. The two methods disagree and the difference was briefly reported
 here as the files being clipped. They are not known to be. Measure the **shipped** file with
 `volumedetect` and trust that.
+
+### `ambient/`, the first sounds here that are not events
+
+Two beds, and they are a different kind of thing from everything above. A cue is an event: it
+fires, it is 70 ms to 1.6 s long, and it is over. A bed runs underneath a selected duty action
+for as long as the player leaves it selected, so it loops, and almost every rule in this file
+had to be asked again for it.
+
+`ambient/silversmith_sfx_v01.ogg` is a fire in a metal stove, a 25 s loop cut from 15.50 s of
+Coll Anderson's *Gentle Wind* master (Sonniss GDC 2020). `ambient/devotion_sfx_v01.ogg` is a
+cathedral between responses, a 35 s loop from 81.50 s of Alexander Kopeikin's *St Petersburg*
+master (GDC 2016) — taken from the quiet passage rather than the choir, because the master
+alternates full choir at −22 to −25 dB with long stretches at −31 to −36 and only the quiet ones
+are a setting rather than a performance.
+
+**The loop is made by folding the tail back over the head with an equal-power crossfade**, and
+which start time you choose matters far more than anything else about it. Searching the fire's
+master for the closest band match between the two shoulders, the best start scores 0.70 dB
+across five bands and the worst 11.06, with up to 15.4 dB in a single band — and the worst
+one's seam reads only −1.00 dB by level, so a level check calls it fine. Crossfade *length*, by
+contrast, moves the seam about a decibel across a 24× range. The reasoning and the measurements
+are in `../docs/ambient_loop_note.md`.
+
+**A bed's `gainDb` is set by ear, and that is a finding rather than laziness.** A target was
+chosen the way −24 was chosen for the cues — derived from one bed judged against its own cue —
+and the second bed falsified it: trimmed to the same measured loudness, the cathedral sits far
+forward of the fire. No measure explains it. M200, 3 s short-term maximum, short-term p95 and
+p50 all agree with integrated loudness to within 1.0 dB. What separates them is that the
+cathedral has voices in it, and every loudness measure scores energy rather than salience. So
+`sfx_levels.py` reports a bed's level and refuses to propose one, `--write` skips beds so it
+cannot overwrite a judgement with a computation, and the only rule left that is not taste is the
+true-peak ceiling.
+
+**Both are 48 kHz, which departs from this tree's keep-the-source-rate convention**, and the
+departure is deliberate. Both masters are 96 kHz. The convention exists to preserve the check
+that a shipped clip's peak matches its master's — and that check cannot apply to a bed anyway,
+because a crossfaded loop's peak comes from a 25 or 35 second window of a much longer recording
+and was never going to match. Against a convention with no force here, 48 kHz is what the
+browser resamples to on decode, it is what was auditioned and approved, and it saves about 12%
+on files that are already five to ten times the size of any cue.
+
+**Whoever wires these into the board needs one thing that is not in the file.** Chrome's
+`decodeAudioData` returns 176 to 764 samples past the true end of a Vorbis file — 4 to 17 ms of
+padding, 6 dB down on some and near-silent on others. Looped raw, that pads every wrap with a
+dropout: rendered offline and measured in 2 ms windows, the hole reads −64.7 dB against a bed
+sitting at −33. Setting `loopStart = 0` and `loopEnd` to the clip's true length removes it
+entirely, and `loopEnd` is in seconds, which matters because the AudioContext runs at whatever
+rate the device reports rather than at 48 kHz.
 
 ### The bench
 

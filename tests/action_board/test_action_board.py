@@ -2107,9 +2107,28 @@ def test_a_sonniss_record_agrees_with_its_own_path_about_which_bundle_it_came_fr
     for key, entry in sorted(rec.items()):
         if not key.startswith("sfx/") or entry.get("licence") != "sonniss-gameaudiogdc":
             continue
-        path = re.search(r"GDC(\d{4})-GameAudioBundle(\d+)of(\d+)",
-                         str(entry.get("originalPath", "")))
+        raw = str(entry.get("originalPath", ""))
+        path = re.search(r"GDC(\d{4})-GameAudioBundle(\d+)of(\d+)", raw)
         if not path:
+            # AN INDIVIDUAL FILE OFF A MIRROR IS NOT AN ARCHIVE, and refusing it would force an
+            # archive number nobody could check. Both ambient beds came from the your.org
+            # mirror's `individual/` tree, which is flattened by publisher: the file genuinely
+            # never travelled in one of the numbered parts, and writing "archive 3 of 14" on it
+            # would be inventing a history to satisfy a regex. The year is still a fact and is
+            # still checked; only the archive clause is allowed to be absent.
+            loose = re.search(r"sonniss(\d{4})/", raw)
+            if loose:
+                note = str(entry.get("licenceNote", ""))
+                year = re.search(r"GameAudioGDC (\d{4})", note)
+                if not year:
+                    bad.append("%s: licenceNote states no bundle year" % key)
+                elif year.group(1) != loose.group(1):
+                    bad.append("%s: path says GDC %s, licenceNote says %s"
+                               % (key, loose.group(1), year.group(1)))
+                elif re.search(r"archive \d+ of \d+", note):
+                    bad.append("%s: came from the mirror as an individual file, so its "
+                               "licenceNote must not claim an archive number" % key)
+                continue
             bad.append("%s: licence is sonniss but originalPath names no bundle -- %r"
                        % (key, entry.get("originalPath", "")))
             continue
@@ -2229,8 +2248,15 @@ def test_no_sound_claims_a_rank_in_the_set_that_the_set_contradicts():
                     if re.search(pat, sentence, re.I):
                         within = folder
                         break
+                # A CLAIM IS SCOPED TO ITS OWN CLASS. Every rank in this tree was written
+                # when every clip was a cue; ambient beds are a second class, measured
+                # differently and heard differently, and "the quietest in the set" was never
+                # a claim about a 35 s bed. Filing the first two beds made Quarry's record
+                # look false on a comparison nobody had meant to make.
+                kind = rec[key].get("kind", "cue")
                 beaten = [(o, r[metric]) for o, r in reading.items()
                           if o != key and metric in r and o.startswith(within)
+                          and rec.get(o, {}).get("kind", "cue") == kind
                           and (r[metric] < mine if sign > 0 else r[metric] > mine)]
                 if beaten:
                     o, val = sorted(beaten, key=lambda kv: kv[1] * sign)[0]
@@ -2290,8 +2316,12 @@ def test_a_sound_record_describes_the_file_that_is_actually_there():
                              capture_output=True).stdout
         samples = np.frombuffer(raw, dtype=np.float32).astype(float)
         if chans > 1:
-            samples = samples.reshape(-1, chans).mean(axis=1)
-        return samples, rate
+            # THE PEAK BELONGS TO THE LOUDER CHANNEL, NOT TO A FOLD. Folding first reads the
+            # first stereo bed 0.7 dB low and the second 2.0 dB low, because a fold averages
+            # away whatever is only on one side. sfx_levels.py takes true peak the same way.
+            samples = samples.reshape(-1, chans)
+            return samples.reshape(-1, chans), rate, samples.shape[0]
+        return samples, rate, samples.size
 
     if shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None:
         pytest.skip("ffmpeg/ffprobe not on PATH; this check needs a decoder")
@@ -2307,11 +2337,11 @@ def test_a_sound_record_describes_the_file_that_is_actually_there():
         want_pk = re.search(r"peak (-?[\d.]+) *dB", said)
         if not (want_ms or want_pk):
             continue
-        a, rate = native(root / key)
+        a, rate, frames = native(root / key)
         if a.size == 0:
             off.append("%s: decoded to nothing" % key)
             continue
-        got_ms = round(1000 * a.size / rate)
+        got_ms = round(1000 * frames / rate)
         got_pk = 20 * math.log10(max(float(np.abs(a).max()), 1e-12))
         if want_ms and abs(int(want_ms.group(1)) - got_ms) > 25:
             off.append("%s: record says %s ms, the file is %d"
@@ -2366,8 +2396,20 @@ def test_every_sound_carries_a_measured_playback_trim():
 
     drifted = []
     for key in sounds:
-        want = levels.gain_for(levels.profile(ROOT / "ui" / "board_v2" / key))
+        kind = rec[key].get("kind", "cue")
         got = float(rec[key]["gainDb"])
+        prof = levels.profile(ROOT / "ui" / "board_v2" / key, kind)
+        if kind == "bed":
+            # NOTHING TO RE-DERIVE. A bed's level is a judgement -- a target was tried and
+            # falsified, because at equal measured loudness a bed with voices in it sits
+            # forward of one without, and no loudness measure scores that. What is still
+            # checkable is the one rule that is not taste: it must not clip.
+            over = levels.ceiling_breach(prof, got)
+            if over:
+                drifted.append("%s: authored %+.1f dB puts true peak %+.2f dB over the ceiling"
+                               % (key, got, over))
+            continue
+        want = levels.gain_for(prof)
         if abs(want - got) > 0.5:
             drifted.append("%s: record says %+.1f dB, re-measures %+.1f" % (key, got, want))
     assert not drifted, (
