@@ -1,8 +1,14 @@
 # Cutting an ambient bed into a seamless loop
 
-**Status: fourteen files under six duty actions.** Three actions have one track each —
+**Status: twenty-five files under seven duty actions.** Three actions have one track each —
 `clerical_actionB/silversmith` (25 s, fire), `give_alms_actionA/alms` (25 s, rain) and
-`give_alms_actionB/donate_building` (32.5 s, a sheltered wind). Three have several.
+`give_alms_actionB/donate_building` (32.5 s, a sheltered wind). Four have several.
+`build_roads_actionA/` holds eleven — `rammers`, `gravel`, `far_work`, `worker_footsteps`,
+`horse_snorts`, the ox cart in three (`ox_cart_mechanics`, `ox_cart_stones`, `ox_breathing`)
+and the oil lamp in two (`oil_lamp_rattle`, `oil_lamp_flame`), all 35 s; `oil_lamp_flame` is
+wrapped and the other nine are not, and under them all sits `wind` (31 s, wrapped, and the
+only track there that is not 35 s). The largest folder in the tree, and the first action with beds and no cue
+of its own.
 `clerical_actionA/` holds `devotion` (35 s, a service) with `candle` (25.5 s, an independent
 loop that drifts against it) and `rosary` (35 s, a stem placed against the service and so
 matched to it exactly). `allocation_actionA/` holds `footsteps`, `keys` and `wool_robe`
@@ -289,6 +295,17 @@ it is blind to. The sixth bed, `donate_building_sfx_v01.ogg`, found a second, an
 the same shape: **the score reads two short windows and knows nothing about the thirty seconds
 between them.**
 
+### A body can climb — and so can an event rate
+
+`build_roads_actionA/horse_snorts` is the same fault in the other currency. Its six snorts sit
+at 4.10, 12.85, 18.00, 23.10, 27.20 and 31.15 s, so the intervals between them run **8.75,
+5.15, 5.10, 4.10 and 3.95 s** — shortening almost monotonically — and the gap across the wrap
+is **7.95 s**, which resets it. Nothing about the level climbs; the *rate* does. A band search
+over shoulders cannot see it, a level trend across the body cannot see it, and the wrap-window
+percentile cannot see it either, because every one of those reads energy. **Count the events
+and look at the series of gaps.** On sparse material that is one more line of arithmetic and
+it is the only thing that finds this.
+
 ### A body can climb
 
 Searching the sheltered-wind master — 215 s, every start at 0.5 s, every length from 28 to 42 s
@@ -390,12 +407,44 @@ consistent matches is**, because a false positive would have to be both strong a
 offset agreeing with its neighbours. It works on any source short enough to search in one FFT,
 which here is 145 s against a 28.5 s stem.
 
+### The step test compares against the wrong thing when the low end is loud
+
+Section 9 asks whether the step across a butt join is under **the file's own median
+sample-to-sample difference**. `build_roads_actionA/wind` is the first bed to fail it: 0.000295
+left, **0.002281 right**, and the right channel is 3.50× that median.
+
+It is not a discontinuity. Measured against its own neighbours rather than the whole file, the
+step is **0.94× the largest difference in the 100 samples around it** — the differences run
+−0.00164 into the join, −0.00228 across it and −0.00243 out of it, so the slope is continuous
+and merely steep. The wrap happens to land where a slow, loud low-frequency excursion is at
+its fastest.
+
+**The median is the wrong reference and it will go on being wrong in the same way.** A median
+over a whole bed is dominated by its quiet stretches; on material with real low-frequency
+energy the local slope at any given moment can be several times that and nothing is wrong. The
+test should ask whether the join is steeper than the samples *beside* it, which is what a
+click actually is. The median version has not produced a false pass on anything here — a real
+discontinuity is large against both references — so it stays as the cheap first look, with the
+neighbour comparison as the thing that settles it.
+
+**Checked at four widths** — ±5, ±10, ±25 and ±50 samples — the neighbour median moves between
+0.00059 and 0.00090 and the verdict does not change. The whole-file median reads 0.00065,
+close to the local one; what differs is the *maximum* nearby, which is the figure that matters.
+
+**It happened again within the hour, which is what settles it.** `build_roads_actionA/oil_lamp_flame`
+reads 0.000345 left against a whole-file median of 0.000068 — **5.05×**, worse than the wind —
+and **0.64×** the largest difference among its own neighbours. Two files, two false alarms,
+one cause: both are continuous beds with real low-frequency motion, so their medians sit far
+below their local slopes. *The median is a statistic about the quiet parts of a file and the
+wrap is not one of them.* Use it as the cheap first look and let the neighbour comparison
+decide.
+
 ## 12. Not done
 
-- **The board plays no bed.** All fourteen are filed and audible on the ambient bench;
+- **The board plays no bed.** All twenty-five are filed and audible on the ambient bench;
   `bundled_sfx()` still inlines only `tile.ogg` and `confirm.ogg`. This bullet has said "all
   five" since there were five, which is its own small lesson: a count in prose is a fact with
-  no test behind it, and six beds arrived before anyone noticed. The generator prints the
+  no test behind it, and nine beds arrived before anyone noticed. The generator prints the
   number on every run — that is the one to believe.
 - **Bed-to-bed transitions are unspecified.** One global equal-power time, not a pairwise
   matrix: the matrix never converges, it grows as the square of a bed count that is expected to
@@ -407,9 +456,9 @@ which here is 145 s against a 28.5 s stem.
   undecided, as is the fade-in on select, and what happens on deselect or re-select.
 - **The loop checker does not exist as a tool.** The band-match shoulder search, the N-lap
   render and the wrap-window percentile test have been written from scratch for each of the
-  fourteen files. Three of them now have a settled shape and one of them, the percentile test,
-  is the only check that works on a loop that arrives already baked — and none of the three
-  applies to a stem that is not wrapped at all, which four of the fourteen are not.
+  twenty-five files. Three of them now have a settled shape and one of them, the percentile
+  test, is the only check that works on a loop that arrives already baked — and none of the
+  three applies to a stem that is not wrapped at all, which thirteen of the twenty-five are not.
 - **The composite's master is the first audio source here that cannot be re-fetched.** Every
   other sound in the tree is a download, which is why `sfx/masters/` was deleted — the same
   file can be fetched again from the name in `source`. A DAW mix cannot, and the reason the
