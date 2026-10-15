@@ -932,7 +932,7 @@ here as the files being clipped. They are not known to be. Measure the **shipped
 
 ### `ambient/`, the first sounds here that are not events
 
-Ten files under six duty actions, and they are a different kind of thing from everything
+Fourteen files under six duty actions, and they are a different kind of thing from everything
 above.
 
 **They live one folder per duty action** — `ambient/<duty>_<slot>/`, which is the same string
@@ -948,7 +948,8 @@ guessed at, where the old prefix match quietly produced a bed belonging to nothi
 
 *Older filenames still carry their duty's name — `clerical_actionB/silversmith_sfx_v01.ogg`
 says it twice — because moving a file is cheap and renaming one costs a record's continuity.
-New tracks are named for what they are: `footsteps`, `keys`, `wheat`, `coins`, `barn_creaks`.* A cue is an event: it
+New tracks are named for what they are: `footsteps`, `keys`, `wheat`, `coins`, `barn_creaks`,
+`candle`, `room`, `rosary`, `wool_robe`.* A cue is an event: it
 fires, it is 70 ms to 1.6 s long, and it is over. A bed runs underneath a selected duty action
 for as long as the player leaves it selected, so it loops, and almost every rule in this file
 had to be asked again for it.
@@ -971,8 +972,9 @@ only the per-band reading settles it. It is also the easiest thing here to loop:
 scores 0.17 dB of shoulder mismatch, the closest match in the tree.
 
 `ambient/allocation_actionA/footsteps_sfx_v01.ogg` and `keys_sfx_v01.ogg` are a queue of monks
-waiting with a key handed over at the front: a **28.5 s** loop in two stems — and the first bed
-here that was not cut from one recording.
+waiting with a key handed over at the front: a **28.5 s** loop in stems — two at first and
+three since `wool_robe_sfx_v01.ogg` joined them, described below — and the first bed here that
+was not cut from one recording.
 
 **It shipped as one file first and was split afterwards**, which is worth recording because the
 split is the only reason the two can be balanced against each other. `allocation_sfx_v02.ogg`
@@ -985,9 +987,10 @@ would arrive somewhere new every lap.
 
 **Splitting also gave each stem a single source**, where the composite needed two —
 `footsteps` is Sadiquecat's hallway walk throughout and `keys` is Fenodyrie's jingle
-throughout. Both start at −23.0, which is not a judgement but the identity: the composite was
-authored by ear at −23.0 and gain is linear, so the two at −23.0 summed are the bed as it was
-approved. Moving them apart is the point.
+throughout, and the wool that joined them later is Yuval's coat throughout. All three start at
+−23.0, which is not a judgement but the identity: the composite was authored by ear at −23.0
+and gain is linear, so the stems at −23.0 summed are the bed as it was approved. Moving them
+apart is the point.
 It was **assembled** from two CC0 freesound.org uploads: single footfalls lifted out of
 Sadiquecat's *Walking to dead-end hallway* and recombined into several walkers at different
 distances, with three single contacts from Fenodyrie's *keys jingling* as the handoffs.
@@ -1036,6 +1039,64 @@ so its cadence across the wrap is the mix's own 3.92 s for free. What it does ha
 *interior* gap of 4.99 s where the others run 3.90 to 3.96: not a seam, identical every lap, and
 reading as one slower handoff. **A rhythm fault at the wrap is a loop artefact; a rhythm fault
 inside the body is content.**
+
+### A third stem, and the first file here proved to be what it says it is
+
+`ambient/allocation_actionA/wool_robe_sfx_v01.ogg` is the cloth of the same queue — heavy
+habits moving as the monks shift and walk — placed across the same **28.500000 s** from a
+single **CC0** freesound upload by **Yuval**, a 145 s mono recording of a heavy wool coat made
+on an MKH 60 into a ULN-2 in 2013. The feet were already here; this is what they are wearing.
+
+**It is a pure addition to the approved mix, and that is arithmetic rather than a claim.**
+Three identities on the 24-bit masters, each exact to one least significant bit:
+`footsteps + keys` **is** v09, `footsteps + keys + wool` **is** the with-wool preview, and
+`preview − v09` **is** this stem with a maximum sample difference of **zero**. Nothing in the
+bed that was already approved has moved, and the three at −23.0 are the preview at −23.0, bit
+for bit. *The earlier two-stem split could only be checked at r = +0.9970 with a residual
+22.2 dB down* — because the composite it was checked against had been through Vorbis. With no
+codec anywhere in the path the floor is the 24-bit LSB, 1.19 × 10⁻⁷, and all three of these
+land on it. The weaker number was the codec, not the split.
+
+**Its material was traced back into the source by measurement, which is new here.** Every
+other record in this tree names a source because somebody wrote the name down. This one was
+checked: 57 half-second windows of the stem loud enough to probe were cross-correlated against
+the whole 145.262 s upload, and **13 matched decisively** — r between 0.33 and 0.90, each at
+least three times the next peak anywhere else in the recording — locating the material at
+about 24.4, 41.5, 46.0, 63.8–64.5 and 100.8–106.0 s of it. **Consecutive probes map to
+consecutive source times at exactly 1:1**, so the material is cut and placed, not stretched.
+The other 44 match nothing cleanly, and that is the expected result rather than a doubt:
+several placed copies overlap at any instant, so no one window is a scaled copy of one span.
+*A named source can now be confirmed and not merely recorded*, on any file whose source is
+short enough to search.
+
+**And a second sighting of the freesound filename trap.** The account is **`Yuval`** with a
+capital Y; the download is `188208__yuval__fabric-movement-wool.wav`. The candle record found
+that freesound flattens the dots out of a username — it also **folds the case**. Same rule from
+the other side, and the same conclusion: a freesound filename gives you the id and the slug
+reliably and the username only approximately.
+
+**It has almost no width, and that is the one thing worth a second look.** Its side channel
+sits **20.4 dB under its mid** and the channels correlate +0.97 *flat across every band*,
++0.977 to +0.982 from 20 Hz to 20 kHz — which is a mono source with a trace of uniform
+decorrelation, not a placed field. The footsteps it belongs to run +0.69, +0.88, +0.36, +0.17,
++0.04, +0.01 up those same bands with the side only 3.7 dB under the mid, because they are
+several walkers at several distances. **If the robes are the walkers' robes they should share
+that spread.** They don't: the feet are across the cloister and the cloth is in the middle of
+your head. Nothing to fix in this file — it is the stem as rendered — but it is the first thing
+to try in the DAW.
+
+**It has holes, and the footsteps cover them.** 22.4% of the stem is exact digital silence in
+13 spans, the longest 1.570 s at 12.30 s. The footsteps stem has **no silence anywhere**, so
+the three summed never drop out; alone this one would stutter. Which is the Taxation lesson
+again from the other direction — *a stem is judged inside its mix, never on its own* — and the
+reason it can be filed with holes in it where a bed could not.
+
+**Adding it did not break the wrap**, which had to be checked because v09's wrap was baked
+before this layer existed. The step across a butt join goes to 0.0004 / 0.0011, still under
+the preview's own median sample-to-sample difference of 0.0019 / 0.0018; the 1.5 s window
+straddling the wrap moves from the **17th percentile to the 16th**; and the dip at the wrap
+deepens from 3.2 dB under the median to 4.4. Measurably worse, inaudibly so, and inside the
+material's own fluctuation.
 
 `ambient/allocation_actionA/allocation_wind_sfx_v01.ogg` is the first **second layer**: a 17 s howl from
 Hzandbits' *Howling Winds — Interior* (GDC 2016), playing under Allocation alongside the room
@@ -1107,7 +1168,139 @@ up: correlated bass, decorrelated top. That is a spaced pair and not raw M/S, th
 that settled Alms — and the reason equal power is the right curve here while the 451 Hz
 resonance still needs its own check.
 
-### `taxation_actionA/`, three tracks and no licence yet
+### A candle under the service, and the first source too steady to search
+
+`ambient/clerical_actionA/candle_sfx_v01.ogg` is a double wood-wick candle burning close to the
+listener, a **25.5 s** loop from 36.00 s of a 67.6 s **CC0** freesound recording by roisin.gleeson, made
+on a Zoom H4n in 2023 — the recorder and the date come out of the file's own `bext` chunk
+rather than from anyone's memory. It sits beside Devotion, so the service carries from the back
+of the building while something burns near you.
+
+**Its creator was filed wrong for an hour and the filename is why.** freesound names a download
+`<id>__<user>__<slug>` with the username **flattened** — every dot removed — so
+`680474__roisingleeson__…` was read as *roisingleeson* when the account is **roisin.gleeson**.
+Plausible, wrong, and invisible to anything in the file: it would have gone on crediting a
+person who does not exist until someone opened the page. The general form is worth keeping: a
+freesound filename gives you an id and a slug reliably, and a username only approximately.
+
+**It is the steadiest source any bed here is cut from, and that breaks the rule that has held
+for every other one.** Its 2 s blocks span 4.94 dB across the whole recording, and every
+candidate body in the search landed between −57.20 and −57.48 dBFS — a range of 0.28 dB. Where
+the fire's shoulder search spread 0.70 to 11.06 dB and the sheltered wind's 0.30 to 325, this
+spreads 0.37 to 6.12 with the top dozen all under 1 dB. **On material this even, which two
+shoulders you join stops being the thing that decides.** That is the first counter-case to
+§5 of the loop note, and it is worth having one.
+
+**So the length was chosen for what it plays against instead.** 25.5 s realigns with Devotion's
+35 s every 1785 s — half an hour — and with Silversmith's 25 s every 1275 s. Both hold, on
+purpose: the duty was named without the action, so the cut had to survive being placed under
+the wrong one. **A 35 s body scored 0.45 dB**, better than several kept, and would have locked
+to Devotion on every single lap. Matching the length is the one thing not to do.
+
+**Tonal, and for once it cost nothing.** Excesses of 9.4 dB at 9226 Hz and 8.2 dB at 1335 Hz
+over the spectral trend, both scored as narrow bands and the crossfade then built and measured:
+0.00 dB in the lower band and −0.04 in the upper, against the howl's 0.46 and the sheltered
+wind's 0.50.
+
+**The seam decomposes to almost nothing**, which is the other half of the steadiness: the
+crossfade gains 0.38 dB over the raw head it replaced and that head is 0.90 dB under the body
+mean, so the old single figure (−0.55 dB) is for once honest. That is the condition under which
+it always was.
+
+### Beads told under the sermon, and a length match the paragraph above argues against
+
+`ambient/clerical_actionA/rosary_sfx_v01.ogg` is four movements of three or four bead strikes
+placed irregularly across **35.000 s**, built for this project from a single ten-second **CC0**
+freesound recording by jaset13045 — *"hit the beads from a rosary"* is the uploader's whole
+description. It makes Clerical actionA the third folder here to hold more than two tracks,
+after Allocation and Taxation: the service
+carrying from the back of the building, a candle burning near you, and somebody in the
+congregation telling their beads. Like the Taxation stems and the Allocation bed it was placed
+with a script ChatGPT wrote, which is on its record as a `design` note with
+`generatedContent: "none"` beside it — no audio here is model output, every sample is that one
+upload cut up.
+
+**It is 35 s because Devotion is 35 s, and the candle's own entry says not to do that.** Both
+are right, and together they are the whole rule rather than two halves of a disagreement. The
+candle is a recording of a different room with nothing placed against it, so a shared length
+would buy only a lock and drift is free variation — a 35 s candle body scored *better* than the
+25.5 s one taken and was refused for exactly this. The rosary was placed **against** the
+sermon: the beads fall where they fall relative to it, and a lap that drifts moves them
+somewhere nobody put them. **1,680,000 samples in each file**, so from a common start the two
+never separate. *Matching lengths is the trap for independent loops and the requirement for
+stems of one scene*, and this folder now holds one of each, which is the clearest statement of
+it in the tree.
+
+**It is not a seamless loop and does not need to be**, the same shape as Taxation's three
+stems. Content runs 4.82 to 32.26 s, so it opens on 4.8 s of digital silence and closes on
+2.7 s, and the step across a butt wrap is **exactly 0.000000 in both channels** — a figure that
+means nothing whatever here, for the reason the deleted Allocation cathedral taught: silence
+joined to silence makes no click and is not the absence of a seam. Alone the track would gap
+every lap. It is not meant to play alone, and the sermon underneath fills precisely those
+seconds.
+
+**The gap the wrap makes is the one thing to listen for.** The movements begin at 4.80, 13.00,
+21.80 and 29.20 s, so the interior intervals run 8.2, 8.8 and 7.4 s and the one across the wrap
+is **10.6 s** — the longest, by about a fifth over the longest interior one. Irregular spacing
+is what was asked for and 10.6 is inside the spirit of it rather than outside, but it is the
+outlier, and if a lap ever sounds like it pauses, that is where to look. **Allocation's keys
+are the same arithmetic the other way round** — there the wrap landed on the grid and an
+*interior* gap was the odd length — and the rule that came out of them, that a rhythm fault at
+the wrap is a loop artefact while one inside the body is content, needs the material to have a
+rhythm before it can be applied. This has none on purpose, so the wrap gap is a question for
+the ear and not for the arithmetic.
+
+**And it is the file that broke a premise in the levelling note.** That note measures
+everything here **ungated**, on the argument that a cue is too short to survive BS.1770's gate
+and a bed is *too even to need it* — demonstrated at the time against four beds that agreed
+with their gated figures to within 0.02 dB. This one disagrees with its own by **7.1 dB**
+(−46.7 ungated, −39.6 gated), because four short events inside 35 s is not an even bed, and
+five other tracks here now do the same. The note is corrected rather than the measurement: see
+its *Ungated* section, which keeps the choice and drops the reason that stopped being true.
+
+**So the trim was not set from the integrated figure, and the record says why in full.** At
+−46.7 it sits 15.9 dB **under** Devotion's −30.8 while its peak sits 6.7 dB **over** — a crest
+factor of 34.9 dB against the sermon's 12.3. Levelled to match on integrated it would want
+−11.0 and the strikes would peak more than 20 dB above anything the service does. It is at
+**−15.0**, landing 3.9 dB under Devotion, on the reading that beads told two pews away are
+quieter than the service. A guess at taste, and one slider move from a different one.
+
+**All but mono**: the channels correlate **+0.9993**, which is a single close strike rather
+than a stereo field, and means the downmix costs nothing. It sits centred in front of
+Devotion's +0.51 cathedral, which is the right way round.
+
+### `taxation_actionA/`, four tracks and the hardest source here
+
+`room_sfx_v01.ogg` is the barn the other three sit inside — a **30.000 s** loop from 49.75 s of
+saintstereo's 143 s **CC0** barn interior, and the first Taxation track that is **not** a stem
+of the project owner's composite. It is the layer those three were always missing: each of them
+opens and closes on digital silence, and this is what belongs in between.
+
+**Thirty seconds exactly, and here that is the requirement rather than the trap.** Everywhere
+else in this tree a matching length is the thing to avoid — the wind layer's record argues it at
+length — but these four are one scene rather than four loops drifting past each other, so the
+bed holds step with the stems.
+
+**It is the hardest source in the tree to loop, and the numbers say so.** Its best shoulder
+match anywhere is **2.02 dB** across five bands, against 0.37 for the candle and 0.70 for the
+fire. The recording is not room tone: 2 s blocks spanning **40 dB**, 315 of 715 windows more
+than 10 dB over their band's median, and **the master is clipped** at eight points — 47.64,
+86.78, 93.76, 95.30, 96.10, 99.46, 107.10 and 108.28 s. The cut and its fold run 49.75 to
+81.25 s and contain none of them, and the footsteps at either end of the recording are nowhere
+near it.
+
+**There is no long neutral stretch in it at all, and the uploader's description says why.**
+It is someone climbing to the second floor of their grandmother's barn on a Sony PCM-D50: the
+footsteps at both ends are a person on a wooden staircase, and the loud events in between are a
+squeaky pulley and a pedal-operated flywheel. A walk through a working space, not a room tone.
+*Every measurement said so before the description was read* — which was the wrong order, and a
+useful check on the measurements rather than on the description. The calmest region runs
+109–124 s and is punctuated; the only span in 143 seconds with no loud event anywhere inside it
+is **six seconds long**. That was one of three candidates auditioned side by side over the stems — level-matched
+to within 0.03 dB so the comparison was of character rather than loudness — and it was not the
+one taken. The cut that was has events in it because every usable cut in this file does.
+
+### The three stems, one CC0 source each
 
 `ambient/taxation_actionA/wheat_sfx_v01.ogg`, `coins_sfx_v01.ogg` and
 `barn_creaks_sfx_v01.ogg` are the first duty action with **more than two tracks**, and the
@@ -1154,14 +1347,30 @@ step. Whatever wrap they eventually get has to be *the same wrap on all of them*
 separately they would each find a different loop point, and the coin that was placed to land
 against the wheat would arrive somewhere new every lap.
 
-**No trim has been set on any of them.** They measure −47.4, −36.8 and −44.4 LUFS as they
-stand, so coins sits about 10 dB above wheat before any balancing. That balance is the point of
-the per-track sliders and is not something to derive.
+**One of the three now has a trim.** Untrimmed they measure −47.4, −36.8 and −44.4 LUFS, so
+coins ran about 10 dB above wheat; **coins was set by ear to −17.0** on 2026-10-15, which drops
+it to −53.8 and puts it about 6 dB *under* wheat and 2 dB under the barn room it sits in.
+Wheat and the creaks are still at unity and are now the loud ones in the group. That balance is
+the point of the per-track sliders and is not something to derive — the one number here was
+heard, not computed.
 
-**A layer belongs to its action by prefix.** `allocation_wind` resolves to Allocation by
-dropping trailing words until something matches a duty action, so the filename can say which
-layer it is without a `duty` field duplicating what `duty_text.json` already owns — and the
-layer answers to Allocation's own cue.
+**It settled a headroom question as a side effect, and the answer was better than the note
+feared.** `../docs/sfx_levelling_note.md` has carried a bullet warning that a bed plus a cue
+can exceed full scale, and it named `coins` at −8.6 dBTP as the case that had stopped being
+hypothetical. Measured rather than estimated, the four Taxation beds summed at their trims
+read **−8.57 dBTP** before this change and **−20.02** after; with this action's own cue at its
+worst possible alignment, **−4.45** before and **−9.73** after. *Neither was ever over full
+scale.* The bullet was multiplying against the **−1 dBTP policy ceiling** — the limit a cue may
+not exceed — as though some cue sat there, where the loudest cue in this tree after its own
+trim is −3.97 dBTP and Taxation's is −12.90. The ceiling is a rule about what may be filed, not
+a description of what is filed, and the note now says so.
+
+**A track belongs to its action by folder, and nothing in a record says so.** It used to be by
+prefix — `allocation_wind` resolved to Allocation by dropping trailing words until something
+matched — and that paragraph is now the folder-per-action section above. What survives the
+change is the reason behind it: no record here carries a `duty` field, because the path already
+answers the question and `duty_text.json` already owns the list. Every track in a folder
+answers to that action's own cue.
 
 **Eleven of these sounds carried no sha256 at all until 2026-10-15**, and the gap was wider
 than the sounds: 98 of the tree's 219 entries recorded none, whole families at a time — all 35

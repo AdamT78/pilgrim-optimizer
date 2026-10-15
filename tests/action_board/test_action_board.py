@@ -3899,3 +3899,83 @@ def test_setting_the_mark_size_to_the_size_it_already_is_changes_nothing():
         "configure() asked for the size the board already draws and changed %s, so its copy of "
         "one of these expressions disagrees with the module's" % drifted)
     assert g.check() == [], "\n".join(g.check())
+
+
+_NUMBER_WORDS = {
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8,
+    "nine": 9, "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14,
+    "fifteen": 15, "sixteen": 16, "seventeen": 17, "eighteen": 18, "nineteen": 19,
+    "twenty": 20,
+}
+
+
+def test_the_prose_count_of_beds_is_the_number_of_beds():
+    """A count written out in words is a fact with nothing holding it to the tree.
+
+    THIS GUARD EXISTS BECAUSE THE SAME MISTAKE HAPPENED TWICE IN ONE SITTING. `ambient_loop_note`
+    opened "Status: ten files under six duty actions" while thirteen were filed, and its own
+    Not-done list said "all five are filed" from back when there were five -- so six beds had
+    arrived since anyone last read that line. Neither is wrong in a way a reader can catch: the
+    sentence is fluent, the number is plausible, and nothing anywhere disagrees with it out loud.
+
+    WHY THE COUNT AND NOT THE PROSE. Everything else in these notes is an argument, and an
+    argument that goes stale reads as one -- it stops matching what the files do and a reader
+    notices. A bare integer has no such tell. It is also the one thing in the documents that a
+    machine can check, so it is the one thing that should not be left to attention.
+
+    The generator prints the live number on every run and that is the figure to believe; this
+    only asks the two documents that restate it to agree. Falsified by filing a bed and leaving
+    either sentence alone.
+    """
+    board = ROOT / "ui" / "board_v2"
+    ambient = board / "sfx" / "ambient"
+    if not ambient.is_dir():
+        pytest.skip("no sfx/ambient/ in this tree")
+    beds = [p for p in sorted(ambient.rglob("*.ogg")) if "_to_delete" not in p.parts]
+    folders = sorted({p.parent.name for p in beds})
+    assert beds, "sfx/ambient/ holds no beds"
+
+    # "<word> files under <word> duty actions", wherever either document says it.
+    pattern = re.compile(
+        r"\b([A-Za-z]+)\s+(?:ambient\s+)?(?:files|tracks)\s+under\s+([A-Za-z]+)\s+duty\s+actions\b",
+        re.IGNORECASE)
+    checked = 0
+    for rel in ("sfx/README.md", "docs/ambient_loop_note.md"):
+        doc = board / rel
+        if not doc.is_file():
+            continue
+        text = doc.read_text(encoding="utf-8")
+        for said_files, said_folders in pattern.findall(text):
+            got_files = _NUMBER_WORDS.get(said_files.lower())
+            got_folders = _NUMBER_WORDS.get(said_folders.lower())
+            assert got_files is not None, (
+                "%s writes the bed count as %r, which is not a number word this guard knows; "
+                "spell it out so the count can be checked" % (rel, said_files))
+            assert got_folders is not None, (
+                "%s writes the folder count as %r, which is not a number word this guard knows"
+                % (rel, said_folders))
+            assert got_files == len(beds), (
+                "%s says %s files under %s duty actions; sfx/ambient/ holds %d files in %d "
+                "folders (%s)" % (rel, said_files, said_folders, len(beds), len(folders),
+                                  ", ".join(folders)))
+            assert got_folders == len(folders), (
+                "%s says %s duty actions; sfx/ambient/ holds %d folders (%s)"
+                % (rel, said_folders, len(folders), ", ".join(folders)))
+            checked += 1
+    assert checked >= 2, (
+        "neither sfx/README.md nor docs/ambient_loop_note.md states a bed count in the form this "
+        "guard reads, so the count has gone back to being unchecked prose (found %d)" % checked)
+
+    # The levelling note counts them too, in its own phrasing: "<word> ambient files|tracks".
+    # Same fact, third document, and it drifts for the same reason.
+    bare = re.compile(r"\b([A-Za-z]+)\s+ambient\s+(?:files|tracks)\b", re.IGNORECASE)
+    for rel in ("docs/sfx_levelling_note.md", "sfx/README.md", "docs/ambient_loop_note.md"):
+        doc = board / rel
+        if not doc.is_file():
+            continue
+        for said in bare.findall(doc.read_text(encoding="utf-8")):
+            got = _NUMBER_WORDS.get(said.lower())
+            if got is None:          # "the ambient files", "its ambient tracks" -- not a count
+                continue
+            assert got == len(beds), (
+                "%s says %s ambient files; sfx/ambient/ holds %d" % (rel, said, len(beds)))
