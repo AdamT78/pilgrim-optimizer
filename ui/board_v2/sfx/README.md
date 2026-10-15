@@ -952,6 +952,32 @@ it is obvious. The replacement reads +4.5 dB at worst.
 tone with nothing to recognise, so repetition costs little — whereas one footstep every lap is a
 landmark the player learns. The cathedral with voices went to 35 s for the opposite reason.
 
+`ambient/allocation_wind_sfx_v01.ogg` is the first **second layer**: a 17 s howl from
+Hzandbits' *Howling Winds — Interior* (GDC 2016), playing under Allocation alongside the room
+tone rather than instead of it. One is the building, the other is the weather outside it.
+
+**Seventeen seconds is a chosen number, not a found one.** Two loops only realign when their
+lengths do, so layered under the 11.5 s bed this pair repeats every **391 s**. A 23 s layer —
+exactly twice 11.5 — would repeat every 23 s and buy nothing for a whole extra file. Round
+lengths are the trap: two 25 s beds lock immediately.
+
+**A tonal bed joins differently from a broadband one.** This howl holds a resonance at 617 Hz
+sitting 12 dB above the local spectral trend, and two copies of a tone crossfaded at arbitrary
+relative phase can cancel where rain or fire simply sum. Candidates were scored on a narrow
+550–700 Hz band alongside the usual five, and each crossfade was then built and measured rather
+than reasoned about: the chosen one costs 0.46 dB in the howl band. Every bed before this was
+broadband enough that crossfade phase could be ignored.
+
+**The event detector is not universal, and this file shows where it stops.** It flags 49 of 166
+windows above 8 dB — but those are the gusts, which are the material rather than an intruder in
+it. It earns its keep on steady material where a footstep is foreign; on gusty material it
+measures the subject.
+
+**A layer belongs to its action by prefix.** `allocation_wind` resolves to Allocation by
+dropping trailing words until something matches a duty action, so the filename can say which
+layer it is without a `duty` field duplicating what `duty_text.json` already owns — and the
+layer answers to Allocation's own cue.
+
 **A re-cut will never match its recorded sha256, and that is not a fault.** Re-running the cut
 for this bed from the same master with the same parameters produced audio that is *bit*-
 identical — maximum sample difference exactly zero, same 617677 bytes — inside a file with a
