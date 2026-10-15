@@ -38,6 +38,12 @@
       "url": "https://pixabay.com/service/terms/",
       "attributionRequired": false,
       "shareAlike": false
+    },
+    "provenance-pending": {
+      "name": "NOT A LICENCE, AND NOT A CLAIM OF ONE. A placeholder meaning the upstream permission for this file has not been supplied yet. It says only that the file is in the tree and that nobody has yet written down what may be done with it. Nothing carrying this key may be inlined into the board, and a guard enforces that; the bench plays it because the bench is a workbench. Every record using it must be resolved to a real licence before release, and the guard lists them on every run so they cannot be quietly forgotten.",
+      "url": "",
+      "attributionRequired": true,
+      "shareAlike": false
     }
   },
   "files": {
@@ -3050,7 +3056,7 @@
       "gainDb": 1.4,
       "sha256": "aaeccd12c85a50f19c1a1adf76a4f11034d20c8c55b579dba3c1197b2b5206d5"
     },
-    "sfx/ambient/silversmith_sfx_v01.ogg": {
+    "sfx/ambient/clerical_actionB/silversmith_sfx_v01.ogg": {
       "state": "present",
       "kind": "bed",
       "creator": "Coll Anderson",
@@ -3067,7 +3073,7 @@
       "gainDb": -17.0,
       "sha256": "842dc26f3493032eedb9d1f48ac0077bd56c545e9b9727407469a473fb3b7add"
     },
-    "sfx/ambient/devotion_sfx_v01.ogg": {
+    "sfx/ambient/clerical_actionA/devotion_sfx_v01.ogg": {
       "state": "present",
       "kind": "bed",
       "creator": "Alexander Kopeikin",
@@ -3084,7 +3090,7 @@
       "gainDb": -27.0,
       "sha256": "600ad28e2d105301d71a8dc933407d6252ba7a576c3bb61901686fea6919a539"
     },
-    "sfx/ambient/alms_sfx_v01.ogg": {
+    "sfx/ambient/give_alms_actionA/alms_sfx_v01.ogg": {
       "state": "present",
       "kind": "bed",
       "creator": "Soundholder",
@@ -3101,7 +3107,7 @@
       "gainDb": -15.0,
       "sha256": "7b4a1886d49235af96142a54fef3bee566c86dac43bafc33721cedbd9c4f17e9"
     },
-    "sfx/ambient/allocation_sfx_v01.ogg": {
+    "sfx/ambient/allocation_actionA/allocation_sfx_v01.ogg": {
       "state": "absent",
       "kind": "bed",
       "creator": "3maze",
@@ -3119,7 +3125,7 @@
       "sha256": "8057e8c8168dc51455db895d8a0a45f6bddf367d39ace277418622323f7a3bfd",
       "absentNote": "DELETED when v02 replaced it. It is a straight cut from a Sonniss master that is still named in `originalFilename` and still on the mirror in `originalPath`, and its own `modifications` states the window and the crossfade exactly, so the file can be rebuilt from this record alone. The record is kept with its sha256 so a rebuild can be checked against the bytes that were here, which is the only thing deleting it costs. ITS LENGTH WAS LOAD-BEARING and is no longer: the wind layer's 17 s was chosen against this bed's 11.5 s, and that record has been corrected rather than left pointing at a file that is gone."
     },
-    "sfx/ambient/allocation_wind_sfx_v01.ogg": {
+    "sfx/ambient/allocation_actionA/allocation_wind_sfx_v01.ogg": {
       "state": "present",
       "kind": "bed",
       "creator": "Hzandbits",
@@ -3152,8 +3158,8 @@
       "sha256": "2095eac49943c99cb1e2992dace89e6c2778d1254598b18f35f1e85cf6e1a102",
       "gainDb": -1.4
     },
-    "sfx/ambient/allocation_sfx_v02.ogg": {
-      "state": "present",
+    "sfx/ambient/allocation_actionA/allocation_sfx_v02.ogg": {
+      "state": "absent",
       "kind": "bed",
       "creator": "the project owner",
       "licence": "cc0",
@@ -3183,14 +3189,185 @@
       "originalPath": "freesound.org, two downloads assembled locally -- see `sources`",
       "collection": "Pilgrim board_v2 ambient beds",
       "title": "Allocation -- a queue, and keys turning",
-      "role": "the Allocation ambient bed, under allocation actionA, replacing the empty cathedral that held the slot. It plays alongside allocation_wind_sfx_v01.ogg rather than instead of it: this is the people, that is the weather. Allocation is the action where a duty is assigned to someone, so a queue waiting and a key turning in a lock is the sound of the thing happening rather than of the building it happens in.",
+      "role": "SUPERSEDED BY ITS OWN STEMS and no longer drawn. It was the Allocation bed, the whole 28.5 s mix in one file; footsteps_sfx_v01.ogg and keys_sfx_v01.ogg are that same mix split in two so each can be balanced on its own. Nothing about the sound changed -- the two stems carry the same wrap and the same rotation and, summed, reproduce this file.",
       "modifications": "A SEAMLESS 28.500 s LOOP, MADE IN THE MIX RATHER THAN CUT FROM IT. Vorbis q6, 48 kHz stereo, straight from the 24-bit master: no trim, no fade, no resample, no level change. The loop was already baked when the file arrived, which is the first time that has been true here. The method is docs/ambient_composite_guide.md section 15: the finished 30 s mix has its last 1.5 s crossfaded equal-power over its first 1.5 s -- a true overlap, so the result is shorter by the crossfade and runs 28.5 s -- and is then circularly rotated so playback begins in a quiet pause. Rotation is safe only after the cycle is seamless, which is the order the guide states and the order it was done in. THE GUIDE REACHED THIS TREE'S OWN CONCLUSIONS INDEPENDENTLY. Its section 15 says not to rely on a fade to silence followed by a restart, and to bake an equal-power overlap into the asset: docs/ambient_loop_note.md sections 1 and 2, arrived at from the other direction and on different material. CHECKED RATHER THAN TRUSTED. Three laps measure identically to one pass, so the figure below describes what plays. The step across the wrap is 0.0003 in both channels, under the file's own median sample-to-sample difference. The 1.5 s window straddling the wrap sits at the 19th percentile of the loop's own 1.5 s windows -- 2.35 dB under its median, where the quietest window anywhere in the loop is 12.7 dB under it. There is no seam to find. THE SHOULDER TEST DOES NOT APPLY TO A BAKED LOOP and reads 21.5 dB here, which means nothing: comparing head and tail shoulders is how the loop note's section 5 scores a CANDIDATE, and on a file whose head has already been crossfaded with its tail it measures the material's own variation. Score candidates, not finished files. THE PREDECESSOR THIS REPLACED, NEVER COMMITTED, was a 23.510 s cut taken out of the v08 mix here rather than looped in the DAW, and it is worth a line because of what it found. v08 began and ended in digital silence, so butting it end to start made no click at all while dropping 2.5 s of near-nothing into the bed every lap -- 41.0 dB out across five bands, 68.5 dB in the top one. v09 exists because that was real. The cut also had to be an exact multiple of the key cadence, which is the finding kept in the loop note's section 9. THIS FILE'S KEY CADENCE IS NOT QUITE EVEN, and the unevenness is interior rather than at the wrap. Gaps run 3.91, 3.90, 3.92, 4.99, 3.96, 3.90 s, with the wrap landing at 3.92 and costing nothing; the odd one sits between the keys at 12.43 and 17.42 s and reads as one slower handoff rather than as a seam. The guide's section 11 plans an even four seconds, so this is the render departing from the plan, not the plan being wrong.",
       "measured": "28500 ms, peak -4.54 dB, integrated -29.32 LUFS, true peak -4.54 dBTP, stereo 48 kHz, L/R correlation +0.4746. At the authored trim of -23.0 it lands at -52.3 LUFS, between silversmith at -49.8 and alms at -53.4, with allocation wind at -56.0 and devotion at -57.8. THE TRIM IS NOT COMPARABLE WITH THE OTHER BEDS' TRIMS and never was: this file is 22 dB hotter than the cathedral it replaced, which measured -51.26 LUFS and sat at a trim of -5.0. Nothing here was normalised or gained; it is a property of the mix. Bed level is authored by ear and sfx_levelling_note.md section 11 records why there is no target to check it against. LENGTH IS A RELATIONSHIP WITH THE LAYER ABOVE IT, not only with itself. Against allocation_wind_sfx_v01.ogg's 17 s this pair realigns every 969 s, about sixteen minutes, where the 11.5 s bed it replaced gave 391 s. The 23.510 s cut would have given 39,967 s. All three are long enough and none of them was chosen for it, which is the point: nothing in the tree computes this, and the next length could as easily be a near multiple of 17.",
       "gainDb": -23.0,
       "sha256": "c9915afc596ec497b426578e4b9b006072ea0a37d8056356d6f567f335561035",
       "design": "BUILT WITH CHATGPT, which wrote both the specification and the Python that assembles it, over nine iterations to the project owner's direction. Recorded for the same reason every other note in this tree says how a decision was reached: it is a record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample traces to one of the two CC0 uploads in `sources`, which is what `generatedContent` asserts and what keeps the cc0 licence honest. The guide is docs/ambient_composite_guide.md; its sections 3 to 5 and 17 are the part that would transfer to another duty action.",
       "generatedContent": "none",
-      "reproducibleBy": "ui/board_v2/docs/ambient_composite_guide.md"
+      "reproducibleBy": "ui/board_v2/docs/ambient_composite_guide.md",
+      "absentNote": "DELETED when it was split into stems. IT IS RECONSTRUCTABLE FROM THE TWO THAT REPLACED IT AND THAT WAS CHECKED, NOT ASSUMED: their sum correlates with these bytes at r = +0.9970 with a residual 22.2 dB under the sum, which is Vorbis doing what Vorbis does to a file encoded once rather than any difference in content. Both stems are the same 28.500000 s and share this file's wrap and rotation, so played from a common start at the same trim they are this bed. The record is kept with its sha256 so that comparison can be made again against the bytes that were here. Everything it says about how the loop was made still applies to both stems and is not repeated on either."
+    },
+    "sfx/ambient/give_alms_actionB/donate_building_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "Coll Anderson",
+      "licence": "sonniss-gameaudiogdc",
+      "licenceNote": "Sonniss GameAudioGDC 2020 bundle. Taken as an individual file from the your.org mirror rather than out of one of the 14 numbered archives, so no archive number applies. Royalty-free: personal and commercial game use, modification and unlimited projects permitted, no attribution required. The files may not be resold or redistributed as sound effects, including edited versions, and may not be used to train AI or ML models.",
+      "source": "EFX SD Sheltered from the Wind 02.wav, Coll Anderson - Gentle Wind. 215.1 s, 96 kHz, recorded 2019-06-25 in Pro Tools. The master's own bext description reads \"Hollow Med Freq Quiet\", which is accurate: it peaks at -24.95 dBFS and its 5 s blocks run -45 to -59, the quietest source any bed here is cut from. THE SECOND BED FROM THIS PACK -- Silversmith's fire is EFX SD Fire in Metal Stove 03.wav from the same folder.",
+      "originalFilename": "EFX SD Sheltered from the Wind 02.wav",
+      "originalPath": "ftpmirror.your.org/pub/misc/sonniss2020/individual/Coll Anderson - Gentle Wind",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Donate Building -- wind in a sheltered place",
+      "role": "the Donate Building ambient bed, under give_alms actionB. IT MAKES GIVE ALMS THE FIRST DUTY WITH A BED ON BOTH ITS ACTIONS -- rain over Alms, wind over Donate Building -- and the two are a pair rather than a coincidence: weather on both halves of the duty that is about giving things away. They never sound together, being different actions, but the player hears one after the other when switching, so they are levelled close on purpose: alms lands at -53.4 LUFS and this at -52.7, 0.7 dB apart. It has no second layer, and its duty action has no cue filed, so it is a bed with nothing to be set against; the ambient bench says so rather than hiding it, as it already did for Alms.",
+      "modifications": "A SEAMLESS 32.500 s LOOP. 32.500 s body from 64.50 s of the 215.1 s master, with the following 1.5 s folded back over the head as an equal-power crossfade. Resampled 96 -> 48 kHz on encode, Vorbis q6. No trim, no fade, no level change. THE SHOULDER SEARCH DID NOT PICK THIS ON ITS OWN SCORE. Six bands -- the usual five plus a narrow 400-700 Hz, because this master is tonal -- over every start at 0.5 s and every length from 28 to 42 s. The best band match in the file is a 28.5 s body from 52.50 s at 0.25 dB RMS; this one scores 0.30. The 28.5 s body was rejected because IT CLIMBS 7.3 dB FROM ITS FIRST THIRD TO ITS LAST, so every lap would be a crescendo that resets. This body runs -51.70 to -51.78 dB across the same comparison, flat to within 0.08 dB, while still holding 10.79 dB of gust inside it. The score reads two 1.5 s shoulders and cannot see a trend across the 30 s between them; see docs/ambient_loop_note.md. IT IS TONAL, LIKE THE HOWL AND UNLIKE THE FIRE. A resonance at 451 Hz sits 10.3 dB above the local spectral trend with a second at 649 Hz at +6.2, so candidates were scored on a narrow 400-700 Hz band alongside the five and the chosen crossfade was then BUILT and measured rather than reasoned about: it costs 0.50 dB in that band, against the howl's 0.46. The chosen start also happens to be the best tonal match in the file, 0.01 dB. THE JOIN SITS IN A LULL, AND THAT IS THE POINT RATHER THAN A FAULT. Measured the way the loop note's section 2 measures a seam -- crossfade region against the rest of the file -- it reads -7.54 dB, which on the fire would have meant a hole. Decomposed, it is not one: the crossfade GAINS 0.72 dB over the raw head it replaced, and the raw head is 8.09 dB under the body mean because 64.5-66.0 s is a lull in the wind, the 12th percentile of this body's own 1.5 s windows. A quiet moment is the least audible place to wrap. Measured as a linear crossfade instead the seam reads -9.11 dB against equal power's -7.54, which is the loop note's section 2 result again. A DELIVERED SPACED PAIR, not a mono-ish file: broadband the channels correlate +0.82, but per band they run +0.71, +0.84, +0.73, -0.10 and +0.03 from the bottom up -- correlated bass, decorrelated top, which is what a spaced pair looks like and what raw M/S does not. See sfx/README.md on Alms, where the same reading settled a different question.",
+      "measured": "32500 ms, peak -28.83 dB, integrated -49.72 LUFS, true peak -28.83 dBTP, stereo 48 kHz, L/R correlation +0.8195. THE QUIETEST BED IN THE TREE AS A FILE and the one needing least trim: at -3.0 it lands at -52.7 LUFS, between allocation's queue at -52.3 and alms at -53.4, with silversmith at -49.8, allocation wind at -56.0 and devotion at -57.8. At a trim of zero it would land at -49.7, level with silversmith. Verified as a loop: three laps measure identically to one pass; the step across the wrap is 0.00006 and 0.00012 in the two channels against a file median sample-to-sample difference of 0.00005; and the 1.5 s window straddling the wrap sits at the 16th percentile of the loop's own windows, 4.5 dB under their median where the quietest window anywhere in the loop is 9.3 dB under. THE TRIM IS A STARTING POINT, NOT A JUDGEMENT. Bed level is authored by ear and this one has not been heard against anything yet, because build_roads actionB has no cue filed.",
+      "gainDb": -3.0,
+      "sha256": "91a33d9ec730010e9ed03af40d461b109959e1a9c0338fbef795baf61b9decc9"
+    },
+    "sfx/ambient/taxation_actionA/wheat_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "lucasfuchs",
+      "licence": "cc0",
+      "licenceNote": "Creative Commons 0 on the source, which is the whole of the upstream permission: public domain dedication, no attribution required, commercial use and modification unrestricted. The uploader is named here anyway. THE ARRANGEMENT IS THIS PROJECT'S OWN; the licence key records what the file rests on, not a dedication of the arrangement. This record was filed as `provenance-pending` on 2026-10-15 and resolved the same day when the source was supplied -- the placeholder did its job, which was to make the gap visible rather than fillable with a guess.",
+      "design": "BUILT WITH CHATGPT, as the Allocation bed was: it wrote the script that cuts grain poured out of the single CC0 source in `sources` and places it across the 30 s stem. Recorded for the same reason every other note in this tree says how a decision was reached -- it is a record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT: every sample traces to that one freesound upload, which is what `generatedContent` asserts and what keeps the cc0 licence honest. The method for this kind of bed is docs/ambient_composite_guide.md, written for Allocation; these stems are the second duty action built that way and the first where each layer has a source of its own.",
+      "generatedContent": "none",
+      "source": "taxation_wheat_stem.wav, one stem of a Taxation ambience built for this project from a single CC0 freesound.org recording: Pouring grain or seeds by lucasfuchs. It is not a recording in its own right -- the source is 6.787 s and the stem is 30 s, so the material is cut and placed rather than laid down. The stem file exists only on the project owner's disk; the thing anyone can fetch again is the name in `sources`.",
+      "sources": [
+        {
+          "role": "the whole of it -- one source per stem, unlike the Allocation bed's two",
+          "title": "Pouring grain or seeds",
+          "uploader": "lucasfuchs",
+          "url": "https://freesound.org/people/lucasfuchs/sounds/556974/",
+          "licence": "cc0",
+          "originalFilename": "556974__lucasfuchs__pouring-grain-or-seeds.wav",
+          "measured": "6.787 s, 48 kHz, 24-bit stereo",
+          "note": "IT IS NOT GRAIN. The uploader's own description says \"A cherry stone pillow, close up\" -- a stand-in that sounds more like poured seed than poured seed does, which is why the title says grain. Recorded at home, so the uploader warns of distant background noise. 6.8 s of source behind a 30 s stem, so it is placed repeatedly rather than laid down once."
+        }
+      ],
+      "originalFilename": "taxation_wheat_stem.wav",
+      "originalPath": "freesound.org -- see `sources`",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Wheat -- grain being handled",
+      "role": "one of three tracks under taxation actionA, to be balanced against each other and against a background ambience still to come. THE FIRST DUTY ACTION WITH MORE THAN TWO TRACKS, and the reason sfx/ambient/ is now a folder per action rather than a flat list.",
+      "modifications": "THE CONTAINER AND NOTHING ELSE: Vorbis q6 at the stem's own 48 kHz stereo. No trim, no fade, no level change, no loop. IT IS NOT A SEAMLESS LOOP AND IS NOT MEANT TO BE ONE YET. Its content runs 4.01 to 24.93 s of 30, so it opens and closes on exact digital silence, as do the other two stems. That is the composite's current shape rather than a fault: the background ambience that will fill those seconds is not placed, and the project's own method -- docs/ambient_composite_guide.md section 15 -- puts the wrap on the finished mix after all events are placed, not on a stem. Looped as it stands it goes quiet between laps. ALL THREE SHARE A TIMEBASE and are the same 30.000 s long, so played together from a common start they stay in step; a wrap applied later must be the same wrap on all of them, or the events the three were placed against each other will drift apart.",
+      "measured": "30000 ms, peak -20.30 dB, integrated -47.45 LUFS, true peak -20.30 dBTP, stereo 48 kHz. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT. These three are a group to be balanced by ear against each other, which is what the bench's per-track sliders are for; deriving a number here would be inventing a judgement. For scale the three measure -47.4, -36.8 and -44.4 LUFS as they stand, so coins is about 10 dB above wheat before any balancing.",
+      "gainDb": 0.0,
+      "sha256": "27b0b37e6a30d5e7e9cd22dee4b490be8015f284250e8cdad55f271cf80fa8b6"
+    },
+    "sfx/ambient/taxation_actionA/coins_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "Breviceps",
+      "licence": "cc0",
+      "licenceNote": "Creative Commons 0 on the source, which is the whole of the upstream permission: public domain dedication, no attribution required, commercial use and modification unrestricted. The uploader is named here anyway. THE ARRANGEMENT IS THIS PROJECT'S OWN; the licence key records what the file rests on, not a dedication of the arrangement. This record was filed as `provenance-pending` on 2026-10-15 and resolved the same day when the source was supplied -- the placeholder did its job, which was to make the gap visible rather than fillable with a guess.",
+      "design": "BUILT WITH CHATGPT, as the Allocation bed was: it wrote the script that cuts coins counted out of the single CC0 source in `sources` and places it across the 30 s stem. Recorded for the same reason every other note in this tree says how a decision was reached -- it is a record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT: every sample traces to that one freesound upload, which is what `generatedContent` asserts and what keeps the cc0 licence honest. The method for this kind of bed is docs/ambient_composite_guide.md, written for Allocation; these stems are the second duty action built that way and the first where each layer has a source of its own.",
+      "generatedContent": "none",
+      "source": "taxation_coins_stem.wav, one stem of a Taxation ambience built for this project from a single CC0 freesound.org recording: Coin sounds by Breviceps. It is not a recording in its own right -- the source is 20.014 s and the stem is 30 s, so the material is cut and placed rather than laid down. The stem file exists only on the project owner's disk; the thing anyone can fetch again is the name in `sources`.",
+      "sources": [
+        {
+          "role": "the whole of it -- one source per stem, unlike the Allocation bed's two",
+          "title": "Coin sounds",
+          "uploader": "Breviceps",
+          "url": "https://freesound.org/people/Breviceps/sounds/458399/",
+          "licence": "cc0",
+          "originalFilename": "458399__breviceps__coin-sounds.wav",
+          "measured": "20.014 s, 44.1 kHz, 16-bit stereo",
+          "note": "coins spun, dropped and counted on a wooden table, recorded on a Zoom H2n. The only 44.1 kHz source among the three, and the only 16-bit one."
+        }
+      ],
+      "originalFilename": "taxation_coins_stem.wav",
+      "originalPath": "freesound.org -- see `sources`",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Coins -- the count",
+      "role": "one of three tracks under taxation actionA, to be balanced against each other and against a background ambience still to come. THE FIRST DUTY ACTION WITH MORE THAN TWO TRACKS, and the reason sfx/ambient/ is now a folder per action rather than a flat list.",
+      "modifications": "THE CONTAINER AND NOTHING ELSE: Vorbis q6 at the stem's own 48 kHz stereo. No trim, no fade, no level change, no loop. IT IS NOT A SEAMLESS LOOP AND IS NOT MEANT TO BE ONE YET. Its content runs 2.04 to 27.84 s of 30, so it opens and closes on exact digital silence, as do the other two stems. That is the composite's current shape rather than a fault: the background ambience that will fill those seconds is not placed, and the project's own method -- docs/ambient_composite_guide.md section 15 -- puts the wrap on the finished mix after all events are placed, not on a stem. Looped as it stands it goes quiet between laps. ALL THREE SHARE A TIMEBASE and are the same 30.000 s long, so played together from a common start they stay in step; a wrap applied later must be the same wrap on all of them, or the events the three were placed against each other will drift apart.",
+      "measured": "30000 ms, peak -8.55 dB, integrated -36.78 LUFS, true peak -8.55 dBTP, stereo 48 kHz. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT. These three are a group to be balanced by ear against each other, which is what the bench's per-track sliders are for; deriving a number here would be inventing a judgement. For scale the three measure -47.4, -36.8 and -44.4 LUFS as they stand, so coins is about 10 dB above wheat before any balancing.",
+      "gainDb": 0.0,
+      "sha256": "15985c8069fb740669181e3817c012243fb882650f6819c01a882507e6a72ffc"
+    },
+    "sfx/ambient/taxation_actionA/barn_creaks_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "Snake16547",
+      "licence": "cc0",
+      "licenceNote": "Creative Commons 0 on the source, which is the whole of the upstream permission: public domain dedication, no attribution required, commercial use and modification unrestricted. The uploader is named here anyway. THE ARRANGEMENT IS THIS PROJECT'S OWN; the licence key records what the file rests on, not a dedication of the arrangement. This record was filed as `provenance-pending` on 2026-10-15 and resolved the same day when the source was supplied -- the placeholder did its job, which was to make the gap visible rather than fillable with a guess.",
+      "design": "BUILT WITH CHATGPT, as the Allocation bed was: it wrote the script that cuts the building creaking out of the single CC0 source in `sources` and places it across the 30 s stem. Recorded for the same reason every other note in this tree says how a decision was reached -- it is a record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT: every sample traces to that one freesound upload, which is what `generatedContent` asserts and what keeps the cc0 licence honest. The method for this kind of bed is docs/ambient_composite_guide.md, written for Allocation; these stems are the second duty action built that way and the first where each layer has a source of its own.",
+      "generatedContent": "none",
+      "source": "taxation_barn_creaks_stem.wav, one stem of a Taxation ambience built for this project from a single CC0 freesound.org recording: Old wood door creak by Snake16547. It is not a recording in its own right -- the source is 69.159 s and the stem is 30 s, so the material is cut and placed rather than laid down. The stem file exists only on the project owner's disk; the thing anyone can fetch again is the name in `sources`.",
+      "sources": [
+        {
+          "role": "the whole of it -- one source per stem, unlike the Allocation bed's two",
+          "title": "Old wood door creak",
+          "uploader": "Snake16547",
+          "url": "https://freesound.org/people/Snake16547/sounds/433999/",
+          "licence": "cc0",
+          "originalFilename": "433999__snake16547__old-wood-door-creak.wav",
+          "measured": "69.159 s, 48 kHz, 24-bit stereo",
+          "note": "IT IS A DOOR, NOT A BARN. One small old wooden door creaking at various speeds, recorded on a Zoom H4N's internal mic; the barn is what it stands for. The longest of the three sources by a distance, which is why the creaks vary across the stem where the grain repeats."
+        }
+      ],
+      "originalFilename": "taxation_barn_creaks_stem.wav",
+      "originalPath": "freesound.org -- see `sources`",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Barn creaks -- the building around it",
+      "role": "one of three tracks under taxation actionA, to be balanced against each other and against a background ambience still to come. THE FIRST DUTY ACTION WITH MORE THAN TWO TRACKS, and the reason sfx/ambient/ is now a folder per action rather than a flat list.",
+      "modifications": "THE CONTAINER AND NOTHING ELSE: Vorbis q6 at the stem's own 48 kHz stereo. No trim, no fade, no level change, no loop. IT IS NOT A SEAMLESS LOOP AND IS NOT MEANT TO BE ONE YET. Its content runs 3.00 to 28.24 s of 30, so it opens and closes on exact digital silence, as do the other two stems. That is the composite's current shape rather than a fault: the background ambience that will fill those seconds is not placed, and the project's own method -- docs/ambient_composite_guide.md section 15 -- puts the wrap on the finished mix after all events are placed, not on a stem. Looped as it stands it goes quiet between laps. ALL THREE SHARE A TIMEBASE and are the same 30.000 s long, so played together from a common start they stay in step; a wrap applied later must be the same wrap on all of them, or the events the three were placed against each other will drift apart.",
+      "measured": "30000 ms, peak -21.55 dB, integrated -44.44 LUFS, true peak -21.55 dBTP, stereo 48 kHz. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT. These three are a group to be balanced by ear against each other, which is what the bench's per-track sliders are for; deriving a number here would be inventing a judgement. For scale the three measure -47.4, -36.8 and -44.4 LUFS as they stand, so coins is about 10 dB above wheat before any balancing.",
+      "gainDb": 0.0,
+      "sha256": "99b45c700c5165fa065fb49977b548ca2b77c83320960dd321f59f971cf4316d"
+    },
+    "sfx/ambient/allocation_actionA/footsteps_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "Sadiquecat",
+      "licence": "cc0",
+      "licenceNote": "Creative Commons 0 on the source, which is the whole of the upstream permission: public domain dedication, no attribution required, commercial use and modification unrestricted. The uploader is named here anyway. THE ARRANGEMENT IS THIS PROJECT'S OWN; the licence key records what the file rests on, not a dedication of the arrangement.",
+      "design": "BUILT WITH CHATGPT, which wrote the specification and the Python that assembles it, over nine iterations to the project owner's direction. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT: every sample traces to the single CC0 upload in `sources`, which is what `generatedContent` asserts. The method is docs/ambient_composite_guide.md.",
+      "generatedContent": "none",
+      "source": "allocation_v09_footsteps_stem.wav, one of the two stems of the Allocation ambience. SPLITTING THE MIX GAVE EACH STEM A SINGLE SOURCE, where the composite it replaces had to carry two: this one is the queue walking -- every footfall in the bed, and the hallway they are in and nothing else, so it is Walking to dead-end hallway indoor OKM1 - 2025 03 16 by Sadiquecat throughout. The stem file exists only on the project owner's disk; the thing anyone can fetch again is the name in `sources`.",
+      "sources": [
+        {
+          "role": "the room and the walking",
+          "title": "Walking to dead-end hallway indoor OKM1 - 2025 03 16",
+          "uploader": "Sadiquecat",
+          "url": "https://freesound.org/people/Sadiquecat/sounds/793361/",
+          "licence": "cc0",
+          "measured": "19.823 s, 96 kHz, 24-bit stereo",
+          "note": "recorded 2025-03-16 in the theatre reception at Thuir, France, on a Zoom H2N with a Soundman OKM 1; trimmed and normalised by the uploader. Single footfalls were lifted out of it and recombined into several monks at different distances, which is the whole of this stem."
+        }
+      ],
+      "originalFilename": "allocation_v09_footsteps_stem.wav",
+      "originalPath": "freesound.org -- see `sources`",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Allocation footsteps -- the queue moving",
+      "role": "one of two tracks under allocation actionA, beside allocation_wind_sfx_v01.ogg. It replaces half of allocation_sfx_v02.ogg, which was the two of these already mixed together; splitting it is what lets the walking and the keys be balanced against each other rather than only against the wind.",
+      "modifications": "THE CONTAINER AND NOTHING ELSE: Vorbis q6 at the stem's own 48 kHz stereo. No trim, no fade, no level change, no loop made here. IT ARRIVED ALREADY SEAMLESS, carrying the same wrap and the same rotation as the mix it was split out of -- docs/ambient_composite_guide.md section 15 -- which is the only way two stems can be split at all: a wrap chosen per stem would put each one's loop point somewhere different and the key placed to land against a footfall would arrive somewhere new every lap. Verified rather than taken on trust: 28.500000 s to the sample, the same as its partner and as the file they replace; three laps measure identically to one pass; and the two stems summed correlate with the shipped composite at r = +0.9970 with a residual 22.2 dB down, which is Vorbis rather than content. content across the whole 28.5 s. ITS WINDOW STATISTICS ARE NOT WORTH READING ON ITS OWN in isolation either -- it is half a scene. Judge the pair.",
+      "measured": "28500 ms, peak -4.76 dB, integrated -30.66 LUFS, true peak -4.76 dBTP, stereo 48 kHz. THE TRIM IS -23.0 ON BOTH STEMS BECAUSE THAT IS THE IDENTITY, not a judgement: the composite they replace was authored by ear at -23.0, and gain is linear, so the two at -23.0 summed are that bed exactly as it was approved. At that trim this one lands at -53.7 LUFS. Moving them apart is the point of splitting the file; this is only where to start from.",
+      "gainDb": -23.0,
+      "sha256": "fabf1fa26d8e7a5c8e232d47fd07a84a98cb0cd764d6b821669dba3189fc8d0f"
+    },
+    "sfx/ambient/allocation_actionA/keys_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "Fenodyrie",
+      "licence": "cc0",
+      "licenceNote": "Creative Commons 0 on the source, which is the whole of the upstream permission: public domain dedication, no attribution required, commercial use and modification unrestricted. The uploader is named here anyway. THE ARRANGEMENT IS THIS PROJECT'S OWN; the licence key records what the file rests on, not a dedication of the arrangement.",
+      "design": "BUILT WITH CHATGPT, which wrote the specification and the Python that assembles it, over nine iterations to the project owner's direction. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT: every sample traces to the single CC0 upload in `sources`, which is what `generatedContent` asserts. The method is docs/ambient_composite_guide.md.",
+      "generatedContent": "none",
+      "source": "allocation_v09_keys_stem.wav, one of the two stems of the Allocation ambience. SPLITTING THE MIX GAVE EACH STEM A SINGLE SOURCE, where the composite it replaces had to carry two: this one is the seven key handoffs and nothing else and nothing else, so it is keys jingling.wav by Fenodyrie throughout. The stem file exists only on the project owner's disk; the thing anyone can fetch again is the name in `sources`.",
+      "sources": [
+        {
+          "role": "the handoffs",
+          "title": "keys jingling.wav",
+          "uploader": "Fenodyrie",
+          "url": "https://freesound.org/people/Fenodyrie/sounds/565909/",
+          "licence": "cc0",
+          "measured": "5.523 s, 44.1 kHz, 16-bit",
+          "note": "fourteen old keys drawn and jingled, recorded on a Zoom H2. Three single metallic contacts were taken out of it and used in rotation as the key handed to each monk; the full jangle is not used anywhere."
+        }
+      ],
+      "originalFilename": "allocation_v09_keys_stem.wav",
+      "originalPath": "freesound.org -- see `sources`",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Allocation keys -- the handoffs",
+      "role": "one of two tracks under allocation actionA, beside allocation_wind_sfx_v01.ogg. It replaces half of allocation_sfx_v02.ogg, which was the two of these already mixed together; splitting it is what lets the walking and the keys be balanced against each other rather than only against the wind.",
+      "modifications": "THE CONTAINER AND NOTHING ELSE: Vorbis q6 at the stem's own 48 kHz stereo. No trim, no fade, no level change, no loop made here. IT ARRIVED ALREADY SEAMLESS, carrying the same wrap and the same rotation as the mix it was split out of -- docs/ambient_composite_guide.md section 15 -- which is the only way two stems can be split at all: a wrap chosen per stem would put each one's loop point somewhere different and the key placed to land against a footfall would arrive somewhere new every lap. Verified rather than taken on trust: 28.500000 s to the sample, the same as its partner and as the file they replace; three laps measure identically to one pass; and the two stems summed correlate with the shipped composite at r = +0.9970 with a residual 22.2 dB down, which is Vorbis rather than content. content 0.59 to 25.78 s, silence either side. ITS WINDOW STATISTICS ARE NOT WORTH READING ON ITS OWN, because it is seven short events in silence; a stem is a part of a bed and not a bed.",
+      "measured": "28500 ms, peak -11.19 dB, integrated -35.09 LUFS, true peak -11.19 dBTP, stereo 48 kHz. THE TRIM IS -23.0 ON BOTH STEMS BECAUSE THAT IS THE IDENTITY, not a judgement: the composite they replace was authored by ear at -23.0, and gain is linear, so the two at -23.0 summed are that bed exactly as it was approved. At that trim this one lands at -58.1 LUFS. Moving them apart is the point of splitting the file; this is only where to start from.",
+      "gainDb": -23.0,
+      "sha256": "ec76d12de9af9e70038e6fe42e22447a34fcfda08f485bd95f045f3796b6d535"
     }
   },
   "assetDirs": [
@@ -3252,5 +3429,6 @@
     "seals",
     "icons",
     "cutouts"
-  ]
+  ],
+  "ambientFoldersNote": "A BED LIVES IN A FOLDER NAMED AFTER THE DUTY ACTION IT PLAYS UNDER -- sfx/ambient/<duty>_<slot>/, the same string the action's own cue is named with, so sfx/ambient/taxation_actionA/ sits beside sfx/duty_actions/taxation_actionA_sfx_v01.ogg. IT USED TO BE THE FILENAME'S JOB. A flat sfx/ambient/ resolved a bed to its action by dropping trailing words off the stem until one matched a duty action's name, so `allocation_wind` found Allocation. That works for two tracks and stops working for four: a stem wants a name that says what it IS -- wheat, coins, barn creaks -- and those names collide across actions the moment two duties both have wheat in them. The folder now owns which action, the filename owns which track, and neither repeats the other. Unlike slotFolders above, this one IS derivable and is not a mapping: the folder name is the duty key and the slot joined by an underscore, and the generator refuses a folder that does not name a real duty action rather than guessing."
 }

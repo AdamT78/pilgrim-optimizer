@@ -219,7 +219,8 @@ Chrome will not overwrite a download -- a second save arrives as `framing (1).js
 - `tokens/` -- the three Tithe resources, in both the wax and the coin treatment.
 - `sfx/` -- every sound the board has: the two interface cues at the top, then one folder per
   family (`tithe/`, `buildings/`, `duty_actions/`, `general/`), `misc/` for clips that are
-  kept but hold no slot, and `ambient/` for the looping beds, which are a different kind of
+  kept but hold no slot, and `ambient/` for the looping beds, one folder per duty action, which
+  are a different kind of
   thing from the rest. `sfx/README.md` says what each one is and how it was cut.
 - `sfx_lab/` -- `sfx_levels.py`, which measures every clip and writes its `gainDb`, and
   `generate_sound_bench.py`, which builds two pages into `generated/`: a bench for the cues

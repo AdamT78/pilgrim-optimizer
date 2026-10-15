@@ -347,9 +347,14 @@ Still open for ambient:
 
 - **Bed plus cue can clip, and ducking cannot fix it.** Two files at the −1 dBTP ceiling sum
   past it. The headroom problem is true peak rather than loudness, and a duck cannot help
-  because the cue's own attack *is* the peak. Not pressing while the five beds sit between
-  −26.5 and −45.5 dBTP after their trims — the span has not moved as beds were added, though
-  which bed holds each end has — but it returns the moment a bed is authored loud.
+  because the cue's own attack *is* the peak. **THIS HAS STOPPED BEING HYPOTHETICAL.** It sat
+  here harmlessly while every bed landed between −26.5 and −45.5 dBTP after its trim. Of the
+  ten ambient files now filed, seven still do; the three Taxation stems do not, because they
+  have no trim yet — `coins` reads **−8.6 dBTP** at unity, which against a cue at the −1 dBTP
+  ceiling is over full scale before anything is mixed. That is not a bed authored loud, it is a
+  bed not yet authored at all, and it will very likely resolve the moment those three are
+  balanced by ear. But the condition this bullet was written to predict now exists in the tree,
+  and the next bed genuinely authored hot will not announce itself as clearly.
 - **The board plays no bed yet.** `bundled_sfx()` inlines `tile.ogg` and `confirm.ogg` and
   nothing else, so `generated/ambient_bench.html` is where beds are heard today.
 - **Whoever wires them in must pin `loopEnd`.** Chrome's `decodeAudioData` returns up to 17 ms

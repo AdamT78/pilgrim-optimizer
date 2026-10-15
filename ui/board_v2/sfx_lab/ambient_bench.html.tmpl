@@ -114,7 +114,14 @@ function layerStart(f){
   src2.loopStart = 0; src2.loopEnd = b.seconds;   // the same pin the transport uses
   g.gain.value = Math.pow(10, TRIMS[f] / 20);
   src2.connect(g); g.connect(master);
-  src2.start(0);
+  // START AT THE TRANSPORT'S PHASE, NOT AT THIS FILE'S ZERO. It used to be start(0), which
+  // begins the layer at its own beginning whenever the box is ticked. For two independent
+  // recordings that is arbitrary either way -- Allocation's 17 s howl and 28.5 s queue are
+  // meant to drift. For STEMS OF ONE MIX it is wrong: Taxation's wheat, coins and creaks are
+  // the same 30 s split three ways, with the coin placed to land where it lands, and ticking
+  // one on mid-play would put it at a random offset against the others for the rest of the
+  // session. Same length plus same phase is all the lock they need.
+  src2.start(0, elapsed() % b.seconds);
   LAYERS[f] = {src: src2, gain: g};
 }
 function layerStop(f){

@@ -932,20 +932,35 @@ here as the files being clipped. They are not known to be. Measure the **shipped
 
 ### `ambient/`, the first sounds here that are not events
 
-Five files under four duty actions, and they are a different kind of thing from everything
-above. A cue is an event: it
+Ten files under six duty actions, and they are a different kind of thing from everything
+above.
+
+**They live one folder per duty action** — `ambient/<duty>_<slot>/`, which is the same string
+the action's own cue is named with, so `ambient/taxation_actionA/` sits beside
+`duty_actions/taxation_actionA_sfx_v01.ogg`. It was a flat folder until a duty action wanted
+four tracks. A flat folder made the *filename* carry which action, by dropping trailing words
+off the stem until one matched — `allocation_wind` found Allocation that way — and that holds
+up for two tracks and stops at four, because a stem then wants a name saying what it **is**,
+and *wheat* and *coins* collide across actions the moment two duties both involve them, which
+Produce and Taxation already do. **The folder owns which action, the filename owns which track,
+and neither repeats the other.** A folder naming no real duty action is reported rather than
+guessed at, where the old prefix match quietly produced a bed belonging to nothing.
+
+*Older filenames still carry their duty's name — `clerical_actionB/silversmith_sfx_v01.ogg`
+says it twice — because moving a file is cheap and renaming one costs a record's continuity.
+New tracks are named for what they are: `footsteps`, `keys`, `wheat`, `coins`, `barn_creaks`.* A cue is an event: it
 fires, it is 70 ms to 1.6 s long, and it is over. A bed runs underneath a selected duty action
 for as long as the player leaves it selected, so it loops, and almost every rule in this file
 had to be asked again for it.
 
-`ambient/silversmith_sfx_v01.ogg` is a fire in a metal stove, a 25 s loop cut from 15.50 s of
-Coll Anderson's *Gentle Wind* master (Sonniss GDC 2020). `ambient/devotion_sfx_v01.ogg` is a
+`ambient/clerical_actionB/silversmith_sfx_v01.ogg` is a fire in a metal stove, a 25 s loop cut from 15.50 s of
+Coll Anderson's *Gentle Wind* master (Sonniss GDC 2020). `ambient/clerical_actionA/devotion_sfx_v01.ogg` is a
 cathedral between responses, a 35 s loop from 81.50 s of Alexander Kopeikin's *St Petersburg*
 master (GDC 2016) — taken from the quiet passage rather than the choir, because the master
 alternates full choir at −22 to −25 dB with long stretches at −31 to −36 and only the quiet ones
 are a setting rather than a performance.
 
-`ambient/alms_sfx_v01.ogg` is light rain, a 25 s loop from 4.50 s of Soundholder's *Rain &
+`ambient/give_alms_actionA/alms_sfx_v01.ogg` is light rain, a 25 s loop from 4.50 s of Soundholder's *Rain &
 Thunder* master (GDC 2020). **Its filename ends `stereo MS` and that names the mic technique,
 not an undecoded file** — a distinction worth making because getting it wrong is not cosmetic.
 Read as raw Mid/Side and decoded, its bass comes out at −0.54 correlation: out of phase, and
@@ -955,8 +970,24 @@ L/R decompositions of two independent equal-power channels are the same pair of 
 only the per-band reading settles it. It is also the easiest thing here to loop: its best start
 scores 0.17 dB of shoulder mismatch, the closest match in the tree.
 
-`ambient/allocation_sfx_v02.ogg` is a queue of monks waiting with a key handed over at the
-front, a **28.5 s** loop — and it is the first bed here that was not cut from one recording.
+`ambient/allocation_actionA/footsteps_sfx_v01.ogg` and `keys_sfx_v01.ogg` are a queue of monks
+waiting with a key handed over at the front: a **28.5 s** loop in two stems — and the first bed
+here that was not cut from one recording.
+
+**It shipped as one file first and was split afterwards**, which is worth recording because the
+split is the only reason the two can be balanced against each other. `allocation_sfx_v02.ogg`
+was the pair already mixed; it is deleted and its record kept. The stems carry the same wrap
+and the same rotation as the mix they came out of, so summed at the same trim they *are* it —
+checked rather than assumed, at r = +0.9970 with a residual 22.2 dB down, which is Vorbis and
+not content. **Both are 28.500000 s to the sample**, and that is load-bearing: a wrap chosen
+per stem would give each a different loop point, and the key placed to land against a footfall
+would arrive somewhere new every lap.
+
+**Splitting also gave each stem a single source**, where the composite needed two —
+`footsteps` is Sadiquecat's hallway walk throughout and `keys` is Fenodyrie's jingle
+throughout. Both start at −23.0, which is not a judgement but the identity: the composite was
+authored by ear at −23.0 and gain is linear, so the two at −23.0 summed are the bed as it was
+approved. Moving them apart is the point.
 It was **assembled** from two CC0 freesound.org uploads: single footfalls lifted out of
 Sadiquecat's *Walking to dead-end hallway* and recombined into several walkers at different
 distances, with three single contacts from Fenodyrie's *keys jingling* as the handoffs.
@@ -1006,7 +1037,7 @@ so its cadence across the wrap is the mix's own 3.92 s for free. What it does ha
 reading as one slower handoff. **A rhythm fault at the wrap is a loop artefact; a rhythm fault
 inside the body is content.**
 
-`ambient/allocation_wind_sfx_v01.ogg` is the first **second layer**: a 17 s howl from
+`ambient/allocation_actionA/allocation_wind_sfx_v01.ogg` is the first **second layer**: a 17 s howl from
 Hzandbits' *Howling Winds — Interior* (GDC 2016), playing under Allocation alongside the room
 tone rather than instead of it. One is the building, the other is the weather outside it.
 
@@ -1034,6 +1065,98 @@ broadband enough that crossfade phase could be ignored.
 windows above 8 dB — but those are the gusts, which are the material rather than an intruder in
 it. It earns its keep on steady material where a footstep is foreign; on gusty material it
 measures the subject.
+
+`ambient/give_alms_actionB/donate_building_sfx_v01.ogg` is a wind heard from inside somewhere sheltered, a
+**32.5 s** loop from 64.50 s of Coll Anderson's *Sheltered from the Wind 02* (GDC 2020) — the
+second bed from the same pack as Silversmith's fire, and the quietest source any of them is cut
+from: it peaks at −24.95 dBFS and its 5 s blocks run −45 to −59.
+
+**It makes Give Alms the first duty with a bed on both its actions** — rain over Alms, wind over
+Donate Building. That pairing is the point rather than an accident: weather on both halves of
+the duty about giving things away. They never sound together, being different actions, but the
+player hears one after the other when switching between them, so they are levelled close on
+purpose — Alms lands at −53.4 LUFS and this at −52.7. Neither action has a cue filed, so both
+are beds with nothing to be set against, and the bench now says so twice rather than hiding it.
+
+**The search's own best answer was wrong, for a new reason.** Scored across six bands over every
+start and every length from 28 to 42 s, the best match in the master is a 28.5 s body at 0.25 dB
+RMS against this one's 0.30 — and that body **climbs 7.3 dB from its first third to its last**,
+so every lap would be a crescendo resetting to quiet at the wrap. This one runs −51.70 to −51.78
+across the same comparison, flat to 0.08 dB, while still holding 10.79 dB of gust inside it.
+*Fluctuation is the material; a trend is a shape*, and a shape that resets every lap is a loop
+marker. The band score reads two 1.5 s windows and knows nothing about the thirty seconds
+between them — the same blind spot as Allocation's key cadence, from a different direction.
+
+**A seam figure that looked like a hole and was not.** Measured as the loop note's section 2
+measures one — crossfade region against the rest of the file — it reads **−7.54 dB**, which on
+the fire would have meant a rebuild. Split in two it is nothing of the kind: the crossfade
+**gains 0.72 dB** over the raw head it replaced, and that raw head is 8.09 dB under the body
+mean because 64.5–66.0 s is a lull in the wind, the 12th percentile of this body's own 1.5 s
+windows. A lull is the best place to wrap, not the worst. On continuous material the two terms
+are the same number, which is why the single figure worked on fire and rain; where the material
+fluctuates they come apart by 8 dB and the combined reading is unusable.
+
+**Tonal, like the howl.** A resonance at 451 Hz sits 10.3 dB above the local spectral trend,
+with a second at 649 Hz at +6.2, so candidates were scored on a narrow 400–700 Hz band alongside
+the five and the chosen crossfade was built and measured rather than reasoned about: 0.50 dB in
+that band, against the howl's 0.46. Two tonal beds now, both inside half a decibel.
+
+**And a delivered spaced pair, read per band.** Broadband the channels correlate +0.82, which
+would pass for near-mono. Per band they run +0.71, +0.84, +0.73, −0.10 and +0.03 from the bottom
+up: correlated bass, decorrelated top. That is a spaced pair and not raw M/S, the same reading
+that settled Alms — and the reason equal power is the right curve here while the 451 Hz
+resonance still needs its own check.
+
+### `taxation_actionA/`, three tracks and no licence yet
+
+`ambient/taxation_actionA/wheat_sfx_v01.ogg`, `coins_sfx_v01.ogg` and
+`barn_creaks_sfx_v01.ogg` are the first duty action with **more than two tracks**, and the
+reason this folder is a folder. They are stems of a Taxation ambience the project owner is
+building: grain handled, coins counted, and the barn creaking around both.
+
+**One CC0 source each**, unlike the Allocation bed's two: lucasfuchs' *Pouring grain or seeds*
+behind the wheat, Breviceps' *Coin sounds* behind the coins, and Snake16547's *Old wood door
+creak* behind the creaks. Public domain, nothing owed, all three named on the records anyway.
+
+**Two of the three are not what they are called**, which is the kind of thing worth writing
+down before the file outlives the memory. The grain is **a cherry stone pillow** — the
+uploader's own description — poured close to the mic, because it sounds more like poured seed
+than poured seed does. The barn is **one small wooden door**, creaked at various speeds on a
+Zoom H4N. Only the coins are coins.
+
+**Built with ChatGPT**, as the Allocation bed was — it wrote the script that cuts each source
+up and places it across the 30 s stem. That is on the records as a `design` note, which
+attribution.json defines as a record of method rather than a rights claim, and each of the
+three asserts `generatedContent: "none"` alongside it: no audio here is model output, every
+sample traces to one of the three freesound uploads. The licence guard requires that assertion
+precisely so the note can be written down instead of hidden.
+
+**The sources are much shorter than the stems and that shows in them.** 6.8 s of grain, 20.0 s
+of coins and 69.2 s of door, each behind 30 s of stem — so the grain is placed over and over
+while the creaks vary across the whole span, which is audible once you know to listen for it.
+
+*These three were filed for several hours under `provenance-pending`*, a key attribution.json's
+licence table is explicit is **not a licence** — only a statement that a file is here and
+nobody has written down what may be done with it, enforced by a guard that refuses to let one
+be inlined into the board and prints the list on every test run. The placeholder did the job it
+exists for: it made the gap visible rather than fillable with a plausible value. The key stays
+defined, because more stems are expected before their provenance is.
+
+**They are not seamless loops and are not meant to be yet.** Content runs 4.01–24.93 s for
+wheat, 2.04–27.84 for coins and 3.00–28.24 for the creaks, inside a 30 s frame — so all three
+open and close on exact digital silence and go quiet between laps. That is the composite's
+current shape rather than a fault: the background ambience that will fill those seconds is not
+placed, and `../docs/ambient_composite_guide.md` section 15 puts the wrap on the **finished
+mix**, after all events are placed, not on a stem.
+
+**All three are the same 30.000 s and share a timebase**, so from a common start they stay in
+step. Whatever wrap they eventually get has to be *the same wrap on all of them*: cut
+separately they would each find a different loop point, and the coin that was placed to land
+against the wheat would arrive somewhere new every lap.
+
+**No trim has been set on any of them.** They measure −47.4, −36.8 and −44.4 LUFS as they
+stand, so coins sits about 10 dB above wheat before any balancing. That balance is the point of
+the per-track sliders and is not something to derive.
 
 **A layer belongs to its action by prefix.** `allocation_wind` resolves to Allocation by
 dropping trailing words until something matches a duty action, so the filename can say which
