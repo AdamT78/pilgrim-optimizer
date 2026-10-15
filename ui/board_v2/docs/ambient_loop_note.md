@@ -1,8 +1,9 @@
 # Cutting an ambient bed into a seamless loop
 
-**Status: four beds filed.** `silversmith_sfx_v01.ogg` (25 s, fire),
-`devotion_sfx_v01.ogg` (35 s, a service), `alms_sfx_v01.ogg` (25 s, rain) and
-`allocation_sfx_v01.ogg` (11.5 s, an empty cathedral) are in `sfx/ambient/`, and
+**Status: five files under four duty actions.** `silversmith_sfx_v01.ogg` (25 s, fire),
+`devotion_sfx_v01.ogg` (35 s, a service), `alms_sfx_v01.ogg` (25 s, rain),
+`allocation_sfx_v02.ogg` (28.5 s, a queue and keys) and `allocation_wind_sfx_v01.ogg`
+(17 s, a howl, layered under the last) are in `sfx/ambient/`, and
 `sfx_lab/generate_sound_bench.py` builds `generated/ambient_bench.html` to hear them looping
 under their own cues. The board itself still plays neither. This note is the method, worked out
 before the first one was cut so the choices came from measurement rather than from the first
@@ -161,10 +162,122 @@ Two riders: it has to compose with whatever fade-in the bed gets at select, and 
 playback non-deterministic, which matters only for testing. With beds scoped to two duty actions
 and heard repeatedly, this is where the anti-repetition budget is best spent.
 
-## 9. Not done
+## 9. Sparse event material, and a loop built in the mix instead of cut from one
 
-- **The board plays no bed.** Both are filed and audible on the ambient bench; `bundled_sfx()`
-  still inlines only `tile.ogg` and `confirm.ogg`.
+Everything up to here was worked out on **continuous texture** — fire, rain, a room, a howl —
+where every 200 ms window looks much like every other. `allocation_sfx_v02.ogg` is not that. It
+is a **composite**: single footfalls and single key contacts lifted out of two CC0 uploads and
+assembled into a scene, footstep by footstep, rather than a window cut out of one recording.
+The method is `ambient_composite_guide.md`, which is the other document; this section is only
+what the material did to the rules above.
+
+It also arrived **already looped**, which is new. Every bed before it was cut here from a master;
+this one was made seamless in the mix, by the same equal-power overlap sections 1 and 2 argue
+for, worked out independently and written down before this note was consulted. Two routes, one
+answer, on different material — which is the strongest evidence either of them is right.
+
+### The absence of a click is not the absence of a seam
+
+The version before the one that shipped was a 30 s mix whose first and last samples were both
+**exact zeros**. Butting the end against the start produced no discontinuity at all: nothing to
+declick, nothing a waveform view would show. It still could not be looped that way. The first
+0.3 s and last 0.6 s were digital silence and the material thinned out from about 26.4 s, so
+plain repetition dropped some **2.5 s of near-nothing** into the bed every lap. Scored the way
+section 5 scores a shoulder — five bands, 1.5 s head against 1.5 s tail — that butt join was
+**41.0 dB out, with 68.5 dB in the top band**, against the 0.70–1.13 dB that counts as a good
+match on continuous material.
+
+So the two failure modes are independent, and a file that begins and ends in silence is exactly
+the shape that separates them. Silence at both ends makes the *click* test pass and the *level*
+test fail, which is the reverse of the usual case and the reason "it ends where it starts, so it
+loops" reads as true. The shipped version exists because this was real.
+
+### The shoulder test does not apply to a finished loop
+
+Section 5 scores **candidates**: two spans of a master that a crossfade has not yet been built
+between. Run the same test on a baked loop and it compares a head that has already been
+crossfaded with its own tail against that tail — which measures the material's own variation and
+nothing else. On the shipped bed it reads **21.5 dB**, and that figure means nothing whatever.
+
+Worth stating because the number looks like a verdict and invites a rebuild of something that is
+already correct. **Score candidates; verify finished files.** The three checks that do apply to a
+baked loop are the one-pass-against-N-passes identity from section 1, the sample step across the
+wrap against the file's own median sample-to-sample difference, and the window test below.
+
+### Asking whether the wrap is a hole, properly
+
+"Seam region against the rest of the file" (section 2) is the right question on continuous
+material and a weak one here, because every 1.5 s window of this file differs from every other.
+Slide a 1.5 s window across three laps instead and ask where the wrap falls in the distribution.
+On the shipped bed it sits at the **19th percentile**, 2.35 dB under the loop's median, where the
+loop's own quietest window is **12.7 dB** under it. The percentile answers the question the
+decibel figure only looks like it is answering.
+
+### The band search cannot see rhythm
+
+This was found on a cut of the earlier mix that did not ship, and it outlives it. Run the
+section 5 search over that 30 s file and the winner is a **22.0 s body from 0.0 s** at 0.87 dB
+RMS across five bands — a better score than anything else in the file, and wrong. The keys sit
+on a near-regular grid, gaps of 3.97, 3.89, 3.92, 3.92, 3.89 and 3.92 s, and 22.0 s is **5.6 of
+those gaps**, so every lap the wrap would deliver a key 1.5 s early. One lap sounds fine; the
+loop announces itself on the second.
+
+**The rule: on material with a periodic event, the body length must be a whole number of event
+periods, and the shoulder match chooses only among the lengths that already satisfy it.** The cut
+taken was 23.510 s, exactly six of them, scoring 0.95 dB — slightly worse on the only number the
+search knows about, and right.
+
+**The tolerance is set by the material, not by the arithmetic.** Those gaps already vary by 80 ms
+between longest and shortest, because a person placed them; six periods is measurable to about
+±14 ms. A wrap 40 ms off sits inside jitter the listener is already hearing. A machine-sequenced
+grid would have no such slack and would want its length from the sequencer's tempo rather than
+measured off the audio.
+
+**The shipped file does not need the rule, and shows why it is worth knowing anyway.** Its loop
+is the whole mix wrapped onto itself, so the cadence across the wrap is whatever the mix had
+there — 3.92 s, on grid, for free. What the mix does have is one *interior* gap of 4.99 s where
+the others run 3.90 to 3.96. That is not a seam, it repeats identically every lap, and it reads
+as one slower handoff. The distinction worth keeping is that **a rhythm fault at the wrap is a
+loop artefact and a rhythm fault inside the body is content** — the first is always wrong, the
+second is a question for the ear.
+
+### A crossfade that lands a sound on itself
+
+From the same unshipped cut, and the reason it scored as well as it did. Making the body a whole
+number of grid periods has a consequence that looks like a coincidence and is not: the key six
+periods from the head falls in the folded tail at exactly the position the head's own key
+occupies. In that file the two happened to be **the same slice** of the source jingle,
+correlating **+0.82 at zero lag** where every other pair in the file managed +0.07 to +0.14, so
+the crossfade overlaid a recording on itself rather than mixing two different ones. It cost
+**1.8 dB** on that hit — correlated material summing nearer to amplitude than to power — and
+1.8 dB disappeared into the **5.85 dB** the seven jingles already spanned among themselves.
+Section 4's lesson from a third direction: the material's own variation is larger than what the
+process does to it.
+
+**Worth recording as a thing that did not pay:** that search was given a second term penalising
+candidates whose shoulders sat far below the body, on the theory that sparse material lets two
+silences match perfectly while leaving a hole. It changed the ranking by almost nothing — the
+butt join is caught by the band score alone, at 41 dB. The hole it was built to catch did not
+exist. A negative result, not a recommendation.
+
+### Replacing a layer re-rolls the beat cycle of everything it plays with
+
+Section 10 below has carried "bed-to-bed transitions are unspecified" since the first two beds.
+This is a narrower and more immediate version of the same gap. The wind layer's 17 s was chosen
+against an 11.5 s bed to give 391 s before the pair realigns. That bed has been replaced twice
+in one sitting: by a 23.510 s cut, which would have given 39,967 s, and then by the 28.5 s mix
+that shipped, which gives **969 s** — about sixteen minutes. All three are long enough and none
+of them was chosen for it.
+
+A number arriving by accident three times is the warning, not the reassurance. Swapping one file
+silently re-rolls this for every layer sharing its action, **nothing in the tree computes it**,
+and the next swap could as easily land on a near multiple of 17. It is two lines of arithmetic
+against the lengths already on the records.
+
+## 10. Not done
+
+- **The board plays no bed.** All five are filed and audible on the ambient bench;
+  `bundled_sfx()` still inlines only `tile.ogg` and `confirm.ogg`.
 - **Bed-to-bed transitions are unspecified.** One global equal-power time, not a pairwise
   matrix: the matrix never converges, it grows as the square of a bed count that is expected to
   grow, a transition is heard once where a loop seam is heard every lap, and the only thing that
@@ -173,8 +286,19 @@ and heard repeatedly, this is where the anti-repetition budget is best spent.
   fluctuation. If one pair ever misbehaves, per-bed in and out times compose and stay linear.
 - **Start and stop behaviour is unspecified.** Ambience ends on confirm, but hard or faded is
   undecided, as is the fade-in on select, and what happens on deselect or re-select.
-- **The loop checker does not exist as a tool.** The band-match shoulder search and the
-  N-lap render were both run by hand for these two beds; a third will want them scripted.
+- **The loop checker does not exist as a tool.** The band-match shoulder search, the N-lap
+  render and the wrap-window percentile test have been written from scratch for each of the
+  five beds. Three of them now have a settled shape and one of them, the percentile test, is
+  the only check that works on a loop that arrives already baked.
+- **The composite's master is the first audio source here that cannot be re-fetched.** Every
+  other sound in the tree is a download, which is why `sfx/masters/` was deleted — the same
+  file can be fetched again from the name in `source`. A DAW mix cannot, and the reason the
+  artwork keeps its masters forever applies to it exactly. The two CC0 uploads it was built
+  from are named on its record and are re-fetchable; the arrangement of them is not, and
+  presently exists only on the project owner's disk. As FLAC it is 3.2 MB. `ambient_composite_
+  guide.md` reduces the risk without removing it -- the guide reproduces the *method* and the
+  intent, but it is explicit that its timings are approximate, and nine renders went by before
+  this one.
 - **Only the fire's span was searched exhaustively.** The cathedral's search covered the quiet
   passage from 78 to 162 s, not the whole 286 s master, because the choir passages are not
   bed material.

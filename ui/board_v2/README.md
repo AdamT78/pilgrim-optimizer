@@ -217,6 +217,13 @@ Chrome will not overwrite a download -- a second save arrives as `framing (1).js
 - `duty_actions/` -- the art itself, by duty: the action cards, the tile marks under `seals/`
   and `icons/`, and the untouched originals under each `masters/`.
 - `tokens/` -- the three Tithe resources, in both the wax and the coin treatment.
+- `sfx/` -- every sound the board has: the two interface cues at the top, then one folder per
+  family (`tithe/`, `buildings/`, `duty_actions/`, `general/`), `misc/` for clips that are
+  kept but hold no slot, and `ambient/` for the looping beds, which are a different kind of
+  thing from the rest. `sfx/README.md` says what each one is and how it was cut.
+- `sfx_lab/` -- `sfx_levels.py`, which measures every clip and writes its `gainDb`, and
+  `generate_sound_bench.py`, which builds two pages into `generated/`: a bench for the cues
+  and a second one for the beds, where a bed is auditioned looping under its own cue.
 - `attribution.json` -- provenance for every asset in this tree, and the shared facts the tools
   would otherwise each keep their own copy of: which folders hold marks, which are not actions,
   which file extensions to look for.
@@ -236,6 +243,14 @@ Chrome will not overwrite a download -- a second save arrives as `framing (1).js
 - `docs/webp_inlining_note.md` -- a measurement, not a change: what inlining the board's
   pictures as WebP instead of JPEG and PNG would cost and save, and the one trap in doing it
   (Pillow's WebP lossless is not exact by default). Nothing in the tree does this yet.
+- `docs/sfx_levelling_note.md` -- how a clip's playback gain is arrived at, why peak and mean
+  were both wrong for it, and the bed target that was chosen and then falsified.
+- `docs/ambient_loop_note.md` -- how an ambient bed is cut into a seamless loop: which
+  variables matter, which were measured and turned out not to, and what sparse event
+  material does to all of it.
+- `docs/ambient_composite_guide.md` -- the other way to make a bed, when no single recording
+  is the thing you want: build the scene out of parts. Allocation's queue is the worked
+  example and the method is the point.
 
 ## What is not decided yet
 
