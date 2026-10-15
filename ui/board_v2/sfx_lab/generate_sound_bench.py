@@ -158,6 +158,24 @@ def duty_by_name() -> dict:
     return out
 
 
+def duty_for(stem: str, by_name: dict):
+    """Which duty action a bed belongs to, by longest matching prefix of its name.
+
+    A SECOND LAYER NEEDS A NAME OF ITS OWN AND STILL BELONGS TO THE SAME ACTION, so
+    `allocation_wind` resolves to Allocation by dropping trailing words until something
+    matches. The alternative was a `duty` field on the record, which would be a second copy
+    of a fact duty_text.json already owns, and the second copy is the one that goes stale.
+    LONGEST FIRST MATTERS: `donate_building` is an action in its own right and must not be
+    read as a layer of some `donate`.
+    """
+    parts = stem.split("_")
+    for n in range(len(parts), 0, -1):
+        hit = by_name.get("_".join(parts[:n]))
+        if hit:
+            return hit
+    return None
+
+
 def ambient(rec: dict, notes: list) -> tuple:
     """Every bed in sfx/ambient/, with the cue of the duty action it belongs to.
 
@@ -182,11 +200,14 @@ def ambient(rec: dict, notes: list) -> tuple:
             m = e.get("measured", "") or ""
             num = lambda pat: (float(re.search(pat, m).group(1))
                                if re.search(pat, m) else None)
-            hit = by_name.get(stem)
+            hit = duty_for(stem, by_name)
             if hit:
                 used.add((hit[0], hit[1]))
             cue_key = "%s_%s" % (hit[0], hit[1]) if hit else None
             beds.append({
+                # A DOM-SAFE ID: the layer checkbox is addressed by element id and a filename
+                # carries dots. Derived, not stored -- the file is still the key.
+                "id": re.sub(r"[^a-z0-9]+", "_", p.stem.lower()),
                 "file": p.name, "name": (e.get("title") or stem).split(" -- ")[0],
                 "duty": hit[2] if hit else None, "cue": cue_key,
                 "ms": facts["ms"], "sr": facts["sr"], "ch": facts["ch"],
@@ -324,8 +345,8 @@ def main() -> int:
     atmpl = (LAB / "ambient_bench.html.tmpl").read_text(encoding="utf-8")
     OUT_AMBIENT.parent.mkdir(parents=True, exist_ok=True)
     OUT_AMBIENT.write_text(atmpl.replace("__DATA__", json.dumps(
-        {"beds": beds, "cues": cues, "have": len(beds), "slots": slots,
-         "missing": missing})), encoding="utf-8")
+        {"beds": beds, "cues": cues, "have": len(used), "slots": slots,
+         "layers": len(beds), "missing": missing})), encoding="utf-8")
 
     tmpl = (LAB / "sound_bench.html.tmpl").read_text(encoding="utf-8")
     page = tmpl.replace("__DATA__", json.dumps(
@@ -343,7 +364,8 @@ def main() -> int:
     # NO "n of m" HERE: misc has no denominator, so a count is the only honest line.
     print("  misc      %d kept, unassigned" % len(misc))
     print("  wrote %s  (%d KB)" % (OUT_AMBIENT, OUT_AMBIENT.stat().st_size // 1024))
-    print("  ambient   %d of %d duty actions have a bed" % (len(beds), slots))
+    print("  ambient   %d of %d duty actions have a bed, in %d file%s"
+          % (len(used), slots, len(beds), "" if len(beds) == 1 else "s"))
     drawn = [c for c in ([s for st in sets for _, s, _ in st["slots"]]
                          + [t["clip"] for t in tithe]
                          + [a["clip"] for d in duties for a in d["actions"]]

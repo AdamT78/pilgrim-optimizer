@@ -3018,6 +3018,23 @@
       "measured": "11500 ms, peak -39.00 dB, integrated -51.26 LUFS, true peak -39.00 dBTP, stereo 48 kHz, L/R correlation +0.6934",
       "gainDb": -5.0,
       "sha256": "8057e8c8168dc51455db895d8a0a45f6bddf367d39ace277418622323f7a3bfd"
+    },
+    "sfx/ambient/allocation_wind_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "Hzandbits",
+      "licence": "sonniss-gameaudiogdc",
+      "licenceNote": "Sonniss GameAudioGDC 2016 bundle. Taken as an individual file from the your.org mirror rather than out of a numbered archive, so no archive number applies. Royalty-free: personal and commercial game use, modification and unlimited projects permitted, no attribution required. The files may not be resold or redistributed as sound effects, including edited versions, and may not be used to train AI or ML models.",
+      "source": "Wind,Int,Howl,Tonal,Mumble.wav, Hzandbits - Howling Winds - Interior. 33.2 s, 96 kHz, recorded 2015-02-09 in REAPER. The shortest master any bed here is cut from.",
+      "originalFilename": "Wind,Int,Howl,Tonal,Mumble.wav",
+      "originalPath": "ftpmirror.your.org/pub/misc/sonniss2016/individual/Hzandbits - Howling Winds - Interior",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Allocation wind -- a howl through the building",
+      "role": "THE FIRST SECOND LAYER. It plays under allocation actionA alongside allocation_sfx_v01.ogg rather than instead of it: that bed is the room, this is the weather outside it. It resolves to its duty action by prefix, so the filename can say which layer it is without a field repeating which action it belongs to, and it answers to Allocation's own cue.",
+      "modifications": "A SEAMLESS 17 s LOOP. 17.000 s body from 12.50 s of the 33.2 s master, with the following 1.5 s folded back over the head as an equal-power crossfade. SEVENTEEN SECONDS IS A CHOSEN NUMBER, NOT A FOUND ONE. Layered under an 11.5 s bed, the pair only realigns when the two lengths do: 17 gives 391 s, while 23 -- exactly twice 11.5 -- would give 23 s and buy nothing for a whole extra file. Round lengths are the trap. THE HOWL IS TONAL AND THAT CHANGES THE JOIN. Its spectrum holds a resonance at 617 Hz sitting 12 dB above the local trend, and two copies of a tone crossfaded at arbitrary relative phase can cancel where broadband material simply sums. Candidates were scored on a narrow 550-700 Hz band alongside the usual five, and each crossfade was then built and measured rather than inferred: this one costs 0.46 dB in the howl band, and the tone across the join reads +0.07 dB against the body. The event detector is not useful on this material -- it flags 49 of 166 windows above 8 dB, but those are the gusts, which are the point rather than an intruder. Resampled 96 -> 48 kHz on encode, as the other beds.",
+      "measured": "17000 ms, peak -21.48 dB, integrated -37.02 LUFS, true peak -21.48 dBTP, stereo 48 kHz, L/R correlation +0.9586",
+      "gainDb": -19.0,
+      "sha256": "d3cc6d247806274b117c1d6fb9f452a8172e09f195315b24b8b2f41d9dd3a721"
     }
   },
   "assetDirs": [

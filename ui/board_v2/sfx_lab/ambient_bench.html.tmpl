@@ -72,6 +72,8 @@ levels to a JSON file; load takes one back after this page is rebuilt.</p>
   <span id="cuenote" style="color:var(--dim)"></span>
 </div>
 
+<p class="sub" style="color:var(--ok)"><span id="mix">nothing sounding</span><span id="cycle"
+   style="color:var(--dim)"></span></p>
 <p class="sub" id="settings" style="color:var(--ok)"></p>
 <p class="sub" id="loadnote" style="color:var(--dim)"></p>
 
@@ -95,6 +97,71 @@ var MONITOR_DB = 6;
 
 function bed(f){ for (var i = 0; i < BEDS.length; i++) if (BEDS[i].file === f) return BEDS[i];
                  return null; }
+
+// LAYERS SIT BESIDE THE TRANSPORT, THEY DO NOT REPLACE IT. An earlier attempt rewrote this
+// page so every row had its own play button and the selected-bed transport disappeared; it
+// also changed the monitor gain and added random start offsets in the same move, and when
+// something sounded wrong there was no way to tell which change did it. So: the selected bed
+// still plays, seeks and loops exactly as before, and a layer is an extra source that keeps
+// running underneath. One rule resolves the overlap -- THE TRANSPORT WINS, so a bed that is
+// selected and playing never also sounds as a layer, and can never be heard twice.
+var WANT = {}, LAYERS = {};
+function wantsLayer(f){ return !!WANT[f] && !(f === cur && playing); }
+function layerStart(f){
+  if (LAYERS[f] || !bufs[f]) return;
+  var b = bed(f), src2 = ctx.createBufferSource(), g = ctx.createGain();
+  src2.buffer = bufs[f]; src2.loop = true;
+  src2.loopStart = 0; src2.loopEnd = b.seconds;   // the same pin the transport uses
+  g.gain.value = Math.pow(10, TRIMS[f] / 20);
+  src2.connect(g); g.connect(master);
+  src2.start(0);
+  LAYERS[f] = {src: src2, gain: g};
+}
+function layerStop(f){
+  var n = LAYERS[f]; if (!n) return;
+  try { n.src.stop(); } catch (e) {}
+  n.src.disconnect(); n.gain.disconnect(); delete LAYERS[f];
+}
+function syncLayers(){
+  if (!ctx) return;
+  BEDS.forEach(function(b){ wantsLayer(b.file) ? layerStart(b.file) : layerStop(b.file); });
+  paintMix();
+}
+function toggleLayer(f, on){
+  WANT[f] = on;
+  if (!ctx) { init(function(){ syncLayers(); }); return; }
+  syncLayers();
+}
+function sounding(){
+  var out = BEDS.filter(function(b){ return wantsLayer(b.file); });
+  if (playing && cur) { var c = bed(cur); if (c) out = out.concat([c]); }
+  return out;
+}
+function gcd(a, b){ return b ? gcd(b, a % b) : a; }
+function paintMix(){
+  var on = sounding(), tot = 0, known = 0;
+  on.forEach(function(b){
+    if (b.integrated == null) return;
+    known++; tot += Math.pow(10, (b.integrated + TRIMS[b.file]) / 10);
+  });
+  // A POWER SUM, which assumes the beds are uncorrelated -- true for different recordings.
+  // Two at the same level land about 3 dB above either, so layering changes how loud an
+  // action's ambience is even when no slider moved.
+  document.getElementById("mix").innerHTML = on.length < 1 ? "nothing sounding"
+    : on.length + (on.length === 1 ? " bed" : " beds") + " sounding" +
+      (known ? ", together landing at <b>" + (10*Math.log10(tot)).toFixed(1) + "</b> LUFS" : "");
+  var cyc = document.getElementById("cycle");
+  if (on.length < 2) { cyc.innerHTML = ""; return; }
+  var l = Math.round(on[0].seconds * 10), lock = false;
+  for (var i = 1; i < on.length; i++) {
+    var m = Math.round(on[i].seconds * 10);
+    l = l * m / gcd(l, m);
+  }
+  var secs = l / 10, longest = Math.max.apply(null, on.map(function(b){ return b.seconds; }));
+  lock = secs <= longest * 1.01;
+  cyc.innerHTML = " &middot; this combination repeats every " + secs.toFixed(1) + " s" +
+    (lock ? " <b style='color:var(--hot)'>— these lengths lock</b>" : "");
+}
 function dur(){ var b = bed(cur); return b ? b.seconds : 1; }
 function cue(){ var b = bed(cur); return b && b.cue ? CUES[b.cue] : null; }
 
@@ -142,11 +209,13 @@ function playFrom(off){
   playing = true;
   document.getElementById("play").textContent = "stop";
   document.getElementById("play").classList.add("on");
+  syncLayers();   // the transport has taken this bed over; drop its layer copy if it had one
 }
 function stopAll(){
   lastPos = posNow(); stopSrc(); playing = false;
   document.getElementById("play").textContent = "play";
   document.getElementById("play").classList.remove("on");
+  syncLayers();   // handing back: a bed still ticked as a layer resumes underneath
 }
 function elapsed(){ return playing ? (ctx.currentTime - startT) + startOff : lastPos; }
 function posNow(){ return elapsed() % dur(); }
@@ -167,7 +236,8 @@ function setTrim(){
   document.getElementById("lands").innerHTML = lands == null ? "&mdash;"
       : (lands < 0 ? "−" : "") + Math.abs(lands).toFixed(1);
   if (bedGain) bedGain.gain.value = Math.pow(10, t / 20);
-  paintSettings();
+  if (LAYERS[cur]) LAYERS[cur].gain.gain.value = Math.pow(10, t / 20);
+  paintSettings(); paintMix();
 }
 function paintSettings(){
   document.getElementById("settings").innerHTML = "levels &mdash; " + BEDS.map(function(b){
@@ -196,7 +266,7 @@ function pick(f){
     b.classList.toggle("on", b.getAttribute("data-f") === f); });
   if (playing) playFrom(lastPos);
   document.getElementById("trim").value = TRIMS[cur];
-  setTrim(); paintCue();
+  setTrim(); paintCue(); syncLayers();
 }
 document.getElementById("play").onclick = function(){
   if (playing) { stopAll(); return; }
@@ -272,12 +342,14 @@ function tick(){
     document.getElementById("rows").innerHTML = h.join("");
     return;
   }
-  h.push("<table><tr><th class='l'>bed</th><th class='l'>duty action</th><th>length</th>" +
+  h.push("<table><tr><th class='l'>bed</th><th>layer</th><th class='l'>duty action</th><th>length</th>" +
          "<th>rate</th><th>ch</th><th>integrated</th><th>true peak</th><th>gainDb</th>" +
          "<th>lands</th><th>size</th></tr>");
   BEDS.forEach(function(b){
     h.push("<tr data-f='" + b.file + "'><td class='l'><button data-f='" + b.file +
       "' onclick=\"pick('" + b.file + "')\">" + b.name + "</button></td>" +
+      "<td><input type='checkbox' id='ly_" + b.id + "' onchange=\"toggleLayer('" + b.file +
+        "', this.checked)\" title='keep this bed looping underneath whatever is selected'></td>" +
       "<td class='l' style='color:var(--dim)'>" + (b.duty || "&mdash;") + "</td>" +
       "<td>" + (b.ms / 1000).toFixed(0) + " s</td><td>" + b.sr + "</td><td>" +
       (b.ch === 1 ? "mono" : b.ch + " ch") + "</td>" +
