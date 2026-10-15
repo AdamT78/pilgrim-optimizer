@@ -1,9 +1,13 @@
 # Cutting an ambient bed into a seamless loop
 
-**Status: five files under four duty actions.** `silversmith_sfx_v01.ogg` (25 s, fire),
-`devotion_sfx_v01.ogg` (35 s, a service), `alms_sfx_v01.ogg` (25 s, rain),
-`allocation_sfx_v02.ogg` (28.5 s, a queue and keys) and `allocation_wind_sfx_v01.ogg`
-(17 s, a howl, layered under the last) are in `sfx/ambient/`, and
+**Status: ten files under six duty actions.** Four actions have one track each —
+`clerical_actionB/silversmith` (25 s, fire), `clerical_actionA/devotion` (35 s, a service),
+`give_alms_actionA/alms` (25 s, rain) and `give_alms_actionB/donate_building` (32.5 s, a
+sheltered wind). Two have several: `allocation_actionA/` holds `footsteps` and `keys` (28.5 s,
+one mix in two stems) under `allocation_wind` (17 s, an independent loop), and
+`taxation_actionA/` holds `wheat`, `coins` and `barn_creaks` (30 s stems, not yet wrapped and
+waiting on a background bed). They are in `sfx/ambient/`, one folder per duty action since a
+fourth track made the filename the wrong place to say which action a bed belongs to, and
 `sfx_lab/generate_sound_bench.py` builds `generated/ambient_bench.html` to hear them looping
 under their own cues. The board itself still plays neither. This note is the method, worked out
 before the first one was cut so the choices came from measurement rather than from the first
@@ -165,8 +169,9 @@ and heard repeatedly, this is where the anti-repetition budget is best spent.
 ## 9. Sparse event material, and a loop built in the mix instead of cut from one
 
 Everything up to here was worked out on **continuous texture** — fire, rain, a room, a howl —
-where every 200 ms window looks much like every other. `allocation_sfx_v02.ogg` is not that. It
-is a **composite**: single footfalls and single key contacts lifted out of two CC0 uploads and
+where every 200 ms window looks much like every other. Allocation's bed is not that. It
+is a **composite** — shipped first as one file, `allocation_sfx_v02.ogg`, and since split into
+the `footsteps` and `keys` stems that sum to it, which changes nothing in this section: single footfalls and single key contacts lifted out of two CC0 uploads and
 assembled into a scene, footstep by footstep, rather than a window cut out of one recording.
 The method is `ambient_composite_guide.md`, which is the other document; this section is only
 what the material did to the rules above.
@@ -262,7 +267,7 @@ exist. A negative result, not a recommendation.
 
 ### Replacing a layer re-rolls the beat cycle of everything it plays with
 
-Section 10 below has carried "bed-to-bed transitions are unspecified" since the first two beds.
+Section 11 below has carried "bed-to-bed transitions are unspecified" since the first two beds.
 This is a narrower and more immediate version of the same gap. The wind layer's 17 s was chosen
 against an 11.5 s bed to give 391 s before the pair realigns. That bed has been replaced twice
 in one sitting: by a 23.510 s cut, which would have given 39,967 s, and then by the 28.5 s mix
@@ -274,7 +279,65 @@ silently re-rolls this for every layer sharing its action, **nothing in the tree
 and the next swap could as easily land on a near multiple of 17. It is two lines of arithmetic
 against the lengths already on the records.
 
-## 10. Not done
+## 10. Two more things the shoulder score cannot see
+
+Section 5 settled that *which two shoulders you join* dominates everything else, and the band
+match over a 1.5 s window at each end is how that gets scored. Section 9 found the first thing
+it is blind to. The sixth bed, `donate_building_sfx_v01.ogg`, found a second, and the two are
+the same shape: **the score reads two short windows and knows nothing about the thirty seconds
+between them.**
+
+### A body can climb
+
+Searching the sheltered-wind master — 215 s, every start at 0.5 s, every length from 28 to 42 s
+— the best band match in the file is a **28.5 s body from 52.50 s at 0.25 dB RMS**. It was
+rejected. Measured first third against last, that body **climbs 7.3 dB**, so every lap would be
+a crescendo that resets to quiet at the wrap. The shoulders match beautifully; the thing between
+them does not hold still.
+
+The body taken instead scores 0.30 dB and runs −51.70 to −51.78 across the same comparison —
+**flat to within 0.08 dB** while still holding 10.79 dB of gust inside it, which is the
+distinction that matters. Fluctuation is the material. A trend is a shape, and a shape that
+resets every lap is a loop marker exactly like a key arriving early.
+
+So the search wants a second term, and it is one line: the level of the first third of the body
+against the last. On the eight best candidates here it ranged from −7.4 to +7.3 dB and picked
+out the one that was flat. It costs nothing to compute and it would have changed the answer.
+
+### "Seam against the rest of the file" measures two things at once
+
+Section 2's number is crossfade region against the remainder, and on this bed it reads
+**−7.54 dB** — which on the fire would have meant a hole and nearly caused a rebuild. It is not
+one. Split in two:
+
+| | |
+| --- | --- |
+| the crossfade against the **raw head it replaced** | **+0.72 dB** |
+| that raw head against the **whole body** | **−8.09 dB** |
+
+The curve costs nothing; it gains, two decorrelated shoulders summing by power. The 8 dB is the
+material — 64.5 to 66.0 s is a lull in the wind, the 12th percentile of this body's own 1.5 s
+windows — and a lull is the *best* place to wrap, not the worst.
+
+**On continuous material the two terms are the same number**, which is why section 2's single
+figure worked on fire and rain and why nothing noticed. Where the material fluctuates they come
+apart by 8 dB and the combined figure is unreadable. Measure them separately: one is a property
+of the curve, the other is a property of the start time, and only the first is ever a defect.
+
+The percentile test from section 9 agrees and is quicker: the wrap window sits at the **16th**
+percentile of the loop's own windows, 4.5 dB under their median where the quietest window
+anywhere in the loop is 9.3 dB under it. Low, and inside the material's own range.
+
+### A second tonal bed, and the narrow band earning its keep again
+
+This master holds a resonance at **451 Hz, 10.3 dB above the local spectral trend**, with a
+second at 649 Hz at +6.2 — so, like the howl and unlike the fire, two copies crossfaded at
+arbitrary relative phase can cancel where broadband material simply sums. Candidates were scored
+on a narrow 400–700 Hz band alongside the usual five and the chosen crossfade was then built and
+measured: it costs **0.50 dB** in that band, against the howl's 0.46. Two tonal beds now, both
+inside half a decibel, which is starting to look like a method rather than a one-off.
+
+## 11. Not done
 
 - **The board plays no bed.** All five are filed and audible on the ambient bench;
   `bundled_sfx()` still inlines only `tile.ogg` and `confirm.ogg`.
@@ -288,7 +351,7 @@ against the lengths already on the records.
   undecided, as is the fade-in on select, and what happens on deselect or re-select.
 - **The loop checker does not exist as a tool.** The band-match shoulder search, the N-lap
   render and the wrap-window percentile test have been written from scratch for each of the
-  five beds. Three of them now have a settled shape and one of them, the percentile test, is
+  ten files. Three of them now have a settled shape and one of them, the percentile test, is
   the only check that works on a loop that arrives already baked.
 - **The composite's master is the first audio source here that cannot be re-fetched.** Every
   other sound in the tree is a download, which is why `sfx/masters/` was deleted — the same

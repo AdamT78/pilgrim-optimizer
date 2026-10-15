@@ -16,8 +16,10 @@ a rights claim. No audio in the result is model output — every sample traces t
 CC0 uploads named in section 1.
 
 **What it produced.** `allocation_ambient_queue_v09_seamless_loop.wav`, 28.5 s, which ships as
-`sfx/ambient/allocation_sfx_v02.ogg`. The 24-bit master is not in this tree; see the last bullet
-of `ambient_loop_note.md` section 10 for why that is a question rather than a decision.
+`sfx/ambient/allocation_actionA/`, first as the single file `allocation_sfx_v02.ogg` and now as
+the two stems `footsteps_sfx_v01.ogg` and `keys_sfx_v01.ogg`, which carry the same wrap and the
+same rotation and sum back to it. The 24-bit master is not in this tree; see the last bullet
+of `ambient_loop_note.md` section 11 for why that is a question rather than a decision.
 
 **Which parts travel.** Sections 3 to 5 and 17 are the general method — denoise *before* cutting
 fragments, extract single events rather than passages, and vary position, level, filtering and

@@ -5,6 +5,8 @@ visible the moment you open it; what is NOT visible is the handful of rules it i
 those are what erode. Each test below names the failure it exists to catch and how to falsify it.
 """
 import ast
+import base64
+import hashlib
 import importlib.util
 import json
 import math
@@ -1998,6 +2000,77 @@ def test_a_sound_slot_draws_the_highest_version_and_a_hardcoded_one_is_refused(t
         "the module still spells a fixed version somewhere outside a docstring: %s.\n"
         "That is the bug this test exists for -- it resolves fine, draws the wrong take, and "
         "says nothing. Resolve slots through newest_version()." % stuck)
+
+
+def test_nothing_without_a_licence_reaches_the_board(gen):
+    """`provenance-pending` is a promise to come back, and this is what stops it being a hole.
+
+    A SOUND WITH NO LICENCE ON RECORD CAN STILL BE USEFUL -- the Taxation stems arrived as work
+    in progress, with the project owner saying plainly that the provenance would follow -- and
+    the alternative to letting them in was either keeping them out of the tree, where they
+    cannot be heard, or writing a plausible licence, which is the one thing this whole file
+    exists to prevent. So they carry `provenance-pending`, which attribution.json's licence
+    table states is not a licence.
+
+    THE WORD "PENDING" IS DOING REAL WORK AND THIS TEST IS WHY. A placeholder nobody checks is
+    just a wrong value with a nicer name: it ships, and six months later the record still says
+    pending and the board still plays the file. Two things are asserted. Nothing carrying the
+    key may be inlined by the board, which is where a sound becomes something shipped rather
+    than something auditioned. And the pending set is PRINTED on every run even when the test
+    passes, so it stays in front of whoever reads the output.
+
+    THE KEY IS ALLOWED TO OUTLIVE ITS RECORDS and the definition checks are conditional for
+    that reason. The first three to use it -- Taxation's stems -- were resolved to CC0 within
+    hours of being filed, which is the placeholder working rather than the concept being
+    unnecessary: it made the gap visible instead of fillable with a plausible value, and more
+    stems are expected before their provenance is. A test that demanded the key exist would
+    stop anyone retiring it; one that demanded it not exist would stop anyone keeping it ready.
+
+    Falsified by bundling a pending file, or by inventing a licence to make this go away.
+    """
+    rec = json.loads((ROOT / "ui" / "board_v2" / "attribution.json")
+                     .read_text(encoding="utf-8"))
+    pending = sorted(k for k, v in rec["files"].items()
+                     if v.get("licence") == "provenance-pending")
+    if pending:
+        assert "provenance-pending" in rec["licences"], (
+            "records use `provenance-pending` but the licence table does not define it, so "
+            "nothing says what the key means")
+        said = rec["licences"]["provenance-pending"].get("name", "")
+        assert "NOT A LICENCE" in said, (
+            "the `provenance-pending` entry must say it is not a licence; it currently reads %r"
+            % said[:80])
+
+    # BY CONTENT, NOT BY NAME. The first version of this grepped the generator's source for
+    # each pending filename, and a mutation walked straight through it: `bundled_sfx()` builds
+    # its paths as "%s.ogg" % cue, so the string `tile.ogg` never appears and a pending file
+    # bundled that way would have passed. What matters is whether the BYTES reach the page, so
+    # that is what is compared -- immune to how the filename is spelt or assembled.
+    inlined = set()
+    sfx, _ = gen.bundled_sfx()
+    for payload in sfx.values():
+        b64 = str(payload).split(",", 1)[-1]
+        try:
+            inlined.add(hashlib.sha256(base64.b64decode(b64)).hexdigest())
+        except Exception:                                          # pragma: no cover
+            continue
+    tree = ROOT / "ui" / "board_v2"
+    leaked = [k for k in pending
+              if (tree / k).is_file()
+              and hashlib.sha256((tree / k).read_bytes()).hexdigest() in inlined]
+    assert not leaked, (
+        "%d file(s) with no licence on record are inlined into the board: %s.\n"
+        "A pending record may be auditioned on the bench and may not ship."
+        % (len(leaked), ", ".join(leaked)))
+
+    for key in pending:
+        entry = rec["files"][key]
+        for field in ("creator", "originalPath"):
+            assert entry.get(field), "%s is pending but its %s is missing entirely; say \"not " \
+                                     "yet supplied\" rather than leaving the field out" % (key, field)
+    if pending:
+        print("\n%d sound(s) still carry no licence and must be resolved before release:\n  %s"
+              % (len(pending), "\n  ".join(pending)))
 
 
 def test_no_sound_claims_a_licence_its_own_source_contradicts():

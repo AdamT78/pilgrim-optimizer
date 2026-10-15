@@ -150,48 +150,64 @@ def buildings() -> list:
 # under -- `silversmith_sfx_v01.ogg` -- and duty_text.json already owns the mapping from that
 # name to `clerical_actionB`. A `duty` field on the record would be a second copy of a fact the
 # game already states, and the second copy is the one that goes stale.
-def duty_by_name() -> dict:
+def duty_action_folders() -> dict:
+    """{"taxation_actionA": ("taxation", "actionA", "Taxation")} -- the folder a bed lives in.
+
+    THIS REPLACED A PREFIX MATCH ON THE FILENAME. A flat `sfx/ambient/` resolved a bed to its
+    action by dropping trailing words off the stem until one matched a duty action's name, so
+    `allocation_wind` found Allocation and `donate_building` had to be matched longest-first so
+    it was not read as a layer of some `donate`. That carried two facts in one string and held
+    up for two tracks per action.
+
+    IT STOPS WORKING AT FOUR. A stem wants a name that says what it is -- wheat, coins, barn
+    creaks -- and those collide across actions as soon as two duties both involve wheat, which
+    Produce and Taxation already do. So the folder owns which action and the filename owns
+    which track, and neither repeats the other.
+
+    The folder name is the duty key and the slot joined by an underscore, which is the same
+    string the action's own cue is named with: `sfx/ambient/taxation_actionA/` beside
+    `sfx/duty_actions/taxation_actionA_sfx_v01.ogg`. Derived here rather than written down,
+    unlike `slotFolders` in attribution.json, because unlike that one it can be.
+    """
     out = {}
     for d in duty_actions():
         for slot, name in d["actions"]:
-            out[re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")] = (d["key"], slot, name)
+            out["%s_%s" % (d["key"], slot)] = (d["key"], slot, name)
     return out
 
 
-def duty_for(stem: str, by_name: dict):
-    """Which duty action a bed belongs to, by longest matching prefix of its name.
-
-    A SECOND LAYER NEEDS A NAME OF ITS OWN AND STILL BELONGS TO THE SAME ACTION, so
-    `allocation_wind` resolves to Allocation by dropping trailing words until something
-    matches. The alternative was a `duty` field on the record, which would be a second copy
-    of a fact duty_text.json already owns, and the second copy is the one that goes stale.
-    LONGEST FIRST MATTERS: `donate_building` is an action in its own right and must not be
-    read as a layer of some `donate`.
-    """
-    parts = stem.split("_")
-    for n in range(len(parts), 0, -1):
-        hit = by_name.get("_".join(parts[:n]))
-        if hit:
-            return hit
-    return None
-
-
 def ambient(rec: dict, notes: list) -> tuple:
-    """Every bed in sfx/ambient/, with the cue of the duty action it belongs to.
+    """Every bed in sfx/ambient/<duty>_<slot>/, with the cue of the action it belongs to.
 
-    DISCOVERED LIKE misc/, COUNTED LIKE THE DUTY ACTIONS. The folder is the list -- nothing
+    DISCOVERED LIKE misc/, COUNTED LIKE THE DUTY ACTIONS. The folders are the list -- nothing
     declares which actions get a bed -- but the denominator is the duty-action list, because
     "2 of 14 have a bed" is a plan and "2 beds exist" is not.
+
+    A FOLDER THAT NAMES NO DUTY ACTION IS AN ERROR, NOT A BED WITHOUT A HOME. Under the old
+    prefix match an unrecognised name quietly produced a bed with `duty: null` that played and
+    belonged to nothing. A folder is deliberate enough that a typo in one should be reported.
     """
-    folder = SFX / "ambient"
-    by_name = duty_by_name()
+    root = SFX / "ambient"
+    folders = duty_action_folders()
     beds, used = [], set()
-    if folder.is_dir():
-        for stem in sorted({re.sub(r"_sfx_v\d+$", "", p.stem) for p in folder.glob("*.ogg")}):
-            p = newest_version(folder, stem)
+    if not root.is_dir():
+        return beds, used
+    stray = sorted(p.name for p in root.iterdir() if p.is_file())
+    if stray:
+        notes.append("sfx/ambient/ holds %d loose file(s) -- a bed belongs in a duty-action "
+                     "folder: %s" % (len(stray), ", ".join(stray)))
+    for sub in sorted(p for p in root.iterdir() if p.is_dir()):
+        hit = folders.get(sub.name)
+        if hit is None:
+            notes.append("sfx/ambient/%s/ names no duty action, so its beds are left out"
+                         % sub.name)
+            continue
+        for stem in sorted({re.sub(r"_sfx_v\d+$", "", p.stem) for p in sub.glob("*.ogg")}):
+            p = newest_version(sub, stem)
             if p is None:
                 continue
-            key = "sfx/ambient/" + p.name
+            rel = "%s/%s" % (sub.name, p.name)
+            key = "sfx/ambient/" + rel
             if key not in rec:
                 notes.append("%s has no attribution entry, left out" % key)
                 continue
@@ -200,16 +216,13 @@ def ambient(rec: dict, notes: list) -> tuple:
             m = e.get("measured", "") or ""
             num = lambda pat: (float(re.search(pat, m).group(1))
                                if re.search(pat, m) else None)
-            hit = duty_for(stem, by_name)
-            if hit:
-                used.add((hit[0], hit[1]))
-            cue_key = "%s_%s" % (hit[0], hit[1]) if hit else None
+            used.add((hit[0], hit[1]))
             beds.append({
-                # A DOM-SAFE ID: the layer checkbox is addressed by element id and a filename
-                # carries dots. Derived, not stored -- the file is still the key.
-                "id": re.sub(r"[^a-z0-9]+", "_", p.stem.lower()),
-                "file": p.name, "name": (e.get("title") or stem).split(" -- ")[0],
-                "duty": hit[2] if hit else None, "cue": cue_key,
+                # A DOM-SAFE ID, and it has to carry the folder now: two actions may both hold
+                # a track called wheat, and the checkbox is addressed by element id.
+                "id": re.sub(r"[^a-z0-9]+", "_", ("%s_%s" % (sub.name, p.stem)).lower()),
+                "file": rel, "name": (e.get("title") or stem).split(" -- ")[0],
+                "duty": hit[2], "cue": "%s_%s" % (hit[0], hit[1]),
                 "ms": facts["ms"], "sr": facts["sr"], "ch": facts["ch"],
                 "seconds": round(facts["samples"] / facts["sr"], 6) if facts["sr"] else 0,
                 "bytes": p.stat().st_size,
