@@ -98,7 +98,7 @@ between samples, and on sharp transients the reconstruction overshoots the sampl
 | clip | sample peak | true peak |
 |---|---|---|
 | `duty_actions/ordination_actionA_sfx_v03` | −0.1 dBFS | **+0.75 dBTP** |
-| `tithe/wheat_sfx_v01` | −0.2 dBFS | −0.04 dBTP |
+| `misc/velcro_rip_sfx_v01` *(was `tithe/wheat_sfx_v01`)* | −0.2 dBFS | −0.04 dBTP |
 | `duty_actions/clerical_actionB_sfx_v01` | −0.3 dBFS | −0.25 dBTP |
 | `duty_actions/construct_actionB_sfx_v01` | −0.5 dBFS | −0.27 dBTP |
 
@@ -347,8 +347,9 @@ Still open for ambient:
 
 - **Bed plus cue can clip, and ducking cannot fix it.** Two files at the −1 dBTP ceiling sum
   past it. The headroom problem is true peak rather than loudness, and a duck cannot help
-  because the cue's own attack *is* the peak. Not pressing while the two beds sit at −26 and
-  −45 dBTP after their trims, but it returns the moment a bed is authored loud.
+  because the cue's own attack *is* the peak. Not pressing while the five beds sit between
+  −26.5 and −45.5 dBTP after their trims — the span has not moved as beds were added, though
+  which bed holds each end has — but it returns the moment a bed is authored loud.
 - **The board plays no bed yet.** `bundled_sfx()` inlines `tile.ogg` and `confirm.ogg` and
   nothing else, so `generated/ambient_bench.html` is where beds are heard today.
 - **Whoever wires them in must pin `loopEnd`.** Chrome's `decodeAudioData` returns up to 17 ms

@@ -173,6 +173,57 @@ def test_a_generated_asset_is_only_ever_a_copy_of_a_recorded_one(record):
         % (len(strays), ", ".join(strays)))
 
 
+def test_every_record_carries_a_sha256(record):
+    """The hash cannot be optional, because an asset with no hash cannot be checked by anything.
+
+    WRITTEN BECAUSE THE TEST BELOW SAID TO WRITE IT. Its docstring carried the hole for as long
+    as the hole existed: verifying recorded hashes is worth little while 98 of 219 entries record
+    none, and the missing ones were not a scatter. They were whole families -- all 35 wax seals,
+    all 35 of their masters, all 15 token files, and eleven sounds -- filed by passes that simply
+    never added the field. A guard that only validates what happens to be present is satisfied by
+    deleting the field, which is the wrong direction for it to be easy to satisfy in.
+
+    THE HASHES WERE NOT TAKEN ON TRUST WHEN THEY WERE FILLED IN, and that is the part worth
+    keeping in mind if this ever has to be done again. Ordination's v02 crops are the precedent:
+    their records described a 1065 x 522 cut while the files were 1071 x 536, and they were
+    deliberately left WITHOUT a hash rather than blessed with whatever the files happened to
+    contain, because a hash on a file that contradicts its own record reads as verification and
+    is the opposite. So before each of the 98 was hashed, its record was checked against the file
+    for anything checkable: image dimensions where a record states them, duration and peak for
+    every sound, and -- for the seals and tokens, which are the bulk -- the geometry each record
+    claims. All 35 shipped seals state they were corrected to 0.906 of their square and measure
+    0.9027 to 0.9067; all 35 masters match the pre-correction fraction their shipped record
+    names, to within 0.0006, and every stated scale factor reproduces the shipped figure. Nothing
+    contradicted anything. The hashes mean what they say from that date; they cannot vouch for
+    anything before it, and no hash can.
+
+    AN ABSENT RECORD NEEDS ONE MOST OF ALL. A record whose file is gone exists for exactly one
+    reason, which attribution.json states in its own `absentNote`: a sha256 is the only way to
+    tell a re-fetched download from a different file. Strip the hash and nothing is left but a
+    description.
+
+    Falsified by filing an asset without a hash, or by removing one from an entry.
+    """
+    import re
+    HEX = re.compile(r"^[0-9a-f]{64}$")
+    missing, malformed = [], []
+    for key, entry in sorted(record["files"].items()):
+        got = entry.get("sha256")
+        if got is None:
+            missing.append("%s (state %s)" % (key, entry.get("state", "present")))
+        elif not HEX.match(str(got)):
+            malformed.append("%s -> %r" % (key, got))
+    assert not missing, (
+        "%d record(s) carry no sha256:\n  %s\n"
+        "Every entry needs one -- a present file so it can be verified, an absent one so a "
+        "re-fetch can be told from a different file. Check the record against the file before "
+        "adding it: a hash over something that contradicts its own entry reads as verification."
+        % (len(missing), "\n  ".join(missing)))
+    assert not malformed, (
+        "%d sha256 value(s) are not 64 lowercase hex characters: %s"
+        % (len(malformed), "; ".join(malformed)))
+
+
 def test_a_recorded_sha256_is_the_file_that_is_there(record):
     """A hash that no longer matches its file is worse than no hash: it reads as verification.
 
@@ -183,11 +234,12 @@ def test_a_recorded_sha256_is_the_file_that_is_there(record):
     by hand and never written down. The files are gone now and the sweep passes, so it becomes a
     test.
 
-    SCOPED, AND THE SCOPE IS THE WEAKNESS: this checks that a recorded hash is true, not that one
-    is recorded. Most entries here carry no `sha256` at all -- the wax seals and their masters are
-    the bulk of it -- and those are unverifiable by this or anything else. Requiring a hash
-    everywhere is a bigger change than this guard, and would be the thing that actually closes the
-    hole.
+    THE SCOPE WAS THE WEAKNESS AND IS NOW COVERED NEXT DOOR. This checks that a recorded hash is
+    true, not that one is recorded, and for a long time most entries carried no `sha256` at all
+    -- the wax seals and their masters were the bulk of it, 70 of 98. Every record now has one,
+    and `test_every_record_carries_a_sha256` is what keeps it that way. The two are separate on
+    purpose: one asks whether a claim exists, the other whether it is true, and a single test
+    that did both would report the wrong failure half the time.
     """
     checked, wrong = 0, []
     for key, entry in record["files"].items():

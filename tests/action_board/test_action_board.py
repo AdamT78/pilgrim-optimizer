@@ -2016,7 +2016,24 @@ def test_no_sound_claims_a_licence_its_own_source_contradicts():
     says generated, or the reverse -- which is the contradiction that was sitting in plain sight
     and that nobody read as a contradiction.
 
-    Falsified by filing a clip under one origin and describing it as another.
+    IT NOW READS THE WHOLE RECORD, NOT TWO FIELDS OF IT. The first version scanned `source` and
+    `originalFilename`, which is where Ordain's contradiction happened to sit. `modifications`
+    is where a cut is actually described and was never read, so a clip could have said it was
+    generated there, under a royalty-free licence, and passed.
+
+    AND IT HAS ONE EXEMPTION, WHICH IS THE INTERESTING PART. The Allocation bed was assembled by
+    a script ChatGPT wrote, from two CC0 recordings; no audio in it is model output. Under the
+    old rule the only way to file it cleanly was to not mention that, which is exactly backwards
+    for a provenance file -- and attribution.json's own licence table already provides for it,
+    saying a `design` note records how decisions were reached and is not a rights claim. So
+    `design` is exempt. To stop the exemption being a place to put things, a bought-licence
+    record that names an assistant in `design` must also assert `generatedContent: "none"`. The
+    claim then exists as a field rather than as a sentence, and it is wrong in a way somebody
+    can catch by listening.
+
+    Falsified by filing a clip under one origin and describing it as another, by moving a
+    generation note from `source` into `modifications`, or by naming an assistant in `design`
+    without the assertion.
     """
     rec = json.loads((ROOT / "ui" / "board_v2" / "attribution.json")
                      .read_text(encoding="utf-8"))["files"]
@@ -2024,18 +2041,55 @@ def test_no_sound_claims_a_licence_its_own_source_contradicts():
                            re.I)
     BOUGHT = ("sonniss-gameaudiogdc", "pixabay", "cc0")
 
+    def prose(entry, skip=("licence", "design")):
+        """Every string in the record except the licence key itself and `design`.
+
+        The first version read `source` and `originalFilename` only, which was the pair the
+        Ordain mix-up sat in. Two fields is too few: `modifications` is where a cut is actually
+        described, and a record could say "generated" there under a royalty-free licence and
+        pass. `licence` is skipped because "elevenlabs-generated" is the field's own value and
+        matching it would make every such record argue with itself.
+        """
+        out = []
+        for field, value in entry.items():
+            if field in skip:
+                continue
+            if isinstance(value, str):
+                out.append(value)
+            elif isinstance(value, list):
+                for item in value:
+                    if isinstance(item, dict):
+                        out.extend(v for v in item.values() if isinstance(v, str))
+                    elif isinstance(item, str):
+                        out.append(item)
+        return " ".join(out)
+
     clashes = []
     for key, entry in sorted(rec.items()):
         if not key.startswith("sfx/"):
             continue
         licence = entry.get("licence", "")
-        said = " ".join(str(entry.get(f, "")) for f in ("source", "originalFilename"))
+        said = prose(entry)
         if licence in BOUGHT and GENERATED.search(said):
-            clashes.append("%s: licence %r but its source calls it generated -- %r"
-                           % (key, licence, entry.get("source", "")[:90]))
+            clashes.append("%s: licence %r but its own prose calls it generated -- %r"
+                           % (key, licence, GENERATED.search(said).group(0)))
         if "generated" in licence and not GENERATED.search(said):
-            clashes.append("%s: licence %r but nothing in its source says it was generated"
+            clashes.append("%s: licence %r but nothing in its prose says it was generated"
                            % (key, licence))
+        # `design` IS EXEMPT, AND THE EXEMPTION IS NOT FREE. attribution.json's own licence
+        # table says a `design` note records "how the decisions were reached, not a rights
+        # claim", so naming an assistant there has to stay possible -- the Allocation bed was
+        # assembled by a script ChatGPT wrote, out of two CC0 recordings, and hiding that to
+        # satisfy a regex would be the opposite of what this file is for. But an exempt field
+        # is a hole unless something is said out loud, so a bought-licence record that names an
+        # assistant in `design` must also assert `generatedContent: "none"`, which is a claim a
+        # reader can check against the audio rather than a sentence they have to parse.
+        if licence in BOUGHT and GENERATED.search(str(entry.get("design", ""))):
+            if entry.get("generatedContent") != "none":
+                clashes.append(
+                    "%s: licence %r and `design` names an assistant, so the record must assert "
+                    "generatedContent 'none' -- it says %r"
+                    % (key, licence, entry.get("generatedContent")))
 
     assert not clashes, (
         "%d sound record(s) name a licence their own source contradicts:\n  %s"
@@ -2099,6 +2153,16 @@ def test_a_sonniss_record_agrees_with_its_own_path_about_which_bundle_it_came_fr
     the note offers one. They were normalised when this test was written; the clause stays
     conditional so that the test is about agreement rather than about phrasing.
 
+    A MIRROR PATH MAY STATE A RANGE RATHER THAN A YEAR, which is the third branch below. One
+    mirror files the 2021, 2022 and 2023 bundles under a single folder called "Sonniss.com - GDC
+    2021-2023 - Game Audio Bundle", so the path constrains the year to three candidates and
+    cannot pick one. The year for the clip that arrived that way came from the bundle's own
+    tracklist, which ships inside the archives and is headed with the year; the test checks that
+    the note's year falls inside the path's span, so a pasted 2016 still fails while a path that
+    genuinely cannot say more than "one of these three" is not forced to lie. The alternative --
+    writing the other mirror's spelling, which the second branch already accepts -- would have
+    passed this test by recording a download that did not happen.
+
     Falsified by editing either field's year, or an archive number the note states.
     """
     rec = json.loads((ROOT / "ui" / "board_v2" / "attribution.json")
@@ -2125,6 +2189,29 @@ def test_a_sonniss_record_agrees_with_its_own_path_about_which_bundle_it_came_fr
                 elif year.group(1) != loose.group(1):
                     bad.append("%s: path says GDC %s, licenceNote says %s"
                                % (key, loose.group(1), year.group(1)))
+                elif re.search(r"archive \d+ of \d+", note):
+                    bad.append("%s: came from the mirror as an individual file, so its "
+                               "licenceNote must not claim an archive number" % key)
+                continue
+            # A SECOND MIRROR FILES THREE BUNDLES UNDER ONE FOLDER, so its path states a RANGE
+            # where the clause above expects a year: "Sonniss.com - GDC 2021-2023 - Game Audio
+            # Bundle/RYK-Sounds - Footstep". A range cannot date a file, and the temptation is to
+            # write the your.org spelling instead so the regex above passes -- which would be
+            # recording a download that never happened, for the convenience of a test. The year
+            # is a fact and comes from elsewhere: every GDC 2023 archive ships the bundle's own
+            # tracklist, headed "GAME AUDIO BUNDLE 2023 - TRACKLIST", and it lists the file. So
+            # the path is allowed to constrain the year rather than state it, and the note's year
+            # has to fall inside the span. Pasting 2016 or 2026 onto one of these still fails,
+            # which is what this test is for.
+            span = re.search(r"GDC\s*(\d{4})-(\d{4})", raw)
+            if span:
+                note = str(entry.get("licenceNote", ""))
+                year = re.search(r"GameAudioGDC (\d{4})", note)
+                if not year:
+                    bad.append("%s: licenceNote states no bundle year" % key)
+                elif not int(span.group(1)) <= int(year.group(1)) <= int(span.group(2)):
+                    bad.append("%s: path spans GDC %s-%s, licenceNote says %s, which is outside "
+                               "it" % (key, span.group(1), span.group(2), year.group(1)))
                 elif re.search(r"archive \d+ of \d+", note):
                     bad.append("%s: came from the mirror as an individual file, so its "
                                "licenceNote must not claim an archive number" % key)

@@ -127,10 +127,11 @@ unless that is turned off, so the clip is not exclusive to this project.
 | `misc/mechanism_one_cycle_sfx_v01.ogg` | Bluezone, *Steampunk Mechanical Sounds* (GDC **2023**) | *Never held a slot.* The first 960 ms of Taxation's source — one cycle, cut inside its own pause. Kept beside the two-cycle version that ships. |
 | `misc/many_coins_sfx_v01.ogg` | CB Sound Design, *Essential Sounds Vol.01 Coins* (GDC **2023**) | *Never held a slot.* 497 ms of coins, as is. Dual mono stored as stereo — the channels are identical, so summing is lossless. |
 | `misc/wood_groan_long_sfx_v01.ogg` | Pixabay, `voicebosch` | *Never held a slot.* 1230 ms from take 5 of the Pulpit master — a different take, sharing no material with the cue. Lost to Pulpit on shape, not quality: a wash where a cue wants an event. |
+| `misc/velcro_rip_sfx_v01.ogg` | InMotionAudio, *Velcro* (GDC **2026**) | *Was the Wheat cue.* *VelcroRip29*, 417 ms, unedited but for the container. A rip of hooks and loops stood in for a handful of grain until a recording of an actual footfall in grass was available; it moved here byte-identical rather than being deleted. |
 | `misc/shrine_bell_sfx_v01.ogg` | Pixabay, `konpeito_sound` | *Never held a slot.* A suzu — the bell cluster on a rope — 1180 ms from 0.420–1.600 s. Cut for Build Shrine and not taken for it; the slot stays open. |
 | `duty_actions/construct_actionA_sfx_v01.ogg` | 344 Audio, *Nuts And Bolts* (GDC **2023**) | **Construct Building.** Two hammer blows on a chisel at 20 and 376 ms, cut from a 21.9 s take of 56 strikes. Mono master, not summed. |
 | `duty_actions/construct_actionB_sfx_v01.ogg` | Pixabay, `freesound_community` | **Construct Road.** *brick-dropped-on-other-bricks*, 224 ms cut from 3480. Touch, drop, bounce. Left channel only — the right one is dead. |
-| `tithe/wheat_sfx_v01.ogg` | InMotionAudio, *Velcro* | **Wheat.** *VelcroRip29*, unedited but for the container. |
+| `tithe/wheat_sfx_v02.ogg` | RYK-Sounds, *Footstep* (GDC **2023**) | **Wheat.** *grass 3 single step 3*, one footfall in grass, 816 ms, unedited but for the container. It replaced a velcro rip, which is now in `misc/`. Near-dual-mono: the channels differ by 0.32 dB at the peak, so summing costs 0.16. |
 | `tithe/silver_sfx_v02.ogg` | Pixabay, `freesound_community` | **Silver.** *coins-falling-013*, head trimmed to 425 ms so it speaks at once. |
 | `tithe/stone_sfx_v01.ogg` | Bluezone, *Stone Impact* (GDC **2024**) | **Stone.** The first 560 ms of *stone_impact_041* — the impact and the stones that follow it. No fade-in; the master starts at exactly zero. |
 | `buildings/library_sfx_v01.ogg` | 344 Audio, *Antiques — Books* | **Library.** One second of *Pile Of Antique Books Falling Over 8* from 0.806 s. |
@@ -193,7 +194,7 @@ back. None of that was noticed while the masters were on disk, because nobody ne
 Which bundle archive each came from was never recorded at all, and Sonniss ships five:
 
 ```
-wheat       Bundle 3of5  /InMotionAudio - Velcro
+velcro      Bundle 3of5  /InMotionAudio - Velcro
 allocation  Bundle 1of5  /344 Audio - Antique Small Metals
 library     Bundle 1of5  /344 Audio - Antique Books
 ```
@@ -408,7 +409,7 @@ tool that measures them has to stop folding channels first, which is
 | --- | --- | --- |
 | `tile.ogg` · `confirm.ogg` | −2.4 · −1.3 dB | |
 | Ordain · Allocation · Library | −0.1 · −2.2 · −2.3 dB | |
-| Wheat | −0.2 dB | |
+| Wheat | −4.0 dB | −30.3 dB |
 | Silversmith | −0.3 dB | −12.7 dB |
 | Silver | −7.9 dB | −31.1 dB |
 | Brewery | −4.3 dB | −20.5 dB |
@@ -418,7 +419,7 @@ tool that measures them has to stop folding channels first, which is
 
 | | length | peak | centroid |
 | --- | --- | --- | --- |
-| Wheat — velcro rip | 417 ms | −0.2 dB | 8878 Hz |
+| Wheat — a step in grass | 816 ms | −4.0 dB | 8968 Hz |
 | Silver — coins falling | 443 ms | −7.9 dB | 7091 Hz |
 | Stone — rubble landing | 559 ms | −1.4 dB | 6226 Hz |
 
@@ -852,6 +853,22 @@ a clip that was sitting right there to be played. They are useful for choosing w
 listen to and for nothing else. Where a number is going to decide something, filter the audio and
 measure what comes out.
 
+**A fourth way the number misleads, found while replacing the Wheat cue: it does not carry its
+own method.** Checking the new clip against this file's published centroids, a first pass put it
+at 6556 Hz and Stone at 3700 — a table disagreeing with the one above by 2500 Hz on a file that
+had not changed. Neither pass was wrong. The published figures are **magnitude**-weighted with a
+Hann window over the whole clip, decoded at 48 kHz; the new pass was **power**-weighted. Squaring
+the spectrum pulls the mean toward whatever is loudest, which on Stone's low-heavy distribution
+is worth those 2500 Hz and on the grass step is worth 2400 in the other direction.
+
+The method had never been written down anywhere, and was recovered only by running a small grid
+of plausible ones until all three published numbers came back exactly — 8878, 7091 and 6226. That
+worked because there were three to match; with one clip it would not have been checkable at all.
+So: **magnitude spectrum, Hann window over the whole clip, decoded at 48 kHz**, and the same for
+the 85% rolloff. Written down because a number nobody can reproduce is worse than no number — it
+reads as a measurement and behaves as an opinion, and the next person adding a clip to a group
+will compare against it.
+
 ### Writing is a texture, which makes shortening it a different problem
 
 Every other clip here is an event with a decay, so making one shorter means cutting a tail and the
@@ -889,8 +906,12 @@ limitation that makes Silver the dullest thing in the set is what keeps these tw
 knowing because **replacing Silver with a full-bandwidth source would create the collision this
 table says does not exist** — the thing to check then is Bank, not Wheat or Stone.
 
-Wheat and Silversmith are the hottest by about two decibels and may want pulling down once there
-is more of the set to hear it against. **That would be a re-render, not a gain in the page**: the
+Silversmith is now the hottest and may want pulling down once there is more of the set to hear
+it against. **It was Wheat and Silversmith together until the velcro rip left the slot**: the
+rip peaked at −0.2 dB and the grass step that replaced it peaks at −4.0, so a change made for
+the sound's sake moved the set's top by nearly four decibels as a side effect. That is the
+argument for the table rather than against it — the number is here to be re-read when a clip
+changes, not filed once. **That would be a re-render, not a gain in the page**: the
 set is levelled by ear and never normalised individually, for the reason the four decisions above
 record.
 
@@ -911,7 +932,8 @@ here as the files being clipped. They are not known to be. Measure the **shipped
 
 ### `ambient/`, the first sounds here that are not events
 
-Two beds, and they are a different kind of thing from everything above. A cue is an event: it
+Five files under four duty actions, and they are a different kind of thing from everything
+above. A cue is an event: it
 fires, it is 70 ms to 1.6 s long, and it is over. A bed runs underneath a selected duty action
 for as long as the player leaves it selected, so it loops, and almost every rule in this file
 had to be asked again for it.
@@ -933,33 +955,73 @@ L/R decompositions of two independent equal-power channels are the same pair of 
 only the per-band reading settles it. It is also the easiest thing here to loop: its best start
 scores 0.17 dB of shoulder mismatch, the closest match in the tree.
 
-`ambient/allocation_sfx_v01.ogg` is a Belgian cathedral with nobody in it, an **11.5 s** loop
-from 40.10 s of 3maze's *INT* master (GDC 2019) — the second cathedral here and deliberately not
-the same thing as Devotion's, which is a service heard from the back. It is the shortest bed in
-the tree, and that is the master's doing rather than a preference.
+`ambient/allocation_sfx_v02.ogg` is a queue of monks waiting with a key handed over at the
+front, a **28.5 s** loop — and it is the first bed here that was not cut from one recording.
+It was **assembled** from two CC0 freesound.org uploads: single footfalls lifted out of
+Sadiquecat's *Walking to dead-end hallway* and recombined into several walkers at different
+distances, with three single contacts from Fenodyrie's *keys jingling* as the handoffs.
+Allocation is the action where a duty is given to someone, so a queue and a key is the sound of
+the thing happening rather than of the building it happens in. The whole method is
+`../docs/ambient_composite_guide.md`, which is worth reading before the next duty action that
+wants a scene rather than a room.
 
-**Broadband this recording is calm and filtered it is not.** It holds thirteen events above 8 dB
-over their band's median in 200 ms windows, peaking at **+24.4 dB** — almost certainly footsteps
-on stone — and not one shows in the broadband map, which spreads only 4.79 dB. The longest
-window clear of all of them is **16.4 s**, and that caps any loop cut from this file.
+**It also arrived already looped**, which is new here: every bed before it was made seamless in
+this tree, and this one was made seamless in the mix — by the same equal-power overlap baked
+into the asset that `../docs/ambient_loop_note.md` argues for, worked out independently and
+written down before that note was read. Two routes to one answer on different material.
 
-**The detector that found them was built after one got through.** A first cut of 30 s was
-rejected by ear for an event reading +10.8 dB at 5–10 kHz. The scan that chose that span used
-1 s blocks, a 6 dB bar and five bands and walked straight past it; at 200 ms, 8 dB and six bands
-it is obvious. The replacement reads +4.5 dB at worst.
+**It replaced a Belgian cathedral**, `allocation_sfx_v01.ogg`, an 11.5 s loop from 3maze's *INT*
+master (GDC 2019). That one is deleted and its record keeps the whole of its reasoning, which is
+worth reading for one finding that is not about it: broadband the recording was calm — 4.79 dB
+across 5 s blocks — while filtered in 200 ms windows it held thirteen events above 8 dB over
+their band's median, peaking at **+24.4 dB**, almost certainly footsteps on stone, and not one
+showed in the broadband map. **The detector that found them was built after one got through**, a
+first cut rejected by ear for an event at +10.8 dB in 5–10 kHz that a scan at 1 s blocks and a
+6 dB bar walked straight past. At 200 ms, 8 dB and six bands it is obvious.
 
-**A short loop is the right trade here and would not be elsewhere.** This is featureless room
-tone with nothing to recognise, so repetition costs little — whereas one footstep every lap is a
-landmark the player learns. The cathedral with voices went to 35 s for the opposite reason.
+**The version before it looked loopable and was not**, which is why this one exists. That mix
+began and ended on exact zeros, so butting the end against the start made no click whatever —
+the trap, because the first 0.3 s and last 0.6 s were digital silence and the material thinned
+from about 26.4 s, so plain repetition dropped some 2.5 s of near-nothing into the bed every
+lap. Scored as five bands across 1.5 s shoulders that butt join was **41.0 dB out**, with 68.5 dB
+in the top band. *The absence of a click is not the absence of a seam*, and a file that starts
+and ends in silence is the one shape where those two come apart.
+
+**The shipped loop checks out, and not by the usual test.** Three laps measure identically to one
+pass; the step across the wrap is 0.0003 in both channels, under the file's own median
+sample-to-sample difference; and the 1.5 s window straddling the wrap sits at the **19th
+percentile** of the loop's own windows, 2.35 dB under its median where the quietest window
+anywhere is 12.7 dB under. The shoulder test that scores every other bed here reads 21.5 dB on
+it and **means nothing** — comparing head against tail on a loop whose head has already been
+crossfaded with that tail measures the material's variation and not a seam. Score candidates;
+verify finished files.
+
+**Sparse events put a constraint on length that the band search cannot see.** The keys sit on a
+near-regular grid, about 3.92 s apart, so a loop *cut* from this material has to be a whole
+number of those gaps or one key arrives early every lap — and scored the way the band search
+scores anything, the best candidate in the earlier mix was a 22.0 s body at 0.87 dB, which is
+5.6 key periods and wrong. The shipped file sidesteps it by wrapping the whole mix onto itself,
+so its cadence across the wrap is the mix's own 3.92 s for free. What it does have is one
+*interior* gap of 4.99 s where the others run 3.90 to 3.96: not a seam, identical every lap, and
+reading as one slower handoff. **A rhythm fault at the wrap is a loop artefact; a rhythm fault
+inside the body is content.**
 
 `ambient/allocation_wind_sfx_v01.ogg` is the first **second layer**: a 17 s howl from
 Hzandbits' *Howling Winds — Interior* (GDC 2016), playing under Allocation alongside the room
 tone rather than instead of it. One is the building, the other is the weather outside it.
 
-**Seventeen seconds is a chosen number, not a found one.** Two loops only realign when their
-lengths do, so layered under the 11.5 s bed this pair repeats every **391 s**. A 23 s layer —
-exactly twice 11.5 — would repeat every 23 s and buy nothing for a whole extra file. Round
-lengths are the trap: two 25 s beds lock immediately.
+**Seventeen seconds was a chosen number, not a found one.** Two loops only realign when their
+lengths do, so layered under what was then an 11.5 s bed this pair repeated every **391 s**. A
+23 s layer — exactly twice 11.5 — would have repeated every 23 s and bought nothing for a whole
+extra file. Round lengths are the trap: two 25 s beds lock immediately.
+
+**The bed it was chosen against has since been replaced, and the choice survived by luck.**
+17 and 28.5 realign after 34 laps of the bed — **969 s**, about sixteen minutes, against the
+391 s the old pairing gave. The 23.510 s cut that briefly stood in between would have given
+39,967 s. All three are long enough and none of them was chosen for it, which is the point:
+replacing one layer silently re-rolls the beat cycle of every layer it plays with, nothing in
+the tree computes it, and the next length could as easily be a near multiple of 17. **The number
+to re-check when either file moves is this one.**
 
 **A tonal bed joins differently from a broadband one.** This howl holds a resonance at 617 Hz
 sitting 12 dB above the local spectral trend, and two copies of a tone crossfaded at arbitrary
@@ -977,6 +1039,26 @@ measures the subject.
 dropping trailing words until something matches a duty action, so the filename can say which
 layer it is without a `duty` field duplicating what `duty_text.json` already owns — and the
 layer answers to Allocation's own cue.
+
+**Eleven of these sounds carried no sha256 at all until 2026-10-15**, and the gap was wider
+than the sounds: 98 of the tree's 219 entries recorded none, whole families at a time — all 35
+wax seals, all 35 of their masters, all 15 token files. Quarry, Chapel, Confession Box, Pulpit,
+Mint, Mill, Shrine Bell, Wood Groan and the three set-3 clips were the audio share of it.
+
+They were **not** filled in by running `sha256sum` over the tree, and the reason is a precedent
+in the artwork. Ordination's v02 crops once described a 1065 x 522 cut while the files on disk
+were 1071 x 536, and they were deliberately left *unhashed* rather than blessed with whatever
+the files happened to contain — a hash over something that contradicts its own record reads as
+verification and is the opposite of it. So each record was checked against its file first. For
+these eleven that meant duration and peak, both of which every one of them states: all eleven
+agree, durations within 40 ms and peaks within 1.2 dB. Nothing contradicted anything, in the
+sounds or anywhere else.
+
+What the hash now means is narrow and worth being exact about: **it identifies the bytes
+committed, from the date it was recorded.** It says nothing about the file's history before
+that. For a clip whose record already stated a duration and a peak it confirms an existing
+claim; for the 82 entries across the tree that stated nothing checkable it is simply the first
+independent fact anyone has about the file.
 
 **A re-cut will never match its recorded sha256, and that is not a fault.** Re-running the cut
 for this bed from the same master with the same parameters produced audio that is *bit*-
