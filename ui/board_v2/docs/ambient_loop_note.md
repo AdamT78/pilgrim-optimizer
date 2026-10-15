@@ -1,7 +1,8 @@
 # Cutting an ambient bed into a seamless loop
 
-**Status: two beds filed.** `sfx/ambient/silversmith_sfx_v01.ogg` (25 s, fire) and
-`sfx/ambient/devotion_sfx_v01.ogg` (35 s, cathedral) are in the tree, and
+**Status: four beds filed.** `silversmith_sfx_v01.ogg` (25 s, fire),
+`devotion_sfx_v01.ogg` (35 s, a service), `alms_sfx_v01.ogg` (25 s, rain) and
+`allocation_sfx_v01.ogg` (11.5 s, an empty cathedral) are in `sfx/ambient/`, and
 `sfx_lab/generate_sound_bench.py` builds `generated/ambient_bench.html` to hear them looping
 under their own cues. The board itself still plays neither. This note is the method, worked out
 before the first one was cut so the choices came from measurement rather than from the first

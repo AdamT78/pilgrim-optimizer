@@ -2984,6 +2984,40 @@
       "measured": "35000 ms, peak -18.50 dB, integrated -30.83 LUFS, true peak -18.49 dBTP, stereo 48 kHz, L/R correlation +0.5102",
       "gainDb": -27.0,
       "sha256": "600ad28e2d105301d71a8dc933407d6252ba7a576c3bb61901686fea6919a539"
+    },
+    "sfx/ambient/alms_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "Soundholder",
+      "licence": "sonniss-gameaudiogdc",
+      "licenceNote": "Sonniss GameAudioGDC 2020 bundle. Taken as an individual file from the your.org mirror rather than out of one of the 14 numbered archives, so no archive number applies. Royalty-free: personal and commercial game use, modification and unlimited projects permitted, no attribution required. The files may not be resold or redistributed as sound effects, including edited versions, and may not be used to train AI or ML models.",
+      "source": "ambient rain light washed out stereo MS.wav, Soundholder - Rain & Thunder. The master's metadata names Dawid Moroz as artist and 'Rain & Thunder' as the pack. 47.4 s, 96 kHz.",
+      "originalFilename": "ambient rain light washed out stereo MS.wav",
+      "originalPath": "ftpmirror.your.org/pub/misc/sonniss2020/individual/Soundholder - Rain & Thunder",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Alms -- light rain, washed out",
+      "role": "the Alms ambient bed, under give_alms actionA. Neither Alms nor Donate Building has a cue filed, so this is the first bed with nothing to be set against.",
+      "modifications": "A SEAMLESS 25 s LOOP. 25.000 s body from 4.50 s of the 47.4 s master, with the following 1.5 s folded back over the head as an equal-power crossfade. THE 'MS' IN THE FILENAME NAMES THE MIC TECHNIQUE, NOT AN UNDECODED FILE, and the difference matters: read as raw Mid/Side and decoded, the bass would come out at -0.54 correlation, out of phase and mono-incompatible. As stored the channels correlate +0.66 below 100 Hz and near zero above, which is what a delivered spaced pair looks like, so it is used as it is. Broadband statistics cannot tell the two cases apart when the channels are decorrelated -- the M/S and L/R decompositions of independent equal-power channels are the same pair of signals -- and only the per-band reading settles it. RAIN IS THE EASIEST MATERIAL THIS TREE HAS LOOPED: the chosen start scores 0.17 dB of shoulder mismatch with 0.23 in its worst band, and even the worst candidate in the master scores 2.90. The crossfade region reads 1.24 dB under the body, and that is the material rather than the join -- the same window before any crossfade reads 1.20 dB under, so the fade accounts for 0.03. No landmark to learn: every 200 ms block sits within 2 dB of the median, and the pack is called Rain & Thunder but this file holds no thunder. Resampled 96 -> 48 kHz on encode, a deliberate departure from the keep-the-source-rate convention; see the README.",
+      "measured": "25000 ms, peak -21.64 dB, integrated -38.41 LUFS, true peak -20.96 dBTP, stereo 48 kHz, L/R correlation +0.0117",
+      "gainDb": -15.0,
+      "sha256": "7b4a1886d49235af96142a54fef3bee566c86dac43bafc33721cedbd9c4f17e9"
+    },
+    "sfx/ambient/allocation_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "3maze",
+      "licence": "sonniss-gameaudiogdc",
+      "licenceNote": "Sonniss GameAudioGDC 2019 bundle. Taken as an individual file from the your.org mirror rather than out of a numbered archive, so no archive number applies. Royalty-free: personal and commercial game use, modification and unlimited projects permitted, no attribution required. The files may not be resold or redistributed as sound effects, including edited versions, and may not be used to train AI or ML models.",
+      "source": "cathederal_belgium_001.wav, 3maze - INT. 88.3 s, 96 kHz, recorded 2018-04-09. The master's own keywords read 'int, interior, cathederal, ambience, religion, religious, belgium, europe' -- the misspelling is the library's, kept here so the file can be found again.",
+      "originalFilename": "cathederal_belgium_001.wav",
+      "originalPath": "ftpmirror.your.org/pub/misc/sonniss2019/individual/3maze - INT",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Allocation -- a cathedral with nobody in it",
+      "role": "the Allocation ambient bed, under allocation actionA. The second cathedral in the tree and deliberately not the same thing as Devotion's: that one is a service heard from the back, this one is the empty building. It is also the first bed whose duty action has a cue filed, so its level can be set against something.",
+      "modifications": "A SEAMLESS 11.5 s LOOP. 11.500 s body from 40.10 s of the 88.3 s master, with the following 1.5 s folded back over the head as an equal-power crossfade. IT IS THIS SHORT BECAUSE THE MASTER CANNOT DO BETTER. Broadband the recording is calm -- 4.79 dB across 5 s blocks -- but filtered in 200 ms windows it holds thirteen events above 8 dB over their band's median, peaking at +24.4 dB at 28 s and +25.3 at 80 s, almost certainly footsteps on stone in a reverberant building. None of them shows broadband. A first cut of 30 s from 40.50 s was rejected by ear for an event at 65.4-66.6 s reading +10.8 dB at 5-10 kHz; the detector that chose that span scanned 1 s blocks at a 6 dB bar across five bands and walked straight past it, so the bar came down to 200 ms, +8 dB and six bands. At that setting the longest event-free window in the file is 16.4 s, which caps any loop cut from it. Inside that window the best shoulder match wants an 11.5 s body: 0.91 dB RMS across five bands against 1.88 for a 14.5 s body. Re-checked against the same detector the cut reads +4.5 dB at worst, under half what was rejected. A SHORT LOOP IS THE RIGHT TRADE HERE and would not be elsewhere: this is featureless room tone with nothing to recognise, so repetition costs little, whereas one footstep every lap is a landmark. Resampled 96 -> 48 kHz on encode.",
+      "measured": "11500 ms, peak -39.00 dB, integrated -51.26 LUFS, true peak -39.00 dBTP, stereo 48 kHz, L/R correlation +0.6934",
+      "gainDb": -5.0,
+      "sha256": "8057e8c8168dc51455db895d8a0a45f6bddf367d39ace277418622323f7a3bfd"
     }
   },
   "assetDirs": [
