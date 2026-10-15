@@ -923,6 +923,42 @@ master (GDC 2016) — taken from the quiet passage rather than the choir, becaus
 alternates full choir at −22 to −25 dB with long stretches at −31 to −36 and only the quiet ones
 are a setting rather than a performance.
 
+`ambient/alms_sfx_v01.ogg` is light rain, a 25 s loop from 4.50 s of Soundholder's *Rain &
+Thunder* master (GDC 2020). **Its filename ends `stereo MS` and that names the mic technique,
+not an undecoded file** — a distinction worth making because getting it wrong is not cosmetic.
+Read as raw Mid/Side and decoded, its bass comes out at −0.54 correlation: out of phase, and
+mono-incompatible. As stored it reads +0.66 below 100 Hz and near zero above, which is a
+delivered spaced pair. Broadband statistics cannot separate the two cases at all — the M/S and
+L/R decompositions of two independent equal-power channels are the same pair of signals — so
+only the per-band reading settles it. It is also the easiest thing here to loop: its best start
+scores 0.17 dB of shoulder mismatch, the closest match in the tree.
+
+`ambient/allocation_sfx_v01.ogg` is a Belgian cathedral with nobody in it, an **11.5 s** loop
+from 40.10 s of 3maze's *INT* master (GDC 2019) — the second cathedral here and deliberately not
+the same thing as Devotion's, which is a service heard from the back. It is the shortest bed in
+the tree, and that is the master's doing rather than a preference.
+
+**Broadband this recording is calm and filtered it is not.** It holds thirteen events above 8 dB
+over their band's median in 200 ms windows, peaking at **+24.4 dB** — almost certainly footsteps
+on stone — and not one shows in the broadband map, which spreads only 4.79 dB. The longest
+window clear of all of them is **16.4 s**, and that caps any loop cut from this file.
+
+**The detector that found them was built after one got through.** A first cut of 30 s was
+rejected by ear for an event reading +10.8 dB at 5–10 kHz. The scan that chose that span used
+1 s blocks, a 6 dB bar and five bands and walked straight past it; at 200 ms, 8 dB and six bands
+it is obvious. The replacement reads +4.5 dB at worst.
+
+**A short loop is the right trade here and would not be elsewhere.** This is featureless room
+tone with nothing to recognise, so repetition costs little — whereas one footstep every lap is a
+landmark the player learns. The cathedral with voices went to 35 s for the opposite reason.
+
+**A re-cut will never match its recorded sha256, and that is not a fault.** Re-running the cut
+for this bed from the same master with the same parameters produced audio that is *bit*-
+identical — maximum sample difference exactly zero, same 617677 bytes — inside a file with a
+different hash, because ffmpeg randomises the Ogg stream serial number on every encode. The
+sha256 on a record identifies the shipped bytes, not the recipe; the recipe is in
+`modifications` and reproduces the sound, not the file.
+
 **The loop is made by folding the tail back over the head with an equal-power crossfade**, and
 which start time you choose matters far more than anything else about it. Searching the fire's
 master for the closest band match between the two shoulders, the best start scores 0.70 dB
