@@ -1,12 +1,14 @@
 # Cutting an ambient bed into a seamless loop
 
-**Status: ten files under six duty actions.** Four actions have one track each —
-`clerical_actionB/silversmith` (25 s, fire), `clerical_actionA/devotion` (35 s, a service),
-`give_alms_actionA/alms` (25 s, rain) and `give_alms_actionB/donate_building` (32.5 s, a
-sheltered wind). Two have several: `allocation_actionA/` holds `footsteps` and `keys` (28.5 s,
-one mix in two stems) under `allocation_wind` (17 s, an independent loop), and
-`taxation_actionA/` holds `wheat`, `coins` and `barn_creaks` (30 s stems, not yet wrapped and
-waiting on a background bed). They are in `sfx/ambient/`, one folder per duty action since a
+**Status: fourteen files under six duty actions.** Three actions have one track each —
+`clerical_actionB/silversmith` (25 s, fire), `give_alms_actionA/alms` (25 s, rain) and
+`give_alms_actionB/donate_building` (32.5 s, a sheltered wind). Three have several.
+`clerical_actionA/` holds `devotion` (35 s, a service) with `candle` (25.5 s, an independent
+loop that drifts against it) and `rosary` (35 s, a stem placed against the service and so
+matched to it exactly). `allocation_actionA/` holds `footsteps`, `keys` and `wool_robe`
+(28.5 s, one mix in three stems) under `allocation_wind` (17 s, an independent loop).
+`taxation_actionA/` holds `wheat`, `coins` and `barn_creaks` (30 s stems, not yet wrapped)
+inside `room` (30 s, the background bed they were waiting for). They are in `sfx/ambient/`, one folder per duty action since a
 fourth track made the filename the wrong place to say which action a bed belongs to, and
 `sfx_lab/generate_sound_bench.py` builds `generated/ambient_bench.html` to hear them looping
 under their own cues. The board itself still plays neither. This note is the method, worked out
@@ -337,10 +339,64 @@ on a narrow 400–700 Hz band alongside the usual five and the chosen crossfade 
 measured: it costs **0.50 dB** in that band, against the howl's 0.46. Two tonal beds now, both
 inside half a decibel, which is starting to look like a method rather than a one-off.
 
-## 11. Not done
+## 11. Adding a layer to a wrap that is already baked
 
-- **The board plays no bed.** All five are filed and audible on the ambient bench;
-  `bundled_sfx()` still inlines only `tile.ogg` and `confirm.ogg`.
+Everything above assumes the wrap is the last thing done to a mix. `allocation_actionA` broke
+that assumption: v09 was wrapped, split into `footsteps` and `keys`, filed and approved, and a
+third stem — `wool_robe` — was placed into it afterwards. **A baked wrap is a property of the
+sum, so a layer added later can spoil it, and nothing announces that it has.**
+
+What makes this case safe is that the addition is exactly an addition, which is checkable
+arithmetic rather than a promise. On the 24-bit masters, `footsteps + keys` is v09 and
+`footsteps + keys + wool` is the preview, both to **one least significant bit**, and
+`preview − v09` is the wool stem with a maximum sample difference of **zero**. Nothing that was
+approved has moved. *That bit-exactness is also the ceiling the earlier two-stem check could
+not reach*: it read r = +0.9970 with a residual 22.2 dB down because the composite it was
+compared against had been through Vorbis. With no codec in the path the floor is 2⁻²³, which is
+where all three of these land. **The weak number was the codec, not the split.**
+
+The wrap was then re-verified on the sum, by the three checks of §9 rather than by argument:
+
+| | v09 | v09 + wool |
+|---|---|---|
+| step across a butt join (L / R) | 0.00027 / 0.00001 | 0.00039 / 0.00106 |
+| the file's own median \|diff\| (L / R) | 0.00063 / 0.00055 | 0.00192 / 0.00179 |
+| wrap window, percentile of the loop's own | 17th | 16th |
+| wrap window, dB under the median | 3.2 | 4.4 |
+
+Both steps stay under the file's own median sample-to-sample difference, which is the bar §9
+sets, and the wrap dip deepens by 1.2 dB. **Measurably worse and inaudibly so** — but the
+margin moved in one addition, so the check is the rule and not a formality. A fourth layer gets
+the same table.
+
+**The shoulder score says nothing here either**, as §10 would predict: it reads 11.56 dB on v09
+and 9.11 on the sum, and the second is the *better* number. It is measuring the material's own
+variation across the file, on a loop whose head was crossfaded with its tail before either
+stem existed.
+
+### Confirming a source rather than recording one
+
+A side finding, from the same file and generally useful. Every record in this tree names its
+source because somebody wrote the name down; the wool stem's source was **checked**. 57
+half-second windows of the stem were cross-correlated against the whole 145.262 s upload and 13
+matched decisively — r from 0.33 to 0.90, each at least three times the next peak anywhere
+else in the recording. Consecutive probes land at consecutive source times at exactly 1:1, so
+the material is cut and placed rather than stretched.
+
+The 44 that match nothing are the part worth understanding before reusing this: in a mix where
+several copies of one recording overlap, most windows are a *sum* and no single span of the
+source explains them. **A high match rate is not the test; a handful of decisive, mutually
+consistent matches is**, because a false positive would have to be both strong and at a time
+offset agreeing with its neighbours. It works on any source short enough to search in one FFT,
+which here is 145 s against a 28.5 s stem.
+
+## 12. Not done
+
+- **The board plays no bed.** All fourteen are filed and audible on the ambient bench;
+  `bundled_sfx()` still inlines only `tile.ogg` and `confirm.ogg`. This bullet has said "all
+  five" since there were five, which is its own small lesson: a count in prose is a fact with
+  no test behind it, and six beds arrived before anyone noticed. The generator prints the
+  number on every run — that is the one to believe.
 - **Bed-to-bed transitions are unspecified.** One global equal-power time, not a pairwise
   matrix: the matrix never converges, it grows as the square of a bed count that is expected to
   grow, a transition is heard once where a loop seam is heard every lap, and the only thing that
@@ -351,8 +407,9 @@ inside half a decibel, which is starting to look like a method rather than a one
   undecided, as is the fade-in on select, and what happens on deselect or re-select.
 - **The loop checker does not exist as a tool.** The band-match shoulder search, the N-lap
   render and the wrap-window percentile test have been written from scratch for each of the
-  ten files. Three of them now have a settled shape and one of them, the percentile test, is
-  the only check that works on a loop that arrives already baked.
+  fourteen files. Three of them now have a settled shape and one of them, the percentile test,
+  is the only check that works on a loop that arrives already baked — and none of the three
+  applies to a stem that is not wrapped at all, which four of the fourteen are not.
 - **The composite's master is the first audio source here that cannot be re-fetched.** Every
   other sound in the tree is a download, which is why `sfx/masters/` was deleted — the same
   file can be fetched again from the name in `source`. A DAW mix cannot, and the reason the

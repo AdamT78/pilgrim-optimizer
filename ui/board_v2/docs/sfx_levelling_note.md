@@ -62,11 +62,64 @@ survive the gate; a bed is too even to need it. Measured against the gated figur
 | fire in a metal stove, 25 s loop | −35.97 | −35.96 | +0.01 | 247 of 247 |
 | drum track (control, not ambient) | −11.02 | −10.47 | +0.55 | 174 of 197 |
 
-A bed is continuous by construction, so the gate has nothing to discard — it only bites on
-material with more than 10 LU of internal spread, which the control shows. The argument is not
-that gating makes no difference here; it is that where it *would*, it discards the quiet floor
-the player hears for most of the clip and levels the bed by its gusts. **Ungated for both
-classes**, so a bed and a cue are at least measured in the same unit.
+The gate only bites on material with more than 10 LU of internal spread, which the control
+shows. The argument is not that gating makes no difference here; it is that where it *would*,
+it discards the quiet floor the player hears for most of the clip and levels the bed by its
+gusts. **Ungated for both classes**, so a bed and a cue are at least measured in the same unit.
+
+#### "A bed is continuous by construction" was the reason, and it is no longer true
+
+That sentence stood here from four beds that were each one continuous recording, and it stopped
+being true the moment a duty action started taking **stems**. A stem is a layer of a scene —
+grain handled, coins counted, beads told, robes moving — and a layer of a scene is mostly
+silence waiting for the other layers. Measured across all fourteen ambient tracks as they
+stand:
+
+| track | ungated | gated | delta | blocks kept |
+|---|---|---|---|---|
+| `clerical_actionA/devotion` | −30.79 | −30.79 | −0.00 | 347 of 347 |
+| `clerical_actionA/candle` | −53.69 | −53.69 | +0.00 | 252 of 252 |
+| `clerical_actionB/silversmith` | −32.77 | −32.77 | +0.00 | 247 of 247 |
+| `give_alms_actionA/alms` | −38.37 | −38.36 | −0.01 | 247 of 247 |
+| `allocation_actionA/allocation_wind` | −36.97 | −37.16 | +0.19 | 167 of 167 |
+| `give_alms_actionB/donate_building` | −49.68 | −48.91 | −0.77 | 269 of 322 |
+| `allocation_actionA/footsteps` | −30.62 | −29.78 | −0.84 | 233 of 282 |
+| `allocation_actionA/wool_robe` | −31.08 | −29.29 | −1.79 | 187 of 282 |
+| `taxation_actionA/room` | −38.16 | −34.77 | −3.40 | 134 of 297 |
+| `taxation_actionA/barn_creaks` | −44.40 | −39.19 | −5.20 | 90 of 297 |
+| `clerical_actionA/rosary` | −46.71 | −39.55 | −7.16 | 67 of 347 |
+| `allocation_actionA/keys` | −35.04 | −27.22 | −7.82 | 47 of 282 |
+| `taxation_actionA/wheat` | −47.40 | −39.27 | −8.13 | 46 of 297 |
+| `taxation_actionA/coins` | −36.74 | −27.55 | −9.19 | 36 of 297 |
+
+**The five continuous beds still agree with their gated figures inside 0.2 dB**, exactly as the
+table above found. Five stems disagree by 5 to 9 dB, and the last column says why without
+needing the first two: the gated figure for `coins` is computed from **36 of its 297 blocks**,
+so it describes about a ninth of the file and calls that the loudness of the whole.
+
+**The delta is a density reading, and the table sorts itself by it.** It is not two classes
+but a line, and where a track falls on it says how much of its own duration it occupies:
+nothing through the five continuous recordings; −0.8 for `donate_building` and for `footsteps`
+(which walks without a gap); **−1.8 for `wool_robe`** (a rustle with 13 holes in it, 22%
+silence); −3.4 for the barn `room`; and 5 to 9 dB for the five tracks that are a handful of
+placed events — `barn_creaks`, `rosary`, `keys`, `wheat`, `coins`. *Reading the delta is
+cheaper than reading the file*, and it is the number that tells you whether a track's recorded
+loudness means anything on its own.
+
+**The conclusion is unchanged and the reasoning is stronger.** Gating a sparse stem does
+precisely what this section already refuses to do to a gusty wind bed — it levels the material
+by its events and throws away the silence the player is actually sitting in between them.
+Ungated was the right choice for a reason that generalises; "a bed is continuous" was a
+property of the four beds that existed when it was written.
+
+**Two things follow for anyone reading a recorded number.** A bed's `measured` string is
+documentation and not the control — every trim here is authored by ear — but it is the figure
+a later pass will reach for, so: *do not compare a sparse stem's integrated loudness against a
+continuous bed's*, because on `rosary` against `devotion` that comparison is 7 dB wrong before
+it starts, and the crest factors behind the two numbers are 34.9 dB and 12.3. And where a
+sparse stem's level has to be reasoned about rather than heard, the loudest 400 ms block is the
+honest number: `rosary` reads −35.8 there against `devotion`'s −27.6, which is the right way
+round and roughly the right distance.
 
 ### A 200 ms window, with short clips zero-padded
 
@@ -345,16 +398,34 @@ clips is not. `ceiling_breach()` is what is left of the arithmetic.
 
 Still open for ambient:
 
-- **Bed plus cue can clip, and ducking cannot fix it.** Two files at the −1 dBTP ceiling sum
-  past it. The headroom problem is true peak rather than loudness, and a duck cannot help
-  because the cue's own attack *is* the peak. **THIS HAS STOPPED BEING HYPOTHETICAL.** It sat
-  here harmlessly while every bed landed between −26.5 and −45.5 dBTP after its trim. Of the
-  ten ambient files now filed, seven still do; the three Taxation stems do not, because they
-  have no trim yet — `coins` reads **−8.6 dBTP** at unity, which against a cue at the −1 dBTP
-  ceiling is over full scale before anything is mixed. That is not a bed authored loud, it is a
-  bed not yet authored at all, and it will very likely resolve the moment those three are
-  balanced by ear. But the condition this bullet was written to predict now exists in the tree,
-  and the next bed genuinely authored hot will not announce itself as clearly.
+- **Bed plus cue can clip in principle, and ducking cannot fix it** — the headroom problem is
+  true peak rather than loudness, and a duck cannot help because the cue's own attack *is* the
+  peak. **THE ALARM THIS BULLET RAISED WAS WRONG, AND THE ERROR IS WORTH KEEPING.** It said the
+  case had stopped being hypothetical: `taxation_actionA/coins` at **−8.6 dBTP** untrimmed,
+  "against a cue at the −1 dBTP ceiling, over full scale before anything is mixed". **−1 dBTP
+  is the policy ceiling — the limit a cue may not exceed — not a cue.** No cue in this tree sits
+  anywhere near it: the loudest after its own trim is `construct_actionA` at **−3.97 dBTP**,
+  and Taxation's own cue is at **−12.90**. A rule about what may be filed was read as a
+  description of what is filed, and three decibels of that gap did the rest.
+- **Measured instead of multiplied, Taxation never came close.** Rendering the four beds at
+  their trims and summing them, with this action's own cue added at its worst possible
+  alignment:
+
+  | | beds summed | + the cue |
+  |---|---|---|
+  | `coins` at unity | −8.57 dBTP | −4.45 dBTP |
+  | `coins` at −17.0 (set by ear, 2026-10-15) | −20.02 dBTP | −9.73 dBTP |
+
+  4.45 dB of margin at the worst moment the tree could previously produce, and 9.73 now. *The
+  cheap estimate was 4 dB pessimistic on a quantity where 4 dB is the whole question.* Where
+  headroom is the claim, render the sum: the files are on disk and it costs a minute.
+- **What remains true is narrower and still worth watching.** Of the fourteen ambient files,
+  ten land between −26.5 and −45.5 dBTP after their trim. **Two have no trim at all**, `wheat`
+  at −20.3 and `barn_creaks` at −21.5. Two have one and sit above that span: `room` at −21.4,
+  and `coins` at −25.6 after the trim that fixed it. So the span to quote is **−21.4 to
+  −45.5 dBTP** across the twelve tracks that have a trim, and `room` remains the case this
+  bullet was really about — a bed authored above the span that said nothing about it. The
+  arithmetic to distrust is the shortcut, not the concern.
 - **The board plays no bed yet.** `bundled_sfx()` inlines `tile.ogg` and `confirm.ogg` and
   nothing else, so `generated/ambient_bench.html` is where beds are heard today.
 - **Whoever wires them in must pin `loopEnd`.** Chrome's `decodeAudioData` returns up to 17 ms
