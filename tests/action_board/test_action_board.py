@@ -2315,6 +2315,9 @@ _RANKED = {"quietest": ("peak", +1), "loudest": ("peak", -1),
            "darkest": ("centroid", +1), "brightest": ("centroid", -1),
            "longest": ("ms", -1), "shortest": ("ms", +1)}
 _SCOPED = re.compile(r"\b(in|of|across) the (set|tree)\b", re.I)
+# "quietest in the tree" is a peak claim; "quietest in the tree by integrated loudness"
+# is not. On a bed the two rank differently and the sentence has to say which it means.
+_BY_LOUDNESS = re.compile(r"\bLUFS\b|\bintegrated\b", re.I)
 # A SENTENCE MAY NAME A CATEGORY AND STILL SAY "in the set", and then it is ranking inside that
 # category: "the longest duty action in the set" is not a claim about the tithe cues. The folder
 # IS the category, so the comparison narrows to it rather than the test having to be switched off.
@@ -2324,7 +2327,7 @@ _FAMILY = ((r"\bduty action", "sfx/duty_actions/"), (r"\bbuilding", "sfx/buildin
 
 
 def _sound_readings(rec):
-    """peak dB, spectral centroid and length, pulled out of each present record's `measured`."""
+    """peak dB, integrated LUFS, spectral centroid and length, out of each record's `measured`."""
     out = {}
     for key, entry in rec.items():
         if not key.startswith("sfx/") or entry.get("state") != "present":
@@ -2332,6 +2335,7 @@ def _sound_readings(rec):
         said = entry.get("measured", "") or ""
         got = {}
         for name, pat in (("peak", r"peak (-?[\d.]+) *dB"),
+                          ("integrated", r"integrated (-?[\d.]+) *LUFS"),
                           ("centroid", r"[Cc]entroid (\d+) *Hz"),
                           ("ms", r"^(\d+) *ms")):
             m = re.search(pat, said)
@@ -2354,8 +2358,17 @@ def test_no_sound_claims_a_rank_in_the_set_that_the_set_contradicts():
     IT IS THE SAME FAULT AS THE README'S STALE "GDC 2026", and that one was written off as
     uncatchable because it was a claim about scope. This kind is not: a superlative scoped to the
     set is checkable against the set, since `measured` already carries the number that decides it
-    on every record. The three readings parsed here -- peak, centroid, length -- are exactly the
-    three the prose makes rank claims about.
+    on every record. The readings parsed here -- peak, integrated loudness, centroid, length --
+    are the ones the prose makes rank claims about.
+
+    "QUIETEST" MEANS TWO DIFFERENT NUMBERS AND THE BEDS MADE THAT MATTER. For a 400 ms cue, peak
+    and loudness rank the same files in nearly the same order and either will do. For a 35 s bed
+    they come apart completely: `ox_cart_stones` has the lowest integrated figure in the tree at
+    -55.15 LUFS and sits 5 dB ABOVE `donate_building` on peak, because one is a handful of stones
+    in silence and the other is continuous wind. This test read peak only, so it called a true
+    sentence false. It now reads the sentence: one that names LUFS or integrated loudness is
+    ranked on that, anything else on peak. WRITE WHICH READING YOU MEAN -- on a bed the bare word
+    is ambiguous, and the ambiguity is the whole of the 5 dB.
 
     THE TRIGGER IS DELIBERATELY NARROW. It fires only on a sentence that says "in the set", "in
     the tree" or "of the set", because the records are full of superlatives scoped to something
@@ -2398,6 +2411,9 @@ def test_no_sound_claims_a_rank_in_the_set_that_the_set_contradicts():
             for word, (metric, sign) in _RANKED.items():
                 if not re.search(r"\b%s\b" % word, sentence, re.I):
                     continue
+                # LOUD AND QUIET ARE A PEAK CLAIM UNLESS THE SENTENCE SAYS OTHERWISE.
+                if metric == "peak" and _BY_LOUDNESS.search(sentence):
+                    metric = "integrated"
                 mine = reading[key].get(metric)
                 if mine is None:
                     wrong.append("%s: claims %r but its own record states no %s"
@@ -3905,8 +3921,27 @@ _NUMBER_WORDS = {
     "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8,
     "nine": 9, "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14,
     "fifteen": 15, "sixteen": 16, "seventeen": 17, "eighteen": 18, "nineteen": 19,
-    "twenty": 20,
+    "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50,
 }
+
+
+def _spelled(word: str):
+    """twenty-one -> 21. Returns None for anything that is not a number word.
+
+    THE HYPHEN WAS NOT AN AFTERTHOUGHT, IT WAS A CAUGHT BUG. The first version of this guard
+    matched [A-Za-z]+ and read "Twenty-one files" as the word "one", then reported that the
+    README said one file where the tree holds 21. It failed loudly and for the right reason,
+    which is the behaviour wanted, but it failed on a correct document -- so the vocabulary
+    grew a compound rule rather than the prose being bent to fit the test.
+    """
+    parts = word.lower().split("-")
+    if not all(p in _NUMBER_WORDS for p in parts):
+        return None
+    if len(parts) == 1:
+        return _NUMBER_WORDS[parts[0]]
+    if len(parts) == 2 and _NUMBER_WORDS[parts[0]] >= 20 and _NUMBER_WORDS[parts[1]] < 10:
+        return _NUMBER_WORDS[parts[0]] + _NUMBER_WORDS[parts[1]]
+    return None
 
 
 def test_the_prose_count_of_beds_is_the_number_of_beds():
@@ -3937,7 +3972,8 @@ def test_the_prose_count_of_beds_is_the_number_of_beds():
 
     # "<word> files under <word> duty actions", wherever either document says it.
     pattern = re.compile(
-        r"\b([A-Za-z]+)\s+(?:ambient\s+)?(?:files|tracks)\s+under\s+([A-Za-z]+)\s+duty\s+actions\b",
+        r"\b([A-Za-z]+(?:-[A-Za-z]+)?)\s+(?:ambient\s+)?(?:files|tracks)\s+under\s+"
+        r"([A-Za-z]+(?:-[A-Za-z]+)?)\s+duty\s+actions\b",
         re.IGNORECASE)
     checked = 0
     for rel in ("sfx/README.md", "docs/ambient_loop_note.md"):
@@ -3946,8 +3982,8 @@ def test_the_prose_count_of_beds_is_the_number_of_beds():
             continue
         text = doc.read_text(encoding="utf-8")
         for said_files, said_folders in pattern.findall(text):
-            got_files = _NUMBER_WORDS.get(said_files.lower())
-            got_folders = _NUMBER_WORDS.get(said_folders.lower())
+            got_files = _spelled(said_files)
+            got_folders = _spelled(said_folders)
             assert got_files is not None, (
                 "%s writes the bed count as %r, which is not a number word this guard knows; "
                 "spell it out so the count can be checked" % (rel, said_files))
@@ -3968,13 +4004,13 @@ def test_the_prose_count_of_beds_is_the_number_of_beds():
 
     # The levelling note counts them too, in its own phrasing: "<word> ambient files|tracks".
     # Same fact, third document, and it drifts for the same reason.
-    bare = re.compile(r"\b([A-Za-z]+)\s+ambient\s+(?:files|tracks)\b", re.IGNORECASE)
+    bare = re.compile(r"\b([A-Za-z]+(?:-[A-Za-z]+)?)\s+ambient\s+(?:files|tracks)\b", re.IGNORECASE)
     for rel in ("docs/sfx_levelling_note.md", "sfx/README.md", "docs/ambient_loop_note.md"):
         doc = board / rel
         if not doc.is_file():
             continue
         for said in bare.findall(doc.read_text(encoding="utf-8")):
-            got = _NUMBER_WORDS.get(said.lower())
+            got = _spelled(said)
             if got is None:          # "the ambient files", "its ambient tracks" -- not a count
                 continue
             assert got == len(beds), (

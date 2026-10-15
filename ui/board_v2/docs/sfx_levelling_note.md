@@ -72,39 +72,73 @@ gusts. **Ungated for both classes**, so a bed and a cue are at least measured in
 That sentence stood here from four beds that were each one continuous recording, and it stopped
 being true the moment a duty action started taking **stems**. A stem is a layer of a scene —
 grain handled, coins counted, beads told, robes moving — and a layer of a scene is mostly
-silence waiting for the other layers. Measured across all fourteen ambient tracks as they
+silence waiting for the other layers. Measured across all twenty-five ambient tracks as they
 stand:
 
 | track | ungated | gated | delta | blocks kept |
 |---|---|---|---|---|
+| `allocation_actionA/allocation_wind` | −36.97 | −37.16 | +0.19 | 167 of 167 |
 | `clerical_actionA/devotion` | −30.79 | −30.79 | −0.00 | 347 of 347 |
 | `clerical_actionA/candle` | −53.69 | −53.69 | +0.00 | 252 of 252 |
 | `clerical_actionB/silversmith` | −32.77 | −32.77 | +0.00 | 247 of 247 |
 | `give_alms_actionA/alms` | −38.37 | −38.36 | −0.01 | 247 of 247 |
-| `allocation_actionA/allocation_wind` | −36.97 | −37.16 | +0.19 | 167 of 167 |
+| `build_roads_actionA/wind` | −39.31 | −39.29 | −0.02 | 307 of 307 |
+| `build_roads_actionA/oil_lamp_flame` | −44.29 | −44.02 | −0.27 | 327 of 347 |
 | `give_alms_actionB/donate_building` | −49.68 | −48.91 | −0.77 | 269 of 322 |
 | `allocation_actionA/footsteps` | −30.62 | −29.78 | −0.84 | 233 of 282 |
+| `build_roads_actionA/worker_footsteps` | −38.59 | −37.35 | −1.24 | 262 of 347 |
 | `allocation_actionA/wool_robe` | −31.08 | −29.29 | −1.79 | 187 of 282 |
 | `taxation_actionA/room` | −38.16 | −34.77 | −3.40 | 134 of 297 |
+| `build_roads_actionA/ox_cart_mechanics` | −38.00 | −34.30 | −3.70 | 149 of 347 |
+| `build_roads_actionA/gravel` | −35.94 | −31.76 | −4.18 | 132 of 347 |
+| `build_roads_actionA/ox_breathing` | −42.53 | −37.52 | −5.01 | 110 of 347 |
 | `taxation_actionA/barn_creaks` | −44.40 | −39.19 | −5.20 | 90 of 297 |
+| `build_roads_actionA/far_work` | −52.01 | −46.64 | −5.37 | 101 of 347 |
+| `build_roads_actionA/rammers` | −35.88 | −30.02 | −5.86 | 90 of 347 |
+| `build_roads_actionA/ox_cart_stones` | −55.15 | −48.82 | −6.33 | 81 of 347 |
 | `clerical_actionA/rosary` | −46.71 | −39.55 | −7.16 | 67 of 347 |
 | `allocation_actionA/keys` | −35.04 | −27.22 | −7.82 | 47 of 282 |
 | `taxation_actionA/wheat` | −47.40 | −39.27 | −8.13 | 46 of 297 |
+| `build_roads_actionA/horse_snorts` | −44.88 | −36.18 | −8.70 | 47 of 347 |
 | `taxation_actionA/coins` | −36.74 | −27.55 | −9.19 | 36 of 297 |
+| `build_roads_actionA/oil_lamp_rattle` | −48.48 | −38.97 | −9.51 | 39 of 347 |
 
-**The five continuous beds still agree with their gated figures inside 0.2 dB**, exactly as the
-table above found. Five stems disagree by 5 to 9 dB, and the last column says why without
-needing the first two: the gated figure for `coins` is computed from **36 of its 297 blocks**,
-so it describes about a ninth of the file and calls that the loudness of the whole.
+**The six continuous beds still agree with their gated figures inside 0.2 dB** (`oil_lamp_flame` makes a seventh at 0.27), exactly as the
+table above found. Eleven stems disagree by 5 to 10 dB, and the last column says why without
+needing the first two: the gated figure for `oil_lamp_rattle` is computed from **39 of its 347 blocks**,
+so it describes about a ninth of a file that is nine-tenths silence and calls that the
+loudness of the whole. At **9.51 dB** it is the widest gap here, just past `coins`.
 
 **The delta is a density reading, and the table sorts itself by it.** It is not two classes
 but a line, and where a track falls on it says how much of its own duration it occupies:
-nothing through the five continuous recordings; −0.8 for `donate_building` and for `footsteps`
-(which walks without a gap); **−1.8 for `wool_robe`** (a rustle with 13 holes in it, 22%
-silence); −3.4 for the barn `room`; and 5 to 9 dB for the five tracks that are a handful of
-placed events — `barn_creaks`, `rosary`, `keys`, `wheat`, `coins`. *Reading the delta is
-cheaper than reading the file*, and it is the number that tells you whether a track's recorded
-loudness means anything on its own.
+nothing through the six continuous recordings; −0.8 for `donate_building` and for `footsteps`
+(which walks without a gap); −1.2 for `worker_footsteps` and **−1.8 for `wool_robe`** (a rustle
+with 13 holes in it, 22% silence); −3.4 to −4.2 for the barn `room`, `ox_cart_mechanics` and
+`gravel`; and 5 to 10 dB for the eleven tracks that are a handful of placed events —
+`ox_breathing`, `barn_creaks`, `far_work`, `rammers`, `ox_cart_stones`, `rosary`, `keys`,
+`wheat`, `horse_snorts`, `coins` and `oil_lamp_rattle`, which at 90.3% silence sets the end
+of the scale.
+*Reading the delta is cheaper than reading the file*, and it is the number
+that tells you whether a track's recorded loudness means anything on its own.
+
+**Build Roads arrived as seven stems and fell straight onto that line** — `worker_footsteps`
+−1.2, `ox_cart_mechanics` −3.7, `gravel` −4.2, `ox_breathing` −5.0, `far_work` −5.4,
+`rammers` −5.9, `ox_cart_stones` −6.3, against 28.7%, 55.7%, 52.2%, 69.6%, 65.0%, 58.2% and
+75.3% of their length in exact silence. **It ranks rather than measures**, and the middle of
+that list shows the limit: `far_work` is emptier than `rammers` and still reads the smaller
+delta, because the gate weighs how far a track's events stand above its own mean and not how
+much of the file they fill. Near enough to tell at a glance which tracks have a recorded
+loudness worth comparing; not near enough to quote as a duty cycle. Every one of the seven
+fails that test, which is why the folder fell silent with all of them playing — 2.344 s of 35
+with the first four, and 1.168 s once the ox cart was added.
+
+**Then the wind arrived at −0.02 with all 307 blocks kept, and the scene stopped falling
+silent.** That is the whole point of the delta in one line: *a folder of stems has no floor
+until something in it reads near zero*. The seven stems that preceded it, between −1.2 and
+−6.3, could not make one
+between them, however many there are, because they are all silent at the same moments by
+construction. This one number would have said so before anybody listened, and it is the
+cheapest thing in this note to check.
 
 **The conclusion is unchanged and the reasoning is stronger.** Gating a sparse stem does
 precisely what this section already refuses to do to a gusty wind bed — it levels the material
@@ -419,13 +453,25 @@ Still open for ambient:
   4.45 dB of margin at the worst moment the tree could previously produce, and 9.73 now. *The
   cheap estimate was 4 dB pessimistic on a quantity where 4 dB is the whole question.* Where
   headroom is the claim, render the sum: the files are on disk and it costs a minute.
-- **What remains true is narrower and still worth watching.** Of the fourteen ambient files,
-  ten land between −26.5 and −45.5 dBTP after their trim. **Two have no trim at all**, `wheat`
-  at −20.3 and `barn_creaks` at −21.5. Two have one and sit above that span: `room` at −21.4,
-  and `coins` at −25.6 after the trim that fixed it. So the span to quote is **−21.4 to
-  −45.5 dBTP** across the twelve tracks that have a trim, and `room` remains the case this
-  bullet was really about — a bed authored above the span that said nothing about it. The
-  arithmetic to distrust is the shortcut, not the concern.
+- **What remains true is narrower and still worth watching.** Of the twenty-five ambient files,
+  ten land between −26.5 and −45.5 dBTP after their trim. **Thirteen have no trim at all**:
+  `wheat` at −20.3, `barn_creaks` at −21.5, and all eleven Build Roads tracks, at −7.9, −11.3,
+  −13.8, −15.1, −17.0, −19.6, −21.3, −22.1, −23.8, −23.9 and −24.4 — a whole duty action at unity,
+  and the loudest
+  untrimmed thing in the tree is now `rammers` rather than `coins`. Two have a trim and sit
+  above the span: `room` at −21.4, and `coins` at −25.6 after
+  the trim that fixed it. So the span to quote is **−21.4 to −45.5 dBTP** across the twelve
+  tracks that have a trim, and `room` remains the case this bullet was really about — a bed
+  authored above the span that said nothing about it. The arithmetic to distrust is the
+  shortcut, not the concern.
+- **Build Roads cannot be levelled yet, and not because nobody has got to it.** Every trim in
+  this tree was set against the cue the bed plays under — that is where −24 LUFS and this whole
+  note come from — and `build_roads_actionA` is the first action with beds and **no cue filed
+  at all**. The bench prints the warning on every build. Its eleven tracks can be balanced
+  against each other by ear, which is a different question, but where the group as a whole
+  should sit has no reference until that cue exists — and eleven tracks at unity is the
+  loudest thing that could happen to this board. Give Alms has the same gap on both its
+  actions, with one bed each rather than eleven.
 - **The board plays no bed yet.** `bundled_sfx()` inlines `tile.ogg` and `confirm.ogg` and
   nothing else, so `generated/ambient_bench.html` is where beds are heard today.
 - **Whoever wires them in must pin `loopEnd`.** Chrome's `decodeAudioData` returns up to 17 ms

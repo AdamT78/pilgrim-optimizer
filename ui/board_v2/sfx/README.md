@@ -932,8 +932,8 @@ here as the files being clipped. They are not known to be. Measure the **shipped
 
 ### `ambient/`, the first sounds here that are not events
 
-Fourteen files under six duty actions, and they are a different kind of thing from everything
-above.
+Twenty-five files under seven duty actions, and they are a different kind of thing from
+everything above.
 
 **They live one folder per duty action** — `ambient/<duty>_<slot>/`, which is the same string
 the action's own cue is named with, so `ambient/taxation_actionA/` sits beside
@@ -949,7 +949,9 @@ guessed at, where the old prefix match quietly produced a bed belonging to nothi
 *Older filenames still carry their duty's name — `clerical_actionB/silversmith_sfx_v01.ogg`
 says it twice — because moving a file is cheap and renaming one costs a record's continuity.
 New tracks are named for what they are: `footsteps`, `keys`, `wheat`, `coins`, `barn_creaks`,
-`candle`, `room`, `rosary`, `wool_robe`.* A cue is an event: it
+`candle`, `room`, `rosary`, `wool_robe`, `rammers`, `far_work`, `ox_breathing`, `wind`,
+`oil_lamp_flame`, `horse_snorts`.* A cue is an
+event: it
 fires, it is 70 ms to 1.6 s long, and it is over. A bed runs underneath a selected duty action
 for as long as the player leaves it selected, so it loops, and almost every rule in this file
 had to be asked again for it.
@@ -1364,6 +1366,259 @@ scale.* The bullet was multiplying against the **−1 dBTP policy ceiling** — 
 not exceed — as though some cue sat there, where the loudest cue in this tree after its own
 trim is −3.97 dBTP and Taxation's is −12.90. The ceiling is a rule about what may be filed, not
 a description of what is filed, and the note now says so.
+
+### `build_roads_actionA/`, a work gang in eleven tracks — and the first duty here with no cue
+
+`ambient/build_roads_actionA/rammers_sfx_v01.ogg`, `gravel_sfx_v01.ogg`,
+`far_work_sfx_v01.ogg` and `worker_footsteps_sfx_v01.ogg` are a road being laid: the surface
+compacted, stone going down, boots on it, and the same gang heard across the site. **35.000000 s
+each, to the sample**, from two **CC0** freesound uploads — ldezem's tree stump struck with a
+wooden mallet and Yuval's walk on river gravel. Three more arrived with the ox cart and are
+described below. *More are expected*, so the counts in this file and both audio notes will
+move again.
+
+**The four are the whole of the v05 mix, and one number stands between them and it.** On the
+24-bit masters, `rammers + far_work + worker_footsteps + gravel × 1.047129` **is**
+`build_roads_base_ambient_v05_with_workers.wav`, exact to two least significant bits and
+112.2 dB under the mix. So nothing is hidden in that mix that is not in these four — **and the
+gravel sits 0.400 dB louder there than this stem is.** Inaudible, and worth writing down
+because it is the only thing between four files at one trim and the mix as it was last heard:
+to reproduce v05 exactly, gravel goes 0.40 dB above whatever the other three get.
+
+**The mix still falls silent.** With all four playing, 2.344 s of the 35 is exact digital
+silence across 12 spans, because not one of these four is continuous — they run 28.7% to 65.0%
+silence individually. That is precisely Taxation's shape before the barn room arrived, and the
+background layer that fills it is expected but not here.
+
+**One of the four could be confirmed against its source and three could not**, which says
+something about the method rather than about the files. `worker_footsteps` matches Yuval's
+gravel decisively — r up to **+0.96** at 1:1, each match at least three times the next peak
+anywhere else — locating material around 5.65, 50.8 and 51.0 s of it. The other three match
+nothing, at any window from **25 ms to 400 ms** or any speed from **0.5× to 2×**. *That is the
+expected failure, not a doubt*: cross-correlation only sees material carried through at 1:1
+with its waveform intact, and anything pitched, stretched, convolved or resynthesised defeats
+it — `far_work` most of all, being low-passed to −46 dB at 4 kHz. **The fallback was worse than
+useless and is recorded as such**: an octave-band shape comparison puts the gravel stem 3.3 dB
+from the gravel source and 3.5 dB from the mallet source, so it cannot tell the two apart and
+is not evidence either way. **Which source is behind which of the three is therefore inferred
+from character**, and is the first thing to correct if it is wrong.
+
+**The rammers carry a tempo in their source and not in themselves.** 386227 is tagged 80 bpm
+and four bars, and its 12.000 s is exactly sixteen 0.75 s beats — but nothing in the stem sits
+on that grid. 56 strikes fall in 14 clusters of three to five, **0.12 s apart inside a
+cluster**, six times faster than the beat, with 1.45 to 3.84 s between clusters. So the rhythm
+constraint of §9 of the loop note does not apply here and the eventual loop length is not tied
+to a whole number of anything.
+
+**The gap across the wrap is 1.320 s and is the shortest interval in the file** — every
+interior pause is at least 1.450 s, and the mean is 2.16. The rammers come back a tenth of a
+second early every lap. Inside the irregularity rather than outside it, and *the exact opposite
+of the rosary*, whose wrap gap is the longest interval it has. **Where a wrap gap is the
+outlier in either direction, that is the second of the lap to listen to.**
+
+#### The ox cart, in three, and the oldest recording in the tree
+
+`ox_cart_mechanics_sfx_v01.ogg`, `ox_cart_stones_sfx_v01.ogg` and `ox_breathing_sfx_v01.ogg`
+are the material arriving: the cart, the stone it carries, and the animal pulling it. Three
+more **CC0** sources, one each, and three more 35.000000 s stems. They are filed as three
+rather than one so the cart can be balanced against the animal.
+
+**The cart is a Hollywood optical effect from somewhere between the 1930s and the 1960s**,
+copied by USC Cinema to full-track tape and digitised by craigsmith without restoration — his
+description says as much, and *the file says it too*. Its average spectrum falls off a cliff
+between 6 kHz (−42.6 dB under its own peak) and 8 kHz (−65.5), **23 dB in about a third of an
+octave**, onto a flat shelf near −68 dB out to 12 kHz which is transfer noise and not
+programme. That is what a variable-area optical soundtrack looks like and what no field
+recording looks like. **This is the first time a source's stated *history* has been
+corroborated here rather than only its identity** — every other check in this tree answers
+"is this that file", and this one answers "is that file what it says it is". It also leaves a
+caution for whoever sets the trim: raising this track raises 1940s optical hiss with it.
+
+**And the newest recording in the tree is in the same folder.** Oldome's stones were uploaded
+on 2026-05-11, five months old when they were used, at 96 kHz and 32-bit float — the
+highest-specified source here, every bit of which is thrown away by the 48 kHz, 8 kHz-limited
+place it lands in. Ninety years between the two sources of one cart.
+
+**Two of the three confirmed, which makes three of the folder's seven.** `ox_cart_mechanics`
+is the cleanest match anywhere in this tree: 14 of 63 windows at 400 ms, r up to **+1.00**, and
+consecutive probes landing at a **constant +2.50 s offset** — a span of the cart taken through
+at 1:1 rather than cut into fragments. `ox_breathing` matches at r +0.54 to +0.87 across 12
+windows, lower because the source is stereo and was probed in mono. `ox_cart_stones` matches
+nothing, like `rammers`, `gravel` and `far_work`. *The method works here when the material
+allows it*, which is the useful thing to know about the four that fail.
+
+**The whole ox group is band-limited, and so is `far_work`.** All three read about −55 dB at
+6 kHz and −80 to −96 at 8 kHz relative to their own peaks, where rammers, gravel and the worker
+footsteps carry content well past that. The cart and the distant work are the depth in this
+scene and are filtered like it — the optical ceiling on the cart is inherited, but the other
+two were cut to match it.
+
+**A cow stands in for the ox**, which the uploader explicitly offers and the licence makes
+free, and the two are the same species. **But it is by some way the widest thing in this
+tree**: channels correlating **+0.1929** with the side only **1.31 dB** under the mid, where
+the next widest is Allocation's footsteps at +0.41 and 3.7 dB and most beds here sit above
++0.8. A single close-mic'd animal spread wider than a queue of monks will sit around the
+listener's head rather than at the shaft of a cart. Worth a listen before it is accepted.
+
+**v08 is v05 plus these three, and this time the sum is not exact.** `v05 − the four` is zero
+to two least significant bits, so none of the earlier four moved when the ox arrived. But
+fitted against v08 the three sit at −0.056, −0.052 and +0.008 dB — near enough unity — and
+leave a remainder **20.3 dB under the ox group**, peaking at −36.7 dBFS. *It is not a missing
+eighth layer*: where all three are exactly silent it measures −123.8 dB rms, and it decays to
+nothing within about **100 ms** of each event (−9.7 dB immediately, −25.4 at 50 ms, −54.2 at
+100). Nor is it bus compression — v08 over the fitted sum reads 0.00 dB at every level. It is
+a short processing difference, the mix holding a slightly different pass of these same renders.
+Audibly the same scene, not the bit-exact identity the four gave, and worth knowing before
+anyone treats the filed set as that mix.
+
+**The ox closes some of the holes and not all of them.** The four alone fall silent for
+2.344 s of the 35; with the cart, the stone and the animal it is **1.168 s**. The wind below
+closed the rest.
+
+#### The wind, which is the floor, and the only track here that is not 35 seconds
+
+`wind_sfx_v01.ogg` is the hill the road is being cut across — a **CC0** ORTF recording by
+Sandy-Ogilvie made on top of Holehead Hill in the Campsie Fells with the mics behind a wall
+for cover, Line Audio CM4s into a Tascam DR-60DmkII. It stands to this scene as
+`allocation_wind` stands to the queue of monks: one track is the place, the rest are what is
+happening in it.
+
+**Thirty-one seconds, not thirty-five, and that is the whole point.** Everything else in the
+folder is 35.000000 s because they are stems placed against each other. This is weather with
+nothing placed against it, so a shared length would buy only a lock. **31 and 35 are coprime**,
+so the wind realigns with the scene every **1085 s — eighteen minutes and five seconds**. The
+first take of it, `wind_stem_v01_subtle`, *was* 35 s; changing it to 31 is what bought the
+drift. The Allocation wind makes the same argument from 17 s against 28.5, which comes out at
+969 s. **That number is the one to re-check if either length ever moves.**
+
+**It is the first continuous track in the folder and the floor the scene was missing.** Zero
+exact silence, gated and ungated agreeing to 0.02 dB with **all 307 blocks** surviving, where
+the other seven run 28.7% to 75.3% silence and disagree with themselves by 1.2 to 6.3 dB. With
+the seven alone the mix fell silent for 1.168 s of every 35. With this underneath it does not
+fall silent at all.
+
+**Its source was confirmed more completely than any other file here — and the two windows that
+failed are the interesting part.** 28 of 30 one-second windows match the upload decisively,
+r up to **+0.99**, at **two offsets rather than one**. From about 10 s onward the stem sits at
+a constant **+0.748 s** against the source: that is the body. Its first eight seconds sit at
+**+31.748 s** — the material that *follows* the body, folded back over the head. That is the
+equal-power wrap `../docs/ambient_loop_note.md` §1 argues for, arrived at independently, with
+a fold of about **eight seconds** rather than the 1.5 s this tree uses. On slow broadband wind
+a long fold is right; on an event track it would smear the events. Windows 8 and 9 match
+neither because that is where the crossfade holds the two at comparable weight. **Third time
+an outside build has landed on this tree's own loop method.**
+
+**One loop reading needed a second look, and the test was wrong rather than the file.** The
+step across a butt join is 0.000295 left and 0.002281 right, and the right channel is
+**3.50× the file's own median** sample-to-sample difference — the bar §9 sets, and the first
+bed here to fail it. It is not a discontinuity. Against its own neighbours instead of the
+whole file the step is **0.94× the largest difference in the 100 samples around it**: the
+differences run −0.00164 into the join, −0.00228 across it and −0.00243 out of it, so the
+slope is continuous and merely steep. *The whole-file median is dominated by the quiet parts
+of a bed whose low end moves slowly and loudly*, so it understates the local slope and cries
+wolf. **Compare the step with its neighbouring differences, not with a median over the file.**
+The wrap window does sit at the **7th percentile**, the lowest of any bed here — it lands in a
+lull — and the shoulder score reads 4.11 dB head against tail, which means nothing on a loop
+already baked.
+
+**It keeps its source's width, which nothing else in this folder does.** L/R **+0.3051** with
+the side 2.69 dB under the mid, against the source's +0.2684 and 2.35 dB — carried through
+almost unchanged, where the ox group was collapsed to +0.99 and near mono. One band moved:
+below 100 Hz the source reads **−0.0388**, which is wind striking the two capsules
+independently rather than a stereo image, and the stem reads +0.3065, so the low end was
+tightened on the way in.
+
+**And the lowest-specified source in the tree sits in the same folder as the highest.** This
+one is **16-bit**, 44.1 kHz; Oldome's stones are 96 kHz and 32-bit float. Neither fact shows
+in the result. What shows is that one was recorded on a hill in a gale with the mics behind a
+wall and the other at home.
+
+**Where it sits in the mix.** `v10` is `v08` plus this file at **×0.881 (−1.1 dB)**, tiled
+from 7.2515 s into its own loop, with the preview's own fade at the two ends — which is why
+that match is 6.4 dB rather than exact. Its internal loop point falls at 23.7485 s into the
+preview and leaves no residue there at all, which is the loop verifying itself inside somebody
+else's mix.
+
+#### The oil lamp, in two, and a stereo field made out of a 4 ms delay
+
+`oil_lamp_rattle_sfx_v01.ogg` and `oil_lamp_flame_sfx_v01.ogg` are the lamp that lights the
+work: the lantern knocked as the gang moves it, and the wick burning under everything. Two
+more **CC0** sources — ImAFoley's small oil lantern rattled by its handle, and Vrymaa's
+complete action of lighting a candle.
+
+**They are the cleanest arithmetic in the folder.** `rattle + flame` **is**
+`oil_lamp_ambient_v03`, and `v10 + rattle + flame` **is** `v12`, both with a maximum sample
+difference of **exactly zero** — not two least significant bits, zero — and both fitted at
+×1.000000. Where the ox group left a remainder 20.3 dB down and the gravel sits 0.4 dB louder
+in its mix than in its stem, these two at unity simply *are* the preview.
+
+**The flame's source came with instructions.** Vrymaa's description says that removing the
+lighter and the extinguishing from his recording leaves a loopable flame — and that is exactly
+the part this stem uses, starting **6.000 s** in. *The first source in this tree whose uploader
+supplied the method as well as the material.*
+
+**And the probe that confirmed it exposed how the stereo was made.** The mono downmix matches
+almost nothing — 1 of 37 windows — while each channel on its own matches cleanly, the left at
+a constant **+6.000 s** against the source and the right at **+5.996 s**. Those two offsets
+differ by **4 milliseconds**, and cross-correlating the channels peaks at exactly −4.000 ms
+with **r = +0.9991**. One mono recording, one copy delayed 4 ms: a Haas widener. It is why the
+downmix would not match, and why this is now the widest file in the tree at L/R +0.1822 —
+wider than the ox breathing, and synthetic where that one was recorded.
+
+**It is mono-incompatible, and not as a matter of level.** A 4 ms delay summed to mono combs.
+Against the left channel alone the mono sum has **notches of 21 dB at 125, 375, 625, 875 and
+1125 Hz** — every odd multiple of 125 Hz, which is 1/(2 × 4 ms) exactly — and swings
+**22.8 dB peak to trough** between 60 Hz and 4 kHz. Broadband the sum reads only −2.29 dB, *so
+a level check alone would never find this.* Anything folding the board to mono, a phone
+speaker included, does not get a quieter flame; it gets a different one. The fix is a
+decorrelator or a real stereo source, and it is in the DAW rather than here. Alms' record
+settled a delivered spaced pair against raw M/S; this is the third case in that family, and
+the reading that settles each of them is **per band, not broadband**.
+
+**The flame also tripped the step test and passed the neighbour test**, exactly as the wind
+did an hour earlier: 0.000345 left is 5.05× the file's own median sample-to-sample difference
+and **0.64× the largest difference among its immediate neighbours**. Two files in one sitting
+is what moved §9 of the loop note to say which comparison settles it.
+
+**The rattle is the emptiest track in the tree**, at **90.3% exact silence** against
+`ox_cart_stones`' 75.3%, with 3.418 s of content in six half-second events at 4.20, 9.85,
+15.40, 21.70, 27.15 and 32.25 s. Its intervals run 5.10 to 6.30 s and the one across the wrap
+is **6.95 s** — the longest, as the rosary's is and as the rammers' is not. It also owns the
+widest gated-to-ungated gap here, **9.51 dB** with only 39 of 347 blocks surviving, which is
+the plainest case yet for measuring beds ungated: the gated figure describes a ninth of a file
+that is nine-tenths silence.
+
+#### A horse, and a trend the band search cannot see
+
+`horse_snorts_sfx_v01.ogg` is the second animal in the scene, beside the ox at the cart's
+shaft — a **CC0** recording by ohmypro of, in his words, a relaxed horse blowing through his
+nose. It closes the folder at eleven tracks. `v14` is `v12` plus this file at unity with a
+maximum sample difference of **exactly zero**, the third bit-exact addition in a row.
+
+**Its source was confirmed at three separate offsets.** 11 of 23 windows at 400 ms and 14 of
+29 at 250 ms match the upload decisively, r up to **+0.95**, at constant offsets of +1.790,
+−7.750 and −5.550 s — three lifts from a 24 s recording, placed at six points.
+
+**And the snorts get closer together across the lap, which is a shape rather than a texture.**
+Six events at 4.10, 12.85, 18.00, 23.10, 27.20 and 31.15 s: the intervals between their starts
+run **8.75, 5.15, 5.10, 4.10, 3.95 s**, shortening almost monotonically, and then the gap
+across the wrap is **7.95 s** and it starts again. Measured as silence rather than onsets the
+picture holds — 7.05, 3.43, 4.20, 2.35, 3.15 s between events against 6.30 s across the wrap.
+So each lap has a quiet quarter and a busy half, and the reset is audible in principle. **This
+is the event-rate form of the trend §10 of the loop note describes for level**: fluctuation is
+material, a trend that resets every lap is a loop marker. The band search cannot see it, and
+it is a question for the ear rather than a fault in the file.
+
+It is nearly mono from a stereo source, like the lantern rattle and the ox cart — L/R +0.9188,
+and folding it down costs 0.16 dB. *The exact opposite of its folder-mate* `oil_lamp_flame`,
+which is one mono recording widened with a 4 ms delay and loses 21 dB in notches when it is
+summed.
+
+**And it is the first duty action here to have beds and no cue of its own.** The bench says so
+on every build. Every other bed in this tree was levelled against the cue it plays under —
+that is where −24 LUFS and the whole levelling note come from — so until a Build Roads cue is
+filed, these four can be balanced against each other but there is nothing to set the group
+against. Give Alms has the same gap on both its actions.
 
 **A track belongs to its action by folder, and nothing in a record says so.** It used to be by
 prefix — `allocation_wind` resolved to Allocation by dropping trailing words until something
