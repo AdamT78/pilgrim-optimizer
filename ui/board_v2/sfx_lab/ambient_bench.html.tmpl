@@ -68,7 +68,7 @@ action plays, and clicking its dB figure puts the track back to the value on its
 </div>
 
 <div class="ctl">
-  <label>ambient level <input id="trim" type="range" min="-40" max="6" step="0.5" value="0"
+  <label>ambient level <input id="trim" type="range" step="0.5" value="0"
          style="width:320px"></label>
   <span id="trimdb" style="color:var(--hot)"></span>
   <span style="color:var(--dim)">&rarr; lands at <b id="lands"></b> LUFS</span>
@@ -85,6 +85,7 @@ action plays, and clicking its dB figure puts the track back to the value on its
   <span id="grpdb" style="color:var(--hot)"></span>
   <span style="color:var(--dim)">&rarr; the action sums to <b id="grpsum"></b> dBTP</span>
   <button id="grpreset">reset the action</button>
+  <button id="fold">fold the duty action levels into the trims</button>
 </div>
 
 <p class="note" id="modenote"></p>
@@ -106,6 +107,12 @@ their trims and measured, not their peaks added, which on an eleven-track action
 high. <b>Play all</b> and the selection above are one choice and not two: starting an action
 clears the selection and the ticked boxes, and clicking a track name or ticking a box stops the
 action.</p>
+<p class="sub"><b>Fold</b> adds each action's level onto every one of its trims and sets the
+action level back to 0. Nothing you hear changes — a track plays at trim plus group either way,
+and adding the same number to every trim of an action leaves every ratio inside it alone. Use
+it to commit a round of matching, so the saved trims are the whole story and the action faders
+start again from zero. An action whose fold would push a trim past the slider range is left
+alone and named, because clamping one track would move it against its neighbours.</p>
 <div id="acts"></div>
 <p class="sub" id="settings" style="color:var(--ok)"></p>
 <p class="sub" id="loadnote" style="color:var(--dim)"></p>
@@ -150,6 +157,19 @@ var startT = 0, startOff = 0, lastPos = 0;
 // to bed and cue alike, which is why it is not a knob: one slider, and it can only move the
 // thing being decided.
 var MONITOR_DB = 6;
+// ONE SOURCE FOR THE TRIM RANGE, because the big slider, the row sliders and the fold check all
+// have to agree about it. They did not: the range was written into two separate pieces of HTML,
+// and the fold below is only exact while every folded trim stays inside it -- a bound written
+// twice is a bound that will eventually be two different numbers.
+//
+// DELIBERATELY WIDER THAN ANYTHING WILL USE, so that folding a group level into the trims can
+// never be refused in practice. The group fader spans -40 to +12, so a track would have to be
+// under -48 or over +18 before a fold could run off an end; the tree's actual trims run -23 to
+// +6. The cost is a coarser drag -- 90 dB across a slider that was holding 46 -- and the answer
+// to that is the arrow keys, which step by `step` however wide the range is. The fold's range
+// check stays regardless: it is cheap, and a bound nobody expects to hit is exactly the kind
+// that gets crossed silently once something else changes.
+var TRIM_MIN = -60, TRIM_MAX = 30;
 
 function bed(f){ for (var i = 0; i < BEDS.length; i++) if (BEDS[i].file === f) return BEDS[i];
                  return null; }
@@ -424,6 +444,80 @@ function paintRowTrim(f){
   if (l) l.innerHTML = b.integrated == null ? "&mdash;" : (b.integrated + t).toFixed(1);
 }
 function paintRowTrims(){ BEDS.forEach(function(b){ paintRowTrim(b.file); }); }
+// FOLDING THE GROUP INTO THE TRIMS IS EXACT, AND HERE IS WHY IT IS SAFE TO OFFER. A track is
+// heard at 10^((trim + group)/20): one product of two gains. Moving the whole group level into
+// every trim of the action and zeroing the group changes neither factor's product, so nothing
+// about the sound changes and -- the part that matters -- the ratio between any two tracks of
+// the action is untouched, because the same number is added to both. Both controls step in
+// 0.5 dB, so the sum is a multiple of 0.5 and nothing rounds.
+//
+// THE ONE CONDITION IS THE RANGE. A trim cannot leave [TRIM_MIN, TRIM_MAX], and a group level
+// can push one past either end. A clamp there would move one track and not its neighbours,
+// which is exactly the thing the group fader exists to make impossible -- so an action whose
+// fold would clamp is LEFT ALONE AND REPORTED rather than clamped. All-or-nothing per action,
+// not per track: the invariant being protected is internal to an action, so folding one action
+// and skipping another preserves it in both.
+function foldGroups(){
+  var done = [], skipped = [], before = measureGains();
+  Object.keys(GROUPS).sort().forEach(function(a){
+    var v = groupDb(a);
+    if (Math.abs(v) < 0.001) return;
+    var tracks = BEDS.filter(function(b){ return b.action === a; });
+    var out = tracks.filter(function(b){
+      var t = TRIMS[b.file] + v;
+      return t < TRIM_MIN - 1e-9 || t > TRIM_MAX + 1e-9;
+    });
+    if (out.length) { skipped.push({a: a, v: v, out: out}); return; }
+    tracks.forEach(function(b){
+      TRIMS[b.file] = +(TRIMS[b.file] + v).toFixed(1);
+      applyTrim(b.file);
+    });
+    GDB[a] = 0;
+    if (BUS[a]) BUS[a].gain.value = 1;
+    done.push({a: a, v: v, n: tracks.length});
+  });
+  document.getElementById("grp").value = groupDb(curAction());
+  setGroup(); paintRowTrims(); paintActions(); paintMix(); paintSettings();
+  var after = measureGains();
+  reportFold(done, skipped, before, after);
+}
+// WHAT EVERY SOUNDING TRACK IS ACTUALLY AT, trim and bus multiplied, which is the only thing a
+// fold is allowed to leave unchanged. Checked rather than argued: the report says so out loud.
+function measureGains(){
+  var out = {};
+  BEDS.forEach(function(b){
+    out[b.file] = +(TRIMS[b.file] + groupDb(b.action)).toFixed(4);
+  });
+  return out;
+}
+function reportFold(done, skipped, before, after){
+  var moved = BEDS.filter(function(b){
+    return Math.abs(before[b.file] - after[b.file]) > 1e-6; });
+  var h = [];
+  if (!done.length && !skipped.length) {
+    h.push("every duty action level is already 0, so there was nothing to fold.");
+  } else {
+    done.forEach(function(d){
+      var g = GROUPS[d.a] || {};
+      h.push("<b>" + (g.duty || d.a) + "</b> " + (d.v >= 0 ? "+" : "−") +
+             Math.abs(d.v).toFixed(1) + " dB folded into its " + d.n +
+             (d.n === 1 ? " track" : " tracks") + ", action level back to 0");
+    });
+    skipped.forEach(function(s){
+      var g = GROUPS[s.a] || {};
+      h.push("<b style='color:var(--hot)'>" + (g.duty || s.a) + " left alone</b>: " +
+             (s.v >= 0 ? "+" : "−") + Math.abs(s.v).toFixed(1) + " dB would take " +
+             s.out.map(function(b){ return b.name; }).join(", ") +
+             " past the " + TRIM_MIN + " to +" + TRIM_MAX +
+             " trim range, and clamping one track of an action moves it against the others");
+    });
+    h.push(moved.length
+      ? "<b style='color:var(--hot)'>" + moved.length + " tracks changed level — this is a bug</b>"
+      : "every track is at the same level it was: " + BEDS.length +
+        " of " + BEDS.length + " unchanged to four decimals");
+  }
+  document.getElementById("loadnote").innerHTML = h.join("<br>");
+}
 function paintSettings(){
   document.getElementById("settings").innerHTML = "levels &mdash; " + BEDS.map(function(b){
     var t = TRIMS[b.file];
@@ -558,6 +652,7 @@ document.getElementById("playall").onclick = function(){
   if (ALL) { playAll(ALL); return; }   // playAll toggles when handed the action already running
   var a = actOf(cur); if (a) playAll(a);
 };
+document.getElementById("fold").onclick = foldGroups;
 document.getElementById("grpreset").onclick = function(){
   var a = curAction(); if (!a) return;
   document.getElementById("grp").value = GROUPS[a].groupDb || 0; setGroup(); paintActions();
@@ -694,7 +789,8 @@ function tick(){
       "<td><input type='checkbox' id='ly_" + b.id + "' onchange=\"toggleLayer('" + b.file +
         "', this.checked)\" title='keep this bed looping underneath whatever is selected — " +
         "ticking one while a duty action is playing stops that action'></td>" +
-      "<td class='l'><input type='range' class='rt' id='rt_" + b.id + "' min='-40' max='6' " +
+      "<td class='l'><input type='range' class='rt' id='rt_" + b.id + "' min='" + TRIM_MIN +
+        "' max='" + TRIM_MAX + "' " +
         "step='0.5' value='" + t0 + "' oninput=\"rowTrim('" + b.file + "', +this.value)\" " +
         "title='this track&#39;s own level — it moves nothing else, and stays live while a " +
         "whole duty action is playing'>" +
@@ -719,6 +815,8 @@ function tick(){
   });
   document.getElementById("rows").innerHTML = h.join("");
   BEDS.forEach(function(b){ if (!(b.action in GDB)) GDB[b.action] = (GROUPS[b.action] || {}).groupDb || 0; });
+  var bs = document.getElementById("trim");
+  bs.min = TRIM_MIN; bs.max = TRIM_MAX;   // the row sliders read the same two constants
   pick(cur); paintRowTrims(); paintActions(); tick();
 })();
 </script>
