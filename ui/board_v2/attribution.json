@@ -3744,6 +3744,70 @@
       "gainDb": 0.0,
       "sha256": "d3280f3a8396e8cffa9293fb7530251f7edcc2682b5d9a79f52146ed2773d023"
     },
+    "sfx/ambient/ordination_actionB/oil_lamp_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "Vrymaa",
+      "licence": "cc0",
+      "licenceNote": "Creative Commons 0 on the source, which is the whole of the upstream permission: public domain dedication, no attribution required, commercial use and modification unrestricted. The uploader is named here anyway. THE CUT IS THIS PROJECT'S OWN; the licence key records what the file rests on, not a dedication of the cut.",
+      "design": "BUILT WITH CHATGPT, as the other Mission stems were. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample traces to the upload in `sources`, which measurement confirmed; see `modifications`.",
+      "generatedContent": "none",
+      "source": "mission_oil_lamp_stem_v04_distance.wav. The stem exists only on the project owner's disk; the thing anyone can fetch again is the upload in `sources`.",
+      "sources": [
+        {
+          "role": "the whole of it",
+          "title": "Candle & oil lamps - Lighting",
+          "uploader": "Vrymaa",
+          "url": "https://freesound.org/people/Vrymaa/sounds/734665/",
+          "licence": "cc0",
+          "originalFilename": "734665__vrymaa__candle-oil-lamps-lighting.wav",
+          "measured": "55.356 s, 44.1 kHz, 16-bit MONO",
+          "note": "THE SECOND BED IN THIS TREE FROM THIS ONE UPLOAD, after build_roads_actionA/oil_lamp_flame_sfx_v01.ogg -- and they are different cuts of it, which was checked rather than assumed. The flame starts 6.000 s in; this one sits at +22.000 s. Probed against each other the two stems reach only r = 0.575, where the same cut would score near 1."
+        }
+      ],
+      "originalFilename": "mission_oil_lamp_stem_v04_distance.wav",
+      "originalPath": "freesound.org -- see `sources`",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Mission oil lamp -- a lamp handled further off",
+      "role": "one of seven tracks under ordination actionB, which is Mission. IT DOES NOT LOOP: it is a thing that happens once on the way out, not an ambience, which is what the `loop` field below says.",
+      "loop": false,
+      "modifications": "A STRAIGHT CUT AT +22 s, CONFIRMED. Ten of fifteen non-silent one-second windows match the upload at r up to 0.8824, nine of them at a constant offset of +22.000 s; the tenth sits at +7.000 s. That is a cut rather than an assembly, and it is a DIFFERENT cut from the Build Roads flame, which begins at +6.000 s -- the two stems score only 0.575 against each other. IT LEFT THE SOURCE'S MONO ALONE, which is the whole contrast with that other bed. Vrymaa's recording is mono; build_roads_actionA/oil_lamp_flame was given a stereo field by delaying a copy 4 ms, which combs 21 dB at odd multiples of 125 Hz the moment anything folds it down. This stem reads an L/R correlation of +1.0000 -- dual mono exactly -- so there is no width and nothing to lose. A mono source honestly kept mono, beside the same source dishonestly widened, in one tree. THE CONTAINER: Vorbis q6 at the stem's own 48 kHz stereo, no trim and no level change. NO WRAP WAS MADE AND NONE IS WANTED: both ends are exact digital silence and the file plays once.",
+      "measured": "36000 ms, peak -9.7 dB, integrated -39.24 LUFS, true peak -9.64 dBTP, stereo 48 kHz, L/R correlation +1.000000 -- dual mono EXACTLY, the two channels identical sample for sample. It is the only file in the tree of which that is true: door_close_sfx_v01.ogg, filed in the same batch, reads +0.999982, which rounds to the same four decimals and is not the same thing. The distinction was previously held by ordination_actionB/staff_sfx_v01.ogg before it was replaced. Forty-four events over the 36 s and 58.4% exact digital silence. Gated it reads -34.04 LUFS, 5.21 dB off the ungated figure on 106 of 357 blocks, against 10*log10(357/106) = 5.27 -- the block-count identity again. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT.",
+      "gainDb": 0.0,
+      "sha256": "e7309fa6adeeb44b91d12cccdbdc564072d979b535f5d2abd4fe9b003f4f7e8c"
+    },
+    "sfx/ambient/ordination_actionB/door_close_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "lazymonk",
+      "licence": "cc0",
+      "licenceNote": "Creative Commons 0 on the source, which is the whole of the upstream permission: public domain dedication, no attribution required, commercial use and modification unrestricted. The uploader is named here anyway. THE CUT IS THIS PROJECT'S OWN; the licence key records what the file rests on, not a dedication of the cut. THIS ONE REPLACED A CC-BY CANDIDATE ON PURPOSE: InspectorJ's church door (freesound 339677) was auditioned and rejected not on sound but on licence -- it is Attribution 4.0, and ui/assets/gen_credits.py builds the game's credits screen from ui/assets/attribution.json alone and cannot see this tree, so filing it here would have created an obligation the shipped credits could not keep. Every licence in this tree still reads attributionRequired: false.",
+      "design": "CUT IN THIS REPOSITORY RATHER THAN SUPPLIED. Unlike every other Mission stem this one was not built with ChatGPT and did not arrive from the project owner's DAW: the cut points, the placement and the fades were specified by him and performed here with ffmpeg and numpy, which is why `modifications` reads as a recipe rather than as a reconstruction. It can be rebuilt byte-for-byte from the upload and the numbers below.",
+      "generatedContent": "none",
+      "source": "https://freesound.org/people/lazymonk/sounds/214307/",
+      "sources": [
+        {
+          "role": "the whole of it",
+          "title": "Opening and closing a big old door.wav",
+          "uploader": "lazymonk",
+          "url": "https://freesound.org/people/lazymonk/sounds/214307/",
+          "licence": "cc0",
+          "originalFilename": "214307__lazymonk__opening-and-closing-a-big-old-door.wav",
+          "measured": "24.000 s, 44.1 kHz, 16-bit stereo -- and the stereo is nominal: its two channels correlate at +0.999998 with a largest difference of 2.4e-04, so it is a dual-mono file in all but name.",
+          "note": "Described by its uploader as a huge wooden door in a church being unlocked, opened and closed. IT TOUCHES FULL SCALE: six samples across the 24 s reach 0.999 and the whole file measures +0.51 dBTP, so it is a hot master and anything cut from it needs headroom before encoding. See `modifications`."
+        }
+      ],
+      "originalFilename": "214307__lazymonk__opening-and-closing-a-big-old-door.wav",
+      "originalPath": "freesound.org -- see `sources`",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Mission door -- the church door pulled shut behind him",
+      "role": "one of eight tracks under ordination actionB, which is Mission. IT DOES NOT LOOP: a door closes once as the pilgrim leaves, which is what the `loop` field says.",
+      "loop": false,
+      "modifications": "A RECIPE, NOT A RECONSTRUCTION, because this cut was made here and can be remade exactly. From the upload: resample 44.1 kHz to 48 kHz stereo; take 7.600 s to 13.600 s, which is 6.000 s holding the closing itself; apply a 5 ms linear fade at each end; attenuate by 2.0 dB (x0.794328); lay it into 36.000 s of silence starting at 3.000 s, so it runs to 9.000 s; encode Vorbis q6. The placed region correlates with the source region at r = 0.9973, which is Vorbis and not a difference in content. THE 5 ms FADES ARE WHAT THE MEASUREMENT ASKED FOR AND NO MORE. Neither cut point sits on a zero crossing -- 7.600 s lands on -47.4 dBFS and 13.600 s on -50.5 dBFS -- but neither is a discontinuity either: against their own immediate neighbours the steps are 0.5x and 1.4x the largest nearby sample difference. Five milliseconds takes both to exactly zero, which is shorter than anything audible on a door and leaves the transient untouched. THE 2.0 dB IS ENCODER HEADROOM AND NOT A BALANCE JUDGEMENT, which matters because this tree's rule is that gain belongs in `gainDb` and not in the audio. The exception is earned: the source touches 0.00 dBFS inside this very cut, two samples in one run, measuring +0.09 dBTP before encoding -- and Vorbis overshoots a full-scale input, which was not a prediction but an observation, the first build coming back at +0.21 dBTP with a sample peak of 0.14 dBFS. A file that decodes above full scale clips in anything that is not floating point, whatever its trim says. Two decibels of headroom lands it at -1.89 dBTP, inside the -1 dBTP line, and the factor is written above so the cut stays reproducible. `gainDb` is still 0.0 and still means nobody has set a level.",
+      "measured": "36000 ms, peak -1.92 dB, integrated -28.84 LUFS, true peak -1.89 dBTP, stereo 48 kHz, L/R correlation +1.0000 -- dual mono, inherited from a source that is dual mono in all but name. 83.2% of the file is exact digital silence and both ends are silent, so the butt-join step is 0.000000, which here says nothing at all because the file is not meant to join: it plays once. IT IS THE HOTTEST BED IN THE TREE at -1.89 dBTP, against rammers at -5.90 after its trim, and that is a property of a door rather than a level anybody chose. Gated it reads -15.90 LUFS, 12.94 dB off the ungated figure on 18 of 357 blocks, against 10*log10(357/18) = 12.97 -- the block-count identity again. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT, and this is the one bed where that is likely to want changing first.",
+      "gainDb": 0.0,
+      "sha256": "4748df803674b2447087beebefd02f20050f6cd8d49670305c776e8fc39a3f5e"
+    },
     "sfx/ambient/build_roads_actionA/ox_cart_mechanics_sfx_v01.ogg": {
       "state": "present",
       "kind": "bed",
@@ -4153,9 +4217,9 @@
     },
     "ordination_actionB": {
       "groupDb": 0.0,
-      "tracks": 6,
-      "summedTruePeakDbtp": -10.23,
-      "summedAtTrims": "151b6b21dd5b762a"
+      "tracks": 8,
+      "summedTruePeakDbtp": -1.36,
+      "summedAtTrims": "b818af19deca9e04"
     },
     "taxation_actionA": {
       "groupDb": 0.0,
