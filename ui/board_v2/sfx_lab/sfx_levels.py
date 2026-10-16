@@ -65,6 +65,7 @@ keeps one owner per fact, and is reversible. It also retires Mint's exception: t
 be re-cut without its +22.3 dB and carry the number here instead.
 """
 import argparse
+import hashlib
 import json
 import math
 import pathlib
@@ -264,6 +265,78 @@ def ceiling_breach(p, g, ceiling=CEILING_DBTP):
     return round(over, 2) if over > 0 else 0.0
 
 
+def group_sums(doc, write=False):
+    """Each duty action's beds rendered together at their trims, and the peak of that mix.
+
+    THE ONLY HONEST HEADROOM FIGURE FOR AN ACTION. Adding the tracks' individual true peaks
+    assumes they all peak at the same instant, which none of them do: on Build Roads that
+    shortcut reads +1.86 dBTP where the rendered mix reads -3.05, fourteen decibels apart, and
+    on Taxation it is ten. Where headroom is the claim, render the sum.
+
+    PHASE-LOCKED TRACKS ARE SUMMED, DRIFTING ONES ARE BOUNDED. Tracks of the same length hold
+    step and can simply be added; one of a different length -- Build Roads' 31 s wind against
+    ten 35 s stems, Allocation's 17 s howl against 28.5 -- lands somewhere different every lap,
+    so its own peak is added as a bound rather than pretending a phase. The result is therefore
+    the worst case over all phases, which is the number a ceiling wants.
+
+    IT SCALES EXACTLY WITH THE GROUP LEVEL, which is why one figure per action is enough: the
+    bench shows summedTruePeakDbtp + groupDb and that is exact, not an estimate.
+
+    AND IT GOES STALE SILENTLY, so `summedAtTrims` fingerprints the gainDb values it was taken
+    from. A test compares the two without decoding anything and says to rerun this.
+    """
+    files = doc.get("files", {})
+    by = {}
+    for key, e in files.items():
+        if not key.startswith("sfx/ambient/") or not key.endswith(".ogg"):
+            continue
+        if e.get("state") != "present":
+            continue
+        by.setdefault(key.split("/")[2], []).append(key)
+    out = {}
+    for action in sorted(by):
+        keys = sorted(by[action])
+        rendered, lengths = [], []
+        for k in keys:
+            a, sr = load(BOARD / k)
+            g = float(files[k].get("gainDb") or 0.0)
+            rendered.append((round(len(a) / sr, 6), a * (10 ** (g / 20))))
+            lengths.append(round(len(a) / sr, 6))
+        modal = max(set(lengths), key=lengths.count)
+        locked = [x for ln, x in rendered if ln == modal]
+        loose = [x for ln, x in rendered if ln != modal]
+        n = min(len(x) for x in locked)
+        mixed = sum(x[:n] for x in locked)
+        lin = max(true_peak(mixed[:, c], 48000) for c in range(mixed.shape[1]))
+        lin = 10 ** (lin / 20)
+        for x in loose:
+            lin += 10 ** (max(true_peak(x[:, c], 48000) for c in range(x.shape[1])) / 20)
+        fp = hashlib.sha256("|".join(
+            "%s=%.2f" % (k.rsplit("/", 1)[1], float(files[k].get("gainDb") or 0.0))
+            for k in keys).encode()).hexdigest()[:16]
+        out[action] = {"tracks": len(keys), "summed": round(20 * math.log10(lin), 2),
+                       "fp": fp, "lengths": sorted(set(lengths))}
+    print("%-24s %6s %9s  %s" % ("duty action", "tracks", "summed", "lengths"))
+    for a, v in out.items():
+        print("%-24s %6d %6.2f dBTP  %s"
+              % (a, v["tracks"], v["summed"], ", ".join("%g" % x for x in v["lengths"])))
+    if write:
+        groups = doc.setdefault("ambientGroups", {})
+        for a, v in out.items():
+            g = groups.setdefault(a, {"groupDb": 0.0})
+            g["tracks"] = v["tracks"]
+            g["summedTruePeakDbtp"] = v["summed"]
+            g["summedAtTrims"] = v["fp"]
+        gone = [a for a in list(groups) if a not in out]
+        for a in gone:
+            del groups[a]
+        (BOARD / "attribution.json").write_text(
+            json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        print("\nwrote %d action sums%s" % (len(out),
+              "; removed %d with no beds" % len(gone) if gone else ""))
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--write", action="store_true", help="write gainDb into attribution.json")
@@ -274,7 +347,14 @@ def main():
                     help="override the cue target")
     ap.add_argument("--trim", type=float, default=None,
                     help="with --one --kind bed: check an authored trim rather than derive one")
+    ap.add_argument("--groups", action="store_true",
+                    help="render each duty action's beds together and report the summed peak")
     args = ap.parse_args()
+
+    if args.groups:
+        doc = json.loads((BOARD / "attribution.json").read_text(encoding="utf-8"))
+        group_sums(doc, write=args.write)
+        return 0
 
     if args.one:
         p = profile(pathlib.Path(args.one), args.kind)

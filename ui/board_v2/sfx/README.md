@@ -602,6 +602,15 @@ tree leans on hardest, that a shipped clip's peak matches its master's. `gainDb`
 `attribution.json` keeps every byte verifiable, keeps one owner per fact — the file owns the
 audio, the record owns the playback level — and is reversible.
 
+**Edit `attribution.json` in place; never round-trip it through a JSON writer.** Three ambient
+levels were changed by loading the file, setting three floats and dumping it back. The values
+were right and the diff was **8,013 lines**: the writer reformatted all 242 records, and the
+change would have been unreviewable. It was caught only by diffing against the copy on the
+other machine. The file is a record of what was decided, so a diff has to show the decision and
+nothing else — locate the line, replace the value, and check the diff before anything else.
+The same applies to adding a record: render the new block, splice it in at a located line, then
+re-read the file and assert the record came back exactly as written.
+
 **And it makes the board's own gains mean what they say.** The board applies
 `SFX_GAIN = {hover: 0.12, select: 0.5, confirm: 0.7}` at playback, and set 1 works *because*
 its two files are near-matched and that gain does the role balance. Set 3 bakes 12.5 dB of
@@ -932,7 +941,7 @@ here as the files being clipped. They are not known to be. Measure the **shipped
 
 ### `ambient/`, the first sounds here that are not events
 
-Twenty-five files under seven duty actions, and they are a different kind of thing from
+Twenty-nine files under eight duty actions, and they are a different kind of thing from
 everything above.
 
 **They live one folder per duty action** — `ambient/<duty>_<slot>/`, which is the same string
@@ -950,7 +959,7 @@ guessed at, where the old prefix match quietly produced a bed belonging to nothi
 says it twice — because moving a file is cheap and renaming one costs a record's continuity.
 New tracks are named for what they are: `footsteps`, `keys`, `wheat`, `coins`, `barn_creaks`,
 `candle`, `room`, `rosary`, `wool_robe`, `rammers`, `far_work`, `ox_breathing`, `wind`,
-`oil_lamp_flame`, `horse_snorts`.* A cue is an
+`oil_lamp_flame`, `horse_snorts`, `staff`, `distant_dogs`, `night_city`.* A cue is an
 event: it
 fires, it is 70 ms to 1.6 s long, and it is over. A bed runs underneath a selected duty action
 for as long as the player leaves it selected, so it loops, and almost every rule in this file
@@ -1352,9 +1361,10 @@ against the wheat would arrive somewhere new every lap.
 **One of the three now has a trim.** Untrimmed they measure −47.4, −36.8 and −44.4 LUFS, so
 coins ran about 10 dB above wheat; **coins was set by ear to −17.0** on 2026-10-15, which drops
 it to −53.8 and puts it about 6 dB *under* wheat and 2 dB under the barn room it sits in.
-Wheat and the creaks are still at unity and are now the loud ones in the group. That balance is
-the point of the per-track sliders and is not something to derive — the one number here was
-heard, not computed.
+Wheat and the creaks are still at unity and are now the loud ones in the group — and since
+Build Roads was levelled they are **the only two untrimmed files left in the tree**. That
+balance is the point of the per-track sliders and is not something to derive: the numbers here
+were heard, not computed.
 
 **It settled a headroom question as a side effect, and the answer was better than the note
 feared.** `../docs/sfx_levelling_note.md` has carried a bullet warning that a bed plus a cue
@@ -1614,11 +1624,234 @@ and folding it down costs 0.16 dB. *The exact opposite of its folder-mate* `oil_
 which is one mono recording widened with a 4 ms delay and loses 21 dB in notches when it is
 summed.
 
+#### All eleven levelled in one pass, and the headroom moves to the cue
+
+Set by ear on 2026-10-16, across the whole folder at once rather than file by file, which is
+the only way a scene of eleven can be balanced:
+
+| | | | |
+|---|---|---|---|
+| `ox_cart_stones` **+6.0** | `oil_lamp_rattle` **+3.0** | `ox_breathing` **+2.0** | `horse_snorts` **+1.0** |
+| `ox_cart_mechanics` **−2.0** | `far_work` **−2.5** | `worker_footsteps` **−3.5** | |
+| `gravel` **−7.0** | `oil_lamp_flame` **−7.0** | `rammers` **−7.0** | `wind` **−7.0** |
+
+**The two extremes are the two measurements that predicted them.** `ox_cart_stones` was the
+quietest file in the tree at −55.15 LUFS and takes the biggest lift here, +6.0, and *still*
+lands under every other track in the folder. `rammers` was the loudest untrimmed file in the
+tree at −7.93 dBTP and is pulled back furthest. Nothing computed either number —
+`sfx_lab/sfx_levels.py` derives a cue's trim and refuses to touch a bed, because a bed target
+was tried at −39 LUFS and falsified by the second bed ever filed.
+
+**Eleven tracks that sum have to sit quieter per track than one that plays alone**, so reading
+this folder's files against a lone rain bed compares nothing. The quantity that matters is the
+action's own sum: rendered, the ten locked tracks come to **−12.96 dBTP** and the drifting
+wind can add at most **−11.98 dBTP** at any phase. Twelve decibels in hand, which is a healthy
+place for a bed group.
+
+**Which moves the headroom question onto the cue that does not exist.** Add the loudest cue in
+the tree after its own trim — `construct_actionA` at −3.97 dBTP — peak-aligned with that sum,
+and the total is **−1.06 dBTP**: legal, and the tightest margin anywhere here. Add a cue at
+the **−1.0 dBTP policy ceiling** instead and it reaches **+1.16 dBTP**, which is over. *The
+ceiling that has governed cues since set 1 is not safe for this action.* A Build Roads cue
+wants to land near −4 dBTP or quieter, and that is a consequence of the action having eleven
+beds rather than one.
+
 **And it is the first duty action here to have beds and no cue of its own.** The bench says so
 on every build. Every other bed in this tree was levelled against the cue it plays under —
-that is where −24 LUFS and the whole levelling note come from — so until a Build Roads cue is
-filed, these four can be balanced against each other but there is nothing to set the group
-against. Give Alms has the same gap on both its actions.
+that is where −24 LUFS and the whole levelling note come from — so the eleven were balanced
+against each other and the group's absolute level is the one judgement here with no reference
+behind it. Give Alms has the same gap on both its actions, with one bed each rather than
+eleven.
+
+### `ordination_actionB/`, Mission in four — and a loop that closes on arithmetic
+
+Four tracks, and they divide cleanly by how they behave in time. `footsteps` and `staff` are
+**metrical**: a gait, and a pole planted on a count. `distant_dogs` is **intermittent**: nine
+barks in five groups with silence between them. `night_city` is **continuous**: crickets, wind
+and distant town that never stop. The first two are described below, then the other two.
+
+`footsteps_sfx_v01.ogg` and `staff_sfx_v01.ogg` are a pilgrim setting out: boots on stone at a
+walking pace with a staff planted every third step. Two **CC0** sources — Fission9's six
+hiking-boot steps and worthahep88's stick into soft dirt — and **36.000000 s** each, the first
+length here that is neither 35, 30 nor 28.5. It is not arbitrary: at 100 steps a minute,
+36 s is sixty steps of nominal space, and the walk uses 54 of them with two pauses in the rest.
+`staff + footsteps` **is** the v02 mix, exact to one least significant bit.
+
+**It is a real loop and not merely a clickless one, which are different things.** Both ends
+are exact digital silence, so the butt-join step is 0.000000 in both channels — *and that
+figure means nothing*, for the reason the deleted Allocation cathedral taught. On a metrical
+walk the seam is the rhythm. The 54 footfalls run a median **0.605 s** apart, which is 99.2
+steps a minute against the 100 the filename claims, and **the interval across the wrap is
+0.600 s** — five milliseconds off the walking step. The gait continues through the loop point.
+Compare `rammers`, whose wrap gap is 0.13 s shorter than its tightest interior pause, and
+`horse_snorts`, whose event rate ramps across the body and resets.
+
+**The loop closes because the counts divide, and that is worth having as a method.** The staff
+lands on every third step without a single exception — steps 3, 6, 9 … 54, eighteen plants,
+seventeen gaps all exactly three — and **54 ÷ 3 = 18 exactly**, so the staff returns to the
+same foot at the wrap. The footfalls do the same thing one layer down: the six source steps are
+cycled in a strict order and **54 ÷ 6 = 9 exactly**, so the rotation closes too. Two patterns,
+both commensurate with the length, and **no crossfade anywhere**. Had there been 53 steps the
+staff would have changed feet every lap, and no amount of wrap-window percentile would have
+found it — that test reads energy.
+
+**The two pauses are 2.400 and 2.405 s**, five milliseconds apart, after the 18th and 38th
+step. They are what stops 36 s of metronome sounding like one. The staff's count carries
+straight through them rather than restarting, which is what makes the arithmetic above work.
+
+**Both sources confirmed, and the usual probe failed on both.** Event against event, the
+footfalls match their source at **r up to 0.998** and the staff plants at **up to 0.962**,
+eight of twelve above 0.70 across four distinct source hits. But the sliding cross-correlation
+that confirmed the wind and the ox cart found **nothing** — 0 of 117 windows. It normalises
+each candidate position by the source's local energy with a percentile floor, and on a source
+that is 3.5 s of six isolated events in silence that floor clamps almost everywhere and
+flattens the result. *On a short, sparse source, compare event against event rather than
+sliding a window.* The probe's blind spot, not the file's.
+
+**Two things to know before levelling.** The six source steps are heard **nine times each in
+the same order**, so the same 3.6 s of material returns ten times a lap — unlikely to read
+under a staff and whatever else Mission gets, audible soloed, and the same observation the
+Taxation wheat record makes about 6.8 s of grain behind 30 s. And both are **essentially
+mono**: the footsteps correlate +0.9994 and the staff reads **+1.0000**, dual mono exactly,
+the only file in the tree that is. Nothing is lost folding them down, which is the opposite of
+`oil_lamp_flame` — but there is also no width at all.
+
+#### The dogs, which are an assembly and not a cut
+
+`distant_dogs_sfx_v01.ogg` is nine barks over 36 s from felix.blume's **CC0** recording of a
+Mexican village at night — uploaded 2023, recorded 2009 on a mid-side Schoeps pair. It is the
+intermittent layer of Mission: 62.6% of the file is exact digital silence.
+
+**It is five excerpts of one recording, placed, and the audio said so before the covering note
+did.** Walking the stem in 100 ms steps against the source at every candidate offset recovers
+five runs of about 2.5 s: stem 6.9–9.6 s from source 13.05–15.75 s, 10.7–13.3 from 29.60–32.20,
+17.6–20.0 from 75.40–77.80, 24.7–27.3 from 63.70–66.30, and 31.0–33.8 from 112.00–114.80.
+**They are not in source order** — 75.4 s is placed before 63.7 s — so the sequence was chosen.
+
+**One event scored 0.301 and it was the probe's fault, not the file's.** Eight of nine barks
+matched above r = 0.917; the ninth sits 0.75 s before the end of its excerpt, and the 1.2 s
+event window ran off the splice into the silence after it. The boundary walk put that bark
+inside the same run as the two either side. *An event probe that crosses a splice reports a
+false negative.* That is a second named blind spot for this method, beside the sliding probe's
+collapse on short sparse sources recorded above — and the two are opposites: one window too
+wide, one source too thin.
+
+**The mid-side claim was checked rather than taken.** The upload's description says the
+recording is mid-side "encoded as stereo left-right", which could mean either a decoded pair or
+raw M/S in two channels, and the two want different handling. Raw M/S reads a channel
+correlation near zero; this file reads **+0.8009**, so it is decoded and nothing needs a
+matrix. It carries a **7.14 dB left-over-right imbalance** which the stem reproduces at
+7.03 dB — itself a small confirmation of provenance, and *a thing to know before placing it:*
+these dogs sit well to the left.
+
+**The wrap needs no crossfade and the reason is not the step.** Both ends are digital silence,
+so the butt-join step is 0.000000 — which means nothing on its own, as the deleted Allocation
+cathedral taught. What makes it loop is the gap: interior gaps of 0.80, 0.81, 3.14, 6.32, 0.91,
+6.51, 6.27 and 0.92 s, and **10.32 s across the wrap**. The loop point lands in the longest
+quiet in the file rather than inside a group, which is the opposite fault to `rammers`.
+
+#### The night town, where a wrong first reading was worth keeping
+
+`night_city_sfx_v01.ogg` is 36 s of Articulated Sounds' *Quiet Streets* from the **Sonniss
+GameAudioGDC 2017** bundle — crickets, slight wind, distant activity, and the continuous layer
+the other three sit on. At **96 kHz** it is the highest-rate source in the tree, resampled to
+48 on the way in, and the rate does not show in the result.
+
+**The head is a fold, and the measurement dated it.** Thirty-six of thirty-six one-second
+windows match the source at r = 0.78 to 0.97, at two offsets: thirty-four at **+0.0000 s** and
+the first two at **+36.0000 s** — the material *following* the body laid back over its head,
+which is the equal-power wrap of the loop note's section 1 arrived at independently. Scoring
+each 100 ms window against both offsets puts the join at **2.0 s**: the head reads as the fold
+until 1.9 s and as the body from 2.0 on. This tree's convention is 1.5 s and `build_roads/wind`
+arrived with about 8 s. Three files, three lengths, and nothing yet says which is right.
+
+**A residual that looked like a hidden layer was a high-pass.** Fitting the source to the body
+at ×0.214464 leaves a residual 11.73 dB under the stem — but only **7.93 dB** under it below
+100 Hz, 6 dB worse explained in that one band. Two large files had been downloaded in the same
+minute as the source and named nowhere, and a city rumble was the obvious suspect. **Neither is
+in the file:** probing the residual against both matched 0 of 15 windows each at r = 0.06 to
+0.21, and a joint fit improved it by 0.00 dB at a scale of 0.0002. The band table says what is
+really happening — the stem sits **8.88 dB below** the fitted source from 20–60 Hz and 1.4 to
+2.0 dB *above* it in every band over 100 Hz. There is **less** bottom in the stem than in the
+source. That is a high-pass, which is the opposite of an added rumble, and it makes the
+residual LF-heavy for the same arithmetic reason. The covering note was right and the first
+reading of it was wrong; it is recorded because the wrong reading was the plausible one.
+
+**It is the third file to split the two wrap tests the same way.** The butt-join step is 2.74×
+the file's median sample-to-sample difference and 0.40× the largest difference among its own
+immediate neighbours — passing on the neighbour test, failing on the median, after
+`build_roads/wind` at 3.50× against 0.94× and `oil_lamp_flame` at 5.05× against 0.64×.
+
+#### A delta that turned out to be a block count
+
+The gated-against-ungated difference has been read here as a density measure: a continuous bed
+agrees inside 0.2 dB, a sparse stem disagrees by 5 to 10. The two Mission stems that are mostly
+silence both read **exactly 7.01 dB** and both survive on **exactly 71 blocks** — different
+material, different sources, different sources' sample rates. That is not a coincidence and it
+is worth knowing what it is.
+
+On a file whose quiet parts are *true digital silence*, every scrap of energy is inside the
+blocks that survive the gate, so the delta collapses to **10·log₁₀(all blocks ÷ surviving
+blocks)** and carries nothing beyond the duty cycle. Checked on all four Mission beds the
+prediction holds to 0.03 dB: `distant_dogs` 71 of 357, delta +7.008 against +7.014 predicted;
+`staff` 71 of 357, +7.007 against +7.014; `footsteps` 231 of 357, +1.861 against +1.891;
+`night_city` 357 of 357, −0.004 against 0.000. **The delta is still worth printing — it is the
+duty cycle, which is a real thing to know about a bed — but it is not a statement about what is
+in the loud parts, and calling it "how dense the material is" overstates it.** Where the quiet
+parts are a *floor* rather than silence the arithmetic does not apply and the figure means
+something else again; no file here is that case yet.
+
+**Mission has no cue either.** `ordination actionA` is Ordain and has one; `actionB` does not.
+With these two, **seventeen beds across four duty actions** now have nothing to be levelled
+against — eleven on Build Roads, one on each of Give Alms' two actions, and four here.
+
+### Two levels, and why they are not one number
+
+A bed carries **`gainDb`**, which is its balance against the other beds of its action. An
+action carries **`groupDb`** in `attribution.json`'s `ambientGroups` block, which is where that
+whole action sits against the other actions. A track is heard at the sum of the two.
+
+**Folding the second into the first would give the same sound once and then throw the
+structure away.** There would be no action level left to revisit, only eleven numbers that
+happened to move together, and the next adjustment would be eleven slider moves again. Kept
+apart, balancing *within* an action and matching actions *to each other* stay separate jobs,
+which is how they are actually done.
+
+**The group cannot change the balance inside an action, by construction.** On the bench it is
+one gain node per action that every track of that action feeds, so it scales all of them by
+exactly the same factor. It is deliberately *not* added into each track's own gain, where a
+clamp or a rounding could pull one track out of line — which is the one thing a master fader
+must never do. Anything that eventually plays these beds has to do the same: per-track gain,
+then one bus gain per action.
+
+**`summedTruePeakDbtp` is a rendered measurement, not a sum of peaks.** It is the action's beds
+mixed at their trims and measured. Adding the individual peaks instead assumes they all peak at
+the same instant, which none of them do: on Build Roads that shortcut reads **+1.86 dBTP**
+where the rendered mix reads **−3.05**, and on Taxation it is ten decibels out. The figure
+scales exactly with `groupDb`, so the bench shows *summed + group* and that is exact rather
+than pessimistic.
+
+| duty action | beds | rendered sum at today's trims |
+| --- | --- | --- |
+| `build_roads_actionA` | 11 | **−3.05 dBTP** |
+| `ordination_actionB` | 2 | −10.35 |
+| `taxation_actionA` | 4 | −20.02 |
+| `clerical_actionA` | 3 | −22.89 |
+| `allocation_actionA` | 4 | −26.20 |
+| `clerical_actionB` | 1 | −26.47 |
+| `give_alms_actionB` | 1 | −31.83 |
+| `give_alms_actionA` | 1 | −35.96 |
+
+**That 33 dB spread is the whole case for the second level.** Eight actions, and nothing yet
+says which of them should be louder than which — `give_alms_actionA` is a single rain bed and
+`build_roads_actionA` is eleven tracks of a work gang, and they are not supposed to arrive at
+the same number by accident.
+
+**It goes stale silently, so it is fingerprinted.** `summedAtTrims` records a hash of the
+gainDb values the sum was measured from, and a test refuses the pair when they disagree —
+without decoding anything, which is what lets the check live in a suite that does not own
+ffmpeg. `python3 ui/board_v2/sfx_lab/sfx_levels.py --groups --write` recomputes both. Moving a
+*group* level does not invalidate it; moving a *trim* does.
 
 **A track belongs to its action by folder, and nothing in a record says so.** It used to be by
 prefix — `allocation_wind` resolved to Allocation by dropping trailing words until something
