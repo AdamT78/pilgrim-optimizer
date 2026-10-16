@@ -232,6 +232,10 @@ def ambient(rec: dict, notes: list) -> tuple:
                 "integrated": num(r"integrated\s*(-?[\d.]+)\s*LUFS"),
                 "tp": num(r"true peak\s*(-?[\d.]+)\s*dBTP"),
                 "gainDb": e.get("gainDb"),
+                # ABSENT MEANS LOOPING, which is what every bed filed so far does. A record
+                # only has to say `loop: false`, and then the bench comes up with that box
+                # unticked instead of needing it re-ticked after every rebuild.
+                "loop": e.get("loop", True),
                 "src": base64.b64encode(p.read_bytes()).decode("ascii"),
             })
             if facts["samples"] == 0:

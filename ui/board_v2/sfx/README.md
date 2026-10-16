@@ -941,7 +941,7 @@ here as the files being clipped. They are not known to be. Measure the **shipped
 
 ### `ambient/`, the first sounds here that are not events
 
-Thirty-one files under eight duty actions, and they are a different kind of thing from
+Thirty-three files under eight duty actions, and they are a different kind of thing from
 everything above.
 
 **They live one folder per duty action** — `ambient/<duty>_<slot>/`, which is the same string
@@ -960,7 +960,7 @@ says it twice — because moving a file is cheap and renaming one costs a record
 New tracks are named for what they are: `footsteps`, `keys`, `wheat`, `coins`, `barn_creaks`,
 `candle`, `room`, `rosary`, `wool_robe`, `rammers`, `far_work`, `ox_breathing`, `wind`,
 `oil_lamp_flame`, `horse_snorts`, `staff`, `distant_dogs`, `night_city`, `rat_squeaks`,
-`rats_crossing`.* A cue is an
+`rats_crossing`, `oil_lamp`, `door_close`.* A cue is an
 event: it
 fires, it is 70 ms to 1.6 s long, and it is over. A bed runs underneath a selected duty action
 for as long as the player leaves it selected, so it loops, and almost every rule in this file
@@ -1679,13 +1679,15 @@ against each other and the group's absolute level is the one judgement here with
 behind it. Give Alms has the same gap on both its actions, with one bed each rather than
 eleven.
 
-### `ordination_actionB/`, Mission in six — and a loop that closes on arithmetic
+### `ordination_actionB/`, Mission in eight — and a loop that closes on arithmetic
 
-Six tracks, and they divide cleanly by how they behave in time. `footsteps` and `staff` are
+Eight tracks, and they divide cleanly by how they behave in time. `footsteps` and `staff` are
 **metrical**: a gait, and a pole planted on a count. `distant_dogs` is **intermittent**: nine
 barks in five groups. `rat_squeaks` and `rats_crossing` are **one event between them**, both
 firing in the same second once a lap. `night_city` is **continuous**: crickets, wind and
-distant town that never stop. The metrical pair is described first, then the others.
+distant town that never stop. And `oil_lamp` and `door_close` **do not loop at all** — both carry
+`"loop": false`, play once and stop. The metrical pair is
+described first, then the others.
 
 `footsteps_sfx_v01.ogg` and the staff (v01 then v02, below) are a pilgrim setting out: boots on stone at a
 walking pace with a staff planted every third step. Two **CC0** sources — Fission9's six
@@ -1863,6 +1865,76 @@ silence is now explained instead of open. **Worth keeping as a method note:** wh
 fails, run it against something known to be absent before concluding anything. If the control
 scores as well as the claim, the only finding is about the instrument.
 
+#### The door, the first cut made in this repository — and a licence that decided it
+
+`door_close_sfx_v01.ogg` is the one bed here that did not arrive from a DAW. The cut points,
+the placement and the fades were specified and performed in this repository with ffmpeg and
+numpy, which is why its `modifications` reads as a recipe: resample lazymonk's **CC0** church
+door from 44.1 to 48 kHz, take **7.600 to 13.600 s**, fade 5 ms at each end, attenuate 2.0 dB,
+lay it into 36 s of silence starting at **3.000 s**. It rebuilds byte-for-byte from those
+numbers, and the placed region correlates with the source region at **r = 0.9973** — Vorbis,
+not a difference in content.
+
+**The licence chose the source, not the sound.** InspectorJ's church door (freesound 339677)
+was the first candidate and does trace cleanly, as a 12% slow-down — which is a result worth
+keeping for its own sake, because it is the case where the control did its job instead of
+killing the claim. Straight correlation gave 0.11; sweeping slower speeds gave **r = 0.6573 at
+×0.88** with a clear peak either side of it, against a control ceiling of **0.405**. Real
+separation, unlike `rats_crossing` where the control won. It was rejected anyway: it is
+**Attribution 4.0**, and `ui/assets/gen_credits.py` builds the game's credits from
+`ui/assets/attribution.json` alone and cannot see this tree. Filing it would have created an
+obligation the shipped credits could not keep, and every licence here still reads
+`attributionRequired: false`.
+
+**Two fades, and only because the measurement asked.** Neither cut point sits on a zero
+crossing — 7.600 s lands on −47.4 dBFS, 13.600 s on −50.5 — but neither is a discontinuity
+either: against their own immediate neighbours the steps are **0.5×** and **1.4×** the largest
+nearby sample difference. Five milliseconds takes both to exactly zero, shorter than anything
+audible on a door, and the transient is untouched.
+
+**And two decibels of headroom, which is an exception to this tree's own rule and is earned.**
+Gain belongs in `gainDb`, not in the audio. But lazymonk's recording touches **0.00 dBFS inside
+this very cut** — two samples in one run, +0.09 dBTP before encoding — and *Vorbis overshoots a
+full-scale input*. That was an observation, not a prediction: the first build came back at
+**+0.21 dBTP** with a sample peak of 0.14 dBFS, a file that decodes above full scale and clips
+in anything that is not floating point, whatever its trim says. Two decibels lands it at
+**−1.89 dBTP** and the factor is on the record, so the cut stays reproducible. `gainDb` is
+still 0.0 and still means nobody has set a level.
+
+*A note for whoever levels Mission.* At −1.89 dBTP the door is the hottest bed in the tree, and
+it takes the whole action to **−1.36 dBTP** summed — against Build Roads' −5.22, which was
+already the tight one. Add the loudest cue filed and the worst alignment is **+3.45 dBTP**.
+The door is where the negative trim goes.
+
+*What sits just outside the window, in case it was not meant to.* The cut ends at 13.600 s and
+there is a **0.00 dBFS** event at **13.75 s**, 150 ms later — the loudest thing in that part of
+the source. If the intended sound was the latch rather than the swing, the window wants
+extending by about half a second.
+
+#### The lamp, and the same source kept honest this time
+
+`oil_lamp_sfx_v01.ogg` is Vrymaa's **CC0** candle-and-oil-lamp recording again — the second bed
+in the tree from that one upload, after `build_roads_actionA/oil_lamp_flame`. **They are
+different cuts and that was checked rather than assumed:** the flame begins at **+6.000 s**,
+this one at **+22.000 s**, nine of its ten matching windows sitting at that constant offset at
+r up to 0.8824, and probed against each other the two stems reach only **0.575** where the same
+cut would score near 1.
+
+**The interesting part is what this one did not do.** Vrymaa's recording is mono. The Build
+Roads flame was given a stereo field by delaying a copy 4 ms, which combs 21 dB at odd
+multiples of 125 Hz the instant anything folds it down — a width that is not in the recording
+and costs 21 dB to discover. This stem reads **+1.000000**, dual mono exactly — the two
+channels identical sample for sample: no width, and nothing to lose. One source, two beds, one
+widened and one left alone, and the honest one is the one that survives a mono fold. It is the
+only file in the tree whose channels are identical; `door_close`, filed the same day, reads
+**+0.999982**, which rounds to the same four decimals and is not the same claim.
+`staff_sfx_v01.ogg` held the distinction until it was replaced.
+
+**It is also the first bed here that does not loop.** `"loop": false` on the record, so the
+bench comes up with its box unticked and the board, when it plays beds at all, should fire it
+once. It is a lamp picked up on the way out, not an ambience, and at 44 events over 36 s with
+58.4% silence it would read as a repeating fidget if it came round every lap.
+
 #### The night town, where a wrong first reading was worth keeping
 
 `night_city_sfx_v01.ogg` is 36 s of Articulated Sounds' *Quiet Streets* from the **Sonniss
@@ -1915,8 +1987,11 @@ parts are a *floor* rather than silence the arithmetic does not apply and the fi
 something else again; no file here is that case yet.
 
 **Mission has no cue either.** `ordination actionA` is Ordain and has one; `actionB` does not.
-**Nineteen beds across four duty actions** now have nothing to be levelled against — eleven on
-Build Roads, one on each of Give Alms' two actions, and six here.
+**Twenty-one beds across four duty actions** now have nothing to be levelled against — eleven
+on Build Roads, one on each of Give Alms' two actions, and eight here. **And Mission is now
+the tightest action in the tree for headroom**, summing to **−1.36 dBTP** against Build Roads'
+−5.22: the door alone is −1.89. Add the loudest cue filed and the worst alignment is
+**+3.45 dBTP**. Whatever Mission's cue turns out to be, the door wants a negative trim first.
 
 ### Two levels, and why they are not one number
 
@@ -1998,6 +2073,22 @@ gainDb values the sum was measured from, and a test refuses the pair when they d
 without decoding anything, which is what lets the check live in a suite that does not own
 ffmpeg. `python3 ui/board_v2/sfx_lab/sfx_levels.py --groups --write` recomputes both. Moving a
 *group* level does not invalidate it; moving a *trim* does.
+
+**Whether a track loops is a field too, and absent means yes.** A record may carry
+`"loop": false`, the generator passes it to the bench, and the bench's **loop** column is
+ticked for everything else. Thirty-one of the thirty-three beds filed loop, which is why the field is
+written only when the answer is no — the same economy as `gainDb`, where silence means a
+number nobody has set. A one-shot plays once and stops: it is an event with a place in the
+scene rather than an ambience, and it is excluded from the repeat figure, since folding its
+length into the common multiple would describe a cycle that never comes round.
+
+*It also changed what "sounding" means on the bench, which is worth recording because the
+old definition was wrong in a way nothing could reveal.* The page used to read the request —
+which boxes are ticked, which action is running — and that was exactly true while every bed
+looped, because a looping track asked for is a looping track playing. A one-shot finishes
+with its box still ticked, so the request and the reality come apart, and the mix line, the
+progress window and the cycle all held onto a track that had stopped. The live set of audio
+nodes decides now. **A definition can be correct only because nothing has yet tested it.**
 
 **A track belongs to its action by folder, and nothing in a record says so.** It used to be by
 prefix — `allocation_wind` resolved to Allocation by dropping trailing words until something

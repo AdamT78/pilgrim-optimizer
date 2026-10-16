@@ -128,7 +128,7 @@ gusts. **Ungated for both classes**, so a bed and a cue are at least measured in
 That sentence stood here from four beds that were each one continuous recording, and it stopped
 being true the moment a duty action started taking **stems**. A stem is a layer of a scene —
 grain handled, coins counted, beads told, robes moving — and a layer of a scene is mostly
-silence waiting for the other layers. Measured across all thirty-one ambient tracks as they
+silence waiting for the other layers. Measured across all thirty-three ambient tracks as they
 stand:
 
 | track | ungated | gated | delta | blocks kept |
@@ -158,6 +158,8 @@ stand:
 | `ordination_actionB/distant_dogs` | −48.96 | −41.95 | −7.01 | 71 of 357 |
 | `ordination_actionB/rats_crossing` | −46.57 | −32.81 | −13.76 | 15 of 357 |
 | `ordination_actionB/rat_squeaks` | −48.62 | −34.82 | −13.80 | 15 of 357 |
+| `ordination_actionB/oil_lamp` | −39.24 | −34.04 | −5.20 | 106 of 357 |
+| `ordination_actionB/door_close` | −28.84 | −15.90 | −12.94 | 18 of 357 |
 | `clerical_actionA/rosary` | −46.71 | −39.55 | −7.16 | 67 of 347 |
 | `allocation_actionA/keys` | −35.04 | −27.22 | −7.82 | 47 of 282 |
 | `taxation_actionA/wheat` | −47.40 | −39.27 | −8.13 | 46 of 297 |
@@ -178,11 +180,12 @@ nothing through the six continuous recordings; −0.8 for `donate_building` and 
 with 13 holes in it, 22% silence); −3.4 to −4.2 for the barn `room`, `ox_cart_mechanics` and
 `gravel`; and 5 to 10 dB for the thirteen tracks that are a handful of placed events —
 `ox_breathing`, `barn_creaks`, `far_work`, `rammers`, `ox_cart_stones`, `rosary`, `keys`,
-`wheat`, `horse_snorts`, `staff`, `distant_dogs`, `coins` and `oil_lamp_rattle`. *(That list
+`wheat`, `horse_snorts`, `staff`, `distant_dogs`, `coins`, `oil_lamp_rattle` and Mission's
+`oil_lamp` at −5.20. *(That list
 said "eleven" while naming twelve for some weeks, which is the same class of fault as the bed
 counts and had no test behind it either.)* **And the scale now runs past 10 dB**, which it did
-not when this paragraph was written: `rats_crossing` and `rat_squeaks` read **−13.76 and
-−13.80**, on 15 of 357 blocks each. `oil_lamp_rattle` at 90.3% silence used to set the end of
+not when this paragraph was written: `rats_crossing`, `rat_squeaks` and `door_close` read
+**−13.76, −13.80 and −12.94**, on 15, 15 and 18 of 357 blocks. `oil_lamp_rattle` at 90.3% silence used to set the end of
 it; `rat_squeaks` at **98.2%** does now, and with the identity above that is all those two
 figures are saying — 10·log₁₀(357 ÷ 15) = 13.77.
 *Reading the delta is cheaper than reading the file*, and it is the number
@@ -214,8 +217,8 @@ every scrap of its energy is inside the blocks the gate keeps, and the delta red
 
 > **delta = 10 · log₁₀( all blocks ÷ surviving blocks )**
 
-Checked against all thirty-one beds, the prediction agrees with the measured delta to within
-**0.06 dB on twenty-nine of them**. The two outside it are `allocation_wind` at 0.19 dB, with
+Checked against all thirty-three beds, the prediction agrees with the measured delta to within
+**0.06 dB on thirty-one of them**. The two outside it are `allocation_wind` at 0.19 dB, with
 every one of its 167 blocks kept, and `taxation_actionA/room` at 0.061, which is the boundary
 rather than a counterexample. *The delta is a block count.* Nothing else.
 
@@ -550,11 +553,11 @@ Still open for ambient:
   headroom is the claim, render the sum: the files are on disk and it costs a minute.
 - **THE PER-FILE SPAN HAS STOPPED BEING THE RIGHT QUANTITY.** This bullet has tracked where
   individual beds land since there were two of them, and Build Roads being levelled on
-  2026-10-16 broke it: of the thirty-one ambient files, six now sit between −26.5 and
-  −45.5 dBTP and **twenty-five sit above −26.5**, the span running −5.9 to −35.4. Only
-  Mission's six are still untrimmed, the loudest of them `footsteps` at −10.4 dBTP, which is
-  unset rather than authored; the ends of the span are `rammers` at −5.9 and `wind` at −35.4,
-  both of them Build Roads tracks and both chosen. Read per file that looks alarming and it
+  2026-10-16 broke it: of the thirty-three ambient files, six now sit between −26.5 and
+  −45.5 dBTP and **twenty-seven sit above −26.5**, the span running −1.9 to −35.4. Only
+  Mission's eight are still untrimmed, the loudest of them now `door_close` at −1.9 dBTP, which is
+  unset rather than authored; the top of the span is now `ordination_actionB/door_close` at
+  −1.9, which is a door rather than a level anybody chose, and the bottom is `wind` at −35.4. Read per file that looks alarming and it
   is not: *tracks that sum have to be authored quieter per track than one track that plays
   alone*, and comparing one of Build Roads' eleven against a lone rain bed compares nothing.
   **The quantity that governs headroom is the sum of an action's own beds**, and the per-file

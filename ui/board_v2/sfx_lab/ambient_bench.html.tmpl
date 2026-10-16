@@ -31,6 +31,7 @@
  input.rt { width:108px; vertical-align:middle; margin:0 7px 0 0 }
  .rv { display:inline-block; min-width:46px; text-align:right; cursor:pointer }
  .chg { color:var(--hot) }
+ tr.once td:first-child { box-shadow:inset 3px 0 0 var(--dim) }
  .stale { color:var(--dim); font-style:italic }
  .ctl { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:14px 0 0 }
  .ctl label { color:var(--dim) }
@@ -57,7 +58,11 @@ voices in it sits forward of one without and no loudness measure scores that. Sa
 levels to a JSON file; load takes one back after this page is rebuilt. Every track also carries
 its own <b>trim</b> slider in the table above, which is the same number seen twice — move either
 and the other follows. The row one needs no selection, so it keeps working while a whole duty
-action plays, and clicking its dB figure puts the track back to the value on its record.</p>
+action plays, and clicking its dB figure puts the track back to the value on its record.
+The <b>loop</b> box beside it is ticked by default and means what every bed here does: it
+runs until something stops it. Untick it and the track plays once and stops — for a bed that
+is an event rather than an ambience. It can be switched while the track is playing, and a
+one-shot drops out of the mix line, the window and the repeat figure the moment it ends.</p>
 
 <div class="ctl">
   <button id="play" class="big">play</button>
@@ -184,6 +189,19 @@ function bed(f){ for (var i = 0; i < BEDS.length; i++) if (BEDS[i].file === f) r
 // WANT IS THE USER'S CHECKBOXES AND NOTHING ELSE. Play all does not write to it -- it clears
 // it -- so there is never a tick hiding under a running action waiting to come back.
 var WANT = {}, LAYERS = {};
+// WHETHER A TRACK LOOPS IS A PROPERTY OF THE TRACK, not of how it is being played. Ticked is
+// the default and means it loops, which is what every bed filed so far does; unticked means it
+// plays once and stops, for a bed that is an event rather than an ambience. The record can
+// carry `loop: false` and the generator passes it through, so the setting survives a rebuild
+// instead of having to be re-ticked every time -- the same arrangement `gainDb` has.
+var LOOPS = {};
+function loops(f){ return LOOPS[f] !== false; }
+// WHAT TO DO WHEN A ONE-SHOT RUNS OUT. The clock, the window and the mix line all read what is
+// sounding, and one of them has just stopped sounding, so they all have to be asked again.
+function afterEnd(e){
+  if (!anySounding()) lastPos = e;   // freeze the clock where it was, not at a stale reading
+  paintMix(); paintRows(); paintActions();
+}
 function wantsLayer(f){
   if (ALL) return actOf(f) === ALL;
   return !!WANT[f] && !(f === cur && playing);
@@ -191,8 +209,16 @@ function wantsLayer(f){
 function layerStart(f, atZero){
   if (LAYERS[f] || !bufs[f]) return;
   var b = bed(f), src2 = ctx.createBufferSource(), g = ctx.createGain();
-  src2.buffer = bufs[f]; src2.loop = true;
+  src2.buffer = bufs[f]; src2.loop = loops(f);
   src2.loopStart = 0; src2.loopEnd = b.seconds;   // the same pin the transport uses
+  // A ONE-SHOT HAS TO CLEAN UP AFTER ITSELF, because nothing else will come and ask. Without
+  // this the node stays in LAYERS after the sound has finished, anySounding() keeps reporting
+  // true and the clock runs on under silence.
+  src2.onended = function(){
+    if (!LAYERS[f] || LAYERS[f].src !== src2) return;
+    var e = elapsed();          // read the clock BEFORE the node leaves LAYERS, or it is gone
+    layerStop(f); afterEnd(e);
+  };
   g.gain.value = Math.pow(10, TRIMS[f] / 20);
   src2.connect(g); g.connect(busFor(f));
   // START AT THE TRANSPORT'S PHASE, NOT AT THIS FILE'S ZERO. It used to be start(0), which
@@ -226,9 +252,14 @@ function toggleLayer(f, on){
   if (!ctx) { init(function(){ syncLayers(); paintRows(); paintMode(); paintActions(); }); return; }
   syncLayers(); paintRows(); paintMode(); paintActions();
 }
+// WHAT IS ACTUALLY MAKING A NOISE, which is not the same as what has been asked for. It used
+// to read the request -- the ticked boxes, or every track of the running action -- and that was
+// true as long as every bed looped, because a looping track asked for is a looping track
+// sounding. A ONE-SHOT BREAKS THAT: it finishes, its node is gone, and the box stays ticked.
+// Reading the request there reported a bed sounding into silence and held the mix line, the
+// window and the cycle on a track that had stopped. LAYERS is the live set, so LAYERS decides.
 function sounding(){
-  if (ALL) return BEDS.filter(function(b){ return b.action === ALL; });
-  var out = BEDS.filter(function(b){ return wantsLayer(b.file); });
+  var out = BEDS.filter(function(b){ return !!LAYERS[b.file]; });
   if (playing && cur) { var c = bed(cur); if (c) out = out.concat([c]); }
   return out;
 }
@@ -246,7 +277,17 @@ function paintMix(){
     : on.length + (on.length === 1 ? " bed" : " beds") + " sounding" +
       (known ? ", together landing at <b>" + (10*Math.log10(tot)).toFixed(1) + "</b> LUFS" : "");
   var cyc = document.getElementById("cycle");
-  if (on.length < 2) { cyc.innerHTML = ""; return; }
+  // ONLY LOOPING TRACKS HAVE A CYCLE. A one-shot happens once and then is not part of any
+  // repeat, so folding its length into the common multiple would describe a pattern that
+  // never comes round.
+  var rep = on.filter(function(b){ return loops(b.file); });
+  var shots = on.length - rep.length;
+  if (rep.length < 2) {
+    cyc.innerHTML = shots ? " &middot; " + shots + (shots === 1 ? " one-shot" : " one-shots")
+                            + ", which do not repeat" : "";
+    return;
+  }
+  on = rep;
   var l = Math.round(on[0].seconds * 10), lock = false;
   for (var i = 1; i < on.length; i++) {
     var m = Math.round(on[i].seconds * 10);
@@ -254,13 +295,20 @@ function paintMix(){
   }
   var secs = l / 10, longest = Math.max.apply(null, on.map(function(b){ return b.seconds; }));
   lock = secs <= longest * 1.01;
-  cyc.innerHTML = " &middot; this combination repeats every " + secs.toFixed(1) + " s" +
-    (lock ? " <b style='color:var(--hot)'>— these lengths lock</b>" : "");
+  cyc.innerHTML = " &middot; the " + on.length + " looping tracks repeat every " +
+    secs.toFixed(1) + " s" +
+    (lock ? " <b style='color:var(--hot)'>— these lengths lock</b>" : "") +
+    (shots ? ", beside " + shots + (shots === 1 ? " one-shot" : " one-shots") : "");
 }
 function dur(){ var b = bed(cur); return b ? b.seconds : 1; }
 function cue(){ var b = bed(cur); return b && b.cue ? CUES[b.cue] : null; }
 
-BEDS.forEach(function(b){ TRIMS[b.file] = b.gainDb == null ? 0 : b.gainDb; });
+BEDS.forEach(function(b){
+  TRIMS[b.file] = b.gainDb == null ? 0 : b.gainDb;
+  // ABSENT MEANS LOOPING. Thirty-one beds are filed and every one of them loops, so the record
+  // only has to say something when the answer is no.
+  LOOPS[b.file] = b.loop !== false;
+});
 
 function b2ab(b64){
   var s = atob(b64), n = s.length, a = new Uint8Array(n);
@@ -308,7 +356,14 @@ function playFrom(off, seek){
   stopSrc();
   var b = bufs[cur]; if (!b) return;
   src = ctx.createBufferSource();
-  src.buffer = b; src.loop = true;
+  src.buffer = b; src.loop = loops(cur);
+  var mine = src;
+  src.onended = function(){
+    if (src !== mine) return;      // a newer source replaced this one; it has nothing to say
+    var e = elapsed();
+    playing = false; src = null;
+    paintTransport(); afterEnd(e);
+  };
   // PIN THE LOOP TO THE FILE'S TRUE LENGTH. Chrome's decodeAudioData hands back a few hundred
   // samples of Vorbis padding past the end -- 4 to 17 ms, near-silent on some files -- and a
   // raw loop pads every wrap with a dropout measuring 30 dB below the bed. loopEnd is in
@@ -418,6 +473,23 @@ function rowTrim(f, v){
   paintRowTrim(f);
   queueRepaint();
 }
+// `loop` IS SETTABLE ON A SOURCE THAT IS ALREADY RUNNING, so a track can be switched mid-play
+// without restarting it: untick and it finishes the pass it is on and stops, tick and it keeps
+// going. Nothing is torn down, which is what makes this usable while judging a mix.
+function toggleLoop(f, on){
+  LOOPS[f] = !!on;
+  if (LAYERS[f]) LAYERS[f].src.loop = !!on;
+  if (f === cur && src) src.loop = !!on;
+  paintRowLoop(f); paintMix(); paintSettings();
+}
+function paintRowLoop(f){
+  var b = bed(f); if (!b) return;
+  var e = document.getElementById("lp_" + b.id);
+  if (e && e.checked !== loops(f)) e.checked = loops(f);
+  var tr = document.querySelector("tr[data-f='" + f + "']");
+  if (tr) tr.classList.toggle("once", !loops(f));
+}
+function paintRowLoops(){ BEDS.forEach(function(b){ paintRowLoop(b.file); }); }
 function rowReset(f){
   var b = bed(f); if (!b) return;
   rowTrim(f, b.gainDb == null ? 0 : b.gainDb);
@@ -678,6 +750,7 @@ document.getElementById("save").onclick = function(){
       // the file would be silently 2x the level it described, and nothing would say so.
       var gd = groupDb(b.action);
       return {file: b.file, name: b.name, duty: b.duty, action: b.action,
+              loop: loops(b.file), recordLoop: b.loop !== false,
               trimDb: +t.toFixed(1), groupDb: +gd.toFixed(1),
               effectiveDb: +(t + gd).toFixed(1),
               recordGainDb: b.gainDb, integratedLufs: b.integrated,
@@ -707,7 +780,8 @@ document.getElementById("load").onchange = function(){
       var j = JSON.parse(r.result), n = 0, gn = 0;
       (j.beds || []).forEach(function(b){
         var k = b.file in TRIMS ? b.file : null;
-        if (k) { TRIMS[k] = b.trimDb; n++; }
+        if (k) { TRIMS[k] = b.trimDb; n++;
+                 if (typeof b.loop === 'boolean') LOOPS[k] = b.loop; }
       });
       // A FILE SAVED BEFORE THE GROUP LEVEL EXISTED HAS NO `groups`, and must still load. It
       // leaves the group levels alone rather than zeroing them, because absent is not the
@@ -720,10 +794,12 @@ document.getElementById("load").onchange = function(){
       // EVERY TRACK ALREADY SOUNDING TAKES ITS NEW TRIM TOO. setTrim only reaches the selected
       // bed, and under play all there is no selected bed and eleven layers -- loading a file
       // would have moved the numbers on the page and nothing in the air.
-      BEDS.forEach(function(b){ applyTrim(b.file); });
+      BEDS.forEach(function(b){ applyTrim(b.file);
+        if (LAYERS[b.file]) LAYERS[b.file].src.loop = loops(b.file); });
+      if (src) src.loop = loops(cur);
       document.getElementById("trim").value = TRIMS[cur];
       document.getElementById("grp").value = groupDb(curAction());
-      setTrim(); setGroup(); paintRowTrims(); paintRows(); paintMode(); paintActions();
+      setTrim(); setGroup(); paintRowTrims(); paintRowLoops(); paintRows(); paintMode(); paintActions();
       var extra = (j.beds || []).length - n;
       document.getElementById("loadnote").textContent = "restored " + n +
         (n === 1 ? " level" : " levels") + " and " + gn +
@@ -778,7 +854,7 @@ function tick(){
   // against each other is exactly the job you want doing while all eleven sound. A number
   // edited in place asks for no selection, so it stays live in every mode and breaks nothing.
   // `filed` beside it is the record's own gainDb and never moves: the anchor to come back to.
-  h.push("<table><tr><th class='l'>bed</th><th>layer</th><th class='l'>trim</th>" +
+  h.push("<table><tr><th class='l'>bed</th><th>layer</th><th>loop</th><th class='l'>trim</th>" +
          "<th class='l'>duty action</th><th>length</th>" +
          "<th>rate</th><th>ch</th><th>integrated</th><th>true peak</th><th>filed</th>" +
          "<th>lands</th><th>size</th></tr>");
@@ -789,6 +865,10 @@ function tick(){
       "<td><input type='checkbox' id='ly_" + b.id + "' onchange=\"toggleLayer('" + b.file +
         "', this.checked)\" title='keep this bed looping underneath whatever is selected — " +
         "ticking one while a duty action is playing stops that action'></td>" +
+      "<td><input type='checkbox' id='lp_" + b.id + "'" + (loops(b.file) ? " checked" : "") +
+        " onchange=\"toggleLoop('" + b.file + "', this.checked)\" " +
+        "title='ticked, the default, means this track loops; unticked it plays once and stops " +
+        "— for a bed that is an event rather than an ambience'></td>" +
       "<td class='l'><input type='range' class='rt' id='rt_" + b.id + "' min='" + TRIM_MIN +
         "' max='" + TRIM_MAX + "' " +
         "step='0.5' value='" + t0 + "' oninput=\"rowTrim('" + b.file + "', +this.value)\" " +
@@ -817,6 +897,6 @@ function tick(){
   BEDS.forEach(function(b){ if (!(b.action in GDB)) GDB[b.action] = (GROUPS[b.action] || {}).groupDb || 0; });
   var bs = document.getElementById("trim");
   bs.min = TRIM_MIN; bs.max = TRIM_MAX;   // the row sliders read the same two constants
-  pick(cur); paintRowTrims(); paintActions(); tick();
+  pick(cur); paintRowTrims(); paintRowLoops(); paintActions(); tick();
 })();
 </script>

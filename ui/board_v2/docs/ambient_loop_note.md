@@ -1,6 +1,6 @@
 # Cutting an ambient bed into a seamless loop
 
-**Status: thirty-one files under eight duty actions.** Three actions have one track each —
+**Status: thirty-three files under eight duty actions.** Three actions have one track each —
 `clerical_actionB/silversmith` (25 s, fire), `give_alms_actionA/alms` (25 s, rain) and
 `give_alms_actionB/donate_building` (32.5 s, a sheltered wind). Four have several.
 `build_roads_actionA/` holds eleven — `rammers`, `gravel`, `far_work`, `worker_footsteps`,
@@ -15,12 +15,14 @@ matched to it exactly). `allocation_actionA/` holds `footsteps`, `keys` and `woo
 (28.5 s, one mix in three stems) under `allocation_wind` (17 s, an independent loop).
 `taxation_actionA/` holds `wheat`, `coins` and `barn_creaks` (30 s stems, not yet wrapped)
 inside `room` (30 s, the background bed they were waiting for).
-`ordination_actionB/` holds six at 36 s, and they are the three kinds of loop this note knows
+`ordination_actionB/` holds eight at 36 s, and they are the three kinds of loop this note knows
 side by side: `footsteps` and `staff` are **metrical**, closing on arithmetic rather than a
 crossfade (section 12); `distant_dogs`, `rats_crossing` and `rat_squeaks` are
 **intermittent**, each closing because its wrap gap -- 10.32, 34.57 and 35.00 s -- is longer
 than any interior gap (section 13); and `night_city` is **wrapped**, arriving with a 2.0 s
-equal-power fold over its head. They are in `sfx/ambient/`, one folder per duty action since a
+equal-power fold over its head. `oil_lamp` and `door_close` are **outside this note entirely**:
+both carry `"loop": false` and play once, so they have no seam to join and nothing here
+applies to them. They are in `sfx/ambient/`, one folder per duty action since a
 fourth track made the filename the wrong place to say which action a bed belongs to, and
 `sfx_lab/generate_sound_bench.py` builds `generated/ambient_bench.html` to hear them looping
 under their own cues. The board itself still plays neither. This note is the method, worked out
@@ -506,7 +508,7 @@ sliding probe fails when the source is too thin, the event probe when its window
 
 ## 14. Not done
 
-- **The board plays no bed.** All thirty-one are filed and audible on the ambient bench;
+- **The board plays no bed.** All thirty-three are filed and audible on the ambient bench;
   `bundled_sfx()` still inlines only `tile.ogg` and `confirm.ogg`. This bullet has said "all
   five" since there were five, which is its own small lesson: a count in prose is a fact with
   no test behind it, and nine beds arrived before anyone noticed. The generator prints the
@@ -521,7 +523,7 @@ sliding probe fails when the source is too thin, the event probe when its window
   undecided, as is the fade-in on select, and what happens on deselect or re-select.
 - **The loop checker does not exist as a tool.** The band-match shoulder search, the N-lap
   render and the wrap-window percentile test have been written from scratch for each of the
-  thirty-one files. Three of them now have a settled shape and one of them, the percentile
+  thirty-three files. Three of them now have a settled shape and one of them, the percentile
   test, is the only check that works on a loop that arrives already baked — and none of the
   three applies to a stem that is not wrapped at all, which a good many of these are. None of
   the three can check a metrical loop either; see section 12.
