@@ -15,15 +15,23 @@
       letter-spacing:.05em }
  td.l,th.l { text-align:left }
  tr.sel td { background:#201c18 }
+ tr.run td { background:#17201a }
  button { font:inherit; color:var(--fg); background:#241f1b; border:1px solid var(--line);
           border-radius:3px; padding:4px 11px; cursor:pointer }
  button:hover { border-color:var(--hot) }
  button.on { background:var(--hot); border-color:var(--hot); color:#191511 }
+ button:disabled, input:disabled { opacity:.34; cursor:default }
+ button:disabled:hover { border-color:var(--line) }
  .bar { position:relative; height:28px; background:#1b1815; border:1px solid var(--line);
         border-radius:3px; max-width:1180px; margin:16px 0 8px; overflow:hidden }
  .xf { position:absolute; top:0; bottom:0; left:0; background:rgba(208,139,60,.22);
        border-right:1px solid var(--hot) }
  .pl { position:absolute; top:0; bottom:0; width:2px; background:var(--ok) }
+ .mk { position:absolute; top:0; bottom:0; width:1px; background:rgba(232,226,216,.20) }
+ input.rt { width:108px; vertical-align:middle; margin:0 7px 0 0 }
+ .rv { display:inline-block; min-width:46px; text-align:right; cursor:pointer }
+ .chg { color:var(--hot) }
+ .stale { color:var(--dim); font-style:italic }
  .ctl { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:14px 0 0 }
  .ctl label { color:var(--dim) }
  .big { font-size:13px; padding:7px 16px }
@@ -46,13 +54,17 @@ play — its filed trim times the select gain — so it is the reference you set
 Use your system volume if the whole thing is too loud. <b>A bed's level is a judgement, not a
 measurement:</b> a target was tried and falsified, because at equal measured loudness a bed with
 voices in it sits forward of one without and no loudness measure scores that. Save writes the
-levels to a JSON file; load takes one back after this page is rebuilt.</p>
+levels to a JSON file; load takes one back after this page is rebuilt. Every track also carries
+its own <b>trim</b> slider in the table above, which is the same number seen twice — move either
+and the other follows. The row one needs no selection, so it keeps working while a whole duty
+action plays, and clicking its dB figure puts the track back to the value on its record.</p>
 
 <div class="ctl">
   <button id="play" class="big">play</button>
   <button id="seam" class="big">jump to 2.5 s before the wrap</button>
   <span style="color:var(--dim)">lap <b id="lap">0</b></span>
   <span style="color:var(--dim)"><b id="pos">0.00</b> / <b id="dur">0</b> s</span>
+  <span style="color:var(--dim)">window set by <b id="win">&mdash;</b></span>
 </div>
 
 <div class="ctl">
@@ -67,6 +79,17 @@ levels to a JSON file; load takes one back after this page is rebuilt.</p>
 </div>
 
 <div class="ctl">
+  <button id="playall" class="big">play all of this duty action</button>
+  <label>duty action level <input id="grp" type="range" min="-40" max="12" step="0.5"
+         value="0" style="width:260px"></label>
+  <span id="grpdb" style="color:var(--hot)"></span>
+  <span style="color:var(--dim)">&rarr; the action sums to <b id="grpsum"></b> dBTP</span>
+  <button id="grpreset">reset the action</button>
+</div>
+
+<p class="note" id="modenote"></p>
+
+<div class="ctl">
   <button id="fire" class="big">fire the cue</button>
   <label><input id="rep" type="checkbox"> repeat every 6 s</label>
   <span id="cuenote" style="color:var(--dim)"></span>
@@ -74,19 +97,52 @@ levels to a JSON file; load takes one back after this page is rebuilt.</p>
 
 <p class="sub" style="color:var(--ok)"><span id="mix">nothing sounding</span><span id="cycle"
    style="color:var(--dim)"></span></p>
+<h2>Duty actions</h2>
+<p class="sub">Two levels, and they do different jobs. The <b>ambient level</b> above balances
+one bed against the others of its action; the <b>duty action level</b> here moves that whole
+action against the others, as one gain node every track of the action feeds — so it can never
+change the balance you set inside it. <b>Sums to</b> is the action's beds rendered together at
+their trims and measured, not their peaks added, which on an eleven-track action reads 14 dB
+high. <b>Play all</b> and the selection above are one choice and not two: starting an action
+clears the selection and the ticked boxes, and clicking a track name or ticking a box stops the
+action.</p>
+<div id="acts"></div>
 <p class="sub" id="settings" style="color:var(--ok)"></p>
 <p class="sub" id="loadnote" style="color:var(--dim)"></p>
 
 <div class="bar" id="bar">
   <div class="xf" id="xf"></div>
+  <div id="mk"></div>
   <div class="pl" id="pl" style="left:0"></div>
 </div>
+<p class="note">The bar runs the length of the <b>longest track sounding</b>, and the faint marks
+are where the shorter ones wrap inside it.</p>
 
 <script>
 var D = __DATA__;
 var BEDS = D.beds, CUES = D.cues;
 var ctx = null, bufs = {}, cueBufs = {}, src = null;
 var master = null, bedGain = null, repTimer = null, TRIMS = {};
+// TWO LEVELS. TRIMS[file] is a bed's balance against the others of its action; GDB[action] is
+// where that whole action sits. They are NOT added together into one number per track: the
+// group is a single gain node per action that every track of that action feeds, so it scales
+// all of them by exactly the same factor and CANNOT change the balance inside the action. Add
+// it into each track's gain instead and a clamp or a rounding anywhere pulls one track out of
+// line -- which is the one thing a master fader must never do.
+var GROUPS = D.groups || {}, GDB = {}, BUS = {};
+// THE FOLDER, NOT THE CUE. `cue` is the name of a clip and is null on the four actions
+// with beds and no cue filed; `action` is the folder and always exists.
+function actOf(f){ var b = bed(f); return b ? b.action : null; }
+function groupDb(a){ return a in GDB ? GDB[a] : 0; }
+// ONE SELECTION, NOT TWO. Either a track is selected -- the transport bed plus whatever boxes
+// are ticked beside it -- or a whole duty action is playing, and never both. ALL holds the
+// action while play all runs and is null the rest of the time, and every control reads it, so
+// there is no state in which a row is lit in the table above while eleven other tracks sound.
+// The earlier version lit the action's first row, which was a true statement about which trim
+// the slider would move and a false one about what you were hearing; a control that answers a
+// question nobody asked, in the place reserved for the one they did, is worse than no control.
+var ALL = null;
+function curAction(){ return ALL ? ALL : actOf(cur); }
 var cur = BEDS.length ? BEDS[0].file : null, playing = false;
 var startT = 0, startOff = 0, lastPos = 0;
 // A FIXED BOOST, NOT A CONTROL. Everything plays at board levels and the cues sit 20-odd dB
@@ -105,15 +161,20 @@ function bed(f){ for (var i = 0; i < BEDS.length; i++) if (BEDS[i].file === f) r
 // still plays, seeks and loops exactly as before, and a layer is an extra source that keeps
 // running underneath. One rule resolves the overlap -- THE TRANSPORT WINS, so a bed that is
 // selected and playing never also sounds as a layer, and can never be heard twice.
+// WANT IS THE USER'S CHECKBOXES AND NOTHING ELSE. Play all does not write to it -- it clears
+// it -- so there is never a tick hiding under a running action waiting to come back.
 var WANT = {}, LAYERS = {};
-function wantsLayer(f){ return !!WANT[f] && !(f === cur && playing); }
-function layerStart(f){
+function wantsLayer(f){
+  if (ALL) return actOf(f) === ALL;
+  return !!WANT[f] && !(f === cur && playing);
+}
+function layerStart(f, atZero){
   if (LAYERS[f] || !bufs[f]) return;
   var b = bed(f), src2 = ctx.createBufferSource(), g = ctx.createGain();
   src2.buffer = bufs[f]; src2.loop = true;
   src2.loopStart = 0; src2.loopEnd = b.seconds;   // the same pin the transport uses
   g.gain.value = Math.pow(10, TRIMS[f] / 20);
-  src2.connect(g); g.connect(master);
+  src2.connect(g); g.connect(busFor(f));
   // START AT THE TRANSPORT'S PHASE, NOT AT THIS FILE'S ZERO. It used to be start(0), which
   // begins the layer at its own beginning whenever the box is ticked. For two independent
   // recordings that is arbitrary either way -- Allocation's 17 s howl and 28.5 s queue are
@@ -121,7 +182,10 @@ function layerStart(f){
   // the same 30 s split three ways, with the coin placed to land where it lands, and ticking
   // one on mid-play would put it at a random offset against the others for the rest of the
   // session. Same length plus same phase is all the lock they need.
-  src2.start(0, elapsed() % b.seconds);
+  // PLAY-ALL STARTS EVERY TRACK AT ITS OWN ZERO so the mix is the same every time the button
+  // is pressed and a balance can be judged twice. Ticking a layer on by hand still joins at
+  // the transport's phase, which is what keeps stems of one mix in step mid-play.
+  src2.start(0, atZero ? 0 : (elapsed() % b.seconds));
   LAYERS[f] = {src: src2, gain: g};
 }
 function layerStop(f){
@@ -135,11 +199,15 @@ function syncLayers(){
   paintMix();
 }
 function toggleLayer(f, on){
+  // A BOX IS AN INDIVIDUAL TRACK, so ticking one leaves play all for the same reason clicking a
+  // row does. The action's layers go, the clock restarts, and what sounds is the boxes.
+  if (ALL) exitAll();
   WANT[f] = on;
-  if (!ctx) { init(function(){ syncLayers(); }); return; }
-  syncLayers();
+  if (!ctx) { init(function(){ syncLayers(); paintRows(); paintMode(); paintActions(); }); return; }
+  syncLayers(); paintRows(); paintMode(); paintActions();
 }
 function sounding(){
+  if (ALL) return BEDS.filter(function(b){ return b.action === ALL; });
   var out = BEDS.filter(function(b){ return wantsLayer(b.file); });
   if (playing && cur) { var c = bed(cur); if (c) out = out.concat([c]); }
   return out;
@@ -184,8 +252,12 @@ function init(cb){
   ctx = new (window.AudioContext || window.webkitAudioContext)();
   master = ctx.createGain(); master.gain.value = Math.pow(10, MONITOR_DB / 20);
   master.connect(ctx.destination);
-  bedGain = ctx.createGain(); bedGain.connect(master);
-  setTrim();
+  Object.keys(GROUPS).forEach(function(a){
+    var g = ctx.createGain(); g.gain.value = Math.pow(10, groupDb(a) / 20);
+    g.connect(master); BUS[a] = g;
+  });
+  bedGain = ctx.createGain(); routeBed();
+  setTrim(); setGroup();
   var ck = Object.keys(CUES), left = BEDS.length + ck.length;
   if (!left) { cb(); return; }
   BEDS.forEach(function(b){
@@ -200,7 +272,19 @@ function init(cb){
   });
 }
 function stopSrc(){ if (src) { try { src.stop(); } catch (e) {} src.disconnect(); src = null; } }
-function playFrom(off){
+function paintTransport(){
+  var p = document.getElementById("play");
+  p.textContent = playing ? "stop" : "play";
+  p.classList.toggle("on", playing);
+}
+function rephaseLayers(){
+  // A SEEK MOVES THE CLOCK AND EVERYTHING UNDER IT MOVES WITH IT, or the one number stops
+  // describing the mix. Restarting is how a layer is re-phased: it joins at elapsed() % its own
+  // length, which is where the clock now says it should be.
+  Object.keys(LAYERS).forEach(layerStop);
+  syncLayers();
+}
+function playFrom(off, seek){
   stopSrc();
   var b = bufs[cur]; if (!b) return;
   src = ctx.createBufferSource();
@@ -211,21 +295,40 @@ function playFrom(off){
   // seconds, which matters because the AudioContext runs at the device's rate, not the file's.
   src.loopStart = 0; src.loopEnd = dur();
   src.connect(bedGain);
-  startOff = off % dur(); startT = ctx.currentTime;
-  src.start(0, startOff);
+  // THE CLOCK KEEPS THE WHOLE OFFSET AND THE FILE GETS IT MODULO ITS OWN LENGTH. Resuming with
+  // layers already running hands back the clock's own reading, which can be past this bed's
+  // length; folding it into startOff would jump the clock and silently de-phase them.
+  startOff = off; startT = ctx.currentTime;
+  src.start(0, off % dur());
   playing = true;
-  document.getElementById("play").textContent = "stop";
-  document.getElementById("play").classList.add("on");
+  paintTransport();
+  if (seek) rephaseLayers();
   syncLayers();   // the transport has taken this bed over; drop its layer copy if it had one
 }
 function stopAll(){
-  lastPos = posNow(); stopSrc(); playing = false;
-  document.getElementById("play").textContent = "play";
-  document.getElementById("play").classList.remove("on");
+  lastPos = elapsed(); stopSrc(); playing = false;
+  paintTransport();
   syncLayers();   // handing back: a bed still ticked as a layer resumes underneath
 }
-function elapsed(){ return playing ? (ctx.currentTime - startT) + startOff : lastPos; }
-function posNow(){ return elapsed() % dur(); }
+// ONE CLOCK, AND EVERY SOUNDING TRACK IS AT elapsed() % ITS OWN LENGTH. The transport starts at
+// startOff and a layer joins at elapsed() % its length, and that identity survives every later
+// wrap, so one number gives the phase of the whole mix. It has to run whenever ANYTHING sounds
+// and not only when the transport does: play all runs eleven layers and no transport at all,
+// and the old clock read `playing` alone, froze at the last stop, and that is why the bar stood
+// still through the one case it was most wanted for.
+function anySounding(){ return playing || Object.keys(LAYERS).length > 0; }
+function elapsed(){ return anySounding() ? (ctx.currentTime - startT) + startOff : lastPos; }
+// THE WINDOW IS THE LONGEST THING SOUNDING, not the selected bed. With tracks of different
+// lengths mixed together, "how much is left" has one honest answer -- when the longest of them
+// comes round again. The shorter ones have wrapped already, several times over in places, and
+// that is the point of mixing them rather than a fault; the marks in the bar say where.
+function winBed(){
+  var on = sounding(), best = null;
+  on.forEach(function(b){ if (!best || b.seconds > best.seconds) best = b; });
+  return best || bed(cur);
+}
+function winLen(){ var b = winBed(); return b && b.seconds > 0 ? b.seconds : 1; }
+function posNow(){ return elapsed() % winLen(); }
 
 function fireCue(){
   var c = cue(); if (!c || !ctx || !cueBufs[bed(cur).cue]) return;
@@ -233,6 +336,39 @@ function fireCue(){
   s.buffer = cueBufs[bed(cur).cue];
   g.gain.value = Math.pow(10, (c.gainDb || 0) / 20) * c.role;
   s.connect(g); g.connect(master); s.start(0);
+}
+function busFor(f){ var a = actOf(f); return (a && BUS[a]) ? BUS[a] : master; }
+function routeBed(){
+  if (!bedGain) return;
+  try { bedGain.disconnect(); } catch (e) {}
+  bedGain.connect(busFor(cur));
+}
+function setGroup(){
+  // THE ACTION THAT IS SOUNDING, not the action of an invisible pointer. While play all runs
+  // nothing is selected, and this slider is the one control that still has an obvious subject.
+  var a = curAction();
+  var v = +document.getElementById("grp").value;
+  if (a) GDB[a] = v;
+  document.getElementById("grpdb").textContent =
+      (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(1) + " dB";
+  var g = a ? GROUPS[a] : null;
+  var sum = (g && g.summedTruePeakDbtp != null) ? g.summedTruePeakDbtp + v : null;
+  // THE SUM SCALES EXACTLY WITH THE BUS, so one rendered figure plus the group level is the
+  // true answer rather than a bound. Adding the tracks' individual peaks instead reads 14 dB
+  // high on Build Roads, which is why that number is not used here.
+  document.getElementById("grpsum").innerHTML = sum == null ? "&mdash;"
+      : (sum >= 0 ? "+" : "−") + Math.abs(sum).toFixed(2) +
+        (sum > -1 ? " <b style='color:var(--hot)'>over the cue ceiling</b>" : "");
+  if (a && BUS[a]) BUS[a].gain.value = Math.pow(10, v / 20);
+  paintSettings();
+}
+// ONE PLACE WHERE A TRIM REACHES THE AUDIO, whichever control moved it. A track can be sounding
+// through the transport, through a layer, or through neither, and before this there were two
+// copies of the rule, one of which was about to become three.
+function applyTrim(f){
+  var g = Math.pow(10, TRIMS[f] / 20);
+  if (LAYERS[f]) LAYERS[f].gain.gain.value = g;
+  if (f === cur && bedGain) bedGain.gain.value = g;
 }
 function setTrim(){
   var t = +document.getElementById("trim").value;
@@ -242,10 +378,52 @@ function setTrim(){
   var b = bed(cur), lands = b && b.integrated != null ? b.integrated + t : null;
   document.getElementById("lands").innerHTML = lands == null ? "&mdash;"
       : (lands < 0 ? "−" : "") + Math.abs(lands).toFixed(1);
-  if (bedGain) bedGain.gain.value = Math.pow(10, t / 20);
-  if (LAYERS[cur]) LAYERS[cur].gain.gain.value = Math.pow(10, t / 20);
+  applyTrim(cur); paintRowTrim(cur);
   paintSettings(); paintMix();
 }
+// THE TWO CONTROLS ARE ONE NUMBER SEEN TWICE, so each writes TRIMS and then repaints the other.
+// They are not two settings to reconcile: whichever you touch, the row and the big slider read
+// the same afterwards, and nothing is stored in a widget's value.
+function rowTrim(f, v){
+  TRIMS[f] = v;
+  applyTrim(f);
+  if (f === cur) {
+    document.getElementById("trim").value = v;
+    document.getElementById("trimdb").textContent =
+        (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(1) + " dB";
+    var b = bed(cur), l = b && b.integrated != null ? b.integrated + v : null;
+    document.getElementById("lands").innerHTML = l == null ? "&mdash;"
+        : (l < 0 ? "−" : "") + Math.abs(l).toFixed(1);
+  }
+  paintRowTrim(f);
+  queueRepaint();
+}
+function rowReset(f){
+  var b = bed(f); if (!b) return;
+  rowTrim(f, b.gainDb == null ? 0 : b.gainDb);
+}
+// REPAINTS ARE COALESCED TO ONE A FRAME. Dragging a row slider fires on every pixel, and the
+// settings line and the duty-action table are both full innerHTML rebuilds; the audio and the
+// row's own readout are done immediately, and the rest catches up at the next frame.
+var repaintQ = 0;
+function queueRepaint(){
+  if (repaintQ) return;
+  repaintQ = requestAnimationFrame(function(){ repaintQ = 0; paintSettings(); paintMix(); });
+}
+function paintRowTrim(f){
+  var b = bed(f); if (!b) return;
+  var t = TRIMS[f], filed = b.gainDb == null ? 0 : b.gainDb;
+  var s = document.getElementById("rt_" + b.id);
+  if (s && +s.value !== t) s.value = t;
+  var v = document.getElementById("rv_" + b.id);
+  if (v) {
+    v.textContent = (t >= 0 ? "+" : "−") + Math.abs(t).toFixed(1);
+    v.className = "rv" + (Math.abs(t - filed) > 0.01 ? " chg" : "");
+  }
+  var l = document.getElementById("rl_" + b.id);
+  if (l) l.innerHTML = b.integrated == null ? "&mdash;" : (b.integrated + t).toFixed(1);
+}
+function paintRowTrims(){ BEDS.forEach(function(b){ paintRowTrim(b.file); }); }
 function paintSettings(){
   document.getElementById("settings").innerHTML = "levels &mdash; " + BEDS.map(function(b){
     var t = TRIMS[b.file];
@@ -253,6 +431,7 @@ function paintSettings(){
       (b.integrated == null ? "" : " (" + (b.integrated + t).toFixed(1) + " LUFS)") +
       (Math.abs(t - (b.gainDb == null ? 0 : b.gainDb)) > 0.01 ? " <b>changed</b>" : "");
   }).join(" &middot; ");
+  paintActions();
 }
 function paintCue(){
   var c = cue();
@@ -265,24 +444,124 @@ function paintCue(){
     : "this bed's duty action has no cue filed, so there is nothing to set it against";
 }
 function pick(f){
-  var p = playing ? posNow() : lastPos;
-  cur = f; lastPos = p % dur();
-  document.querySelectorAll("tr[data-f]").forEach(function(tr){
-    tr.classList.toggle("sel", tr.getAttribute("data-f") === f); });
-  document.querySelectorAll("button[data-f]").forEach(function(b){
-    b.classList.toggle("on", b.getAttribute("data-f") === f); });
-  if (playing) playFrom(lastPos);
+  // SELECTING A TRACK LEAVES PLAY ALL, it does not join it. The action's layers go, and what is
+  // left sounding is this track plus whatever boxes are ticked -- which, straight after a play
+  // all, is none of them, because play all cleared them on the way in. Picking from a running
+  // action starts this track playing rather than selecting it silently: the page was making
+  // sound a moment ago and going quiet on a click would read as a fault.
+  var wasAll = !!ALL, e = elapsed();
+  if (wasAll) { exitAll(); e = 0; }
+  cur = f;
+  routeBed();
   document.getElementById("trim").value = TRIMS[cur];
-  setTrim(); paintCue(); syncLayers();
+  document.getElementById("grp").value = groupDb(curAction());
+  if (wasAll) playFrom(0, true);
+  else if (playing) playFrom(e);
+  setTrim(); setGroup(); paintCue(); syncLayers();
+  paintRows(); paintMode(); paintActions();
+}
+function exitAll(){
+  if (!ALL) return;
+  ALL = null;
+  Object.keys(LAYERS).forEach(layerStop);
+  startOff = 0; lastPos = 0; if (ctx) startT = ctx.currentTime;
+}
+function playAll(a){
+  if (ALL === a) {   // the lit button is the way out
+    exitAll(); paintRows(); paintMode(); paintActions(); paintMix(); return;
+  }
+  // THE TRANSPORT AND THE TICKED BOXES BOTH GO. Play all is the other selection and not a layer
+  // on top of this one. Leaving the transport running would put one track at its phase while
+  // the rest start at zero -- the mix would differ every time the button was pressed, and a
+  // balance you cannot hear twice is not a balance. Clearing the boxes rather than remembering
+  // them is the same rule seen from the other side: nothing comes back from underneath when the
+  // action stops, because nothing was hidden under it.
+  init(function(){
+    stopSrc(); playing = false; paintTransport();
+    Object.keys(LAYERS).forEach(layerStop);
+    WANT = {}; clearBoxes();
+    ALL = a;
+    startOff = 0; lastPos = 0; startT = ctx.currentTime;
+    BEDS.forEach(function(b){ if (b.action === a) layerStart(b.file, true); });
+    document.getElementById("grp").value = groupDb(a);
+    setGroup(); paintRows(); paintMode(); paintActions(); paintMix();
+  });
+}
+function clearBoxes(){
+  BEDS.forEach(function(b){
+    var e = document.getElementById("ly_" + b.id); if (e) e.checked = false; });
+}
+function paintRows(){
+  document.querySelectorAll("tr[data-f]").forEach(function(tr){
+    var f = tr.getAttribute("data-f");
+    tr.classList.toggle("sel", !ALL && f === cur);
+    tr.classList.toggle("run", !!ALL && actOf(f) === ALL);
+  });
+  document.querySelectorAll("button[data-f]").forEach(function(b){
+    b.classList.toggle("on", !ALL && b.getAttribute("data-f") === cur); });
+}
+function paintMode(){
+  var off = !!ALL;
+  ["trim", "reset", "play", "seam", "fire", "rep"].forEach(function(id){
+    var e = document.getElementById(id); if (e) e.disabled = off; });
+  var pa = document.getElementById("playall");
+  pa.textContent = off ? "stop playing all" : "play all of this duty action";
+  pa.classList.toggle("on", off);
+  var g = off ? (GROUPS[ALL] || {}) : null;
+  document.getElementById("modenote").innerHTML = !off ? "" :
+    "<b style='color:var(--ok)'>" + (g.duty || ALL) + "</b> is playing, all " + (g.tracks || "") +
+    " tracks of it, so no single track is selected and the controls that need one are off. " +
+    "Balance them with the <b>trim</b> column in the table above, which needs no selection and " +
+    "stays live; the duty action level here still moves the whole action. Click any " +
+    "track&rsquo;s name, or tick any box, to leave and go back to one track at a time.";
+}
+function paintActions(){
+  var acts = Object.keys(GROUPS).sort();
+  document.getElementById("acts").innerHTML =
+    "<table><tr><th class='l'>duty action</th><th>tracks</th><th></th><th>group</th>" +
+    "<th>sums to</th></tr>" + acts.map(function(a){
+      var g = GROUPS[a], v = groupDb(a);
+      var sum = g.summedTruePeakDbtp == null ? null : g.summedTruePeakDbtp + v;
+      // THE SUM WAS RENDERED AT THE FILED TRIMS AND SAYS SO WHEN THEY MOVE. It is a measurement
+      // of eleven files mixed together, not a figure this page can recompute -- adding their
+      // peaks reads 14 dB high. Move a trim and it is a measurement of something else; the only
+      // honest thing the page can do is stop presenting it as current.
+      var dirty = BEDS.some(function(b){
+        return b.action === a &&
+               Math.abs(TRIMS[b.file] - (b.gainDb == null ? 0 : b.gainDb)) > 0.01; });
+      var here = (a === ALL);
+      return "<tr" + (a === curAction() ? (here ? " class='run'" : " class='sel'") : "") +
+        "><td class='l'>" + (g.duty || a) + "</td><td>" + g.tracks + "</td>" +
+        "<td><button onclick=\"playAll('" + a + "')\"" +
+          (here ? " class='on'" : "") + ">" + (here ? "stop" : "play all") + "</button></td>" +
+        "<td>" + (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(1) +
+          (Math.abs(v - (g.groupDb || 0)) > 0.01 ? " <b>changed</b>" : "") + "</td>" +
+        "<td" + (sum != null && sum > -1 && !dirty ? " style='color:var(--hot)'" : "") + ">" +
+          (sum == null ? "&mdash;"
+           : dirty ? "<span class='stale'>" + sum.toFixed(2) + " at the filed trims</span>"
+           : sum.toFixed(2) + " dBTP") + "</td></tr>";
+    }).join("") + "</table>";
 }
 document.getElementById("play").onclick = function(){
   if (playing) { stopAll(); return; }
-  init(function(){ playFrom(lastPos); });
+  // RESUME ONTO THE RUNNING CLOCK if layers are already sounding, rather than onto the stale
+  // reading taken when the transport last stopped -- which would jump the clock out from under
+  // them and de-phase every one.
+  init(function(){ playFrom(anySounding() ? elapsed() : lastPos); });
 };
 document.getElementById("seam").onclick = function(){
-  init(function(){ playFrom(Math.max(0, dur() - 2.5)); });
+  init(function(){ playFrom(Math.max(0, dur() - 2.5), true); });
 };
 document.getElementById("trim").oninput = setTrim;
+document.getElementById("grp").oninput = setGroup;
+document.getElementById("playall").onclick = function(){
+  if (ALL) { playAll(ALL); return; }   // playAll toggles when handed the action already running
+  var a = actOf(cur); if (a) playAll(a);
+};
+document.getElementById("grpreset").onclick = function(){
+  var a = curAction(); if (!a) return;
+  document.getElementById("grp").value = GROUPS[a].groupDb || 0; setGroup(); paintActions();
+};
 document.getElementById("reset").onclick = function(){
   var b = bed(cur);
   document.getElementById("trim").value = b.gainDb == null ? 0 : b.gainDb; setTrim();
@@ -299,11 +578,25 @@ document.getElementById("save").onclick = function(){
   var out = {savedAt: new Date().toISOString(), page: "ambient_bench", monitorDb: MONITOR_DB,
     beds: BEDS.map(function(b){
       var t = TRIMS[b.file];
-      return {file: b.file, name: b.name, duty: b.duty, trimDb: +t.toFixed(1),
+      // trimDb IS THE TRACK'S OWN NUMBER AND NEVER THE SUM. The group level is saved once
+      // per action below. Write the total here and a reload would apply the group twice --
+      // the file would be silently 2x the level it described, and nothing would say so.
+      var gd = groupDb(b.action);
+      return {file: b.file, name: b.name, duty: b.duty, action: b.action,
+              trimDb: +t.toFixed(1), groupDb: +gd.toFixed(1),
+              effectiveDb: +(t + gd).toFixed(1),
               recordGainDb: b.gainDb, integratedLufs: b.integrated,
-              landsAtLufs: b.integrated == null ? null : +(b.integrated + t).toFixed(2),
+              landsAtLufs: b.integrated == null ? null : +(b.integrated + t + gd).toFixed(2),
               truePeakDbtp: b.tp,
-              truePeakAfterTrimDbtp: b.tp == null ? null : +(b.tp + t).toFixed(2)};
+              truePeakAfterTrimDbtp: b.tp == null ? null : +(b.tp + t + gd).toFixed(2)};
+    }),
+    groups: Object.keys(GROUPS).sort().map(function(a){
+      var g = GROUPS[a], v = groupDb(a);
+      return {action: a, duty: g.duty, tracks: g.tracks, groupDb: +v.toFixed(1),
+              recordGroupDb: g.groupDb,
+              summedTruePeakDbtp: g.summedTruePeakDbtp,
+              summedAfterGroupDbtp: g.summedTruePeakDbtp == null ? null
+                                    : +(g.summedTruePeakDbtp + v).toFixed(2)};
     })};
   var blob = new Blob([JSON.stringify(out, null, 1)], {type: "application/json"});
   var u = URL.createObjectURL(blob), a = document.createElement("a");
@@ -316,29 +609,64 @@ document.getElementById("load").onchange = function(){
   var r = new FileReader();
   r.onload = function(){
     try {
-      var j = JSON.parse(r.result), n = 0;
+      var j = JSON.parse(r.result), n = 0, gn = 0;
       (j.beds || []).forEach(function(b){
         var k = b.file in TRIMS ? b.file : null;
         if (k) { TRIMS[k] = b.trimDb; n++; }
       });
-      document.getElementById("trim").value = TRIMS[cur]; setTrim();
+      // A FILE SAVED BEFORE THE GROUP LEVEL EXISTED HAS NO `groups`, and must still load. It
+      // leaves the group levels alone rather than zeroing them, because absent is not the
+      // same as zero and silently flattening an action is worse than ignoring an old file.
+      (j.groups || []).forEach(function(g){
+        if (g.action in GROUPS) { GDB[g.action] = g.groupDb; gn++; }
+      });
+      Object.keys(BUS).forEach(function(a){
+        BUS[a].gain.value = Math.pow(10, groupDb(a) / 20); });
+      // EVERY TRACK ALREADY SOUNDING TAKES ITS NEW TRIM TOO. setTrim only reaches the selected
+      // bed, and under play all there is no selected bed and eleven layers -- loading a file
+      // would have moved the numbers on the page and nothing in the air.
+      BEDS.forEach(function(b){ applyTrim(b.file); });
+      document.getElementById("trim").value = TRIMS[cur];
+      document.getElementById("grp").value = groupDb(curAction());
+      setTrim(); setGroup(); paintRowTrims(); paintRows(); paintMode(); paintActions();
       var extra = (j.beds || []).length - n;
       document.getElementById("loadnote").textContent = "restored " + n +
-        (n === 1 ? " setting" : " settings") + " from " + f.name +
-        (extra > 0 ? " (" + extra + " in the file are not on this page)" : "");
+        (n === 1 ? " level" : " levels") + " and " + gn +
+        (gn === 1 ? " duty action" : " duty actions") + " from " + f.name +
+        (extra > 0 ? " (" + extra + " in the file are not on this page)" : "") +
+        (j.groups ? "" : " — no group levels in that file, the ones here are unchanged");
     } catch (e) {
       document.getElementById("loadnote").textContent = "could not read " + f.name;
     }
   };
   r.readAsText(f);
 };
+var markSig = "";
+function paintMarks(d){
+  // REBUILT ONLY WHEN THE SET CHANGES, not sixty times a second. The signature is the window
+  // length and the files in it, which is exactly what the marks depend on.
+  var on = sounding();
+  var sig = d.toFixed(3) + "|" + on.map(function(b){ return b.file; }).sort().join(",");
+  if (sig === markSig) return;
+  markSig = sig;
+  var h = [];
+  on.forEach(function(b){
+    if (!(b.seconds > 0.05) || b.seconds >= d - 0.001) return;
+    if (d / b.seconds > 200) return;
+    for (var t = b.seconds; t < d - 0.001; t += b.seconds)
+      h.push("<div class='mk' style='left:" + (100 * t / d).toFixed(3) + "%'></div>");
+  });
+  document.getElementById("mk").innerHTML = h.join("");
+}
 function tick(){
-  var d = dur(), p = posNow();
+  var wb = winBed(), d = winLen(), p = elapsed() % d;
   document.getElementById("pos").textContent = p.toFixed(2);
-  document.getElementById("dur").textContent = d.toFixed(0);
+  document.getElementById("dur").textContent = d.toFixed(1);
+  document.getElementById("win").textContent = wb ? wb.name : "—";
   document.getElementById("lap").textContent = Math.floor(elapsed() / d);
   document.getElementById("pl").style.left = (100 * p / d) + "%";
   document.getElementById("xf").style.width = (100 * 1.5 / d) + "%";
+  paintMarks(d);
   requestAnimationFrame(tick);
 }
 
@@ -349,14 +677,29 @@ function tick(){
     document.getElementById("rows").innerHTML = h.join("");
     return;
   }
-  h.push("<table><tr><th class='l'>bed</th><th>layer</th><th class='l'>duty action</th><th>length</th>" +
-         "<th>rate</th><th>ch</th><th>integrated</th><th>true peak</th><th>gainDb</th>" +
+  // THE TRIM COLUMN IS THE ONE CONTROL THAT NEEDS NO SELECTION, which is the whole reason it
+  // exists. Selecting a track and playing a whole duty action are one choice and not two, so
+  // the big slider above has no subject while an action plays -- and balancing eleven tracks
+  // against each other is exactly the job you want doing while all eleven sound. A number
+  // edited in place asks for no selection, so it stays live in every mode and breaks nothing.
+  // `filed` beside it is the record's own gainDb and never moves: the anchor to come back to.
+  h.push("<table><tr><th class='l'>bed</th><th>layer</th><th class='l'>trim</th>" +
+         "<th class='l'>duty action</th><th>length</th>" +
+         "<th>rate</th><th>ch</th><th>integrated</th><th>true peak</th><th>filed</th>" +
          "<th>lands</th><th>size</th></tr>");
   BEDS.forEach(function(b){
+    var t0 = b.gainDb == null ? 0 : b.gainDb;
     h.push("<tr data-f='" + b.file + "'><td class='l'><button data-f='" + b.file +
       "' onclick=\"pick('" + b.file + "')\">" + b.name + "</button></td>" +
       "<td><input type='checkbox' id='ly_" + b.id + "' onchange=\"toggleLayer('" + b.file +
-        "', this.checked)\" title='keep this bed looping underneath whatever is selected'></td>" +
+        "', this.checked)\" title='keep this bed looping underneath whatever is selected — " +
+        "ticking one while a duty action is playing stops that action'></td>" +
+      "<td class='l'><input type='range' class='rt' id='rt_" + b.id + "' min='-40' max='6' " +
+        "step='0.5' value='" + t0 + "' oninput=\"rowTrim('" + b.file + "', +this.value)\" " +
+        "title='this track&#39;s own level — it moves nothing else, and stays live while a " +
+        "whole duty action is playing'>" +
+        "<span class='rv' id='rv_" + b.id + "' onclick=\"rowReset('" + b.file + "')\" " +
+        "title='click to restore the filed value'></span></td>" +
       "<td class='l' style='color:var(--dim)'>" + (b.duty || "&mdash;") + "</td>" +
       "<td>" + (b.ms / 1000).toFixed(0) + " s</td><td>" + b.sr + "</td><td>" +
       (b.ch === 1 ? "mono" : b.ch + " ch") + "</td>" +
@@ -364,8 +707,10 @@ function tick(){
       "<td>" + (b.tp == null ? "&mdash;" : b.tp.toFixed(2)) + "</td>" +
       "<td>" + (b.gainDb == null ? "<span class=gap>none</span>"
                 : (b.gainDb > 0 ? "+" : "−") + Math.abs(b.gainDb).toFixed(1)) + "</td>" +
-      "<td>" + (b.integrated == null || b.gainDb == null ? "&mdash;"
-                : (b.integrated + b.gainDb).toFixed(1)) + "</td>" +
+      // LANDS FOLLOWS THE LIVE TRIM, not the filed one. It is the only number on the row that
+      // answers "where is it now", and a stale one beside a slider you are dragging is worse
+      // than none -- it would be read as the answer.
+      "<td id='rl_" + b.id + "'>&mdash;</td>" +
       "<td>" + Math.round(b.bytes / 1024) + " KB</td></tr>");
   });
   h.push("</table>");
@@ -373,6 +718,7 @@ function tick(){
     h.push("<p class='sub gap'>" + m + " has no bed</p>");
   });
   document.getElementById("rows").innerHTML = h.join("");
-  pick(cur); tick();
+  BEDS.forEach(function(b){ if (!(b.action in GDB)) GDB[b.action] = (GROUPS[b.action] || {}).groupDb || 0; });
+  pick(cur); paintRowTrims(); paintActions(); tick();
 })();
 </script>

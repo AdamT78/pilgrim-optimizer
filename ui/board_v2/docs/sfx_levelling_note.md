@@ -8,6 +8,49 @@ to be reconstructed, and so the three traps in it are not rediscovered the hard 
 
 ---
 
+## 0. The four words, and which control moves which
+
+This note and `sfx/README.md` use four terms for four different numbers, and until now defined
+none of them. They apply in this order, and nothing later can undo something earlier:
+
+**the file → trim → group level → monitor gain → your speakers**
+
+**A trim** is the `gainDb` on a sound's own record: how much louder or quieter to play that
+file than it is stored, in decibels. `0.0` is the file as encoded, `−7.0` plays it 7 dB
+quieter, `+4.0` plays it 4 dB louder. **It never touches the file** — that is what every record
+means by *"the container and nothing else: no trim, no fade, no level change"*. The `.ogg`
+bytes stay exactly as encoded, so they remain verifiable against their sha256 forever, and a
+level can be reconsidered without re-encoding anything or losing the chain back to the source.
+The word is a mixing desk's: the trim is the input stage, which sets how hot a source arrives
+before anything downstream happens to it. **The ambient bench labels its per-bed slider
+"ambient level", and that slider edits the trim.** Three names for one number is one too many;
+the field name `gainDb` is the one a machine reads and the one to trust.
+
+**A group level** is the `groupDb` in `attribution.json`'s `ambientGroups`, one per duty
+action: where that whole action sits against the other actions. It is applied as a single gain
+node that every track of the action feeds, so it scales all of them equally and **cannot change
+a balance already set between them**. The bench calls it the "duty action level". A cue has no
+group level; this is a bed idea only, because only beds come in groups.
+
+**The monitor gain** is `MONITOR_DB` on the bench, currently +6 dB, and it is **not a mix
+value**. Everything on that page plays at board levels, and the cues sit twenty-odd decibels
+under the files they came from, so without it the page is too quiet to judge. It is a fixed
+constant rather than a knob on purpose: one slider on a page, and it can only move the thing
+being decided. It is never saved and never reaches the board.
+
+**The ceiling** is −1 dBTP, and it is **a rule about what may be filed, not a description of
+what is filed**. No cue may be trimmed past it. Reading it as though some cue sits there is the
+specific mistake section 11 records: the loudest cue in this tree after its own trim is
+−3.97 dBTP, and multiplying against −1 instead produced a clipping alarm that measurement
+then showed to be false.
+
+**Two of the four are judgements and two are not.** A trim and a group level are set by ear and
+there is no target for either — section 11 explains why a bed target was tried and falsified.
+The monitor gain and the ceiling are fixed, and moving them to make something fit is the error
+rather than the fix.
+
+---
+
 ## 1. Peak was never measuring loudness
 
 The set was levelled by peak from the beginning, and the ear kept disagreeing with the records.
@@ -72,13 +115,14 @@ gusts. **Ungated for both classes**, so a bed and a cue are at least measured in
 That sentence stood here from four beds that were each one continuous recording, and it stopped
 being true the moment a duty action started taking **stems**. A stem is a layer of a scene —
 grain handled, coins counted, beads told, robes moving — and a layer of a scene is mostly
-silence waiting for the other layers. Measured across all twenty-five ambient tracks as they
+silence waiting for the other layers. Measured across all twenty-nine ambient tracks as they
 stand:
 
 | track | ungated | gated | delta | blocks kept |
 |---|---|---|---|---|
 | `allocation_actionA/allocation_wind` | −36.97 | −37.16 | +0.19 | 167 of 167 |
 | `clerical_actionA/devotion` | −30.79 | −30.79 | −0.00 | 347 of 347 |
+| `ordination_actionB/night_city` | −46.13 | −46.13 | +0.00 | 357 of 357 |
 | `clerical_actionA/candle` | −53.69 | −53.69 | +0.00 | 252 of 252 |
 | `clerical_actionB/silversmith` | −32.77 | −32.77 | +0.00 | 247 of 247 |
 | `give_alms_actionA/alms` | −38.37 | −38.36 | −0.01 | 247 of 247 |
@@ -88,6 +132,7 @@ stand:
 | `allocation_actionA/footsteps` | −30.62 | −29.78 | −0.84 | 233 of 282 |
 | `build_roads_actionA/worker_footsteps` | −38.59 | −37.35 | −1.24 | 262 of 347 |
 | `allocation_actionA/wool_robe` | −31.08 | −29.29 | −1.79 | 187 of 282 |
+| `ordination_actionB/footsteps` | −35.89 | −34.03 | −1.86 | 231 of 357 |
 | `taxation_actionA/room` | −38.16 | −34.77 | −3.40 | 134 of 297 |
 | `build_roads_actionA/ox_cart_mechanics` | −38.00 | −34.30 | −3.70 | 149 of 347 |
 | `build_roads_actionA/gravel` | −35.94 | −31.76 | −4.18 | 132 of 347 |
@@ -96,6 +141,8 @@ stand:
 | `build_roads_actionA/far_work` | −52.01 | −46.64 | −5.37 | 101 of 347 |
 | `build_roads_actionA/rammers` | −35.88 | −30.02 | −5.86 | 90 of 347 |
 | `build_roads_actionA/ox_cart_stones` | −55.15 | −48.82 | −6.33 | 81 of 347 |
+| `ordination_actionB/staff` | −50.49 | −43.48 | −7.01 | 71 of 357 |
+| `ordination_actionB/distant_dogs` | −48.96 | −41.95 | −7.01 | 71 of 357 |
 | `clerical_actionA/rosary` | −46.71 | −39.55 | −7.16 | 67 of 347 |
 | `allocation_actionA/keys` | −35.04 | −27.22 | −7.82 | 47 of 282 |
 | `taxation_actionA/wheat` | −47.40 | −39.27 | −8.13 | 46 of 297 |
@@ -103,8 +150,8 @@ stand:
 | `taxation_actionA/coins` | −36.74 | −27.55 | −9.19 | 36 of 297 |
 | `build_roads_actionA/oil_lamp_rattle` | −48.48 | −38.97 | −9.51 | 39 of 347 |
 
-**The six continuous beds still agree with their gated figures inside 0.2 dB** (`oil_lamp_flame` makes a seventh at 0.27), exactly as the
-table above found. Eleven stems disagree by 5 to 10 dB, and the last column says why without
+**The seven continuous beds still agree with their gated figures inside 0.2 dB** (`oil_lamp_flame` makes an eighth at 0.27), exactly as the
+table above found. Thirteen stems disagree by 5 to 10 dB, and the last column says why without
 needing the first two: the gated figure for `oil_lamp_rattle` is computed from **39 of its 347 blocks**,
 so it describes about a ninth of a file that is nine-tenths silence and calls that the
 loudness of the whole. At **9.51 dB** it is the widest gap here, just past `coins`.
@@ -114,10 +161,11 @@ but a line, and where a track falls on it says how much of its own duration it o
 nothing through the six continuous recordings; −0.8 for `donate_building` and for `footsteps`
 (which walks without a gap); −1.2 for `worker_footsteps` and **−1.8 for `wool_robe`** (a rustle
 with 13 holes in it, 22% silence); −3.4 to −4.2 for the barn `room`, `ox_cart_mechanics` and
-`gravel`; and 5 to 10 dB for the eleven tracks that are a handful of placed events —
+`gravel`; and 5 to 10 dB for the thirteen tracks that are a handful of placed events —
 `ox_breathing`, `barn_creaks`, `far_work`, `rammers`, `ox_cart_stones`, `rosary`, `keys`,
-`wheat`, `horse_snorts`, `coins` and `oil_lamp_rattle`, which at 90.3% silence sets the end
-of the scale.
+`wheat`, `horse_snorts`, `staff`, `distant_dogs`, `coins` and `oil_lamp_rattle`, which at 90.3%
+silence sets the end of the scale. *(That list said "eleven" while naming twelve for some
+weeks, which is the same class of fault as the bed counts and had no test behind it either.)*
 *Reading the delta is cheaper than reading the file*, and it is the number
 that tells you whether a track's recorded loudness means anything on its own.
 
@@ -126,8 +174,7 @@ that tells you whether a track's recorded loudness means anything on its own.
 `rammers` −5.9, `ox_cart_stones` −6.3, against 28.7%, 55.7%, 52.2%, 69.6%, 65.0%, 58.2% and
 75.3% of their length in exact silence. **It ranks rather than measures**, and the middle of
 that list shows the limit: `far_work` is emptier than `rammers` and still reads the smaller
-delta, because the gate weighs how far a track's events stand above its own mean and not how
-much of the file they fill. Near enough to tell at a glance which tracks have a recorded
+delta. Near enough to tell at a glance which tracks have a recorded
 loudness worth comparing; not near enough to quote as a duty cycle. Every one of the seven
 fails that test, which is why the folder fell silent with all of them playing — 2.344 s of 35
 with the first four, and 1.168 s once the ox cart was added.
@@ -139,6 +186,34 @@ until something in it reads near zero*. The seven stems that preceded it, betwee
 between them, however many there are, because they are all silent at the same moments by
 construction. This one number would have said so before anybody listened, and it is the
 cheapest thing in this note to check.
+
+**What the delta actually is, which took two files landing on the same figure to notice.**
+`ordination_actionB/distant_dogs` and `ordination_actionB/staff` read **exactly 7.01 dB** and
+survive on **exactly 71 blocks** each — different material, different sources, different source
+sample rates. That is not a coincidence. When a file's quiet parts are *true digital silence*,
+every scrap of its energy is inside the blocks the gate keeps, and the delta reduces to
+
+> **delta = 10 · log₁₀( all blocks ÷ surviving blocks )**
+
+Checked against all twenty-nine beds, the prediction agrees with the measured delta to within
+**0.06 dB on twenty-eight of them**, the exception being `allocation_wind` at 0.19 dB with every
+one of its 167 blocks kept. *The delta is a block count.* Nothing else.
+
+**That is what explains the `far_work` / `rammers` inversion above**, which this note previously
+put down to the gate weighing how far events stand above the mean. The real reason is simpler
+and exact: `far_work` is 67.0% silent and keeps **101 of 347** blocks; `rammers` is 59.4% silent
+and keeps **90 of 347**. The emptier file keeps *more* blocks, so it reads the smaller delta. A
+0.4 s block survives if any part of it carries an event, so the surviving-block count and the
+silence fraction are different quantities and only loosely related — the gate is counting
+blocks a sound touches, not time a sound fills.
+
+**It is still worth printing, and it is still not a density.** A block count is a real thing to
+know: it is the resolution at which the material is intermittent. But a sentence calling the
+delta "how dense this track is" claims more than the number carries, and records should say
+*what it is* — the block ratio — rather than what it was taken for. Where a bed's quiet parts
+are a noise *floor* rather than silence the identity will not hold, because energy then lives
+outside the kept blocks; no bed here is that case yet, and the first one that is will be worth
+measuring rather than assuming.
 
 **The conclusion is unchanged and the reasoning is stronger.** Gating a sparse stem does
 precisely what this section already refuses to do to a gusty wind bed — it levels the material
@@ -453,25 +528,56 @@ Still open for ambient:
   4.45 dB of margin at the worst moment the tree could previously produce, and 9.73 now. *The
   cheap estimate was 4 dB pessimistic on a quantity where 4 dB is the whole question.* Where
   headroom is the claim, render the sum: the files are on disk and it costs a minute.
-- **What remains true is narrower and still worth watching.** Of the twenty-five ambient files,
-  ten land between −26.5 and −45.5 dBTP after their trim. **Thirteen have no trim at all**:
-  `wheat` at −20.3, `barn_creaks` at −21.5, and all eleven Build Roads tracks, at −7.9, −11.3,
-  −13.8, −15.1, −17.0, −19.6, −21.3, −22.1, −23.8, −23.9 and −24.4 — a whole duty action at unity,
-  and the loudest
-  untrimmed thing in the tree is now `rammers` rather than `coins`. Two have a trim and sit
-  above the span: `room` at −21.4, and `coins` at −25.6 after
-  the trim that fixed it. So the span to quote is **−21.4 to −45.5 dBTP** across the twelve
-  tracks that have a trim, and `room` remains the case this bullet was really about — a bed
-  authored above the span that said nothing about it. The arithmetic to distrust is the
-  shortcut, not the concern.
-- **Build Roads cannot be levelled yet, and not because nobody has got to it.** Every trim in
-  this tree was set against the cue the bed plays under — that is where −24 LUFS and this whole
-  note come from — and `build_roads_actionA` is the first action with beds and **no cue filed
-  at all**. The bench prints the warning on every build. Its eleven tracks can be balanced
-  against each other by ear, which is a different question, but where the group as a whole
-  should sit has no reference until that cue exists — and eleven tracks at unity is the
-  loudest thing that could happen to this board. Give Alms has the same gap on both its
-  actions, with one bed each rather than eleven.
+- **THE PER-FILE SPAN HAS STOPPED BEING THE RIGHT QUANTITY.** This bullet has tracked where
+  individual beds land since there were two of them, and Build Roads being levelled on
+  2026-10-16 broke it: of the twenty-nine ambient files, eleven now sit between −26.5 and
+  −45.5 dBTP and **eighteen sit above −26.5**, the span running −3.9 to −40.5. Six are still
+  untrimmed — `wheat`, `barn_creaks` and Mission's four, the loudest of which, `footsteps` at
+  −10.4 dBTP, is simply unset rather than authored; the top of the span is now `rammers` at
+  −3.9, which is a trim somebody chose. Read per file that looks alarming and it
+  is not: *tracks that sum have to be authored quieter per track than one track that plays
+  alone*, and comparing one of Build Roads' eleven against a lone rain bed compares nothing.
+  **The quantity that governs headroom is the sum of an action's own beds**, and the per-file
+  span is kept only as a sorting aid.
+- **Per action, measured rather than multiplied:**
+
+  | duty action | beds | sum of peaks | rendered | + the loudest cue filed |
+  |---|---|---|---|---|
+  | `build_roads_actionA` | 11 | +1.86 | **−11.98** | **−1.06** |
+  | `taxation_actionA` | 4 | −9.94 | **−20.02** | −2.68 |
+  | `allocation_actionA` | 4 | −21.60 | | |
+  | `clerical_actionA` | 3 | −22.35 | | |
+
+  The sum-of-peaks column assumes every track peaks at the same instant, which none of them
+  do: it is **14 dB pessimistic** on Build Roads and 10 dB on Taxation. Rendering the sum
+  costs a minute and is the only figure worth quoting — the same lesson the `coins` episode
+  above taught, now with a second case.
+- **THERE ARE TWO LEVELS NOW, AND THE SECOND ONE IS WHY THE FIRST CAN BE LEFT ALONE.** A bed's
+  `gainDb` is its balance inside its action; an action's `groupDb`, in `attribution.json`'s
+  `ambientGroups`, is where that action sits against the others. They multiply, and the group
+  is applied as **one gain node per action that every track feeds** rather than added into each
+  track's gain — so it cannot change a balance that has already been set, which is the only
+  property that makes a master fader safe to use. The eight actions currently render between
+  **−3.05 and −35.96 dBTP**, a 33 dB spread that nothing has yet had a way to address.
+- **`rammers` at +4.0 is the first trim that spent the action's headroom.** Build Roads went
+  from −11.98 dBTP summed to **−3.05** on that one change — nine decibels on one track — and
+  against the loudest cue filed the worst alignment now reaches **+2.52 dBTP**, over full
+  scale, where a cue at the −1 dBTP policy ceiling gives **+4.06**. *That is not an argument
+  against the trim*, which is a judgement about what Build Roads sounds like. It is the case
+  for pulling the group down afterwards, which is exactly what the second level is for.
+- **Build Roads is levelled, and it is where the headroom question now lives.** Eleven tracks
+  summing to −11.98 dBTP is a healthy bed level with 12 dB in hand. Add the loudest cue in the
+  tree after its own trim — `construct_actionA` at −3.97 dBTP — peak-aligned, and the total is
+  **−1.06 dBTP**: legal, and the tightest margin anywhere here. Add a cue sitting at the
+  **−1.0 dBTP policy ceiling** and it reaches **+1.16 dBTP**, which is over. *So the ceiling
+  that has governed cues since set 1 is not safe for this action.* When a Build Roads cue is
+  filed it should land near −4 dBTP or quieter, and that is a consequence of the action having
+  eleven beds rather than one.
+- **It was levelled without the cue every other bed was levelled against.** `build_roads_actionA`
+  is still the first action with beds and **no cue filed at all** — the bench prints the
+  warning on every build — so the eleven were balanced against each other by ear and the
+  group's absolute level is the one judgement with no reference behind it. Give Alms has the
+  same gap on both its actions, with one bed each rather than eleven.
 - **The board plays no bed yet.** `bundled_sfx()` inlines `tile.ogg` and `confirm.ogg` and
   nothing else, so `generated/ambient_bench.html` is where beds are heard today.
 - **Whoever wires them in must pin `loopEnd`.** Chrome's `decodeAudioData` returns up to 17 ms

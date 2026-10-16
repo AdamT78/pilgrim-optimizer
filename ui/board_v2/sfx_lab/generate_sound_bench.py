@@ -222,7 +222,10 @@ def ambient(rec: dict, notes: list) -> tuple:
                 # a track called wheat, and the checkbox is addressed by element id.
                 "id": re.sub(r"[^a-z0-9]+", "_", ("%s_%s" % (sub.name, p.stem)).lower()),
                 "file": rel, "name": (e.get("title") or stem).split(" -- ")[0],
-                "duty": hit[2], "cue": "%s_%s" % (hit[0], hit[1]),
+                # `action` IS THE FOLDER AND ALWAYS EXISTS; `cue` IS A CLIP AND OFTEN DOES NOT.
+                # Four duty actions have beds and no cue filed, so `cue` is null for them --
+                # which made it the wrong thing to group by, and did exactly that once.
+                "duty": hit[2], "action": sub.name, "cue": "%s_%s" % (hit[0], hit[1]),
                 "ms": facts["ms"], "sr": facts["sr"], "ch": facts["ch"],
                 "seconds": round(facts["samples"] / facts["sr"], 6) if facts["sr"] else 0,
                 "bytes": p.stat().st_size,
@@ -236,12 +239,56 @@ def ambient(rec: dict, notes: list) -> tuple:
     return beds, used
 
 
+def ambient_groups(doc: dict, beds: list, notes: list) -> dict:
+    """The per-action second level, read out of attribution.json's `ambientGroups`.
+
+    TWO LEVELS, AND THE SPLIT IS THE POINT. A bed's own `gainDb` is its balance against the
+    other beds of its action; an action's `groupDb` is where that whole action sits against the
+    other actions. Folding the second into the first gives the same sound once and then throws
+    the structure away -- there is no action level left to revisit, only N numbers that happened
+    to move together. Kept apart, the two jobs stay separate.
+
+    THIS SCRIPT STILL TOUCHES NO DECODER, which is why `summedTruePeakDbtp` is read rather than
+    rendered here: sfx_lab/sfx_levels.py owns the decoding and writes that figure, and
+    `summedAtTrims` fingerprints the trims it was taken at so a stale pair can be caught.
+
+    A folder with beds and no group entry gets a zero and a note rather than being left out --
+    the beds are real and must still play.
+    """
+    # THE WHOLE DOCUMENT, NOT ITS `files` BLOCK. Everything else here works off the per-file
+    # records and `rec` is that dict; a group level is not a property of a file and lives at
+    # the top of attribution.json beside the other notes. Passing `rec` in by habit silently
+    # gave every action a null measurement and a zero, which is why this takes `doc`.
+    said = doc.get("ambientGroups") or {}
+    out = {}
+    for b in beds:
+        act = b["action"]
+        if act in out:
+            continue
+        g = said.get(act)
+        if g is None:
+            notes.append("%s has beds and no ambientGroups entry, so its group level is 0.0"
+                         % act)
+            g = {}
+        out[act] = {"groupDb": float(g.get("groupDb") or 0.0),
+                    "duty": b["duty"],
+                    "tracks": sum(1 for x in beds if x["action"] == act),
+                    "summedTruePeakDbtp": g.get("summedTruePeakDbtp"),
+                    "summedAtTrims": g.get("summedAtTrims")}
+        if g and g.get("tracks") not in (None, out[act]["tracks"]):
+            notes.append("%s: ambientGroups says %s tracks, the folder holds %d -- rerun "
+                         "sfx_levels.py --groups --write" % (act, g.get("tracks"),
+                                                             out[act]["tracks"]))
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--open", action="store_true", help="open the page when it is built")
     args = ap.parse_args()
 
-    rec = json.loads((BOARD / "attribution.json").read_text(encoding="utf-8")).get("files", {})
+    doc = json.loads((BOARD / "attribution.json").read_text(encoding="utf-8"))
+    rec = doc.get("files", {})
     notes: list = []
 
     def clip(rel: str, label: str):
@@ -355,11 +402,12 @@ def main() -> int:
     missing = ["%s (%s)" % (name, d["name"]) for d in duty_actions()
                for slot, name in d["actions"]
                if (d["key"], slot) not in used]
+    groups = ambient_groups(doc, beds, notes)
     atmpl = (LAB / "ambient_bench.html.tmpl").read_text(encoding="utf-8")
     OUT_AMBIENT.parent.mkdir(parents=True, exist_ok=True)
     OUT_AMBIENT.write_text(atmpl.replace("__DATA__", json.dumps(
         {"beds": beds, "cues": cues, "have": len(used), "slots": slots,
-         "layers": len(beds), "missing": missing})), encoding="utf-8")
+         "layers": len(beds), "missing": missing, "groups": groups})), encoding="utf-8")
 
     tmpl = (LAB / "sound_bench.html.tmpl").read_text(encoding="utf-8")
     page = tmpl.replace("__DATA__", json.dumps(

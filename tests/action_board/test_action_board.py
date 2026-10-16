@@ -4015,3 +4015,63 @@ def test_the_prose_count_of_beds_is_the_number_of_beds():
                 continue
             assert got == len(beds), (
                 "%s says %s ambient files; sfx/ambient/ holds %d" % (rel, said, len(beds)))
+
+
+def test_each_duty_action_with_beds_has_a_group_level_and_a_fresh_sum():
+    """The second level, and the measurement beside it that goes stale without saying so.
+
+    A BED'S `gainDb` IS ITS BALANCE AGAINST ITS NEIGHBOURS; an action's `groupDb` is where that
+    whole action sits against the other actions. The two are kept apart because folding the
+    second into the first gives the same sound once and then throws the structure away -- there
+    is no action level left to revisit, only N numbers that happened to move together.
+
+    SO THE ENTRY HAS TO EXIST FOR EVERY FOLDER. A folder with beds and no entry still plays, at
+    a group level of zero, which is a silent default on a number somebody is supposed to have
+    chosen. The generator reports it; this refuses it.
+
+    AND `summedTruePeakDbtp` IS A RENDERED MEASUREMENT, which is the part that rots. It is the
+    action's beds mixed at their trims and measured -- the only honest headroom figure, since
+    adding the individual peaks reads 14 dB high on an eleven-track action -- and it stops being
+    true the moment any trim in that action moves. `summedAtTrims` fingerprints the trims it was
+    taken at, so this can tell a stale pair from a fresh one WITHOUT DECODING ANYTHING, which is
+    what lets it live in a test suite that does not own ffmpeg.
+
+    Falsified by moving a trim and leaving the sum alone, which is the ordinary way it breaks.
+    """
+    board = ROOT / "ui" / "board_v2"
+    doc = json.loads((board / "attribution.json").read_text(encoding="utf-8"))
+    files = doc.get("files", {})
+    ambient = board / "sfx" / "ambient"
+    if not ambient.is_dir():
+        pytest.skip("no sfx/ambient/ in this tree")
+    by_action = {}
+    for p in sorted(ambient.rglob("*.ogg")):
+        if "_to_delete" in p.parts:
+            continue
+        by_action.setdefault(p.parent.name, []).append("sfx/ambient/%s/%s"
+                                                       % (p.parent.name, p.name))
+    assert by_action, "sfx/ambient/ holds no beds"
+    groups = doc.get("ambientGroups")
+    assert groups is not None, (
+        "sfx/ambient/ holds beds in %d folders and attribution.json has no `ambientGroups`, so "
+        "every action's level is an unstated zero" % len(by_action))
+    assert doc.get("ambientGroupsNote"), "`ambientGroups` carries numbers and no note saying what they are"
+
+    for action, keys in sorted(by_action.items()):
+        g = groups.get(action)
+        assert g is not None, (
+            "%s holds %d bed(s) and has no ambientGroups entry" % (action, len(keys)))
+        assert isinstance(g.get("groupDb"), (int, float)), (
+            "%s has no numeric groupDb" % action)
+        assert g.get("tracks") == len(keys), (
+            "%s: ambientGroups says %s tracks, the folder holds %d"
+            % (action, g.get("tracks"), len(keys)))
+        want = hashlib.sha256("|".join(
+            "%s=%.2f" % (k.rsplit("/", 1)[1], float(files[k].get("gainDb") or 0.0))
+            for k in sorted(keys)).encode()).hexdigest()[:16]
+        assert g.get("summedAtTrims") == want, (
+            "%s: summedTruePeakDbtp was measured at a different set of trims than the records "
+            "now carry (%s vs %s). Rerun ui/board_v2/sfx_lab/sfx_levels.py --groups --write"
+            % (action, g.get("summedAtTrims"), want))
+        assert isinstance(g.get("summedTruePeakDbtp"), (int, float)), (
+            "%s has a trim fingerprint and no measured sum beside it" % action)

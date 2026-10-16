@@ -1,6 +1,6 @@
 # Cutting an ambient bed into a seamless loop
 
-**Status: twenty-five files under seven duty actions.** Three actions have one track each —
+**Status: twenty-nine files under eight duty actions.** Three actions have one track each —
 `clerical_actionB/silversmith` (25 s, fire), `give_alms_actionA/alms` (25 s, rain) and
 `give_alms_actionB/donate_building` (32.5 s, a sheltered wind). Four have several.
 `build_roads_actionA/` holds eleven — `rammers`, `gravel`, `far_work`, `worker_footsteps`,
@@ -14,7 +14,12 @@ loop that drifts against it) and `rosary` (35 s, a stem placed against the servi
 matched to it exactly). `allocation_actionA/` holds `footsteps`, `keys` and `wool_robe`
 (28.5 s, one mix in three stems) under `allocation_wind` (17 s, an independent loop).
 `taxation_actionA/` holds `wheat`, `coins` and `barn_creaks` (30 s stems, not yet wrapped)
-inside `room` (30 s, the background bed they were waiting for). They are in `sfx/ambient/`, one folder per duty action since a
+inside `room` (30 s, the background bed they were waiting for).
+`ordination_actionB/` holds four at 36 s, and they are the three kinds of loop this note knows
+side by side: `footsteps` and `staff` are **metrical**, closing on arithmetic rather than a
+crossfade (section 12); `distant_dogs` is **intermittent**, closing because its wrap gap of
+10.32 s is longer than any interior gap; and `night_city` is **wrapped**, arriving with a 2.0 s
+equal-power fold over its head. They are in `sfx/ambient/`, one folder per duty action since a
 fourth track made the filename the wrong place to say which action a bed belongs to, and
 `sfx_lab/generate_sound_bench.py` builds `generated/ambient_bench.html` to hear them looping
 under their own cues. The board itself still plays neither. This note is the method, worked out
@@ -439,9 +444,57 @@ below their local slopes. *The median is a statistic about the quiet parts of a 
 wrap is not one of them.* Use it as the cheap first look and let the neighbour comparison
 decide.
 
-## 12. Not done
+## 12. A metrical loop closes on arithmetic, not on a crossfade
 
-- **The board plays no bed.** All twenty-five are filed and audible on the ambient bench;
+`ordination_actionB` is the first loop here whose seam is a *rhythm* rather than a texture, and
+none of the three checks above can see it. Both its stems begin and end on exact digital
+silence, so the step across a butt join is 0.000000 and says nothing; the wrap-window
+percentile reads energy and a walk's energy is the same everywhere; the shoulder score compares
+material that is silence at both ends.
+
+**What to measure instead is the interval across the wrap against the interval inside the
+body.** Here the footfalls run a median 0.605 s apart and the wrap interval is 0.600 s, so the
+gait continues through the loop point to within five milliseconds. That single number is the
+whole verification.
+
+**And what makes it come out right is divisibility.** The walk is 54 steps; the staff plants on
+every third, 54 ÷ 3 = 18, so the staff returns to the same foot. The footfalls cycle six source
+recordings in fixed order, 54 ÷ 6 = 9, so the rotation returns too. *Every repeating pattern in
+a metrical loop has to divide the event count, or it changes phase every lap* — and a pattern
+that changes phase every lap is heard long before any of the energy tests notice. Count the
+events, factor the count, and check each pattern against it.
+
+## 13. An intermittent loop closes on its longest gap
+
+The third kind, and `ordination_actionB/distant_dogs` is the first of it. Nothing metrical, no
+texture to match, just nine events in 36 s with silence between them — and like the metrical
+case, every energy test above is blind to it. Both ends are digital silence, so the butt-join
+step is 0.000000 and the median comparison of section 9 cannot even run: *the median
+sample-to-sample difference of a file that is 62.6% true silence is exactly zero*, and the
+ratio is undefined rather than small. That is a third failure mode of the median test, after
+the two in section 9 where it was merely too strict.
+
+**What to measure is the series of gaps, and what has to hold is that the wrap gap is not the
+short one.** Here the interior gaps run 0.80, 0.81, 3.14, 6.32, 0.91, 6.51, 6.27 and 0.92 s and
+the gap across the wrap is 10.32 s — longer than any of them, so a listener crossing the loop
+point hears a pause of a length the file has already established, in a file whose whole
+character is irregular pauses. Compare `build_roads_actionA/rammers`, whose wrap gap is 0.13 s
+*shorter* than its tightest interior pause: there the loop point is the one moment that breaks
+the pattern. **A wrap gap at or above the interior maximum is safe; one below the interior
+minimum is a tell.** In between, listen.
+
+**A warning about tracing sparse material across a splice.** The dogs are five excerpts of one
+recording, and event-against-event matching — the section 9 fallback — scored one of the nine
+barks at r = 0.301 while its neighbours 0.8 s either side scored above 0.98. The probe window
+is 1.2 s, that bark sits 0.75 s from the end of its excerpt, and the window ran past the splice
+into material the source does not have there. *Walk the file in short steps against each
+candidate offset and find the run boundaries first; then probe inside the runs.* The event
+probe and the sliding probe now have one named blind spot each, and they are opposites: the
+sliding probe fails when the source is too thin, the event probe when its window is too wide.
+
+## 14. Not done
+
+- **The board plays no bed.** All twenty-nine are filed and audible on the ambient bench;
   `bundled_sfx()` still inlines only `tile.ogg` and `confirm.ogg`. This bullet has said "all
   five" since there were five, which is its own small lesson: a count in prose is a fact with
   no test behind it, and nine beds arrived before anyone noticed. The generator prints the
@@ -456,9 +509,16 @@ decide.
   undecided, as is the fade-in on select, and what happens on deselect or re-select.
 - **The loop checker does not exist as a tool.** The band-match shoulder search, the N-lap
   render and the wrap-window percentile test have been written from scratch for each of the
-  twenty-five files. Three of them now have a settled shape and one of them, the percentile
+  twenty-nine files. Three of them now have a settled shape and one of them, the percentile
   test, is the only check that works on a loop that arrives already baked — and none of the
-  three applies to a stem that is not wrapped at all, which thirteen of the twenty-five are not.
+  three applies to a stem that is not wrapped at all, which a good many of these are. None of
+  the three can check a metrical loop either; see section 12.
+  *How many are unwrapped is deliberately not written here as a number.* It was carried as
+  "thirteen of the twenty-seven" and could not be reproduced from the records when the count
+  next came up: whether a bed is wrapped is stated in prose inside `modifications`, differently
+  each time, and nothing holds the total to the files. A count with no test behind it is the
+  exact fault the bed-count guard was written for, and the fix is a `wrapped` field on the
+  record rather than a better sentence here.
 - **The composite's master is the first audio source here that cannot be re-fetched.** Every
   other sound in the tree is a download, which is why `sfx/masters/` was deleted — the same
   file can be fetched again from the name in `source`. A DAW mix cannot, and the reason the
