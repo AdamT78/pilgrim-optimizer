@@ -941,7 +941,7 @@ here as the files being clipped. They are not known to be. Measure the **shipped
 
 ### `ambient/`, the first sounds here that are not events
 
-Twenty-nine files under eight duty actions, and they are a different kind of thing from
+Thirty-one files under eight duty actions, and they are a different kind of thing from
 everything above.
 
 **They live one folder per duty action** — `ambient/<duty>_<slot>/`, which is the same string
@@ -959,7 +959,8 @@ guessed at, where the old prefix match quietly produced a bed belonging to nothi
 says it twice — because moving a file is cheap and renaming one costs a record's continuity.
 New tracks are named for what they are: `footsteps`, `keys`, `wheat`, `coins`, `barn_creaks`,
 `candle`, `room`, `rosary`, `wool_robe`, `rammers`, `far_work`, `ox_breathing`, `wind`,
-`oil_lamp_flame`, `horse_snorts`, `staff`, `distant_dogs`, `night_city`.* A cue is an
+`oil_lamp_flame`, `horse_snorts`, `staff`, `distant_dogs`, `night_city`, `rat_squeaks`,
+`rats_crossing`.* A cue is an
 event: it
 fires, it is 70 ms to 1.6 s long, and it is over. A bed runs underneath a selected duty action
 for as long as the player leaves it selected, so it loops, and almost every rule in this file
@@ -1635,6 +1636,12 @@ the only way a scene of eleven can be balanced:
 | `ox_cart_mechanics` **−2.0** | `far_work` **−2.5** | `worker_footsteps` **−3.5** | |
 | `gravel` **−7.0** | `oil_lamp_flame` **−7.0** | `rammers` **−7.0** | `wind` **−7.0** |
 
+*Two things happened to these numbers afterwards and the table is left as it was set, because
+it records the balance that was judged. First `rammers` went from −7.0 to **+4.0** the same
+day. Then on 2026-10-16 the whole action was taken to **−4.0** on the bench and folded into
+all eleven. So the ten unchanged tracks each read 4 dB under their cell above, and `rammers`
+reads **+2.0**. The record is the live number; this table is the reasoning.*
+
 **The two extremes are the two measurements that predicted them.** `ox_cart_stones` was the
 quietest file in the tree at −55.15 LUFS and takes the biggest lift here, +6.0, and *still*
 lands under every other track in the folder. `rammers` was the loudest untrimmed file in the
@@ -1644,9 +1651,9 @@ was tried at −39 LUFS and falsified by the second bed ever filed.
 
 **Eleven tracks that sum have to sit quieter per track than one that plays alone**, so reading
 this folder's files against a lone rain bed compares nothing. The quantity that matters is the
-action's own sum: rendered, the ten locked tracks come to **−12.96 dBTP** and the drifting
-wind can add at most **−11.98 dBTP** at any phase. Twelve decibels in hand, which is a healthy
-place for a bed group.
+action's own sum: at the trims in the table, rendered, the ten locked tracks came to
+**−12.96 dBTP** and the drifting wind could add at most **−11.98 dBTP** at any phase. Twelve
+decibels in hand, which is a healthy place for a bed group.
 
 **Which moves the headroom question onto the cue that does not exist.** Add the loudest cue in
 the tree after its own trim — `construct_actionA` at −3.97 dBTP — peak-aligned with that sum,
@@ -1656,6 +1663,15 @@ ceiling that has governed cues since set 1 is not safe for this action.* A Build
 wants to land near −4 dBTP or quieter, and that is a consequence of the action having eleven
 beds rather than one.
 
+**And at the trims the record now carries it is tighter still, which is the open item on this
+folder.** After `rammers` +4.0 and the −4.0 fold, the action renders at **−5.22 dBTP** — 6.8 dB
+hotter than the figure the paragraph above reasons from. Peak-aligned with that same loudest
+cue the worst case is **+1.45 dBTP**, over full scale; against a cue at the −1 ceiling it is
+**+3.16**. So the conclusion has not changed but the number has: for the total to stay legal a
+Build Roads cue has to land at **−9.29 dBTP** or quieter, against the −4 this paragraph
+reasoned to before — or the action wants a few more decibels off it. Nothing clips today,
+because no cue is filed for Build Roads at all.
+
 **And it is the first duty action here to have beds and no cue of its own.** The bench says so
 on every build. Every other bed in this tree was levelled against the cue it plays under —
 that is where −24 LUFS and the whole levelling note come from — so the eleven were balanced
@@ -1663,14 +1679,15 @@ against each other and the group's absolute level is the one judgement here with
 behind it. Give Alms has the same gap on both its actions, with one bed each rather than
 eleven.
 
-### `ordination_actionB/`, Mission in four — and a loop that closes on arithmetic
+### `ordination_actionB/`, Mission in six — and a loop that closes on arithmetic
 
-Four tracks, and they divide cleanly by how they behave in time. `footsteps` and `staff` are
+Six tracks, and they divide cleanly by how they behave in time. `footsteps` and `staff` are
 **metrical**: a gait, and a pole planted on a count. `distant_dogs` is **intermittent**: nine
-barks in five groups with silence between them. `night_city` is **continuous**: crickets, wind
-and distant town that never stop. The first two are described below, then the other two.
+barks in five groups. `rat_squeaks` and `rats_crossing` are **one event between them**, both
+firing in the same second once a lap. `night_city` is **continuous**: crickets, wind and
+distant town that never stop. The metrical pair is described first, then the others.
 
-`footsteps_sfx_v01.ogg` and `staff_sfx_v01.ogg` are a pilgrim setting out: boots on stone at a
+`footsteps_sfx_v01.ogg` and the staff (v01 then v02, below) are a pilgrim setting out: boots on stone at a
 walking pace with a staff planted every third step. Two **CC0** sources — Fission9's six
 hiking-boot steps and worthahep88's stick into soft dirt — and **36.000000 s** each, the first
 length here that is neither 35, 30 nor 28.5. It is not arbitrary: at 100 steps a minute,
@@ -1712,9 +1729,11 @@ sliding a window.* The probe's blind spot, not the file's.
 the same order**, so the same 3.6 s of material returns ten times a lap — unlikely to read
 under a staff and whatever else Mission gets, audible soloed, and the same observation the
 Taxation wheat record makes about 6.8 s of grain behind 30 s. And both are **essentially
-mono**: the footsteps correlate +0.9994 and the staff reads **+1.0000**, dual mono exactly,
-the only file in the tree that is. Nothing is lost folding them down, which is the opposite of
-`oil_lamp_flame` — but there is also no width at all.
+mono**: the footsteps correlate +0.9994 and the staff read **+1.0000**, dual mono exactly,
+the only file in the tree that was. Nothing is lost folding them down, which is the opposite of
+`oil_lamp_flame` — but there is also no width at all. *That is now true of the footsteps only.*
+The staff was rebuilt on 2026-10-16 from a different source and `staff_sfx_v02.ogg` reads
+**+0.8465**, so the tree no longer holds a dual-mono file.
 
 #### The dogs, which are an assembly and not a cut
 
@@ -1749,6 +1768,100 @@ so the butt-join step is 0.000000 — which means nothing on its own, as the del
 cathedral taught. What makes it loop is the gap: interior gaps of 0.80, 0.81, 3.14, 6.32, 0.91,
 6.51, 6.27 and 0.92 s, and **10.32 s across the wrap**. The loop point lands in the longest
 quiet in the file rather than inside a group, which is the opposite fault to `rammers`.
+
+#### A new staff, and a replacement verified by what it no longer matches
+
+`staff_sfx_v02.ogg` replaced `staff_sfx_v01.ogg` on 2026-10-16: the same walk, planted with a
+wooden stick instead of driven into soft dirt. The source is deadrobotmusic's **CC0** *Random
+Wooden Stick Foley*, 15.1 s at 44.1 kHz.
+
+**The arrangement survived the swap, which is the thing that could have broken.** The eighteen
+plants fall at 1.540, 3.368, 5.151 … 35.757 s against v01's 1.542, 3.374, 5.152 … 35.764 —
+**every one within 8 ms**. So the whole of the metrical argument holds unchanged: 54 steps, a
+plant on every third, 54 ÷ 3 = 18 so the staff returns to the same foot at the wrap, both
+pauses still after the 18th and 38th step. The footsteps bed was not touched and did not need
+to be.
+
+**The cleanest evidence is negative.** Against worthahep88's stick-into-dirt — the source v01
+was built from — **none of the eighteen plants reaches r = 0.33**. Whatever this is, it is not
+the old file. A replacement is one of the few claims a correlation can settle outright, because
+failing to match is exactly what it should do.
+
+**The positive half is weaker than v01's was, and that is on the record rather than rounded
+up.** The eighteen plants are **six distinct recorded sounds** — grouped by correlating each
+against the others above r = 0.80 they come to 8, 3, 2, 2, 2 and 1 uses, in a non-repeating
+order. **One of those six** matches the source cleanly, at **r = 0.9353** against a hit at
+5.838 s, and it is the one used three times. The other five place nowhere above 0.46, all of
+them dragged to the same loud source position, which is what a correlator does when it has
+nothing. They are most likely pitch or filter variants of hits in the same upload — the
+ordinary way to stop eighteen copies sounding alike — but that is an inference. v01 had eight
+of twelve plants above r = 0.70 across four distinct source hits; this one is less corroborated
+than what it replaced.
+
+**And the tree no longer holds a dual-mono file.** v01 read +1.0000; v02 reads **+0.8465**. It
+is also 1.67 dB louder integrated and 0.60 dB hotter at the peak, so it will want a trim sooner
+than v01 would have. v01's record is kept at `"state": "absent"` with its sha256, per the
+recoverability rule above — its source is re-fetchable and its arrangement lives on in v02, so
+the bytes went, but the argument that produced it did not.
+
+#### Two rats, which are one event in two files
+
+`rats_crossing_sfx_v01.ogg` and `rat_squeaks_sfx_v01.ogg` fire in the same second — four
+footfalls between 10.3 and 11.8 s and three squeaks between 10.5 and 11.5 — and are otherwise
+silent. **They are not independent layers and were never meant to be:** one rat crosses the
+road once a lap. The wrap gaps are 34.6 and 35.0 s, so the loop point cannot land on either.
+*Both are silent at the same moments*, which matters for levelling: a pair like this can never
+give each other a floor, the same way Build Roads' seven stems could not before the wind
+arrived.
+
+**The squeaks are the first Pixabay source behind an ambient bed, and the first lossy one.**
+SOUND_GARAGE's *Rat Squeaks 4 FX*, **1.411 s of mp3** — the shortest source in the tree by a
+long way, and the only conditional licence in it. The Pixabay grant lapses on *standalone*
+redistribution, which a squeak inside a 36 s bed inside a game is expressly not. The first
+squeak matches the upload at **r = 0.9779** at its 0.110 s position, which settles the source;
+the other two reach 0.19 and 0.22, and are most likely two of the upload's other three squeaks
+pitched or levelled. At **98.2% exact digital silence** this is the emptiest file in the tree,
+and its gated-to-ungated delta of **13.80 dB** is the largest — which, per the levelling note,
+is 10·log₁₀(357 ÷ 15) and therefore a block count rather than a statement about the squeaks.
+
+**The crossing is the first bed here whose source the audio could not corroborate**, and it is
+filed saying so. The covering note names IENBA's **CC0** *Animal Footsteps* — foley staged to
+mimic a weasel, recorded by arts students in Uruguay, and the first mono source behind a bed
+here. Event-against-event correlation, the method that placed the dogs at 0.999 and the first
+squeak at 0.978, reaches **r = 0.074** on all four footfalls. A pitch or speed change would
+destroy waveform correlation, so the source was resampled across fifteen ratios from ×0.5 to
+×3.0 and re-probed at each: the best score anywhere in that sweep is **0.18**.
+
+*An envelope comparison looked supportive and is not evidence.* Amplitude envelopes survive
+pitch shifting, and the four events score 0.65 to 0.91 against their best-matching IENBA
+footfall — but the source has **120 onsets**, so best-of-120 inflates any score, and the same
+test against an unrelated wooden-stick file still reaches **0.74**. A method that cannot tell
+those two apart cannot identify anything. It joins the octave-band fallback in the Build Roads
+section under *tried, and recorded as not evidence*.
+
+So the record carries `"provenanceConfidence": "stated-not-corroborated"`. **The licence
+position is unaffected**: CC0 either way, and every alternative on the owner's disk that day
+was CC0 or Pixabay. What is at stake is only the accuracy of the record, which is why it says
+what it does not know.
+
+**The owner supplied the missing half: sped up *and layered*.** That is the explanation, and it
+is also why no amount of probing was going to work. Layering sums several source hits into one
+event, so a probe is comparing a mixture against a single hit and the correlation collapses
+however well the speed is guessed — the speed sweep was testing the wrong hypothesis, not
+getting the wrong answer.
+
+**The control is the real finding here.** Told what to look for, the sweep was run again on the
+attacks alone — 80 ms windows, where whichever layer dominates the onset has the best chance of
+surviving — across sixty-one speed ratios from ×1.00 to ×4.00. Best anywhere against IENBA:
+**r = 0.226**. The identical sweep against deadrobotmusic's wooden stick, a file that is
+certainly *not* in this stem, reaches **r = 0.2965** — higher than the true source scores.
+
+*So the honest conclusion is not that the evidence is weak. It is that correlation cannot speak
+to this file in either direction*, and the control is what demonstrates it rather than
+asserting it. The flag stays because the audio still confirms nothing; what changed is that the
+silence is now explained instead of open. **Worth keeping as a method note:** when a probe
+fails, run it against something known to be absent before concluding anything. If the control
+scores as well as the claim, the only finding is about the instrument.
 
 #### The night town, where a wrong first reading was worth keeping
 
@@ -1802,8 +1915,8 @@ parts are a *floor* rather than silence the arithmetic does not apply and the fi
 something else again; no file here is that case yet.
 
 **Mission has no cue either.** `ordination actionA` is Ordain and has one; `actionB` does not.
-With these two, **seventeen beds across four duty actions** now have nothing to be levelled
-against — eleven on Build Roads, one on each of Give Alms' two actions, and four here.
+**Nineteen beds across four duty actions** now have nothing to be levelled against — eleven on
+Build Roads, one on each of Give Alms' two actions, and six here.
 
 ### Two levels, and why they are not one number
 
@@ -1811,11 +1924,34 @@ A bed carries **`gainDb`**, which is its balance against the other beds of its a
 action carries **`groupDb`** in `attribution.json`'s `ambientGroups` block, which is where that
 whole action sits against the other actions. A track is heard at the sum of the two.
 
-**Folding the second into the first would give the same sound once and then throw the
-structure away.** There would be no action level left to revisit, only eleven numbers that
-happened to move together, and the next adjustment would be eleven slider moves again. Kept
-apart, balancing *within* an action and matching actions *to each other* stay separate jobs,
-which is how they are actually done.
+**Having only one of them would throw the structure away.** With a single number per track
+there would be no action level to revisit, only eleven figures that happened to move together,
+and the next adjustment would be eleven slider moves again. Kept apart, balancing *within* an
+action and matching actions *to each other* stay separate jobs, which is how they are done.
+
+**Folding one into the other on purpose is a different thing, and it is exact.** A track plays
+at 10<sup>(trim + group)/20</sup> — one product of two gains — so adding an action's group
+level onto every one of its trims and zeroing the group changes nothing audible, and changes
+no ratio *inside* the action either, because the same number goes onto every trim. Both
+controls step in 0.5 dB so the sum is a multiple of 0.5 and nothing rounds. The bench has a
+**fold** button, and the point of it is to *commit* a round of matching: afterwards the trims
+are the whole story, the action faders are back at zero, and the two-stage job starts again
+from a new baseline. Verified on the bench against the live audio graph rather than the model
+— eleven running layers, every one at exactly the level it was before the fold, and the 13 dB
+spread inside the action unchanged.
+
+**It is exact only inside the slider range**, and the range was widened to −60 to +30 to put
+that out of reach. A group level can push a trim past either end, and a clamp would move one
+track and not its neighbours — precisely what the group fader exists to prevent. With the
+action fader spanning −40 to +12, a track would now have to sit under −48 or over +18 before a
+fold could run off an end, and the tree's actual trims run −23 to +6. The check stays anyway:
+an action whose fold would clamp is **left alone and named** rather than clamped, all-or-
+nothing per action, which is the right granularity because the invariant being protected is
+internal to an action. *The first range, −40 to +15, would have refused in practice* — not at
+the top, where the worry started, but at the floor, since Allocation's four tracks already sit
+at −19 to −23 and pushing that action back by −20 asks for −43.
+*Folding also makes that action's `summedTruePeakDbtp` stale* — it was rendered at the filed
+trims — so re-run `sfx_levels.py --groups --write` once the new trims are committed.
 
 **The group cannot change the balance inside an action, by construction.** On the bench it is
 one gain node per action that every track of that action feeds, so it scales all of them by
@@ -1833,19 +1969,29 @@ than pessimistic.
 
 | duty action | beds | rendered sum at today's trims |
 | --- | --- | --- |
-| `build_roads_actionA` | 11 | **−3.05 dBTP** |
-| `ordination_actionB` | 2 | −10.35 |
-| `taxation_actionA` | 4 | −20.02 |
-| `clerical_actionA` | 3 | −22.89 |
-| `allocation_actionA` | 4 | −26.20 |
-| `clerical_actionB` | 1 | −26.47 |
-| `give_alms_actionB` | 1 | −31.83 |
-| `give_alms_actionA` | 1 | −35.96 |
+| `build_roads_actionA` | 11 | **−5.22 dBTP** |
+| `ordination_actionB` | 4 | −10.23 |
+| `allocation_actionA` | 4 | −10.74 |
+| `clerical_actionB` | 1 | −11.97 |
+| `taxation_actionA` | 4 | −12.02 |
+| `clerical_actionA` | 3 | −12.10 |
+| `give_alms_actionB` | 1 | −22.83 |
+| `give_alms_actionA` | 1 | −24.96 |
 
-**That 33 dB spread is the whole case for the second level.** Eight actions, and nothing yet
-says which of them should be louder than which — `give_alms_actionA` is a single rain bed and
-`build_roads_actionA` is eleven tracks of a work gang, and they are not supposed to arrive at
-the same number by accident.
+**That spread is the whole case for the second level, and it has now been used.** It was
+**33 dB** when the eight were only ever balanced inside themselves — `give_alms_actionA` a
+single rain bed at −35.96 against eleven tracks of work gang at −3.05, which is not a pair of
+numbers anybody chose. One pass of matching actions against each other on the bench, folded
+into the trims, brought it to **19.7 dB**, with five of the eight inside 2 dB of each other
+between −10.2 and −12.1. Build Roads stays 5 dB hotter than that cluster and Give Alms' two sit
+10 dB under it, which is a judgement rather than an accident, and the first time this table has
+been able to record one.
+
+*The trims under it are no longer all of one kind.* Some were set against the bed's own
+neighbours and some arrived by folding an action level onto a track nobody had considered
+individually — Taxation's `wheat` and `barn_creaks` went from 0 to +8 that way, and their
+records say so. The level is right; the reasoning behind that particular number is not yet
+there, and the next pass over those two is what supplies it.
 
 **It goes stale silently, so it is fingerprinted.** `summedAtTrims` records a hash of the
 gainDb values the sum was measured from, and a test refuses the pair when they disagree —

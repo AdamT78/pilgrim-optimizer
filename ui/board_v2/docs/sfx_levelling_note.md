@@ -32,6 +32,19 @@ node that every track of the action feeds, so it scales all of them equally and 
 a balance already set between them**. The bench calls it the "duty action level". A cue has no
 group level; this is a bed idea only, because only beds come in groups.
 
+**The two add, which means they can be folded into one.** A track is heard at
+10<sup>(trim + group)/20</sup>, a single product of two gains, so adding an action's group
+level onto every one of its trims and setting the group to 0 changes nothing audible — and
+leaves every ratio *inside* the action alone, because the same number went onto every trim.
+Both controls step in 0.5 dB, so the sum is a multiple of 0.5 and nothing rounds. The bench has
+a **fold** button for it, and it is how a round of matching gets committed: afterwards the
+trims are the whole story and the action faders start again from zero. **It is exact only while
+every folded trim stays inside the slider range** (−60 to +30). A clamp there would move one
+track and not its neighbours, which is the one thing the group fader exists to prevent, so an
+action whose fold would clamp is left alone and named rather than clamped. *Folding makes an
+action's recorded `summedTruePeakDbtp` stale*, because that figure was rendered at the filed
+trims; re-run `sfx_levels.py --groups --write` once the new trims are committed.
+
 **The monitor gain** is `MONITOR_DB` on the bench, currently +6 dB, and it is **not a mix
 value**. Everything on that page plays at board levels, and the cues sit twenty-odd decibels
 under the files they came from, so without it the page is too quiet to judge. It is a fixed
@@ -115,7 +128,7 @@ gusts. **Ungated for both classes**, so a bed and a cue are at least measured in
 That sentence stood here from four beds that were each one continuous recording, and it stopped
 being true the moment a duty action started taking **stems**. A stem is a layer of a scene —
 grain handled, coins counted, beads told, robes moving — and a layer of a scene is mostly
-silence waiting for the other layers. Measured across all twenty-nine ambient tracks as they
+silence waiting for the other layers. Measured across all thirty-one ambient tracks as they
 stand:
 
 | track | ungated | gated | delta | blocks kept |
@@ -141,8 +154,10 @@ stand:
 | `build_roads_actionA/far_work` | −52.01 | −46.64 | −5.37 | 101 of 347 |
 | `build_roads_actionA/rammers` | −35.88 | −30.02 | −5.86 | 90 of 347 |
 | `build_roads_actionA/ox_cart_stones` | −55.15 | −48.82 | −6.33 | 81 of 347 |
-| `ordination_actionB/staff` | −50.49 | −43.48 | −7.01 | 71 of 357 |
+| `ordination_actionB/staff` | −48.86 | −41.87 | −6.99 | 71 of 357 |
 | `ordination_actionB/distant_dogs` | −48.96 | −41.95 | −7.01 | 71 of 357 |
+| `ordination_actionB/rats_crossing` | −46.57 | −32.81 | −13.76 | 15 of 357 |
+| `ordination_actionB/rat_squeaks` | −48.62 | −34.82 | −13.80 | 15 of 357 |
 | `clerical_actionA/rosary` | −46.71 | −39.55 | −7.16 | 67 of 347 |
 | `allocation_actionA/keys` | −35.04 | −27.22 | −7.82 | 47 of 282 |
 | `taxation_actionA/wheat` | −47.40 | −39.27 | −8.13 | 46 of 297 |
@@ -163,9 +178,13 @@ nothing through the six continuous recordings; −0.8 for `donate_building` and 
 with 13 holes in it, 22% silence); −3.4 to −4.2 for the barn `room`, `ox_cart_mechanics` and
 `gravel`; and 5 to 10 dB for the thirteen tracks that are a handful of placed events —
 `ox_breathing`, `barn_creaks`, `far_work`, `rammers`, `ox_cart_stones`, `rosary`, `keys`,
-`wheat`, `horse_snorts`, `staff`, `distant_dogs`, `coins` and `oil_lamp_rattle`, which at 90.3%
-silence sets the end of the scale. *(That list said "eleven" while naming twelve for some
-weeks, which is the same class of fault as the bed counts and had no test behind it either.)*
+`wheat`, `horse_snorts`, `staff`, `distant_dogs`, `coins` and `oil_lamp_rattle`. *(That list
+said "eleven" while naming twelve for some weeks, which is the same class of fault as the bed
+counts and had no test behind it either.)* **And the scale now runs past 10 dB**, which it did
+not when this paragraph was written: `rats_crossing` and `rat_squeaks` read **−13.76 and
+−13.80**, on 15 of 357 blocks each. `oil_lamp_rattle` at 90.3% silence used to set the end of
+it; `rat_squeaks` at **98.2%** does now, and with the identity above that is all those two
+figures are saying — 10·log₁₀(357 ÷ 15) = 13.77.
 *Reading the delta is cheaper than reading the file*, and it is the number
 that tells you whether a track's recorded loudness means anything on its own.
 
@@ -195,9 +214,10 @@ every scrap of its energy is inside the blocks the gate keeps, and the delta red
 
 > **delta = 10 · log₁₀( all blocks ÷ surviving blocks )**
 
-Checked against all twenty-nine beds, the prediction agrees with the measured delta to within
-**0.06 dB on twenty-eight of them**, the exception being `allocation_wind` at 0.19 dB with every
-one of its 167 blocks kept. *The delta is a block count.* Nothing else.
+Checked against all thirty-one beds, the prediction agrees with the measured delta to within
+**0.06 dB on twenty-nine of them**. The two outside it are `allocation_wind` at 0.19 dB, with
+every one of its 167 blocks kept, and `taxation_actionA/room` at 0.061, which is the boundary
+rather than a counterexample. *The delta is a block count.* Nothing else.
 
 **That is what explains the `far_work` / `rammers` inversion above**, which this note previously
 put down to the gate weighing how far events stand above the mean. The real reason is simpler
@@ -530,11 +550,11 @@ Still open for ambient:
   headroom is the claim, render the sum: the files are on disk and it costs a minute.
 - **THE PER-FILE SPAN HAS STOPPED BEING THE RIGHT QUANTITY.** This bullet has tracked where
   individual beds land since there were two of them, and Build Roads being levelled on
-  2026-10-16 broke it: of the twenty-nine ambient files, eleven now sit between −26.5 and
-  −45.5 dBTP and **eighteen sit above −26.5**, the span running −3.9 to −40.5. Six are still
-  untrimmed — `wheat`, `barn_creaks` and Mission's four, the loudest of which, `footsteps` at
-  −10.4 dBTP, is simply unset rather than authored; the top of the span is now `rammers` at
-  −3.9, which is a trim somebody chose. Read per file that looks alarming and it
+  2026-10-16 broke it: of the thirty-one ambient files, six now sit between −26.5 and
+  −45.5 dBTP and **twenty-five sit above −26.5**, the span running −5.9 to −35.4. Only
+  Mission's six are still untrimmed, the loudest of them `footsteps` at −10.4 dBTP, which is
+  unset rather than authored; the ends of the span are `rammers` at −5.9 and `wind` at −35.4,
+  both of them Build Roads tracks and both chosen. Read per file that looks alarming and it
   is not: *tracks that sum have to be authored quieter per track than one track that plays
   alone*, and comparing one of Build Roads' eleven against a lone rain bed compares nothing.
   **The quantity that governs headroom is the sum of an action's own beds**, and the per-file
@@ -557,14 +577,21 @@ Still open for ambient:
   `ambientGroups`, is where that action sits against the others. They multiply, and the group
   is applied as **one gain node per action that every track feeds** rather than added into each
   track's gain — so it cannot change a balance that has already been set, which is the only
-  property that makes a master fader safe to use. The eight actions currently render between
-  **−3.05 and −35.96 dBTP**, a 33 dB spread that nothing has yet had a way to address.
-- **`rammers` at +4.0 is the first trim that spent the action's headroom.** Build Roads went
-  from −11.98 dBTP summed to **−3.05** on that one change — nine decibels on one track — and
-  against the loudest cue filed the worst alignment now reaches **+2.52 dBTP**, over full
-  scale, where a cue at the −1 dBTP policy ceiling gives **+4.06**. *That is not an argument
-  against the trim*, which is a judgement about what Build Roads sounds like. It is the case
-  for pulling the group down afterwards, which is exactly what the second level is for.
+  property that makes a master fader safe to use. The eight actions rendered between
+  **−3.05 and −35.96 dBTP** when each had only ever been balanced inside itself — a 33 dB
+  spread that nothing had a way to address. **One pass of matching them against each other, on
+  2026-10-16, brought it to 19.7 dB**: −5.22 to −24.96, with five of the eight between −10.2
+  and −12.1. The group levels that produced it were then folded into the trims, so the record
+  carries one number per track again and every `groupDb` is back at 0, ready for the next pass.
+- **`rammers` at +4.0 was the first trim that spent the action's headroom, and the group fader
+  bought it back.** Build Roads went from −11.98 dBTP summed to **−3.05** on that one change —
+  nine decibels on one track — and against the loudest cue filed the worst alignment reached
+  **+2.52 dBTP**, over full scale, where a cue at the −1 dBTP policy ceiling gave **+4.06**.
+  *That was never an argument against the trim*, which is a judgement about what Build Roads
+  sounds like; it was the case for pulling the group down afterwards, which is exactly what the
+  second level is for. That is what happened: the action was taken to **−4.0** on the bench and
+  folded, which put `rammers` at **+2.0** and the action at **−5.22 dBTP** summed. The trim
+  that caused the problem is still the loudest in the tree and the action now has room.
 - **Build Roads is levelled, and it is where the headroom question now lives.** Eleven tracks
   summing to −11.98 dBTP is a healthy bed level with 12 dB in hand. Add the loudest cue in the
   tree after its own trim — `construct_actionA` at −3.97 dBTP — peak-aligned, and the total is

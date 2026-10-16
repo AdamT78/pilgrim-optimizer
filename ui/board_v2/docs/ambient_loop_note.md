@@ -1,6 +1,6 @@
 # Cutting an ambient bed into a seamless loop
 
-**Status: twenty-nine files under eight duty actions.** Three actions have one track each —
+**Status: thirty-one files under eight duty actions.** Three actions have one track each —
 `clerical_actionB/silversmith` (25 s, fire), `give_alms_actionA/alms` (25 s, rain) and
 `give_alms_actionB/donate_building` (32.5 s, a sheltered wind). Four have several.
 `build_roads_actionA/` holds eleven — `rammers`, `gravel`, `far_work`, `worker_footsteps`,
@@ -15,10 +15,11 @@ matched to it exactly). `allocation_actionA/` holds `footsteps`, `keys` and `woo
 (28.5 s, one mix in three stems) under `allocation_wind` (17 s, an independent loop).
 `taxation_actionA/` holds `wheat`, `coins` and `barn_creaks` (30 s stems, not yet wrapped)
 inside `room` (30 s, the background bed they were waiting for).
-`ordination_actionB/` holds four at 36 s, and they are the three kinds of loop this note knows
+`ordination_actionB/` holds six at 36 s, and they are the three kinds of loop this note knows
 side by side: `footsteps` and `staff` are **metrical**, closing on arithmetic rather than a
-crossfade (section 12); `distant_dogs` is **intermittent**, closing because its wrap gap of
-10.32 s is longer than any interior gap; and `night_city` is **wrapped**, arriving with a 2.0 s
+crossfade (section 12); `distant_dogs`, `rats_crossing` and `rat_squeaks` are
+**intermittent**, each closing because its wrap gap -- 10.32, 34.57 and 35.00 s -- is longer
+than any interior gap (section 13); and `night_city` is **wrapped**, arriving with a 2.0 s
 equal-power fold over its head. They are in `sfx/ambient/`, one folder per duty action since a
 fourth track made the filename the wrong place to say which action a bed belongs to, and
 `sfx_lab/generate_sound_bench.py` builds `generated/ambient_bench.html` to hear them looping
@@ -483,6 +484,17 @@ character is irregular pauses. Compare `build_roads_actionA/rammers`, whose wrap
 the pattern. **A wrap gap at or above the interior maximum is safe; one below the interior
 minimum is a tell.** In between, listen.
 
+**Two more arrived the same day and they sharpen the rule rather than repeat it.**
+`rats_crossing` and `rat_squeaks` are the far end of the scale: four footfalls and three
+squeaks, both bursts inside the same second of a 36 s file, 95.6% and 98.2% exact digital
+silence. Their wrap gaps are 34.57 and 35.00 s, which is nearly the whole loop, so the test
+passes so comfortably it stops being informative — *when a file holds one event, the wrap is
+safe unless the event sits against an end, and the thing worth measuring is whether it does.*
+The harder question those two raise is not about the seam at all: **they are silent at the
+same moments**, by design, because they are one rat and not two layers. A pair like that can
+never give each other a floor, which is the levelling note's point about Build Roads' seven
+stems seen from the other side — and it is a property of the pair, invisible in either file.
+
 **A warning about tracing sparse material across a splice.** The dogs are five excerpts of one
 recording, and event-against-event matching — the section 9 fallback — scored one of the nine
 barks at r = 0.301 while its neighbours 0.8 s either side scored above 0.98. The probe window
@@ -494,7 +506,7 @@ sliding probe fails when the source is too thin, the event probe when its window
 
 ## 14. Not done
 
-- **The board plays no bed.** All twenty-nine are filed and audible on the ambient bench;
+- **The board plays no bed.** All thirty-one are filed and audible on the ambient bench;
   `bundled_sfx()` still inlines only `tile.ogg` and `confirm.ogg`. This bullet has said "all
   five" since there were five, which is its own small lesson: a count in prose is a fact with
   no test behind it, and nine beds arrived before anyone noticed. The generator prints the
@@ -509,7 +521,7 @@ sliding probe fails when the source is too thin, the event probe when its window
   undecided, as is the fade-in on select, and what happens on deselect or re-select.
 - **The loop checker does not exist as a tool.** The band-match shoulder search, the N-lap
   render and the wrap-window percentile test have been written from scratch for each of the
-  twenty-nine files. Three of them now have a settled shape and one of them, the percentile
+  thirty-one files. Three of them now have a settled shape and one of them, the percentile
   test, is the only check that works on a loop that arrives already baked — and none of the
   three applies to a stem that is not wrapped at all, which a good many of these are. None of
   the three can check a metrical loop either; see section 12.
