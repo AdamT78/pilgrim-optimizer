@@ -311,21 +311,55 @@ def group_sums(doc, write=False):
         lin = 10 ** (lin / 20)
         for x in loose:
             lin += 10 ** (max(true_peak(x[:, c], 48000) for c in range(x.shape[1])) / 20)
+        # AND THE LOUDNESS OF THE SAME MIX, WHICH IS A DIFFERENT QUESTION AND A DIFFERENT
+        # RANKING. The peak above answers "can this clip", which is what a ceiling wants. It
+        # does not answer "how loud is this action against the next one", and on this tree the
+        # two disagree sharply: clerical_actionA peaks 10.7 dB above give_alms_actionA and is
+        # 0.2 dB QUIETER. That gap matters the moment one action crossfades into another,
+        # because a crossfade is heard by loudness and not by peak -- the same argument the
+        # module header makes about cues, arriving a second time one level up.
+        #
+        # A DRIFTING LAYER IS ADDED AT PHASE ZERO HERE RATHER THAN BOUNDED. For the peak that
+        # would be dishonest, since the worst case is what a ceiling needs; for loudness over
+        # 25-35 s it is near enough, because integrated loudness barely moves with the phase
+        # of one layer among several. The figure is an average, not a worst case, and nothing
+        # downstream should treat it as one.
+        loud_mix = mixed.copy()
+        for x in loose:
+            m = min(n, len(x))
+            loud_mix[:m] = loud_mix[:m] + x[:m]
+        loudness = integrated(loud_mix, 48000)
         fp = hashlib.sha256("|".join(
             "%s=%.2f" % (k.rsplit("/", 1)[1], float(files[k].get("gainDb") or 0.0))
             for k in keys).encode()).hexdigest()[:16]
         out[action] = {"tracks": len(keys), "summed": round(20 * math.log10(lin), 2),
+                       "loudness": round(loudness, 2),
                        "fp": fp, "lengths": sorted(set(lengths))}
-    print("%-24s %6s %9s  %s" % ("duty action", "tracks", "summed", "lengths"))
+    print("%-24s %6s %9s %12s  %s" % ("duty action", "tracks", "summed", "loudness", "lengths"))
     for a, v in out.items():
-        print("%-24s %6d %6.2f dBTP  %s"
-              % (a, v["tracks"], v["summed"], ", ".join("%g" % x for x in v["lengths"])))
+        print("%-24s %6d %6.2f dBTP %7.2f LUFS  %s"
+              % (a, v["tracks"], v["summed"], v["loudness"],
+                 ", ".join("%g" % x for x in v["lengths"])))
+    ranked = sorted(out, key=lambda a: -out[a]["loudness"])
+    if len(ranked) > 1:
+        print("\nloudest to quietest, and the step a crossfade between neighbours would make:")
+        for i, a in enumerate(ranked):
+            step = ("" if i == 0 else
+                    "   %+6.2f dB from %s" % (out[a]["loudness"] - out[ranked[i - 1]]["loudness"],
+                                              ranked[i - 1]))
+            print("  %-24s %7.2f LUFS%s" % (a, out[a]["loudness"], step))
+        print("  spread %.2f dB across %d actions"
+              % (out[ranked[0]]["loudness"] - out[ranked[-1]]["loudness"], len(ranked)))
     if write:
         groups = doc.setdefault("ambientGroups", {})
         for a, v in out.items():
             g = groups.setdefault(a, {"groupDb": 0.0})
             g["tracks"] = v["tracks"]
             g["summedTruePeakDbtp"] = v["summed"]
+            # SHARES summedAtTrims WITH THE PEAK, because it is the same render of the same
+            # files at the same trims. One fingerprint covers both, so the existing freshness
+            # test guards the loudness too without knowing it exists.
+            g["summedLoudnessLufs"] = v["loudness"]
             g["summedAtTrims"] = v["fp"]
         gone = [a for a in list(groups) if a not in out]
         for a in gone:

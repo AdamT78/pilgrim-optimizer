@@ -2373,6 +2373,14 @@ _BY_LOUDNESS = re.compile(r"\bLUFS\b|\bintegrated\b", re.I)
 _FAMILY = ((r"\bduty action", "sfx/duty_actions/"), (r"\bbuilding", "sfx/buildings/"),
            (r"\btithe", "sfx/tithe/"), (r"\bmisc\b", "sfx/misc/"),
            (r"\binterface cue|\bgeneral set", "sfx/general/"))
+# "THE SIXTH QUIETEST IN THE TREE" IS NOT A CLAIM TO BE THE QUIETEST, and before this the
+# guard read it as one and refused a true sentence. That is the worse failure of the two: a
+# check that rejects accurate prose teaches people to write round it, and the way round it
+# here is to drop the scope -- which is the exact habit this test exists to break. An ordinal
+# makes the claim MORE checkable, not less: "sixth quietest" says precisely five clips beat
+# it, so the test asserts the count rather than skipping the sentence.
+_ORDINAL = {"second": 2, "third": 3, "fourth": 4, "fifth": 5, "sixth": 6,
+            "seventh": 7, "eighth": 8, "ninth": 9, "tenth": 10}
 
 
 def _sound_readings(rec):
@@ -2444,6 +2452,18 @@ def test_no_sound_claims_a_rank_in_the_set_that_the_set_contradicts():
     IT ALSO CANNOT CHECK a rank claim made in sfx/README.md, which has the same disease and no
     field to read. Three of the stale sentences fixed on the day this was written were there.
 
+    NOR CAN IT CHECK A CLAIM SCOPED TO ONE AMBIENT FOLDER, and that gap grew teeth on
+    2026-10-17. `_SCOPED` only fires on "in the set" or "in the tree", so "the quietest bed in
+    Build Shrine" is never examined -- true or false. The folder names are not in `_FAMILY`
+    either, and adding them is not free: those patterns are tried in order against sentences
+    that already pass `_SCOPED`, so a cue record saying "the longest duty action in the set"
+    while mentioning Taxation could be re-scoped to an ambient folder it has nothing to do
+    with. The deliberate consequence is that a per-folder superlative is unguarded prose, and
+    the records now carry several. Widening `_SCOPED` to catch them would fire on the many
+    superlatives correctly scoped to a clip's own contents, which is the failure this test's
+    narrowness exists to avoid -- so the fix is a scope FIELD on the claim rather than a
+    cleverer regex, and until then per-folder ranks are checked by hand or not at all.
+
     Falsified by writing a true superlative and then filing a clip that beats it.
     """
     rec = json.loads((ROOT / "ui" / "board_v2" / "attribution.json")
@@ -2483,10 +2503,23 @@ def test_no_sound_claims_a_rank_in_the_set_that_the_set_contradicts():
                           if o != key and metric in r and o.startswith(within)
                           and rec.get(o, {}).get("kind", "cue") == kind
                           and (r[metric] < mine if sign > 0 else r[metric] > mine)]
-                if beaten:
-                    o, val = sorted(beaten, key=lambda kv: kv[1] * sign)[0]
-                    wrong.append("%s: claims %r %s but %s is %s (%s vs %s)"
-                                 % (key, word, metric, o, word, val, mine))
+                # An ordinal immediately before the word sets which place is being claimed;
+                # with none, the claim is first place and `want` is zero clips above it.
+                ord_m = re.search(r"\b(\w+)\s+%s\b" % word, sentence, re.I)
+                place = _ORDINAL.get(ord_m.group(1).lower(), 1) if ord_m else 1
+                want = place - 1
+                if len(beaten) != want:
+                    nth = "" if place == 1 else " %s-" % place
+                    if beaten:
+                        o, val = sorted(beaten, key=lambda kv: kv[1] * sign)[0]
+                        wrong.append(
+                            "%s: claims%s %r %s with %d clip(s) above it, but %d beat it "
+                            "(%s is %s at %s against its %s)"
+                            % (key, nth, word, metric, want, len(beaten), o, word, val, mine))
+                    else:
+                        wrong.append(
+                            "%s: claims%s %r %s with %d clip(s) above it, but nothing beats it"
+                            % (key, nth, word, metric, want))
     assert not wrong, (
         "%d rank claim(s) scoped to the whole set are no longer true -- a later clip beat them "
         "and nobody re-read the older record:\n  %s" % (len(wrong), "\n  ".join(sorted(set(wrong)))))

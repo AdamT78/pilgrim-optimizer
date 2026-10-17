@@ -128,7 +128,7 @@ gusts. **Ungated for both classes**, so a bed and a cue are at least measured in
 That sentence stood here from four beds that were each one continuous recording, and it stopped
 being true the moment a duty action started taking **stems**. A stem is a layer of a scene —
 grain handled, coins counted, beads told, robes moving — and a layer of a scene is mostly
-silence waiting for the other layers. Measured across all thirty-seven ambient tracks as they
+silence waiting for the other layers. Measured across all forty-two ambient tracks as they
 stand:
 
 | track | ungated | gated | delta | blocks kept |
@@ -150,10 +150,14 @@ stand:
 | `taxation_actionA/room` | −38.16 | −34.77 | −3.40 | 134 of 297 |
 | `build_roads_actionA/ox_cart_mechanics` | −38.00 | −34.30 | −3.70 | 149 of 347 |
 | `ordination_actionB/distant_cart` | −45.19 | −41.16 | −4.03 | 141 of 357 |
+| `build_roads_actionB/fabric` | −44.09 | −39.89 | −4.19 | 95 of 247 |
 | `build_roads_actionA/gravel` | −35.94 | −31.76 | −4.18 | 132 of 347 |
 | `ordination_actionB/two_horses` | −44.73 | −40.25 | −4.47 | 127 of 357 |
+| `build_roads_actionB/gallows_rope` | −49.35 | −44.44 | −4.91 | 80 of 247 |
+| `build_roads_actionB/tinkering` | −42.09 | −37.16 | −4.94 | 80 of 247 |
 | `build_roads_actionA/ox_breathing` | −42.53 | −37.52 | −5.01 | 110 of 347 |
 | `taxation_actionA/barn_creaks` | −44.40 | −39.19 | −5.20 | 90 of 297 |
+| `build_roads_actionB/gallows_timber` | −46.95 | −41.32 | −5.64 | 68 of 247 |
 | `build_roads_actionA/far_work` | −52.01 | −46.64 | −5.37 | 101 of 347 |
 | `build_roads_actionA/rammers` | −35.88 | −30.02 | −5.86 | 90 of 347 |
 | `build_roads_actionA/ox_cart_stones` | −55.15 | −48.82 | −6.33 | 81 of 347 |
@@ -166,6 +170,7 @@ stand:
 | `build_roads_actionB/crows_ravens` | −45.75 | −36.71 | −9.04 | 31 of 247 |
 | `taxation_actionA/coins` | −36.74 | −27.55 | −9.19 | 36 of 297 |
 | `build_roads_actionA/oil_lamp_rattle` | −48.48 | −38.97 | −9.51 | 39 of 347 |
+| `build_roads_actionB/monk_robe` | −47.86 | −36.23 | −11.63 | 17 of 247 |
 | `ordination_actionB/door_close` | −28.84 | −15.90 | −12.94 | 18 of 357 |
 | `ordination_actionB/rats_crossing` | −46.57 | −32.81 | −13.76 | 15 of 357 |
 | `ordination_actionB/rat_squeaks` | −48.62 | −34.82 | −13.80 | 15 of 357 |
@@ -245,8 +250,8 @@ every scrap of its energy is inside the blocks the gate keeps, and the delta red
 
 > **delta = 10 · log₁₀( all blocks ÷ surviving blocks )**
 
-Checked against all thirty-seven beds, the prediction agrees with the measured delta to within
-**0.06 dB on thirty-six of them**. The one outside it is `allocation_wind` at 0.19 dB, with
+Checked against all forty-two beds, the prediction agrees with the measured delta to within
+**0.06 dB on forty-one of them**. The one outside it is `allocation_wind` at 0.19 dB, with
 every one of its 167 blocks kept. `taxation_actionA/room` at 0.057 is the next worst and sits
 just inside — it was carried here as 0.061 and reads a hair under when the table's own rounded
 figures are used, which is the boundary rather than a counterexample either way. *The delta is
@@ -605,7 +610,7 @@ Still open for ambient:
   headroom is the claim, render the sum: the files are on disk and it costs a minute.
 - **THE PER-FILE SPAN HAS STOPPED BEING THE RIGHT QUANTITY.** This bullet has tracked where
   individual beds land since there were two of them, and Build Roads being levelled on
-  2026-10-16 broke it: of the thirty-seven ambient files, seven now sit between −26.5 and
+  2026-10-16 broke it: of the forty-two ambient files, seven now sit between −26.5 and
   −45.5 dBTP and **twenty-nine sit above −26.5**, the span running −3.4 to −37.5. Eight are
   still untrimmed, seven of them Mission's and the eighth `build_roads_actionB/wind`, which
   arrived on 2026-10-17 as the only bed of a new action and so has nothing to be balanced
@@ -621,6 +626,37 @@ Still open for ambient:
   span is kept only as a sorting aid.
 - **Per action, measured rather than multiplied:**
 
+  **PEAK IS NOT THE RANKING A TRANSITION HEARS, and the two orders differ sharply here.**
+  Everything above is summed true peak, which answers *can this action clip*. The moment one
+  action crossfades into another, the question becomes *will it step*, and that is loudness.
+  The same render now reports both — `summedLoudnessLufs` beside `summedTruePeakDbtp`, under
+  the same `summedAtTrims` fingerprint, because it is the same mix of the same files:
+
+  | duty action | loudness | true peak | step from the one above |
+  |---|---|---|---|
+  | `ordination_actionB` | **−28.85** | −2.42 | |
+  | `build_roads_actionB` | **−30.22** | −11.57 | −1.37 |
+  | `build_roads_actionA` | **−32.44** | −5.22 | −1.48 |
+  | `taxation_actionA` | **−33.83** | −12.02 | −1.39 |
+  | `clerical_actionB` | **−35.31** | −11.97 | −1.48 |
+  | `allocation_actionA` | **−35.80** | −10.74 | −0.49 |
+  | `give_alms_actionA` | **−42.41** | −24.96 | −6.61 |
+  | `clerical_actionA` | **−42.57** | −12.10 | −0.16 |
+  | `give_alms_actionB` | **−43.72** | −22.83 | −1.15 |
+
+  **`clerical_actionA` peaks 10.5 dB above `give_alms_actionA` and is 0.16 dB quieter.** That
+  one line is the module header's argument about cues — peak does not predict loudness —
+  arriving a second time one level up, on actions rather than clips. Anyone who matched these
+  nine by the peak column would put those two 10 dB apart and be wrong by 10 dB.
+
+  **The shape of it: six actions inside 7 dB, then a 6.61 dB cliff, then three.** The top six
+  are close enough that a transition between any pair of them is about the fade; below the
+  cliff sit the three single-bed actions, and a crossfade into one of those is about the
+  level, whatever the fade does. The full spread is **14.87 dB** against the peak column's
+  22.55 — so the actions are better matched than the peaks suggest, and still not matched.
+  *Nothing here is a judgement yet: every `groupDb` is 0, so this is where the beds happened
+  to land, not where anybody put them.*
+
   **All nine, at the trims of 2026-10-17**, rendered rather than estimated:
 
   | duty action | beds | sum of peaks | rendered | + the loudest cue filed |
@@ -631,13 +667,13 @@ Still open for ambient:
   | `clerical_actionB` | 1 | −11.97 | **−11.97** | −1.06 |
   | `taxation_actionA` | 4 | −1.96 | **−12.02** | −1.07 |
   | `clerical_actionA` | 3 | −11.35 | **−12.10** | −1.10 |
-  | `build_roads_actionB` | 2 | −12.18 | **−14.90** | −1.80 |
+  | `build_roads_actionB` | 7 | −0.70 | **−11.57** | −0.94 |
   | `give_alms_actionB` | 1 | −22.83 | **−22.83** | −3.03 |
   | `give_alms_actionA` | 1 | −24.96 | **−24.96** | −3.23 |
 
   The sum-of-peaks column assumes every track peaks at the same instant, which none of them
   do: it is **10.1 dB pessimistic** on Taxation, 6.6 on Build Roads and 6.5 on Mission, and
-  2.7 dB on Build Shrine, whose two beds barely overlap at all, and exactly nothing on the
+  10.9 dB on Build Shrine, whose seven beds barely overlap at all, and exactly nothing on the
   three actions with one bed, where the two columns are the same measurement. Rendering the sum costs a minute and is the only figure worth quoting — the
   same lesson the `coins` episode above taught, now across the whole tree.
 

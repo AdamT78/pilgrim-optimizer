@@ -4281,6 +4281,191 @@
       "measured": "25000 ms, peak -23.6 dB, integrated -45.75 LUFS, true peak -23.58 dBTP, stereo 48 kHz, L/R correlation +0.866666. 83.8% of the file is exact digital silence and both ends are silent. Gated it reads -36.71 LUFS, 9.04 dB off the ungated figure on 31 of 247 blocks, against 10*log10(247/31) = 9.01 -- the block-count identity. THE WRAP IS SAFE BY THE SECTION 13 TEST AND NOT BY MUCH MORE THAN A FACTOR OF TWO: material runs 5.132 to 20.041 s, so the gap across the wrap is 10.091 s against a longest interior gap of 5.056 s. Every other intermittent bed here clears it by far more; this is the closest margin in the tree and still the right side of the line. VORBIS COLLAPSED THE RUN COUNT, WHICH IS THE BOTTLE'S LESSON AGAIN AND LOUDER. The stem has 374 separate non-silent runs at 84.54% silence; the shipped .ogg has FOUR at 83.80%, because the encoder rings out across the hundreds of sub-millisecond gaps between caw transients. Same direction as every other file checked -- the shipped file is the less silent -- but 374 to 4 is the largest collapse seen, and it is a reminder that run counts read off a stem describe the edit and not the asset. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT.",
       "gainDb": 0.0,
       "sha256": "4160315a10fa32c5de7f3ee13ca94c87135195c396311fb988d7a1488c8437b5"
+    },
+    "sfx/ambient/build_roads_actionB/fabric_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "IENBA",
+      "licence": "cc0",
+      "licenceNote": "Creative Commons 0 on freesound: copy, modify, distribute and perform, commercially, without permission and without attribution. THE LICENCE WAS CHECKED BEFORE ANYTHING ELSE WAS, which is the door's lesson applied. door_close's first candidate was measured in full, traced at r = 0.6573 against a control ceiling of 0.405, and then thrown away on Attribution 4.0 -- because ui/assets/gen_credits.py builds the shipped credits from ui/assets/attribution.json alone and cannot see this tree, so an attribution obligation here could not be kept. Freesound licences vary per upload and the only way to know is to look. This one is CC0, so every licence in this tree still reads attributionRequired: false. THE ASSEMBLY IS THIS PROJECT'S OWN.",
+      "design": "BUILT WITH CHATGPT, as the other Build Shrine and the Mission stems were. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample is meant to trace to the one upload in `sources`, and the trace was run and landed; see `modifications`.",
+      "generatedContent": "none",
+      "source": "build_shrine_fabric_flapping_stem_v03_25s.wav. The stem exists only on the project owner's disk; the thing anyone can fetch again is the file named in `sources`.",
+      "sources": [
+        {
+          "role": "the whole bed -- the entire 13.750 s upload, used THREE times at 0.000, +3.350 and +7.900 s",
+          "title": "Fabric Flapping",
+          "uploader": "IENBA",
+          "url": "https://freesound.org/people/IENBA/sounds/701647/",
+          "licence": "cc0",
+          "originalFilename": "701647__ienba__fabric-flapping.wav",
+          "measured": "13.750 s, 48 kHz stereo. Already at this tree's rate, so no resampling on the way in -- the first Build Shrine source that needed none, against the wind's 96 kHz and the raven's 44.1. Its last 0.5 s is 44.8 dB under its own average and its final non-zero sample is at 13.747 s.",
+          "note": "SAME UPLOADER AS rats_crossing's SOURCE, freesound 658429, and the contrast is worth keeping: that one is the only bed in the tree whose stated source FAILED its probe, at r = 0.074 with a control that outscored it. This one lands 14 of 14. The uploader is not the variable -- what was done to the audio afterwards is."
+        }
+      ],
+      "originalFilename": "build_shrine_fabric_flapping_stem_v03_25s.wav",
+      "originalPath": "freesound.org/people/IENBA/sounds/701647",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Build Shrine fabric -- canvas and rope working in the wind",
+      "role": "the third track under build_roads actionB, which is Build Shrine, with wind_sfx_v01.ogg and crows_ravens_sfx_v01.ogg. It loops. The made thing in a scene whose other two layers are weather and birds: cloth under tension, which is what a shrine under construction has.",
+      "modifications": "SOURCE CONFIRMED, THREE COPIES, AND THE PLACEMENTS COVER THE MATERIAL. Fourteen of fourteen probed events match at r up to 0.9166, at THREE constant placements: the whole 13.750 s upload laid in at 0.000, +3.350 and +7.900 s. Those cover 0.000-13.750, 3.350-17.100 and 7.900-21.647, and the stem's own material runs 0.000-21.412 -- so every sounding moment belongs to a placed copy and nothing is left over. THAT COVERAGE CHECK IS THE CROWS' LESSON and it is now run as a matter of course: offsets that agree with each other prove nothing on their own, because a probe wrong by a constant produces exactly that. THE CONTROL IS THE SAME MATERIAL, WHICH MAKES IT A BETTER CONTROL. yuval's `fabric-movement-wool` (freesound 188208, the Allocation wool_robe source) is another fabric recording and matches 0 of 14 at r max 0.2160. A control drawn from a different material class would have been easier to beat. THE COPIES ARE LEVELLED AND GATED, NOT JUST PLACED. Where a copy plays alone the fit gives -9.1 to -10.0 dB for the first and -11.7 to -13.1 dB for the third, and the third's gain climbs steadily across three seconds, which is a slow fade-in. 17.2-18.2 s is muted outright in the stem though the third copy covers it. So the three overlap, at different levels, with parts cut away -- which is what the covering note means by made from one sound. WHAT IS NOT EXPLAINED: where a copy plays alone and nothing overlaps it, the correlation sits at 0.87-0.92 rather than the 0.99 a plain excerpt reaches. The obvious cause was tested and is not it -- the stem's left channel scores 0.8673 against the source's left, 0.8663 against its right and 0.8771 against its mid, so it is not a question of which channel was taken (the side signal scores 0.1470, so the source is near-mono itself). THIS IS THE SECOND BUILD SHRINE STEM WITH THAT SIGNATURE, after the wind at 0.82, and both came through the same pipeline. One residual is a curiosity; two in one folder is a pattern worth naming, and it is named here rather than explained. THE CONTAINER: Vorbis q6 at the stem's own 48 kHz stereo, no trim, no fade and no level change; the stem peaks at -16.5 dBFS so there was no headroom problem to solve before encoding.",
+      "measured": "25000 ms, peak -16.9 dB, integrated -44.09 LUFS, true peak -16.88 dBTP, stereo 48 kHz, L/R correlation +0.997236. 59.0% of the file is exact digital silence; the stem it came from reads 59.5% in 481 separate runs where the shipped .ogg has THREE, the same Vorbis ring-out the crows showed at 374 to 4. IT IS NOT DUAL MONO AND THE CORRELATION ALONE WOULD SAY IT WAS. In the stem the two channels correlate +1.000000 and are NOT identical: the right is the left times 1.3764 with the residual 98 dB down, so it is one mono signal panned 2.77 dB to the right. Correlation cannot tell a copy from a copy at another level; the ratio can. Folding to mono costs 1.29 dB of LEVEL and nothing of content, which is the opposite of build_roads_actionA/oil_lamp_flame, where a 4 ms delay costs 21 dB of comb filtering, and different again from the deleted lamp, which was identical sample for sample. Three kinds of not-really-stereo, now all three seen here. THE LOOP IS GOOD, AND THE FIRST READING OF IT HERE WAS WRONG. The three sounding runs are 0.000-4.721, 8.369-10.679 and 18.188-21.412, so a lap holds silences of 3.648, 7.509 and -- across the wrap -- 3.588 s. The wrap silence is 60 ms shorter than the shortest interior one, which fails section 13 of the loop note as that section was written, and this record first said so, calling it `rammers' fault almost exactly ... the same size of problem`. THAT COMPARED THE WRONG QUANTITY. 60 ms is 1.6% of a 3.6 s gap; rammers is 0.068 s on 0.768, which is 8.9%, five and a half times worse. Duration is heard as a ratio and not as a difference, and the threshold for telling two multi-second intervals apart is around 5-10% of their length -- so rammers sits on that boundary and this does not come near it. The two differ again in kind: rammers' pauses are about 1.5 s inside a rhythmic work gang, these are 3.6 to 7.5 s in a wind with no pulse. Section 13 has been restated as a ratio because of this file. NOTHING NEEDS FIXING: the seam is also clickless, the first 50 ms reads -91.8 dBFS and the butt-join step is 0.00000000 exactly, so the file fades up from true silence. AND IT NEVER PLAYS ALONE -- wind_sfx_v01.ogg under it is 0.0% silence, so the fabric's gaps are filled by a continuous bed, which is the argument clerical_actionA/rosary's record makes about a stem not needing to be seamless by itself. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT.",
+      "gainDb": 0.0,
+      "sha256": "e6d90d6bbff77d9cffe408efe0fe7a928cc390877c6fbbfca7253f8765aecb4b"
+    },
+    "sfx/ambient/build_roads_actionB/gallows_timber_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "Matt Script",
+      "licence": "sonniss-gameaudiogdc",
+      "licenceNote": "Sonniss GameAudioGDC 2019 bundle, pack `Matt Script - Squeaks & Creaks`. Taken as an individual file from the gamesounds.xyz mirror rather than out of a numbered archive, so no archive number applies. Royalty-free: personal and commercial game use, modification and unlimited projects permitted, no attribution required. The publisher and pack are named here anyway. Same single-year path shape as the Build Shrine wind, read by the clause added on 2026-10-17. THE ASSEMBLY IS THIS PROJECT'S OWN.",
+      "design": "BUILT WITH CHATGPT, as the other Build Shrine and the Mission stems were. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample is meant to trace to the one upload in `sources`, and the trace was run and landed; see `modifications`.",
+      "generatedContent": "none",
+      "source": "build_shrine_gallows_timber_stem_v02_25s.wav. The stem exists only on the project owner's disk; the thing anyone can fetch again is the file named in `sources`.",
+      "sources": [
+        {
+          "role": "the whole bed -- a 4.673 s recording used repeatedly, at seven resolved placements between +3.537 and +22.797 s",
+          "title": "Old wood floor_creak_creaking_slow_back and forth_04",
+          "uploader": "Matt Script, in the pack `Squeaks & Creaks`",
+          "url": "https://gamesounds.xyz/?dir=Sonniss.com+-+GDC+2019+-+Game+Audio+Bundle%2FMatt+Script+-+Squeaks+%26+Creaks",
+          "licence": "sonniss-gameaudiogdc",
+          "originalFilename": "Old wood floor_creak_creaking_slow_back and forth_04.wav",
+          "measured": "4.673 s, 96 kHz, 24-bit stereo. Resampled to 48 kHz for the probe. NOT PERIODIC, which was checked rather than assumed: autocorrelated over lags from 0.15 to 3.0 s it shows no self-similarity peak above 0.15 at all, despite `slow back and forth` in its name.",
+          "note": "THE URL IS THE PACK'S DIRECTORY, NOT THE FILE'S, because that is how the mirror was given. The filename above is exact. The ampersand in the pack name is why the url carries %26; a bare & truncates the query."
+        }
+      ],
+      "originalFilename": "build_shrine_gallows_timber_stem_v02_25s.wav",
+      "originalPath": "gamesounds.xyz/Sonniss.com - GDC 2019 - Game Audio Bundle/Matt Script - Squeaks & Creaks",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Build Shrine gallows timber -- a frame working under load",
+      "role": "the fourth track under build_roads actionB, which is Build Shrine, with wind, crows_ravens and fabric. It loops. Paired with gallows_rope_sfx_v01.ogg: the frame and what hangs from it.",
+      "modifications": "SOURCE CONFIRMED AGAINST A CONTROL OF THE SAME MATERIAL. Fourteen of fourteen probed events match at r up to 0.9326. The control is snake16547's `old-wood-door-creak` -- another old-wood creak recording, which is the hardest kind of control to beat -- and it matches 0 of 14 at r max 0.1498. The rope bed's own source was run as a second control and reaches 0.1526. THE COPY COUNT IS NOT RESOLVED AND IS NOT GUESSED AT. Event matching puts the copies at seven distinct placements -- +3.537, +4.139, +7.947, +13.262, +16.857, +18.696 and +22.797 s -- but copies of a 4.673 s source at those positions overlap heavily, and an event inside an overlap matches whichever copy is louder there, so seven resolved placements is a lower bound on the alignment rather than a count of layers. THE OBVIOUS EXPLANATION WAS TESTED AND RULED OUT: a periodic source would let a window lock onto the wrong cycle and manufacture spurious placements, and the two closest placements here are 0.602 s apart, which looked exactly like that. The source autocorrelates below 0.15 at every lag from 0.15 to 3.0 s. It is not periodic, so that is not what is happening, and no replacement mechanism is proposed. WHAT IS ESTABLISHED is that the placements cover the material: the four sounding runs are 3.895-4.585, 6.911-8.996, 16.036-17.916 and 21.479-23.844, and every one of them falls inside a placed copy. The one hole in the coverage, 12.620-13.262, is silent in the stem. That check is the crows' lesson and it is why the placement list is trusted as far as it goes. THE CONTAINER: Vorbis q6 at the stem's own 48 kHz stereo, no trim, no fade and no level change; the stem peaks at -23.4 dBFS so there was no headroom problem to solve.",
+      "measured": "25000 ms, peak -23.4 dB, integrated -46.95 LUFS, true peak -23.33 dBTP, stereo 48 kHz, L/R correlation +0.998089. 71.9% of the file is exact digital silence in 4 runs. Gated it reads -41.32 LUFS, 5.64 dB off the ungated figure on 68 of 247 blocks, against 10*log10(247/68) = 5.60 -- the block-count identity. THE LOOP IS FINE AND THE FIRST VERSION OF THE TEST WOULD HAVE SAID OTHERWISE. Material runs 3.895-23.844, so the interior pauses are 2.325, 3.563 and 7.040 s and the wrap gap is 5.051 s -- shorter than the longest interior pause, which is what the old warning keyed on, and 2.17 TIMES THE SHORTEST, which is what matters. Section 13 is now a ratio and this reads `listen`, comfortably clear of the 0.95 threshold. Both ends are true digital silence, -240 dBFS over 50 ms either side, and the butt-join step is 0.000000. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT.",
+      "gainDb": 0.0,
+      "sha256": "a04202098dc94f33c1b78d84e15d0c7386937beabf44db104857701f994162a1"
+    },
+    "sfx/ambient/build_roads_actionB/gallows_rope_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "jergonda",
+      "licence": "cc0",
+      "licenceNote": "Creative Commons 0 on freesound: copy, modify, distribute and perform, commercially, without permission and without attribution. CHECKED BEFORE ANYTHING WAS MEASURED, which is the door's standing lesson -- freesound licences vary per upload and door_close's first candidate was traced in full and then discarded on Attribution 4.0. Every licence in this tree still reads attributionRequired: false. THE ASSEMBLY IS THIS PROJECT'S OWN.",
+      "design": "BUILT WITH CHATGPT, as the other Build Shrine and the Mission stems were. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample is meant to trace to the one upload in `sources`, and the trace was run and landed; see `modifications`.",
+      "generatedContent": "none",
+      "source": "build_shrine_gallows_rope_stem_v01_25s.wav. The stem exists only on the project owner's disk; the thing anyone can fetch again is the file named in `sources`.",
+      "sources": [
+        {
+          "role": "the whole bed -- the 18.486 s upload used THREE times, at +0.030, +3.360 and +6.260 s",
+          "title": "Hang Man's Rope",
+          "uploader": "jergonda",
+          "url": "https://freesound.org/people/jergonda/sounds/254735/",
+          "licence": "cc0",
+          "originalFilename": "254735__jergonda__hang-mans-rope.wav",
+          "measured": "18.486 s, 44.1 kHz, 16-bit stereo. Resampled to 48 kHz for the probe, and THE ONLY 16-BIT SOURCE IN THIS FOLDER -- the wind and the timber are 24-bit at 96 kHz and the raven 32-bit float at 44.1.",
+          "note": "Rope under load, creaking. The bed it feeds is named for the sound and not for anything on the board: Build Shrine builds a shrine, and the gallows is the other thing a frame of timber and rope is."
+        }
+      ],
+      "originalFilename": "build_shrine_gallows_rope_stem_v01_25s.wav",
+      "originalPath": "freesound.org/people/jergonda/sounds/254735",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Build Shrine gallows rope -- hemp taking the weight",
+      "role": "the fifth track under build_roads actionB, which is Build Shrine, with wind, crows_ravens, fabric and gallows_timber. It loops. Paired with gallows_timber_sfx_v01.ogg: the frame and what hangs from it.",
+      "modifications": "SOURCE CONFIRMED, THREE COPIES, AND THE CLEANEST PLACEMENT SET IN THE FOLDER. Fourteen of fourteen probed events match at r up to 0.8902, at THREE constant placements: the 18.486 s upload laid in at +0.030, +3.360 and +6.260 s. Every event resolves to one of the three with no stragglers, which is what the timber beside it does not do. TWO CONTROLS, BOTH OF THEM CREAKS. vrymaa's `leather-rub-creaks` reaches 0.3460 and the timber bed's own source reaches 0.1526, both 0 of 14. The leather is the closest control run anywhere in this tree -- creaking cordage against creaking hide -- and it still falls half a scale short of the real thing. THE PLACEMENTS COVER THE MATERIAL: the copies span 0.030-18.516, 3.360-21.846 and 6.260-24.746, and the stem's three sounding runs are 6.177-9.233, 15.271-18.124 and 20.983-24.535, all inside. The first copy's opening six seconds are muted in the stem, so the layers are gated as well as placed. THE CONTAINER: Vorbis q6 at the stem's own 48 kHz stereo, no trim, no fade and no level change; the stem peaks at -17.9 dBFS so there was no headroom problem to solve.",
+      "measured": "25000 ms, peak -17.9 dB, integrated -49.35 LUFS, true peak -17.85 dBTP, stereo 48 kHz, L/R correlation +0.997409. 62.2% of the file is exact digital silence in 3 runs. Gated it reads -44.44 LUFS, 4.91 dB off the ungated figure on 80 of 247 blocks, against 10*log10(247/80) = 4.90 -- the block-count identity. THE WRAP IS SAFE OUTRIGHT, which is rarer here than it sounds. Material runs 6.177-24.535, the interior pauses are 2.859 and 6.037 s, and the wrap gap is 6.643 s -- LONGER than the longest interior pause, so it clears section 13's first clause without needing the ratio at all. Both ends are true digital silence, -240 dBFS over 50 ms either side, and the butt-join step is 0.000000. AT -49.35 LUFS it is the quietest of Build Shrine's five, against the wind's -31.11, so that folder spans 18.2 dB before anybody has set a trim. It is the SIXTH quietest bed in the tree by integrated loudness, after ox_cart_stones, bottle_knock, candle, far_work and donate_building. That ranking was checked rather than written from memory: the first draft of this line said third, and the rank guard refused it. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT.",
+      "gainDb": 0.0,
+      "sha256": "a21d233044d6f0ec87f792432aede03aea9317453d03cc58ac4717204dbc58d0"
+    },
+    "sfx/ambient/build_roads_actionB/tinkering_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "The Sound Pack Tree; Wav Junction Sound Effects; NistuGgner",
+      "licence": "sonniss-gameaudiogdc",
+      "licenceNote": "THREE OF THE FOUR SOURCES ARE SONNISS GameAudioGDC 2020, from two packs -- `The Sound Pack Tree - Construction & Tools` and `Wav Junction Sound Effects - Rocks` -- taken as individual files from the gamesounds.xyz mirror, so no archive number applies. THE FOURTH IS CC0 ON FREESOUND and is recorded on its own `sources` entry; the bed's top-level `licence` names the grant covering most of it and the per-source `licence` keys are the authority. The creation notes carry the same licence links and embed the source credits in the exported WAV's RIFF LIST/INFO. Royalty-free under the Sonniss grant: personal and commercial game use, modification and unlimited projects permitted, no attribution required; CC0 requires none either. The freesound licence was CHECKED AT SOURCE rather than taken from the covering note's table, which stated it correctly -- but a table supplied with a stem is a claim about a licence, not the licence, and the door's rejection came from exactly that distinction. Every licence in this tree still reads attributionRequired: false. THE ASSEMBLY IS THIS PROJECT'S OWN.",
+      "design": "BUILT WITH CHATGPT, as the other Build Shrine and the Mission stems were. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample is meant to trace to the four uploads in `sources`. All four do, and not by correlation: the project owner's creation notes specify the whole chain and all twelve cues rebuild from it at r = +1.000000. See `modifications`.",
+      "generatedContent": "none",
+      "source": "build_shrine_tinkering_more_stem_v01_25s.wav, the `more tinkering` of two variants offered. The stem exists only on the project owner's disk; the things anyone can fetch again are the four files named in `sources`. Two preview mixes, build_shrine_more_tinkering_loop_v01_25s.wav and build_shrine_less_tinkering_loop_v01_25s.wav, sit beside it in the same folder and are this stem over the rest of the action rather than anything new.",
+      "sources": [
+        {
+          "role": "LONGER STONE-ON-STONE ADJUSTMENTS -- confirmed, three uses, at +1.490, +14.320 and +22.430 s",
+          "title": "0093_Rock_Quick_Drag_On_Rock_003",
+          "uploader": "Wav Junction Sound Effects, in the pack `Rocks`",
+          "url": "https://gamesounds.xyz/Sonniss.com%20-%20GDC%202020%20-%20Game%20Audio%20Bundle/Wav%20Junction%20Sound%20Effects%20-%20Rocks/0093_Rock_Quick_Drag_On_Rock_003.wav",
+          "licence": "sonniss-gameaudiogdc",
+          "originalFilename": "0093_Rock_Quick_Drag_On_Rock_003.wav",
+          "measured": "1.920 s, 48 kHz, 24-bit stereo. Already at this tree's rate.",
+          "note": "Every one of its three uses matches at r = 0.937-0.939 against the SAME source position, 0.578 s. Three copies of one moment, not three different drags."
+        },
+        {
+          "role": "SHORTER STONE-ON-STONE ADJUSTMENTS -- confirmed, three uses, at +4.300, +11.310 and +17.330 s",
+          "title": "0119_Rock_Quick_Drag_On_Rock_029",
+          "uploader": "Wav Junction Sound Effects, in the pack `Rocks`",
+          "url": "https://gamesounds.xyz/Sonniss.com%20-%20GDC%202020%20-%20Game%20Audio%20Bundle/Wav%20Junction%20Sound%20Effects%20-%20Rocks/0119_Rock_Quick_Drag_On_Rock_029.wav",
+          "licence": "sonniss-gameaudiogdc",
+          "originalFilename": "0119_Rock_Quick_Drag_On_Rock_029.wav",
+          "measured": "1.536 s, 48 kHz, 24-bit stereo. Already at this tree's rate.",
+          "note": "Three uses, r = 0.918-0.919, all at source position 0.781 s."
+        },
+        {
+          "role": "SMALLER STONE PLACEMENTS AND SETTLING CONTACTS -- confirmed, three uses, at +4.465, +11.515 and +18.875 s",
+          "title": "stone_slab2",
+          "uploader": "NistuGgner",
+          "url": "https://freesound.org/people/NistuGgner/sounds/700536/",
+          "licence": "cc0",
+          "originalFilename": "700536__nistuggner__stone_slab2.wav",
+          "measured": "0.489 s, 44.1 kHz, 24-bit stereo. Resampled to 48 kHz for the probe. THE SHORTEST SOURCE IN THIS TREE, under half a second.",
+          "note": "Three uses, r = 0.726-0.729, all at source position 0.057 s. A source this short is the shape that defeats a sliding probe, so event matching was used from the start."
+        },
+        {
+          "role": "BRICK PLACEMENT, the initial contact when setting something down -- confirmed, three uses, at frames 67200, 680640 and 1068480 (1.400, 14.180 and 22.260 s), each the excerpt 0.000-0.420 s at -14.234364, -14.734364 and -14.934364 dB",
+          "title": "044315 - Lay Brick 15",
+          "uploader": "The Sound Pack Tree, in the pack `Construction & Tools`",
+          "url": "https://gamesounds.xyz/Sonniss.com%20-%20GDC%202020%20-%20Game%20Audio%20Bundle/The%20Sound%20Pack%20Tree%20-%20Construction%20%26%20Tools/044315%20-%20Lay%20Brick%2015.wav",
+          "licence": "sonniss-gameaudiogdc",
+          "originalFilename": "044315 - Lay Brick 15.wav",
+          "measured": "0.965 s, 96 kHz, 24-bit MONO -- the only mono source in this folder. sha256 ad20486c535a51bc..., which matches the fingerprint the creation notes give for it.",
+          "note": "IT WAS FILED `stated-not-corroborated` FOR ABOUT AN HOUR AND THAT WAS THE PROBE'S FAULT, NOT THE FILE'S. Correlating the stem against the RAW source failed here while it worked on the other three, because the pipeline low-passes every source at 6,500 Hz before cutting and a 0.42 s brick contact is mostly broadband transient -- it loses more to that filter than a rock drag or a slab does. Reconstructed through the documented chain instead, it matches at r = +1.000000. See `modifications`."
+        }
+      ],
+      "originalFilename": "build_shrine_tinkering_more_stem_v01_25s.wav",
+      "originalPath": "gamesounds.xyz/Sonniss.com - GDC 2020 - Game Audio Bundle/{The Sound Pack Tree - Construction & Tools, Wav Junction Sound Effects - Rocks}; freesound.org/people/NistuGgner/sounds/700536",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Build Shrine tinkering -- stone being set and shifted",
+      "role": "the sixth track under build_roads actionB, which is Build Shrine, with wind, crows_ravens, fabric, gallows_timber and gallows_rope. It loops. The work itself: the only layer in the folder that is somebody doing something rather than weather, birds, cloth or a frame.",
+      "modifications": "ALL FOUR SOURCES CONFIRMED, AND NOT BY CORRELATION -- BY RECONSTRUCTION. The project owner supplied `build_shrine_tinkering_more_stem_v01_25s_creation_notes.md`, which specifies the whole chain: which channel of each source, resample_poly ratios, a 70 Hz and a 6,500 Hz second-order Butterworth applied with causal sosfilt to the WHOLE source before cutting, the exact sample slice of each excerpt, raised-cosine edge fades, an equal-power pan at -0.10 (L x0.7604059656000309, R x0.6494480483301837), and a start frame and gain for each of twelve cues. REBUILT FROM THAT RECIPE, EVERY ONE OF THE TWELVE MATCHES THE STEM AT r = +1.000000 ON BOTH CHANNELS, fitted gain +1.0000, with the residual 101 to 107 dB under the stem -- which is the triangular dither floor the notes say was applied at quantization. That is not a trace, it is a reproduction: this is now the best-evidenced bed in the tree by a wide margin, and the only one whose audio can be regenerated from first principles. THE FOUR SOURCE FINGERPRINTS IN THE NOTES MATCH THE FILES ON DISK, and so does the export fingerprint of the stem itself, 27877fa12828b9ff... . THE NOTES' OWN MEASUREMENTS AGREE WITH THIS TREE'S: true peak -11.55 against -11.58 measured here, sample peak about -11.75 against -11.73, and the notes' `integrated loudness` of -37.25 is the GATED figure, which reads -37.16 here; this tree records ungated, -42.09, and the two are different measures rather than a disagreement. WHAT THE FIRST PASS GOT WRONG, KEPT BECAUSE THE FAULT IS GENERAL. Probing the stem against the RAW sources confirmed three of the four and left the brick at `stated-not-corroborated` for about an hour. Two independent mistakes, both mine. FIRST, THE SOURCES ARE FILTERED BEFORE THEY ARE CUT. A 6,500 Hz low-pass takes more from a 0.42 s brick contact, which is mostly broadband transient, than from a rock drag or a slab, whose energy already sits low -- so the same probe that scored 0.92 on the drags scored an unstable 0.585 on the brick, and flipped sign when the window length changed. A PROBE AGAINST AN UNPROCESSED SOURCE IS A PROBE AGAINST SOMETHING THE STEM DOES NOT CONTAIN. SECOND, AND WORSE, THE TEST I TRUSTED MOST WAS THE BROKEN ONE. `If one recording is used three times, the three uses correlate with each other` is sound, and it needs no source at all -- but I ran it at FIXED ALIGNMENT and it returned +0.159, +0.159 and -0.042, which I read as proof the three runs were different sounds. Allowing a lag search returns r = +1.0000 at lags of -1.00, +1.00 and +2.00 ms. The three runs are bit-identical gestures. THE 1-2 MS IS ITSELF EXPLAINED BY THE RECIPE: the three brick cues carry different gains, -14.23, -14.73 and -14.93 dB, so each one's 4 ms raised-cosine fade-in crosses the 24-bit quantization threshold at a different moment, and a silence detector reports three different onsets for three identical gestures. A SELF-SIMILARITY TEST MUST CROSS-CORRELATE, NEVER COMPARE AT A FIXED OFFSET, and on a transient one millisecond is the difference between 1.00 and 0.15. THE CONTAINER: Vorbis q6 at the stem's own 48 kHz stereo, no trim, no fade and no level change; the stem peaks at -11.7 dBFS so there was no headroom problem to solve.",
+      "measured": "25000 ms, peak -11.7 dB, integrated -42.09 LUFS, true peak -11.58 dBTP, stereo 48 kHz, L/R correlation +0.997601. 68.4% of the file is exact digital silence in 12 runs. Gated it reads -37.16 LUFS, 4.94 dB off the ungated figure on 80 of 247 blocks, against 10*log10(247/80) = 4.90 -- the block-count identity. IT IS THE LOUDEST BED IN BUILD SHRINE BY PEAK and by a wide margin: -11.58 dBTP against the wind's -14.90 and the crows' -23.58, which is what twelve struck and dragged stones do against weather. By loudness it is second of the six at -42.09, behind only the wind's -31.11 and ahead of the fabric's -44.09 -- checked against the folder rather than written from the impression that two thirds silence must put it low. THE WRAP IS COMFORTABLE. Material runs 1.408-24.156, the interior pauses are 0.256, 1.280, 1.460, 1.984, 3.087 and 5.824 s and the wrap gap is 2.252 s -- 8.80 TIMES the shortest interior pause, well clear of the 0.95 threshold, though shorter than the longest. Both ends are true digital silence and the butt-join step is 0.000000. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT.",
+      "gainDb": 0.0,
+      "sha256": "f4a41301a01b1fda48a587a61d436821bf3a646e271c929142fa4f5391c83424"
+    },
+    "sfx/ambient/build_roads_actionB/monk_robe_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "Yuval",
+      "licence": "cc0",
+      "licenceNote": "Creative Commons 0 on freesound: copy, modify, distribute and perform, commercially, without permission and without attribution. CHECKED AT SOURCE AGAIN even though this tree already carries this exact upload under allocation_actionA/wool_robe -- a licence filed once is evidence about that day, and an uploader can change one. It still reads CC0. Every licence here still reads attributionRequired: false. THE CUT IS THIS PROJECT'S OWN.",
+      "design": "BUILT WITH CHATGPT, as the other Build Shrine and the Mission stems were. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample is meant to trace to the one upload in `sources`, and the trace was run and landed; see `modifications`.",
+      "generatedContent": "none",
+      "source": "build_shrine_monk_repositioning_stem_v02_25s.wav. The stem exists only on the project owner's disk; the thing anyone can fetch again is the file named in `sources`.",
+      "sources": [
+        {
+          "role": "the whole bed -- two excerpts, from about 42.9 s and about 92.4 s of a 145 s recording",
+          "title": "fabric movement wool",
+          "uploader": "Yuval",
+          "url": "https://freesound.org/people/Yuval/sounds/188208/",
+          "licence": "cc0",
+          "originalFilename": "188208__yuval__fabric-movement-wool.wav",
+          "measured": "145.262 s, 48 kHz, 24-bit MONO. THE ONLY SOURCE IN THIS FOLDER THAT NEEDED NOTHING DOING TO IT before the probe -- already at this tree's rate, and mono, so there was no resampling and no channel to choose. The longest source feeding any bed here.",
+          "note": "SECOND BED IN THIS TREE FROM THIS UPLOAD, after allocation_actionA/wool_robe, and the second source to feed two different duty actions after Vrymaa's lamp. It also served as the CONTROL for build_roads_actionB/fabric, where it reached 0.2160 -- so this tree has now used the same recording as evidence, as a control, and as two beds."
+        }
+      ],
+      "originalFilename": "build_shrine_monk_repositioning_stem_v02_25s.wav",
+      "originalPath": "freesound.org/people/Yuval/sounds/188208",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Build Shrine monk robe -- wool shifting as somebody repositions",
+      "role": "the seventh track under build_roads actionB, which is Build Shrine, with wind, crows_ravens, fabric, gallows_timber, gallows_rope and tinkering. It loops. The person in the scene: twice a lap somebody moves and their robe moves with them.",
+      "modifications": "SOURCE CONFIRMED AND THE CUT IS TWO EXCERPTS. Seven of seven probed events match at r up to 0.9340, at TWO constant placements: material from about 42.855 s of the source laid in at 6.425 s, and from about 92.371 s laid in at 16.541 s. The control is the OTHER fabric recording in this same folder, IENBA's `Fabric Flapping` behind build_roads_actionB/fabric, which matches 0 of 7 at r max 0.1458 -- cloth against cloth, in the same duty action, which is about as unhelpful a control as could be arranged and it still separates by a factor of six. AND IT IS A DIFFERENT CUT FROM allocation_actionA/wool_robe, WHICH WAS CHECKED RATHER THAN ASSUMED, the rule Vrymaa's lamp established when one upload first fed two actions. Each of this bed's two sounding regions was cross-correlated against the WHOLE of the Allocation bed -- a lag search, not a comparison at a fixed offset -- and they peak at 0.0209 and 0.0227. For scale: the two lamp beds, genuinely different cuts of one upload, scored 0.575 against each other, and the same region against itself would be 1.0000. These two share no material at all, which is a cleaner separation than the lamp pair managed. THE LAG SEARCH IS NOT INCIDENTAL. The same comparison run at a fixed alignment is what produced the wrong answer on tinkering_sfx_v01.ogg hours earlier, where three bit-identical gestures scored 0.159 because their onsets differed by a millisecond. A cross-correlation costs the same and cannot fail that way. THE CONTAINER: Vorbis q6 at the stem's own 48 kHz stereo, no trim, no fade and no level change; the stem peaks at -22.8 dBFS so there was no headroom problem to solve.",
+      "measured": "25000 ms, peak -22.8 dB, integrated -47.86 LUFS, true peak -22.74 dBTP, stereo 48 kHz, L/R correlation +0.991266. IT IS THE EMPTIEST BED IN BUILD SHRINE at 90.3% exact digital silence, in two runs: 6.433-7.585 and 16.375-17.655 s. Gated it reads -36.23 LUFS, 11.63 dB off the ungated figure on 17 of 247 blocks, against 10*log10(247/17) = 11.62 -- the block-count identity, agreeing to 0.005 dB, the closest agreement of any bed in the tree. THE DELTA IS THE FIFTH WIDEST HERE, after bottle_knock, rat_squeaks, rats_crossing and door_close, and it is the first of those five that is not a single event -- two gestures rather than one burst. THE WRAP IS SAFE OUTRIGHT: one interior pause of 8.789 s against a wrap gap of 13.779, so it clears section 13's first clause without needing the ratio. Only distant_dogs and gallows_rope manage that too. Both ends are true digital silence and the butt-join step is 0.000000. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT.",
+      "gainDb": 0.0,
+      "sha256": "296e9aee3bc7b4b524f5c6f74838ef06dec85979c192f03512c17dd4cb91cca8"
     }
   },
   "assetDirs": [
@@ -4350,55 +4535,64 @@
       "groupDb": 0.0,
       "tracks": 4,
       "summedTruePeakDbtp": -10.74,
-      "summedAtTrims": "596b1ed3448511ba"
+      "summedAtTrims": "596b1ed3448511ba",
+      "summedLoudnessLufs": -35.8
     },
     "build_roads_actionA": {
       "groupDb": 0.0,
       "tracks": 11,
       "summedTruePeakDbtp": -5.22,
-      "summedAtTrims": "02c4940d168faac6"
+      "summedAtTrims": "02c4940d168faac6",
+      "summedLoudnessLufs": -32.44
     },
     "build_roads_actionB": {
       "groupDb": 0.0,
-      "tracks": 2,
-      "summedTruePeakDbtp": -14.9,
-      "summedAtTrims": "779d103f4362a6f4"
+      "tracks": 7,
+      "summedTruePeakDbtp": -11.57,
+      "summedAtTrims": "01c19ab04a476840",
+      "summedLoudnessLufs": -30.22
     },
     "clerical_actionA": {
       "groupDb": 0.0,
       "tracks": 3,
       "summedTruePeakDbtp": -12.1,
-      "summedAtTrims": "55fb3502d5b64e8b"
+      "summedAtTrims": "55fb3502d5b64e8b",
+      "summedLoudnessLufs": -42.57
     },
     "clerical_actionB": {
       "groupDb": 0.0,
       "tracks": 1,
       "summedTruePeakDbtp": -11.97,
-      "summedAtTrims": "d1be912ce9e889d4"
+      "summedAtTrims": "d1be912ce9e889d4",
+      "summedLoudnessLufs": -35.31
     },
     "give_alms_actionA": {
       "groupDb": 0.0,
       "tracks": 1,
       "summedTruePeakDbtp": -24.96,
-      "summedAtTrims": "a55762d9e46ea469"
+      "summedAtTrims": "a55762d9e46ea469",
+      "summedLoudnessLufs": -42.41
     },
     "give_alms_actionB": {
       "groupDb": 0.0,
       "tracks": 1,
       "summedTruePeakDbtp": -22.83,
-      "summedAtTrims": "d13b1f124f2ec0e1"
+      "summedAtTrims": "d13b1f124f2ec0e1",
+      "summedLoudnessLufs": -43.72
     },
     "ordination_actionB": {
       "groupDb": 0.0,
       "tracks": 10,
       "summedTruePeakDbtp": -2.42,
-      "summedAtTrims": "196a2169ab9617eb"
+      "summedAtTrims": "196a2169ab9617eb",
+      "summedLoudnessLufs": -28.85
     },
     "taxation_actionA": {
       "groupDb": 0.0,
       "tracks": 4,
       "summedTruePeakDbtp": -12.02,
-      "summedAtTrims": "af10ba825d386e88"
+      "summedAtTrims": "af10ba825d386e88",
+      "summedLoudnessLufs": -33.83
     }
   }
 }

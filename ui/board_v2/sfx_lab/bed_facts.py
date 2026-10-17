@@ -41,6 +41,14 @@ BLOCK_S = 0.400
 HOP_S = 0.100
 ABS_GATE_LUFS = -70.0
 REL_GATE_LU = -10.0
+PAUSE_S = 0.25        # the shortest silence this tree calls a pause rather than texture
+# BELOW THIS FRACTION OF THE SHORTEST INTERIOR PAUSE, THE SEAM IS A TELL. 0.95 and not 0.90,
+# which was the first value and was wrong in a checkable way: it put `rammers` at 0.91 into
+# "listen" and so quietly overturned a judgement the loop note has carried since that bed was
+# filed. 5% is also the conservative end of the published range for telling two multi-second
+# intervals apart (5-10%), and a flag whose job is to fetch a human should sit at the
+# conservative end. At 0.95 rammers is a tell and build_roads_actionB/fabric, 0.98, is not.
+TELL_RATIO = 0.95
 
 
 def _lufs(power):
@@ -99,7 +107,41 @@ def silence(a, sr):
     out["tail"] = (n - 1 - nz[-1]) / sr
     out["wrap"] = out["head"] + out["tail"]
     out["interior_max"] = max(((d[b] - 1) / sr for b in breaks), default=0.0)
+    # PAUSES, NOT EVERY GAP. Section 13's test is about whether the loop point breaks the
+    # rhythm of the file's own silences, and a 3 ms hole between two transients is not one of
+    # those -- it is texture. Below this threshold the interior minimum collapses towards zero
+    # and the test stops being able to say anything. 0.25 s is the shortest thing anyone has
+    # called a pause in these notes.
+    out["pauses"] = sorted(g for g in ((d[b] - 1) / sr for b in breaks) if g >= PAUSE_S)
     return out
+
+
+def wrap_verdict(sil):
+    """Section 13's three-way test, stated as a RATIO rather than a difference.
+
+    THE DIFFERENCE FORM MISREAD A FILE AND THIS IS THE REPAIR. `build_roads_actionB/fabric`
+    has a wrap gap 60 ms under its shortest interior pause and was written up as `rammers'
+    fault almost exactly`, because in seconds the two misses are the same size: 0.060 against
+    0.068. In the terms that matter they are five and a half times apart -- 1.6% of a 3.6 s
+    gap against 8.9% of a 0.77 s one. DURATION IS HEARD AS A RATIO. The published figure for
+    telling two multi-second intervals apart is around 5-10% of their length, so a miss of a
+    couple of percent cannot be heard however many milliseconds it is.
+
+    Reporting only "the wrap is not the longest gap" was the other half of the fault: that is
+    the condition for NOT BEING PROVABLY SAFE, which is a different claim from being wrong,
+    and in capitals it reads like a failure. Three verdicts now, and the middle one says what
+    to do rather than implying the file is broken.
+    """
+    p = sil["pauses"]
+    w = sil["wrap"]
+    if not p:
+        return ("no interior pause to compare", None)
+    if w >= p[-1]:
+        return ("SAFE -- the wrap is the longest pause in the file", w / p[-1])
+    if w < TELL_RATIO * p[0]:
+        return ("A TELL -- the wrap is the short one; the loop point breaks the pattern", w / p[0])
+    return ("listen -- between the thresholds, %.2fx the shortest interior pause" % (w / p[0]),
+            w / p[0])
 
 
 def seam(a, neighbours=10):
@@ -217,11 +259,13 @@ def show(f):
     if sil["first"] is not None:
         print("    material %.3f to %.3f s   head %.3f  tail %.3f  WRAP GAP %.3f  interior max %.3f"
               % (sil["first"], sil["last"], sil["head"], sil["tail"], sil["wrap"], sil["interior_max"]))
-        # Section 13's test compares the wrap gap against the interior gaps, so it only has
-        # anything to say about a bed that HAS interior gaps. A continuous bed has none, and
-        # an unguarded `wrap <= interior_max` reads 0 <= 0 and cries wolf on every one of them.
-        if sil["interior_max"] > 0 and sil["wrap"] <= sil["interior_max"]:
-            print("    <-- WRAP GAP IS NOT THE LONGEST GAP. Section 13's test does not pass; listen.")
+        # Section 13's test compares the wrap gap against the interior pauses, so it only has
+        # anything to say about a bed that HAS them. A continuous bed has none, and an
+        # unguarded comparison cries wolf on every one of those.
+        if sil["pauses"]:
+            verdict, ratio = wrap_verdict(sil)
+            print("    pauses %s   wrap %.3f  ->  %s"
+                  % (", ".join("%.3f" % g for g in sil["pauses"]), sil["wrap"], verdict))
     for c, s in enumerate(f["seam"]):
         xm = "n/a (median is zero -- sparse file)" if s["x_median"] is None else "%.2fx median" % s["x_median"]
         xn = "n/a" if s["x_neighbour"] is None else "%.2fx neighbours" % s["x_neighbour"]
