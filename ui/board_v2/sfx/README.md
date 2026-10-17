@@ -941,7 +941,7 @@ here as the files being clipped. They are not known to be. Measure the **shipped
 
 ### `ambient/`, the first sounds here that are not events
 
-Thirty-three files under eight duty actions, and they are a different kind of thing from
+Thirty-seven files under nine duty actions, and they are a different kind of thing from
 everything above.
 
 **They live one folder per duty action** — `ambient/<duty>_<slot>/`, which is the same string
@@ -960,7 +960,7 @@ says it twice — because moving a file is cheap and renaming one costs a record
 New tracks are named for what they are: `footsteps`, `keys`, `wheat`, `coins`, `barn_creaks`,
 `candle`, `room`, `rosary`, `wool_robe`, `rammers`, `far_work`, `ox_breathing`, `wind`,
 `oil_lamp_flame`, `horse_snorts`, `staff`, `distant_dogs`, `night_city`, `rat_squeaks`,
-`rats_crossing`, `oil_lamp`, `door_close`.* A cue is an
+`rats_crossing`, `door_close`, `distant_cart`, `two_horses`, `bottle_knock`.* A cue is an
 event: it
 fires, it is 70 ms to 1.6 s long, and it is over. A bed runs underneath a selected duty action
 for as long as the player leaves it selected, so it loops, and almost every rule in this file
@@ -1679,14 +1679,156 @@ against each other and the group's absolute level is the one judgement here with
 behind it. Give Alms has the same gap on both its actions, with one bed each rather than
 eleven.
 
-### `ordination_actionB/`, Mission in eight — and a loop that closes on arithmetic
+### `build_roads_actionB/`, Build Shrine in two — a fold at the wrong end, and an inverted stem
 
-Eight tracks, and they divide cleanly by how they behave in time. `footsteps` and `staff` are
+`wind_sfx_v01.ogg` is 25 s of wind through winter grass, the only bed of a ninth duty action
+and **the second folder under the build_roads duty**: `actionA` is Build Road and holds
+eleven, this is Build Shrine and holds one. It is also the third bed in the tree called
+`wind`, which the folder convention anticipated — the folder owns which action, the filename
+owns which track — but it is worth saying out loud that `build_roads_actionA/wind`,
+`allocation_actionA/allocation_wind` and this one are three unrelated recordings.
+
+**The source is confirmed and the cut is a single excerpt.** Twelve of twelve one-second
+windows match Ivo Vicic's *91 Wind_winter grass_2_MS stereo* from the **Sonniss GDC 2019**
+bundle at r up to **0.8237**, eleven of them at one constant offset of **+42.247 s** — and
+constant to within a millisecond across twenty-one seconds, which is what rules out a
+time-stretch despite the suspiciously round 25.000 s length. **Controls separate cleanly**:
+sandy-ogilvie's hillside wind reaches 0.1571 and EFX's *Sheltered from the Wind 02* reaches
+0.2107, both 0 of 12.
+
+**And an unnamed candidate was checked, for the third time in this tree.** `wind winter open
+space v2.wav`, 164 s, downloaded within the same hour and named nowhere — the pattern that
+produced the CITY RUMBLE scare on `night_city` and the G4F scare on `two_horses`. It matches
+**0 of 12** at r max **0.2042**. Auditioned and rejected. *Three for three now, and the habit
+is worth keeping: an unnamed large file beside a named one is a question, not an answer.*
+
+**The loop is an equal-power fold at the TAIL, which is the mirror of `night_city`.** The
+twelfth window, at t = 23 s, matches at **+17.247 s** — exactly 42.247 minus the file's own
+25.000 — so the end of the stem carries the source material from immediately *before* the
+excerpt begins. Fitting both offsets at once gives the crossfade envelope directly rather
+than by inference: the body's gain holds flat to 22.2 s, the fold's is zero until 22.2, they
+cross at about **23.3** and the trade completes by **24.4**. A **2.1 s** equal-power
+crossfade. `night_city` folded the material *after* the body over its head in 2.0 s; this one
+folds the material *before* the body over its tail in 2.1. **Two files, two ends, the same
+technique and almost the same length — and this tree's stated convention is 1.5 s, which now
+disagrees with both.** `build_roads/wind` arrived with about 8 s. Four files, four lengths,
+and the convention is the only one of them nothing was built to.
+
+**The stem is polarity-inverted against its source.** Every window correlates *negative*,
+−0.59 to −0.82, never positive. Inaudible on its own and it changes nothing about the trace.
+It would matter the day a second bed is cut from this same upload, because the two would
+partially cancel rather than sum — which is the same situation as Vrymaa's lamp, cut twice
+for two actions, with the sign the other way round.
+
+**It is about +9 dB on the source, with a low cut.** Band by band the stem sits **+9.2 dB**
+over the source and holds that to within 0.4 dB from 100 Hz to 20 kHz — flat, so not an EQ —
+while 60–100 Hz reads +7.30 and 20–60 Hz reads **+2.35**, which is 6.9 dB below the broadband
+figure. That shape is a high-pass below about 100 Hz and nothing else. The same method found
+the opposite reading on `night_city`, where a residual that looked like an added rumble was a
+high-pass too; the band table is the cheap way to tell an EQ from a gain.
+
+**What is not explained, said plainly.** After gain, polarity and the low cut, the
+correlation tops out at **0.82** where a straight excerpt reaches 0.99 — so roughly a third
+of the variance is unaccounted for. It is not a time-stretch, because the offset does not
+drift; not an EQ, because the bands are flat; and not a raw mid-side delivery, because
+decoding the source as M±S scores *worse*, not better. No cause is proposed, because none was
+established. *The record says the same thing in the same words.*
+
+**It is the first bed to pass both wrap tests.** The butt-join step is 0.003480 left and
+0.000854 right — **1.42× and 0.36×** the file's own median sample-to-sample difference, and
+**0.53× and 0.21×** the largest step among its immediate neighbours. `build_roads/wind`,
+`oil_lamp_flame` and `night_city` each passed on neighbours and failed on the median, which
+was the evidence that the median test is the one at fault on sparse material; this one passes
+both and is continuous, which fits that reading rather than challenging it.
+
+**The stereo is recorded, not manufactured.** Best inter-channel lag is **−0.021 ms**, one
+sample at 48 kHz, at r +0.5409 — so the width is a real mid-side field and not a Haas delay.
+Folding it to mono costs **1.19 dB**, which is the honest price of real width, against
+`oil_lamp_flame`, whose 4 ms delay combs 21 dB the moment anything folds it.
+
+**Build Shrine has no cue either**, so it joins the list: **twenty-four beds across five duty
+actions** now have nothing to be levelled against. At −14.90 dBTP it is the quietest action
+in the tree bar the two Give Alms beds, and with one track the sum and the file are the same
+measurement.
+
+*This is the first bed measured by `sfx_lab/bed_facts.py` rather than by a script written for
+the occasion, and the butt-join test was added to that tool while filing it — calibrated by
+running it against the three files whose seam ratios were already written down.* See the
+housekeeping note below: it did not reproduce them.
+
+#### The crows, which are three copies of two birds — and a 200 ms error the layout caught
+
+`crows_ravens_sfx_v01.ogg` is the thing that happens in the weather: corvids over the
+hillside, 25 s against the wind's 25 s, and **the first bed here drawing on two packs at
+once**. Both are inside the Sonniss **GDC 2018** bundle and share its grant, so the single
+`licence` key is still correct and no permission turns on which pack a given caw came from.
+
+**Both sources confirmed, and the probe was chosen before it failed rather than after.** The
+crow is **2.350 s**, which is exactly the shape the sliding cross-correlation is known to
+break on — the Mission footsteps record has it scoring **0 of 117 windows** on a 3.5 s source
+of isolated events, because the local-energy floor clamps almost everywhere and flattens the
+result. So this one went straight to event-against-event matching. Eight events, against each
+source: **the crow matches five at r up to 0.9731, at two constant offsets**; **the raven
+matches two at r up to 0.9522, at one**. Each event scores 0.11 to 0.21 against the *other*
+source, so the pair separates itself without a control being needed. A control was run
+anyway — the wind bed's own source, Ivo Vicic's winter grass — and it matches **0 of 8 at
+r max 0.0784**. Nought point nine seven against nought point zero eight.
+
+**The layout accounts for the whole file.** Crow at **5.150–7.500**, raven at
+**6.950–19.533**, crow again at **17.690–20.040**, and the stem's material runs
+**5.132–20.041**. The 2.350 s crow file is used twice and the 12.583 s raven once, with the
+raven's span overlapping both crow copies — which is what the covering note meant by
+*combining two sources*. Three placed copies, two recordings.
+
+**And the layout is what caught a 200 ms error in the probe, which is the part worth keeping.**
+The first pass reported the offsets as +5.350, +7.150 and +17.890, and those numbers looked
+perfectly reasonable — until they left **5.150 to 5.350** belonging to nothing. That stretch
+is not silence: it rises from −24.8 to −3.8 dB against the file's loudest tenth of a second,
+which is the attack of the first caw. The probe was reporting each match against its **event
+centre** while the window it actually correlated began 200 ms earlier. Refitting whole copies
+settles it: at the corrected offsets the fits give r **+0.47, +0.59 and +0.28** across the
+full span of each copy, and at the uncorrected ones **−0.01, −0.07 and −0.00**. *A probe that
+is wrong by a constant does not look wrong — every offset agrees with every other one, which
+is the thing that normally signals correctness.* What exposed it was a 200 ms hole in the
+accounting, so: **when a trace resolves, check that the placements cover the material, not
+just that the offsets agree.**
+
+*Why the whole-copy figures are so much lower than the per-event ones.* The stem is 83.8%
+silence, so each source is heard in bursts with the rest gated out, and a fit across the full
+2.350 s or 12.583 s is mostly fitting silence. The per-event numbers carry the claim; the
+whole-copy fits only resolve the alignment. Worth stating because the two sets of numbers sit
+side by side in the record and the weaker pair is not the weaker evidence.
+
+**The wrap is safe, and by the narrowest margin in the tree.** Material runs 5.132 to
+20.041 s, so the gap across the wrap is **10.091 s** against a longest interior gap of
+**5.056 s** — section 13's test passes by a factor of two, where every other intermittent bed
+here clears it by far more. Right side of the line, and the first one close enough to the
+line to be worth saying so.
+
+**Vorbis collapsed the run count 374 to 4, which is the bottle's lesson again and louder.**
+The stem holds **374** separate non-silent runs at 84.54% silence; the shipped `.ogg` holds
+**four** at 83.80%, because the encoder rings out across the hundreds of sub-millisecond gaps
+between caw transients. Same direction as every file checked in the note below — the shipped
+file is always the less silent — but 374 to 4 is by far the largest collapse, and it is the
+clearest case yet that *a run count read off a stem describes the edit, not the asset.*
+
+**It costs the action nothing in headroom.** At −23.58 dBTP it is 8.7 dB under the wind, and
+the two together still render at **−14.90 dBTP**, unchanged to the hundredth — the crows
+simply never peak where the wind does. Build Shrine stays the quietest action in the tree
+bar the two Give Alms beds.
+
+### `ordination_actionB/`, Mission in ten — and a loop that closes on arithmetic
+
+Ten tracks, and they divide cleanly by how they behave in time. `footsteps` and `staff` are
 **metrical**: a gait, and a pole planted on a count. `distant_dogs` is **intermittent**: nine
-barks in five groups. `rat_squeaks` and `rats_crossing` are **one event between them**, both
-firing in the same second once a lap. `night_city` is **continuous**: crickets, wind and
-distant town that never stop. And `oil_lamp` and `door_close` **do not loop at all** — both carry
-`"loop": false`, play once and stop. The metrical pair is
+barks in five groups. `rat_squeaks`, `rats_crossing` and `bottle_knock` are **one burst
+apiece and all three land on top of each other** — 10.252 to 11.900, 10.477 to 11.727 and
+10.743 to 11.831 s, three stems built separately on three different days that between them
+leave the other 34 seconds of the lap empty. That is dealt with below. `night_city` is
+**continuous**: crickets, wind and
+distant town that never stop. `distant_cart` and `two_horses` are **traffic**: a cart on stone and a pair of
+horses, both looping. And `door_close` **does not loop at all** — it carries `"loop": false`,
+plays once and stops. The metrical pair is
 described first, then the others.
 
 `footsteps_sfx_v01.ogg` and the staff (v01 then v02, below) are a pilgrim setting out: boots on stone at a
@@ -1902,38 +2044,191 @@ in anything that is not floating point, whatever its trim says. Two decibels lan
 still 0.0 and still means nobody has set a level.
 
 *A note for whoever levels Mission.* At −1.89 dBTP the door is the hottest bed in the tree, and
-it takes the whole action to **−1.36 dBTP** summed — against Build Roads' −5.22, which was
-already the tight one. Add the loudest cue filed and the worst alignment is **+3.45 dBTP**.
-The door is where the negative trim goes.
+it took the whole action to **−1.36 dBTP** summed — against Build Roads' −5.22, which was
+already the tight one. **That is where the first trim in this folder went**: on 2026-10-17 the
+door was set to **−1.5 dB**, which puts it at −3.39 dBTP and the action at **−2.42** with ten
+beds rather than eight. Still the tightest action in the tree, and still over full scale
+against the loudest cue filed, at **+2.86 dBTP**. The door is no longer where the next
+decibel comes from — the group level is.
 
 *What sits just outside the window, in case it was not meant to.* The cut ends at 13.600 s and
 there is a **0.00 dBFS** event at **13.75 s**, 150 ms later — the loudest thing in that part of
 the source. If the intended sound was the latch rather than the swing, the window wants
 extending by about half a second.
 
-#### The lamp, and the same source kept honest this time
+#### A cart and two horses — and two horses out of one recording
 
-`oil_lamp_sfx_v01.ogg` is Vrymaa's **CC0** candle-and-oil-lamp recording again — the second bed
-in the tree from that one upload, after `build_roads_actionA/oil_lamp_flame`. **They are
-different cuts and that was checked rather than assumed:** the flame begins at **+6.000 s**,
-this one at **+22.000 s**, nine of its ten matching windows sitting at that constant offset at
-r up to 0.8824, and probed against each other the two stems reach only **0.575** where the same
-cut would score near 1.
+`distant_cart_sfx_v01.ogg` and `two_horses_sfx_v01.ogg` are the first beds here from the
+**gamesounds.xyz** mirror's `Dramatic Cat - Horse Carriage - Draft Horse` pack, and the first
+whose licence note states a **span rather than a year**. That mirror files the GDC 2021, 2022
+and 2023 bundles together as Part 7, and where `tithe/wheat_sfx_v02` got its year from the
+bundle's own tracklist, this pack's folder carries a Readme and a filelist and no tracklist.
+Nothing to hand dates it. *A year nobody has checked reads exactly like one somebody has*, so
+the records say **2021-2023, Part 7**, and the Sonniss guard was widened the same day to accept
+a span where it had demanded a year — with the span required to be the path's own, so a wider
+one still fails. Eight mutations, including the one where a note claims 2020-2023 on a
+2021-2023 path. The licence grant is identical across all three bundles, so no permission turns
+on which.
 
-**The interesting part is what this one did not do.** Vrymaa's recording is mono. The Build
-Roads flame was given a stereo field by delaying a copy 4 ms, which combs 21 dB at odd
-multiples of 125 Hz the instant anything folds it down — a width that is not in the recording
-and costs 21 dB to discover. This stem reads **+1.000000**, dual mono exactly — the two
-channels identical sample for sample: no width, and nothing to lose. One source, two beds, one
-widened and one left alone, and the honest one is the one that survives a mono fold. It is the
-only file in the tree whose channels are identical; `door_close`, filed the same day, reads
-**+0.999982**, which rounds to the same four decimals and is not the same claim.
-`staff_sfx_v01.ogg` held the distinction until it was replaced.
+**The horses are two copies of one horse, and the measurement shows it rather than being told
+it.** Sixteen of seventeen non-silent windows match the source at r up to **0.7724**, and the
+offsets fall into exactly two groups — ten at **−13.700 s** and six at **+3.250 s**. Two
+constant offsets is one recording running against itself, displaced by **16.950 s**. That is
+what the covering note meant by *layered*, and it is the pleasant case: a claim a correlation
+can confirm in its own terms rather than merely fail to contradict.
 
-**It is also the first bed here that does not loop.** `"loop": false` on the record, so the
-bench comes up with its box unticked and the board, when it plays beds at all, should fire it
-once. It is a lamp picked up on the way out, not an ambience, and at 44 events over 36 s with
-58.4% silence it would read as a repeating fidget if it came round every lap.
+**An unnamed candidate was checked and is not in it.** `G4F SFX06 - HORSES - Walking on stone
+03.wav` was downloaded in the same minute as the source and named nowhere — the pattern that
+produced the CITY RUMBLE scare on `night_city`. Probed the same way it matches **0 of 17**
+windows, r max 0.1906. It was auditioned and rejected. That matters more here than it did
+there: G4F is a different publisher and would have brought a different licence with it.
+
+**The cart was the first bed filed without its source being checked at all, and the gap lasted
+an hour.** Every other bed here had been probed: the dogs at r = 0.999, the first rat squeak at
+0.978, and `rats_crossing` *failed* at 0.074 and says that too. The cart's source file simply
+was not on disk when the stem was filed — only the stem and its previews — so it went in
+carrying `"provenanceConfidence": "stated-not-checked"`, which is deliberately not the
+`stated-not-corroborated` that `rats_crossing` carries: the two look alike and mean opposite
+amounts of work, and the first is the one a single download fixes.
+
+**Which is exactly what happened.** The source was supplied the same afternoon and the stem
+traced at once: **fifteen of seventeen** non-silent windows match
+`VEHWagn_Wood Cart Roll On Stone Pavement In Courtyard 03` at r up to **0.8682**, and all
+fifteen at **one constant offset of −14.000 s**. One offset is a straight excerpt — not an
+assembly, not a layering, which is the thing the horses' *two* offsets showed on the same day.
+The control, the horse source from the same pack, reaches **0.2004**. The flag was cleared and
+the record now carries the numbers instead of the apology. *The pair is worth keeping side by
+side:* `stated-not-checked` cost one download to settle, and `rats_crossing` has had its source
+on disk throughout and still cannot be settled at all.
+
+**And the source was checked for the fault `oil_lamp_flame` has.** It is **16.460 s, 96 kHz,
+24-bit and mono** — a single channel, so there is no stereo field to have been faked. Probing
+it the way the lamp flame was probed gives **0.0000 ms lag at r = +1.0000** and a mono fold
+that loses **0.02 dB**. Nothing to comb, nothing to lose. That check is cheap and is now worth
+running on any mono-sourced stem that arrives wide.
+
+#### A bottle going over, which is the quietest thing here and the widest delta
+
+`bottle_knock_sfx_v01.ogg` is one event in 36 s: a beer bottle knocked over on concrete, from
+Glitchedtones' *Pub Foley* in the **Sonniss GameAudioGDC 2020** bundle. **Its source is not on
+disk**, so it carries `"provenanceConfidence": "stated-not-checked"` — the cart's flag, filed
+the same day the cart's was cleared, and the record says which of the two states it is in and
+why that matters.
+
+**A fourth path shape, and the guard learnt it rather than being loosened.** gamesounds.xyz
+files the older bundles one year to a folder — `Sonniss.com - GDC 2020 - Game Audio Bundle` —
+which states its year as plainly as the your.org form and matched none of the three clauses
+the Sonniss test knew, so it slid past the span pattern straight into the catch-all. The span
+clause wants `2021-2023` with no spaces round the hyphen; a looser regex would have read
+`2020 - Game` as a span starting nowhere. So the clause is its own, and the path's year must
+match the note's. Twelve mutations, all caught.
+
+**It is the widest gated-against-ungated delta in the tree by over three decibels**, and the
+block-count identity predicts it almost exactly: ungated **−54.10 LUFS**, gated **−37.04**,
+a gap of **17.06 dB** on **7 of 357** blocks, against 10·log₁₀(357 ÷ 7) = 17.08. At −54.10
+it is also the **second quietest bed** here, after `build_roads_actionA/ox_cart_stones` at
+−55.19 — checked rather than assumed, because it looked like the quietest.
+
+**Three one-event stems and they all fire at once.** `rats_crossing` runs 10.252 to 11.900 s,
+`rat_squeaks` 10.477 to 11.727 and the bottle 10.743 to 11.831. Three stems built separately
+on three different days, and between them they occupy **1.65 s of a 36 s lap** and leave the
+rest to the dogs, the walk and the town. Nothing is wrong with any one of them; the scene is
+what is wrong, and it is a placement problem rather than a level one. *A folder of
+single-event stems needs its events spread deliberately, because nothing in the pipeline does
+it and the default is for everybody to start near the same place.*
+
+**A dual-mono source did not survive the encoder as dual mono, and the lamp did.** The stem's
+two channels are identical sample for sample — L/R **+1.000000** — and the shipped `.ogg`
+reads **+0.996767**. The oil lamp deleted from this same folder came through at **+1.000000**
+exactly. So this is not a rule about Vorbis but something joint stereo does to some material
+and not others, and it is worth knowing before anyone claims dual mono from a shipped file
+rather than from the stem it was made from.
+
+#### Every silence percentage in this tree was measured on the wrong file
+
+Not wrongly measured — measured on the **WAV stem** rather than the **`.ogg` that ships**. The
+bottle made it visible: its stem is 97.11% exact digital silence in 51 separate non-zero runs,
+and the shipped file is **96.98%** in **one unbroken run**, because Vorbis rings out across the
+small gaps between contacts. Checked across every bed whose record quotes a figure, the
+shipped file is **always the less silent of the two**, by 0.06 to 4.76 points:
+
+| bed | record says | shipped file |
+|---|---|---|
+| `build_roads_actionA/worker_footsteps` | 28.7% | **23.94%** |
+| `ordination_actionB/staff` (v02) | 92.1% | **90.09%** |
+| `ordination_actionB/footsteps` | 47.7% | **48.70%** |
+| `build_roads_actionA/ox_breathing` | 69.6% | **68.63%** |
+| `ordination_actionB/distant_dogs` | 62.6% | **61.72%** |
+| `build_roads_actionA/oil_lamp_rattle` | 90.3% | **89.51%** |
+| `build_roads_actionA/horse_snorts` | 75.7% | **75.02%** |
+| `build_roads_actionA/ox_cart_stones` | 75.3% | **74.85%** |
+| `ordination_actionB/rat_squeaks` | 98.2% | **97.83%** |
+| `build_roads_actionA/ox_cart_mechanics` | 55.7% | **55.41%** |
+| `ordination_actionB/rats_crossing` | 95.6% | **95.42%** |
+| `ordination_actionB/two_horses` | 54.4% | **54.29%** |
+| `ordination_actionB/distant_cart` | 54.3% | **54.24%** |
+| `ordination_actionB/door_close` | 83.2% | **83.24%** |
+
+`ordination_actionB/footsteps` is the one that moved the other way, and `door_close` is the
+only one that agrees — **because it is the only cut in that table made inside this
+repository**, so its figure was read off the shipped file to begin with. That is the tell, and
+it is the argument for doing the measuring here rather than taking it from a covering note.
+
+*A second inconsistency fell out of the same check and cannot be settled.* The deleted
+`staff_sfx_v01` is recorded at **89.8%** in its own absent record and at **88.2%** in v02's,
+which are two readings of one file and at most one of them is right. The bytes are gone, so
+neither can be re-measured; both are left where they are with this line beside them.
+
+**None of it changes a level or a conclusion.** The silence fraction appears in these
+documents as a ranking aid and as the intuition behind the delta, and the delta itself is
+computed on the shipped file and is unaffected — `rat_squeaks` is still the emptiest bed
+either way. What it changes is the status of a number: *these were never measurements of the
+thing they are written beside.* **The records have not been restated**, because several of
+them put the figure inside a comparative clause that has to be re-read rather than
+search-and-replaced. This table is the correct set until they are.
+
+#### The three recorded seam ratios do not reproduce, and that is all that is known
+
+Adding the butt-join test to `bed_facts.py` meant calibrating it, and the only honest way to
+calibrate a new instrument is to point it at answers already written down. Three were: this
+tree records `night_city` at **2.74× median / 0.40× neighbours**, `build_roads/wind` at
+**3.50× / 0.94×** and `oil_lamp_flame` at **5.05× / 0.64×**.
+
+**None of them came back.** Measured per channel, on the mono fold, on the channel sum and on
+the per-sample maximum — four definitions — the closest any of them gets is the mono fold on
+`night_city`, 2.86 against 2.74, and the same definition puts `wind` at 1.36 where the note
+says 3.50. The four results bracket the recorded figures without matching them, which says
+the original measurement used a definition that is not among the obvious ones: a different
+neighbour window, perhaps, or the WAV stems rather than the shipped files — the fault the
+silence percentages turned out to have.
+
+**What was done about it: nothing, deliberately.** The three ratios are kept where they are.
+They were load-bearing for one conclusion — that the median test fails on sparse material
+while the neighbour test holds — and that conclusion does not depend on their exact values,
+only on the two tests disagreeing in a consistent direction, which every definition above
+reproduces. `bed_facts.py` states its own definition in its docstring and will be
+self-consistent from here; the three old numbers are the last ones in the tree whose
+provenance is a script nobody kept. *Written down rather than fixed, because fixing it means
+guessing which definition was meant, and a guessed reconciliation is worse than a recorded
+disagreement.*
+
+#### The lamp that was filed and then deleted
+
+`oil_lamp_sfx_v01.ogg` lived in the tree for one day. It was Vrymaa's **CC0** recording again —
+the second bed from that upload after `build_roads_actionA/oil_lamp_flame`, and **a different
+cut, which was checked rather than assumed**: the flame begins at +6.000 s, the lamp at
++22.000 s, and probed against each other the two stems reached only **0.575** where the same
+cut would score near 1. It was also dual mono *exactly*, +1.000000, the only file in the tree
+whose two channels were identical sample for sample.
+
+None of which saved it. It was taken to **−17.0 dB** on the bench — a lamp turned down until it
+was not there — and then removed rather than left at the bottom of the mix. *A scene decision,
+not a fault in the file*, and worth separating from the deletions above it: the three clips in
+the recoverability section went because they were superseded or redundant, and this one went
+because it was not wanted. Its record is kept at `"state": "absent"` with its sha256, and the
+cut is specified exactly enough to remake, so the bytes are recoverable if the judgement
+changes. The dual-mono distinction passes back to nothing — `door_close` reads +0.999982, which
+rounds to the same four decimals and is not the same claim.
 
 #### The night town, where a wrong first reading was worth keeping
 
@@ -1987,11 +2282,15 @@ parts are a *floor* rather than silence the arithmetic does not apply and the fi
 something else again; no file here is that case yet.
 
 **Mission has no cue either.** `ordination actionA` is Ordain and has one; `actionB` does not.
-**Twenty-one beds across four duty actions** now have nothing to be levelled against — eleven
-on Build Roads, one on each of Give Alms' two actions, and eight here. **And Mission is now
-the tightest action in the tree for headroom**, summing to **−1.36 dBTP** against Build Roads'
-−5.22: the door alone is −1.89. Add the loudest cue filed and the worst alignment is
-**+3.45 dBTP**. Whatever Mission's cue turns out to be, the door wants a negative trim first.
+**Twenty-five beds across five duty actions** now have nothing to be levelled against —
+eleven on Build Road, two on Build Shrine, one on each of Give Alms' two actions, and ten
+here. **And Mission is
+the tightest action in the tree for headroom**, summing to **−2.42 dBTP** against Build Roads'
+−5.22, even after the door took the folder's first trim. Add the loudest cue filed and the
+worst alignment is **+2.86 dBTP**, which is over full scale; holding the total to the
+−1.0 dBTP policy ceiling would need a Mission cue at **−17.4 dBTP or quieter**. *That is not a
+sane target for a cue*, so what the number is really saying is that the ten beds want their
+group level pulled down before anything is filed against them.
 
 ### Two levels, and why they are not one number
 
@@ -2076,7 +2375,7 @@ ffmpeg. `python3 ui/board_v2/sfx_lab/sfx_levels.py --groups --write` recomputes 
 
 **Whether a track loops is a field too, and absent means yes.** A record may carry
 `"loop": false`, the generator passes it to the bench, and the bench's **loop** column is
-ticked for everything else. Thirty-one of the thirty-three beds filed loop, which is why the field is
+ticked for everything else. Thirty-six of the thirty-seven beds filed loop, which is why the field is
 written only when the answer is no — the same economy as `gainDb`, where silence means a
 number nobody has set. A one-shot plays once and stops: it is an event with a place in the
 scene rather than an ambience, and it is excluded from the repeat figure, since folding its

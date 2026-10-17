@@ -128,7 +128,7 @@ gusts. **Ungated for both classes**, so a bed and a cue are at least measured in
 That sentence stood here from four beds that were each one continuous recording, and it stopped
 being true the moment a duty action started taking **stems**. A stem is a layer of a scene —
 grain handled, coins counted, beads told, robes moving — and a layer of a scene is mostly
-silence waiting for the other layers. Measured across all thirty-three ambient tracks as they
+silence waiting for the other layers. Measured across all thirty-seven ambient tracks as they
 stand:
 
 | track | ungated | gated | delta | blocks kept |
@@ -138,6 +138,7 @@ stand:
 | `ordination_actionB/night_city` | −46.13 | −46.13 | +0.00 | 357 of 357 |
 | `clerical_actionA/candle` | −53.69 | −53.69 | +0.00 | 252 of 252 |
 | `clerical_actionB/silversmith` | −32.77 | −32.77 | +0.00 | 247 of 247 |
+| `build_roads_actionB/wind` | −31.11 | −31.09 | −0.02 | 247 of 247 |
 | `give_alms_actionA/alms` | −38.37 | −38.36 | −0.01 | 247 of 247 |
 | `build_roads_actionA/wind` | −39.31 | −39.29 | −0.02 | 307 of 307 |
 | `build_roads_actionA/oil_lamp_flame` | −44.29 | −44.02 | −0.27 | 327 of 347 |
@@ -148,7 +149,9 @@ stand:
 | `ordination_actionB/footsteps` | −35.89 | −34.03 | −1.86 | 231 of 357 |
 | `taxation_actionA/room` | −38.16 | −34.77 | −3.40 | 134 of 297 |
 | `build_roads_actionA/ox_cart_mechanics` | −38.00 | −34.30 | −3.70 | 149 of 347 |
+| `ordination_actionB/distant_cart` | −45.19 | −41.16 | −4.03 | 141 of 357 |
 | `build_roads_actionA/gravel` | −35.94 | −31.76 | −4.18 | 132 of 347 |
+| `ordination_actionB/two_horses` | −44.73 | −40.25 | −4.47 | 127 of 357 |
 | `build_roads_actionA/ox_breathing` | −42.53 | −37.52 | −5.01 | 110 of 347 |
 | `taxation_actionA/barn_creaks` | −44.40 | −39.19 | −5.20 | 90 of 297 |
 | `build_roads_actionA/far_work` | −52.01 | −46.64 | −5.37 | 101 of 347 |
@@ -156,38 +159,63 @@ stand:
 | `build_roads_actionA/ox_cart_stones` | −55.15 | −48.82 | −6.33 | 81 of 347 |
 | `ordination_actionB/staff` | −48.86 | −41.87 | −6.99 | 71 of 357 |
 | `ordination_actionB/distant_dogs` | −48.96 | −41.95 | −7.01 | 71 of 357 |
-| `ordination_actionB/rats_crossing` | −46.57 | −32.81 | −13.76 | 15 of 357 |
-| `ordination_actionB/rat_squeaks` | −48.62 | −34.82 | −13.80 | 15 of 357 |
-| `ordination_actionB/oil_lamp` | −39.24 | −34.04 | −5.20 | 106 of 357 |
-| `ordination_actionB/door_close` | −28.84 | −15.90 | −12.94 | 18 of 357 |
 | `clerical_actionA/rosary` | −46.71 | −39.55 | −7.16 | 67 of 347 |
 | `allocation_actionA/keys` | −35.04 | −27.22 | −7.82 | 47 of 282 |
 | `taxation_actionA/wheat` | −47.40 | −39.27 | −8.13 | 46 of 297 |
 | `build_roads_actionA/horse_snorts` | −44.88 | −36.18 | −8.70 | 47 of 347 |
+| `build_roads_actionB/crows_ravens` | −45.75 | −36.71 | −9.04 | 31 of 247 |
 | `taxation_actionA/coins` | −36.74 | −27.55 | −9.19 | 36 of 297 |
 | `build_roads_actionA/oil_lamp_rattle` | −48.48 | −38.97 | −9.51 | 39 of 347 |
+| `ordination_actionB/door_close` | −28.84 | −15.90 | −12.94 | 18 of 357 |
+| `ordination_actionB/rats_crossing` | −46.57 | −32.81 | −13.76 | 15 of 357 |
+| `ordination_actionB/rat_squeaks` | −48.62 | −34.82 | −13.80 | 15 of 357 |
+| `ordination_actionB/bottle_knock` | −54.10 | −37.04 | −17.06 | 7 of 357 |
 
 **The seven continuous beds still agree with their gated figures inside 0.2 dB** (`oil_lamp_flame` makes an eighth at 0.27), exactly as the
 table above found. Thirteen stems disagree by 5 to 10 dB, and the last column says why without
 needing the first two: the gated figure for `oil_lamp_rattle` is computed from **39 of its 347 blocks**,
 so it describes about a ninth of a file that is nine-tenths silence and calls that the
-loudness of the whole. At **9.51 dB** it is the widest gap here, just past `coins`.
+loudness of the whole. At **9.51 dB** it is the widest gap among those thirteen, just past
+`coins` — four tracks filed since run wider, and the paragraph after next is about them.
 
-**The delta is a density reading, and the table sorts itself by it.** It is not two classes
+**The delta is a density reading, and the table sorts itself by it.** *Which stopped being
+true for a while without anybody noticing: five rows filed between 2026-10-16 and 2026-10-17
+were appended to the bottom of the table instead of placed, so the sentence described an
+order the table no longer had. Re-sorted on 2026-10-17. A table that claims to be sorted is
+exactly the kind of prose fact the bed-count guard exists for, and there is no guard on this
+one.* It is not two classes
 but a line, and where a track falls on it says how much of its own duration it occupies:
 nothing through the six continuous recordings; −0.8 for `donate_building` and for `footsteps`
 (which walks without a gap); −1.2 for `worker_footsteps` and **−1.8 for `wool_robe`** (a rustle
 with 13 holes in it, 22% silence); −3.4 to −4.2 for the barn `room`, `ox_cart_mechanics` and
 `gravel`; and 5 to 10 dB for the thirteen tracks that are a handful of placed events —
 `ox_breathing`, `barn_creaks`, `far_work`, `rammers`, `ox_cart_stones`, `rosary`, `keys`,
-`wheat`, `horse_snorts`, `staff`, `distant_dogs`, `coins`, `oil_lamp_rattle` and Mission's
-`oil_lamp` at −5.20. *(That list
+`wheat`, `horse_snorts`, `staff`, `distant_dogs`, `coins` and `oil_lamp_rattle`. *(That list
 said "eleven" while naming twelve for some weeks, which is the same class of fault as the bed
 counts and had no test behind it either.)* **And the scale now runs past 10 dB**, which it did
-not when this paragraph was written: `rats_crossing`, `rat_squeaks` and `door_close` read
-**−13.76, −13.80 and −12.94**, on 15, 15 and 18 of 357 blocks. `oil_lamp_rattle` at 90.3% silence used to set the end of
-it; `rat_squeaks` at **98.2%** does now, and with the identity above that is all those two
-figures are saying — 10·log₁₀(357 ÷ 15) = 13.77.
+not when this paragraph was written: `door_close`, `rats_crossing` and `rat_squeaks` read
+**−12.94, −13.76 and −13.80**, on 18, 15 and 15 of 357 blocks, and `bottle_knock` reads
+**−17.06** on **7**, the widest gap in the tree by over three decibels. `oil_lamp_rattle` at
+90.3% silence used to set the end of it, and with the identity above that is all those
+figures are saying — 10·log₁₀(357 ÷ 15) = 13.77, 10·log₁₀(357 ÷ 7) = 17.08.
+
+**The end of the scale is the `far_work` / `rammers` inversion again, and it is worth seeing
+it twice.** Measured on the shipped files, `rat_squeaks` is **97.8%** silence and
+`bottle_knock` is **97.0%** — the bottle is the *less* empty file — and the bottle still reads
+3.3 dB wider, on 7 blocks against 15. The squeaks are **three bursts** at 10.48, 10.97 and
+11.48 s, each loud enough to carry its own blocks; the bottle is **one burst** of 1.09 s that
+decays steeply, so most of what follows its first impact falls under the gate rather than
+beside it. *Silence fraction and surviving-block count are different quantities*, and at both
+ends of this table it is the second that governs the delta. How the events are spread matters
+as much as how much there is: the same second of material, placed three times over, would have
+read smaller.
+
+*A measurement note that applies to every silence figure in this tree.* The two percentages
+above are of the **shipped `.ogg`**. Almost every one filed in `attribution.json` before
+2026-10-17 was measured on the **WAV stem** instead, and the shipped file is always the less
+silent of the two, by 0.06 to 4.8 points — Vorbis rings out across short gaps, so what was 51
+separate non-zero runs in the bottle's stem is one unbroken run in the file that ships. The
+measured table is in `sfx/README.md`; the records have not yet been restated.
 *Reading the delta is cheaper than reading the file*, and it is the number
 that tells you whether a track's recorded loudness means anything on its own.
 
@@ -217,10 +245,12 @@ every scrap of its energy is inside the blocks the gate keeps, and the delta red
 
 > **delta = 10 · log₁₀( all blocks ÷ surviving blocks )**
 
-Checked against all thirty-three beds, the prediction agrees with the measured delta to within
-**0.06 dB on thirty-one of them**. The two outside it are `allocation_wind` at 0.19 dB, with
-every one of its 167 blocks kept, and `taxation_actionA/room` at 0.061, which is the boundary
-rather than a counterexample. *The delta is a block count.* Nothing else.
+Checked against all thirty-seven beds, the prediction agrees with the measured delta to within
+**0.06 dB on thirty-six of them**. The one outside it is `allocation_wind` at 0.19 dB, with
+every one of its 167 blocks kept. `taxation_actionA/room` at 0.057 is the next worst and sits
+just inside — it was carried here as 0.061 and reads a hair under when the table's own rounded
+figures are used, which is the boundary rather than a counterexample either way. *The delta is
+a block count.* Nothing else.
 
 **That is what explains the `far_work` / `rammers` inversion above**, which this note previously
 put down to the gate weighing how far events stand above the mean. The real reason is simpler
@@ -385,6 +415,28 @@ python3 ui/board_v2/sfx_lab/sfx_levels.py --write          # stamp gainDb into a
 `test_every_sound_carries_a_measured_playback_trim` refuses a clip filed without a `gainDb`, and
 re-measures every value against its audio where a decoder is available. The bench prints a
 `NOTE` for any drawn clip missing the field.
+
+**For a BED, use `bed_facts.py` instead, which is the one that knows what a record needs.**
+
+```
+python3 ui/board_v2/sfx_lab/bed_facts.py <path.ogg>            # everything, from one decode
+python3 ui/board_v2/sfx_lab/bed_facts.py --record <path.ogg>   # + the `measured` string and sha256
+```
+
+`sfx_levels.py` answers *what should this play at*, and for a bed the answer is "nobody can
+tell you, set it by ear". `bed_facts.py` answers the other question — *what is this file* —
+and in one pass gives duration, peak, true peak, M200, ungated and gated loudness with the
+block counts and the identity's prediction beside them, silence fraction and the run
+structure under it, head, tail and wrap gaps against the longest interior gap, the butt-join
+step against both yardsticks, L/R correlation, exact dual mono, and the delayed-copy check
+that catches an `oil_lamp_flame`-style Haas widener. **It exists because those fifteen numbers
+used to be taken by writing four throwaway scripts per bed**, and one of those scripts got the
+channel indexing wrong — `channels()` returns an (n, ch) array and a fresh script iterates its
+rows — which reported a 36-second file as a single 400 ms block, a number plausible enough to
+have been written down. *A tool that always measures the same way the same way cannot have
+that fault twice.* It takes about three seconds a file. It deliberately does **no provenance
+work**: that probe has to pick its window, its speed candidates and above all its control for
+the claim being tested, and a default control is not a control.
 
 **The tool needs `ffmpeg`, which is not on the Mac's PATH** — the same fact that made
 `generate_sound_bench.py` read Ogg headers by hand rather than shell out. That is tolerable only
@@ -553,28 +605,56 @@ Still open for ambient:
   headroom is the claim, render the sum: the files are on disk and it costs a minute.
 - **THE PER-FILE SPAN HAS STOPPED BEING THE RIGHT QUANTITY.** This bullet has tracked where
   individual beds land since there were two of them, and Build Roads being levelled on
-  2026-10-16 broke it: of the thirty-three ambient files, six now sit between −26.5 and
-  −45.5 dBTP and **twenty-seven sit above −26.5**, the span running −1.9 to −35.4. Only
-  Mission's eight are still untrimmed, the loudest of them now `door_close` at −1.9 dBTP, which is
-  unset rather than authored; the top of the span is now `ordination_actionB/door_close` at
-  −1.9, which is a door rather than a level anybody chose, and the bottom is `wind` at −35.4. Read per file that looks alarming and it
+  2026-10-16 broke it: of the thirty-seven ambient files, seven now sit between −26.5 and
+  −45.5 dBTP and **twenty-nine sit above −26.5**, the span running −3.4 to −37.5. Eight are
+  still untrimmed, seven of them Mission's and the eighth `build_roads_actionB/wind`, which
+  arrived on 2026-10-17 as the only bed of a new action and so has nothing to be balanced
+  against yet. The loudest untrimmed is `ordination_actionB/footsteps`
+  at −10.4 dBTP, which is unset rather than authored — the door was the loudest untrimmed bed
+  until 2026-10-17, when it took the first trim in that folder; the top of the span is still
+  `ordination_actionB/door_close` at −3.4
+  after its own trim, which is a door rather than a level anybody chose, and the bottom is
+  `ordination_actionB/rat_squeaks` at −37.5, which is one. Read per file that looks alarming and it
   is not: *tracks that sum have to be authored quieter per track than one track that plays
   alone*, and comparing one of Build Roads' eleven against a lone rain bed compares nothing.
   **The quantity that governs headroom is the sum of an action's own beds**, and the per-file
   span is kept only as a sorting aid.
 - **Per action, measured rather than multiplied:**
 
+  **All nine, at the trims of 2026-10-17**, rendered rather than estimated:
+
   | duty action | beds | sum of peaks | rendered | + the loudest cue filed |
   |---|---|---|---|---|
-  | `build_roads_actionA` | 11 | +1.86 | **−11.98** | **−1.06** |
-  | `taxation_actionA` | 4 | −9.94 | **−20.02** | −2.68 |
-  | `allocation_actionA` | 4 | −21.60 | | |
-  | `clerical_actionA` | 3 | −22.35 | | |
+  | `ordination_actionB` | 10 | +4.05 | **−2.42** | **+2.86** |
+  | `build_roads_actionA` | 11 | +1.39 | **−5.22** | **+1.45** |
+  | `allocation_actionA` | 4 | −7.68 | **−10.74** | −0.69 |
+  | `clerical_actionB` | 1 | −11.97 | **−11.97** | −1.06 |
+  | `taxation_actionA` | 4 | −1.96 | **−12.02** | −1.07 |
+  | `clerical_actionA` | 3 | −11.35 | **−12.10** | −1.10 |
+  | `build_roads_actionB` | 2 | −12.18 | **−14.90** | −1.80 |
+  | `give_alms_actionB` | 1 | −22.83 | **−22.83** | −3.03 |
+  | `give_alms_actionA` | 1 | −24.96 | **−24.96** | −3.23 |
 
   The sum-of-peaks column assumes every track peaks at the same instant, which none of them
-  do: it is **14 dB pessimistic** on Build Roads and 10 dB on Taxation. Rendering the sum
-  costs a minute and is the only figure worth quoting — the same lesson the `coins` episode
-  above taught, now with a second case.
+  do: it is **10.1 dB pessimistic** on Taxation, 6.6 on Build Roads and 6.5 on Mission, and
+  2.7 dB on Build Shrine, whose two beds barely overlap at all, and exactly nothing on the
+  three actions with one bed, where the two columns are the same measurement. Rendering the sum costs a minute and is the only figure worth quoting — the
+  same lesson the `coins` episode above taught, now across the whole tree.
+
+  **Two actions are over full scale against the loudest cue filed**, Mission at **+2.86** and
+  Build Roads at **+1.45**, and neither has a cue of its own. That is a constraint on what may
+  be filed rather than a fault in what is. Holding the total to the **−1.0 dBTP** policy
+  ceiling, a Mission cue has to land at **−17.4 dBTP or quieter** and a Build Roads cue at
+  **−9.3** — against `construct_actionA`, the loudest cue in the tree, at −3.97. *So the
+  ceiling that has governed cues since set 1 is not a usable target for either action, and on
+  Mission it is 16 dB out.* The honest reading is that Mission's beds are too hot rather than
+  its unwritten cue too loud: the door at −3.39 after its trim carries the action, and taking
+  the group down is the move that buys the cue its room back.
+
+  *The figures in the bullets around this table were each correct when written and several
+  are not current: Taxation summed −20.02 when `coins` sat at −17.0 and reads −12.02 at the
+  −9.0 it carries now, and Build Roads summed −11.98 before `rammers` was trimmed and the
+  group folded. The bullets are kept as written; this table is the live one.*
 - **THERE ARE TWO LEVELS NOW, AND THE SECOND ONE IS WHY THE FIRST CAN BE LEFT ALONE.** A bed's
   `gainDb` is its balance inside its action; an action's `groupDb`, in `attribution.json`'s
   `ambientGroups`, is where that action sits against the others. They multiply, and the group
