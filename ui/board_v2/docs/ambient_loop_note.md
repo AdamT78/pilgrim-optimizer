@@ -1,12 +1,27 @@
 # Cutting an ambient bed into a seamless loop
 
-**Status: forty-two files under nine duty actions.** Three actions have one track each —
+**Status: forty-nine files under ten duty actions.** Three actions have one track each —
 `clerical_actionB/silversmith` (25 s, fire), `give_alms_actionA/alms` (25 s, rain) and
-`give_alms_actionB/donate_building` (32.5 s, a sheltered wind). Six have several.
-`build_roads_actionB/` is the newest and holds seven at 25 s, with `gallows_timber`
+`give_alms_actionB/donate_building` (32.5 s, a sheltered wind). Seven have several.
+`produce_actionA/` is the newest and holds seven at 35 s, and between them they use **four
+different ways of reaching the loop point, one of which does not work**. The two continuous
+ones are **wrapped at opposite ends**: `wind` folds over its TAIL in about 2 s, as
+`build_roads_actionB/wind` does, and `field_rustle` folds over its HEAD across about six
+seconds, as `night_city` does in two. They were built the same day by the same hand for the
+same action, which is the clearest evidence this note has that the fold convention is not one
+thing — see section 1. `distant_rooster` sidesteps the question entirely by carrying
+`loop: false`. `sheaf_handling` needs no fold at all because it begins and ends in silence and
+its wrap gap is the longest pause in the file — section 13's first clause, passed outright,
+and by the widest margin of any looping bed here at 2.58×. And `stalk_brushing` is built the
+same way and **fails**: three gestures with interior pauses of 10.475 and 11.605 s and a wrap
+gap of 8.867, which is 0.85× the shortest and a tell. `straw_workers` is built the same way
+again — ten runs from the same upload as `sheaf_handling` — and passes at 2.06×. *One folder,
+one author, one week, three beds of the same construction, and one of the three fails* —
+which is the argument for the test, since nothing about how they were made predicts which.
+`build_roads_actionB/` holds seven at 25 s, with `gallows_timber`
 (seven resolved placements of one 4.673 s creak, wrap 5.051 s at 2.17× its shortest interior
 pause) and `gallows_rope` (three copies of an 18.486 s rope, wrap 6.643 s and **safe
-outright** — longer than any interior pause, which only `distant_dogs` and it manage here)
+outright** — longer than any interior pause, at 1.10×)
 joining: `wind` (winter grass on open
 ground, wrapped with a 2.1 s equal-power fold at its TAIL rather than its head) under
 `crows_ravens` (intermittent, three placed copies of two corvid recordings, wrap gap
@@ -525,6 +540,12 @@ end of the 5-10% discrimination range, which is where a flag whose job is to fet
 belongs. At 0.95: `rammers` 0.91 is a tell, `fabric` 0.98 is not, `gallows_timber` 2.17 is
 not, and `gallows_rope` and `distant_dogs` are safe outright. `sfx_lab/bed_facts.py` prints
 the verdict and the ratio on every bed.
+
+**Passing outright is not rare, and nobody counted until 2026-10-17.** Two records and two
+lines in this file said or implied it was, all of them written from the prose rather than from
+the files. Running the verdict across all forty-nine gives **thirteen** that clear the first
+clause, twelve of them looping, in this order: barn_creaks 1.03, ox_breathing 1.04, gallows_rope 1.10, oil_lamp_rattle 1.12, rosary 1.13, far_work 1.18, sickle_cutting 1.26, monk_robe 1.57, distant_dogs 1.83, crows_ravens 2.00, straw_workers 2.06, sheaf_handling 2.58 and distant_rooster 7.68. *A claim about how rare something
+is in a set is a claim about every member of the set.*
 *A figure that did not reproduce, recorded rather than quietly fixed:* this note has said
 rammers' wrap gap is **0.13 s** shorter than its tightest interior pause since it was written,
 and measured on the shipped file it is **0.068 s**. Same class as the seam ratios in
@@ -561,7 +582,7 @@ sliding probe fails when the source is too thin, the event probe when its window
 
 ## 14. Not done
 
-- **The board plays no bed.** All forty-two are filed and audible on the ambient bench;
+- **The board plays no bed.** All forty-nine are filed and audible on the ambient bench;
   `bundled_sfx()` still inlines only `tile.ogg` and `confirm.ogg`. This bullet has said "all
   five" since there were five, which is its own small lesson: a count in prose is a fact with
   no test behind it, and nine beds arrived before anyone noticed. The generator prints the
@@ -591,7 +612,7 @@ sliding probe fails when the source is too thin, the event probe when its window
   undecided, as is the fade-in on select, and what happens on deselect or re-select.
 - **The loop checker does not exist as a tool.** The band-match shoulder search, the N-lap
   render and the wrap-window percentile test have been written from scratch for each of the
-  forty-two files. Three of them now have a settled shape and one of them, the percentile
+  forty-nine files. Three of them now have a settled shape and one of them, the percentile
   test, is the only check that works on a loop that arrives already baked — and none of the
   three applies to a stem that is not wrapped at all, which a good many of these are. None of
   the three can check a metrical loop either; see section 12.
@@ -601,10 +622,10 @@ sliding probe fails when the source is too thin, the event probe when its window
   each time, and nothing holds the total to the files. A count with no test behind it is the
   exact fault the bed-count guard was written for, and the fix is a `wrapped` field on the
   record rather than a better sentence here.
-- **`--groups` re-renders all nine actions when it already knows which one changed.** Every
+- **`--groups` re-renders all ten actions when it already knows which one changed.** Every
   action's entry carries `summedAtTrims`, a fingerprint of the `gainDb` values its sum was
   taken from, and a test compares the two without decoding anything. The renderer does not
-  read it: adding one bed to one folder decodes and mixes all forty-two files, about
+  read it: adding one bed to one folder decodes and mixes all forty-nine files, about
   fourteen seconds where two would do. Harmless at this size and the fix is a few lines —
   skip an action whose fingerprint still matches — but it is the only place in the pipeline
   where the cost grows with the whole tree rather than with the change.
