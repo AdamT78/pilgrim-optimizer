@@ -941,7 +941,7 @@ here as the files being clipped. They are not known to be. Measure the **shipped
 
 ### `ambient/`, the first sounds here that are not events
 
-Thirty-seven files under nine duty actions, and they are a different kind of thing from
+Forty-two files under nine duty actions, and they are a different kind of thing from
 everything above.
 
 **They live one folder per duty action** — `ambient/<duty>_<slot>/`, which is the same string
@@ -1679,7 +1679,7 @@ against each other and the group's absolute level is the one judgement here with
 behind it. Give Alms has the same gap on both its actions, with one bed each rather than
 eleven.
 
-### `build_roads_actionB/`, Build Shrine in two — a fold at the wrong end, and an inverted stem
+### `build_roads_actionB/`, Build Shrine in seven — a fold at the wrong end, and an inverted stem
 
 `wind_sfx_v01.ogg` is 25 s of wind through winter grass, the only bed of a ninth duty action
 and **the second folder under the build_roads duty**: `actionA` is Build Road and holds
@@ -1755,6 +1755,231 @@ measurement.
 the occasion, and the butt-join test was added to that tool while filing it — calibrated by
 running it against the three files whose seam ratios were already written down.* See the
 housekeeping note below: it did not reproduce them.
+
+#### The monk's robe, and one recording that now does three different jobs here
+
+`monk_robe_sfx_v01.ogg` is the person in the scene: twice a lap somebody shifts and their wool
+moves with them. Two excerpts of Yuval's **CC0** *fabric movement wool* — from about **42.9 s**
+and **92.4 s** of a 145-second recording — placed at 6.425 and 16.541 s.
+
+**Seven of seven events at r up to 0.9340**, against a control chosen to be as unhelpful as
+possible: IENBA's `Fabric Flapping`, the source of `fabric_sfx_v01.ogg` *in this same folder*.
+Cloth against cloth, same duty action, and it still matches **0 of 7 at r max 0.1458**.
+
+**It is the second bed from this upload, and the cuts were checked rather than assumed.**
+`allocation_actionA/wool_robe` has used it since Allocation was built, which makes this the
+second source to feed two duty actions after Vrymaa's lamp — and the lamp is where the rule
+comes from. Each of this bed's two sounding regions was cross-correlated against the *whole*
+of the Allocation bed and they peak at **0.0209 and 0.0227**. For scale: the two lamp beds,
+genuinely different cuts of one upload, scored **0.575** against each other, and a region
+against itself is 1.0000. These two share no material at all — a cleaner separation than the
+lamp pair managed.
+
+**That comparison was a lag search, and that is not incidental.** The identical test run at a
+*fixed* alignment is what produced the wrong answer on `tinkering` a few hours earlier, where
+three bit-identical gestures scored 0.159 because their onsets differed by a millisecond. A
+cross-correlation costs the same and cannot fail that way.
+
+*One recording, three jobs.* This upload is now two beds in two duty actions **and** the
+control that cleared `fabric_sfx_v01.ogg`. Worth noticing before it is used a fourth time: a
+file that is evidence in one place and material in another is fine, but a control must be
+absent from the thing it is controlling, and that is now a fact about this tree to check
+rather than assume.
+
+**The numbers.** It is the emptiest bed in Build Shrine at **90.3%** exact digital silence, in
+two runs, and its delta of **−11.63 dB on 17 of 247 blocks** is the fifth widest in the tree —
+the first of those five that is two gestures rather than a single burst. The block-count
+identity predicts 11.62, **agreeing to 0.005 dB, the closest of any bed here**. Its wrap is
+**safe outright**, 13.779 s against one interior pause of 8.789, which only `distant_dogs` and
+`gallows_rope` also manage.
+
+#### The tinkering, which was reconstructed rather than traced — and the probe that lied
+
+`tinkering_sfx_v01.ogg` is the work itself, stone being set and shifted, and the only layer in
+this folder that is somebody doing something rather than weather, birds, cloth or a frame.
+Four sources, three Sonniss **GDC 2020** and one **CC0** on freesound, twelve gestures in six
+passages.
+
+**It is the only bed in this tree that can be regenerated from first principles, and that is
+a different class of evidence from everything else here.** The project owner supplied creation
+notes specifying the entire chain: which channel of each source, the `resample_poly` ratios, a
+70 Hz and a 6,500 Hz second-order Butterworth applied with *causal* `sosfilt` to the whole
+source *before* cutting, the exact sample slice of each excerpt, raised-cosine edge fades, an
+equal-power pan at −0.10 (L ×0.7604059656000309, R ×0.6494480483301837), and a start frame and
+gain for all twelve cues. Rebuilt from that recipe, **every cue matches the stem at
+r = +1.000000 on both channels**, fitted gain +1.0000, residual **101 to 107 dB** under the
+stem — the triangular dither floor the notes say was applied at quantization. The four source
+fingerprints in the notes match the files on disk, and so does the export fingerprint.
+
+That is not a trace. It is a reproduction, and it retires the question the rest of this
+section used to be about.
+
+#### Two mistakes in the first pass, kept because both faults are general
+
+The first pass probed the stem against the **raw** sources, confirmed three of the four, and
+left the brick filed `stated-not-corroborated` for about an hour. Both reasons are worth more
+than the result was.
+
+**A probe against an unprocessed source is a probe against something the stem does not
+contain.** The chain low-passes every source at 6,500 Hz before cutting. A 0.42 s brick
+contact is mostly broadband transient and loses far more to that than a rock drag or a slab,
+whose energy already sits low — so the identical probe scored 0.92 on the drags and an
+unstable 0.585 on the brick, flipping sign when the window length changed. *Where a pipeline
+is known to filter, filter the source the same way before comparing, or expect the quietest
+and sharpest layer to be the one that fails.*
+
+**And the test I trusted most was the broken one.** "If one recording is used three times, the
+three uses correlate with each other" is sound, and it needs no source at all — which is why
+it felt decisive. But it was run at **fixed alignment**, returned +0.159, +0.159 and −0.042,
+and was read as proof the three runs were different sounds. Allowing a lag search returns
+**r = +1.0000** at lags of −1.00, +1.00 and +2.00 ms. The three runs are bit-identical.
+
+**The millisecond is explained by the recipe, which is the part worth keeping.** The three
+brick cues carry different gains — −14.23, −14.73 and −14.93 dB — so each one's 4 ms
+raised-cosine fade-in crosses the 24-bit quantization threshold at a slightly different
+moment, and a silence detector duly reports three different onsets for three identical
+gestures. **A self-similarity test must cross-correlate and never compare at a fixed offset.**
+On a transient, one millisecond is the difference between 1.00 and 0.15.
+
+*The general lesson is about confidence rather than correlation.* The failing probe produced a
+plausible, specific, wrong conclusion — three different sounds, stated with a number — and the
+thing that overturned it was a document, not a better measurement. A measurement can be
+confidently wrong in a way that only outside information corrects.
+
+#### What the notes let us check that nothing else could
+
+The notes' own measurements agree with this tree's: true peak **−11.55** against −11.58 here,
+sample peak about −11.75 against −11.73. Their "integrated loudness" of **−37.25** is the
+*gated* figure and reads −37.16 here; this tree records ungated, −42.09, so the two are
+different measures rather than a disagreement — worth stating, because a reader comparing the
+notes to the record would otherwise find a five-decibel gap and no explanation.
+
+**It is the loudest bed in the folder by peak**, −11.58 dBTP against the wind's −14.90, which
+is what twelve struck and dragged stones do against weather — and second by loudness at
+−42.09, behind only the wind. Its wrap gap is 2.252 s against a shortest interior pause of
+0.256, so **8.8×**, comfortably clear. Six beds now sum to **−11.57 dBTP**, so Build Shrine
+has given up 3.2 dB of headroom in one track and is no longer the roomiest action in the tree.
+
+#### The gallows, in two parts — and the first wrap that is safe outright
+
+`gallows_timber_sfx_v01.ogg` and `gallows_rope_sfx_v01.ogg` are the frame and what hangs from
+it. Build Shrine builds a shrine; the gallows is the other thing a frame of timber and rope
+is, and the folder now carries both. Matt Script's old-wood creak from the Sonniss **GDC
+2019** bundle under jergonda's *Hang Man's Rope*, **CC0** on freesound and checked before
+anything was measured.
+
+**Both traced, and the controls were the hardest ones available.** The timber matches
+**14 of 14** at r up to **0.9326** against snake16547's `old-wood-door-creak` at **0.1498** —
+another old-wood creak, which is as close as a control gets. The rope matches **14 of 14** at
+up to **0.8902** against vrymaa's `leather-rub-creaks` at **0.3460**: creaking cordage against
+creaking hide, the closest control run anywhere in this tree, and it still falls half a scale
+short. Each bed's source was also run against the other's and reached 0.1526 both ways.
+
+**The rope is three clean copies.** The 18.486 s upload at **+0.030, +3.360 and +6.260 s**,
+every event resolving to one of the three with no stragglers, and the copies spanning
+0.030–18.516, 3.360–21.846 and 6.260–24.746 against sounding runs at 6.177–9.233,
+15.271–18.124 and 20.983–24.535 — all inside. The first copy's opening six seconds are muted
+in the stem, so the layers are gated as well as placed.
+
+**The timber's copy count is not resolved, and is not guessed at.** Event matching puts it at
+seven placements between +3.537 and +22.797 s, but copies of a 4.673 s source at those
+positions overlap heavily and an event inside an overlap matches whichever copy is louder
+there — so seven is a lower bound on the alignment, not a count of layers. *The obvious
+explanation was tested and ruled out.* A periodic source would let a window lock onto the
+wrong cycle and manufacture placements, and the two closest here are 0.602 s apart, which
+looked exactly like that. Autocorrelated from 0.15 to 3.0 s the source peaks nowhere above
+0.15 — it is not periodic, despite "slow back and forth" in its name. No replacement
+mechanism is offered. What *is* established is coverage: all four sounding runs fall inside a
+placed copy, and the single hole in the coverage, 12.620–13.262 s, is silent in the stem.
+
+**The rope's wrap is safe outright, which is rarer here than it sounds.** Its interior pauses
+are 2.859 and 6.037 s and the wrap gap is **6.643 s** — longer than the longest interior
+pause, so it clears section 13's first clause without needing the ratio at all. The timber
+reads **5.051 s** against pauses of 2.325, 3.563 and 7.040: shorter than the longest, which
+is what the old warning keyed on, and **2.17× the shortest**, which is what matters. Both are
+clickless, −240 dBFS over 50 ms either side of the seam and a butt-join step of 0.000000.
+
+**These two are why section 13 is now a ratio.** The timber would have tripped the old
+difference-based warning exactly as `fabric` did, and for the same non-reason. The rule, the
+threshold and `bed_facts.py`'s three-way verdict are in the loop note; the threshold was
+chosen by running it against the beds already judged rather than picked for roundness.
+
+**Build Shrine now spans 18.2 dB before anybody has set a trim** — the wind at −31.11 LUFS
+down to the rope at −49.35, which is the quietest bed in the folder and the sixth quietest in
+the tree. Five beds summing to −14.72 dBTP, still the roomiest action here.
+
+#### The fabric, where the licence was checked first and the loop does not quite close
+
+`fabric_sfx_v01.ogg` is canvas and rope working in the wind — the made thing in a scene whose
+other two layers are weather and birds. Three overlapping copies of one 13.750 s **CC0**
+upload, IENBA's *Fabric Flapping* on freesound.
+
+**The licence was checked before anything was measured, which is the door's lesson applied.**
+`door_close`'s first candidate was traced in full — r = 0.6573 against a control ceiling of
+0.405, real separation — and then thrown away on **Attribution 4.0**, because
+`ui/assets/gen_credits.py` builds the shipped credits from `ui/assets/attribution.json` alone
+and cannot see this tree. Freesound licences vary per upload and the only way to know is to
+look. This one is CC0, so every licence here still reads `attributionRequired: false`.
+
+**Fourteen of fourteen events, three constant placements, and the coverage checks out.**
+r up to **0.9166**, with the whole upload laid in at **0.000, +3.350 and +7.900 s**. Those
+cover 0.000–13.750, 3.350–17.100 and 7.900–21.647; the stem's material runs 0.000–21.412, so
+every sounding moment belongs to a placed copy and nothing is left over. *That last check is
+the crows' lesson, now run as a matter of course* — offsets agreeing with each other prove
+nothing, because a probe wrong by a constant produces exactly that.
+
+**The control is the same material, which is what makes it a control worth running.** yuval's
+`fabric-movement-wool` — freesound 188208, the source of Allocation's `wool_robe` — is another
+fabric recording, and it matches **0 of 14 at r max 0.2160**. A control from a different
+material class would have been easier to beat and would have proved less.
+
+**And the same uploader produced this tree's one failed trace.** `rats_crossing` comes from
+IENBA too, freesound 658429, and is the only bed here whose stated source failed its probe —
+r = 0.074, with the control outscoring it. This one lands fourteen of fourteen. *The uploader
+is not the variable; what was done to the audio afterwards is.*
+
+**The copies are levelled and gated, not merely placed.** Where one plays alone the fit gives
+−9.1 to −10.0 dB for the first and −11.7 to −13.1 dB for the third, with the third climbing
+steadily across three seconds — a slow fade-in. 17.2–18.2 s is muted outright although the
+third copy covers it.
+
+**It is not dual mono, and the correlation on its own would say it was.** In the stem the two
+channels correlate **+1.000000** and are *not identical*: the right is the left times
+**1.3764**, residual 98 dB down. One mono signal panned 2.77 dB right. *Correlation cannot
+tell a copy from a copy at another level; the ratio can.* Folding to mono costs **1.29 dB of
+level and nothing of content** — which is the opposite of `oil_lamp_flame`, whose 4 ms delay
+combs 21 dB on a fold, and different again from the deleted lamp, which was identical sample
+for sample. Three kinds of not-really-stereo, and all three have now turned up here.
+
+**The loop is good, and the first reading of it here was wrong — in a way worth keeping.** The
+three sounding runs are 0.000–4.721, 8.369–10.679 and 18.188–21.412, so a lap holds silences
+of **3.648**, **7.509** and, across the wrap, **3.588 s**. The wrap silence is 60 ms shorter
+than the shortest interior one, which fails section 13 of the loop note *as that section was
+written*, and this page first reported it as "`rammers`' fault almost exactly … the same size
+of it".
+
+**That compared the wrong quantity.** 60 ms is **1.6%** of a 3.6 s gap. `rammers` is 0.068 s
+on 0.768 — **8.9%**, five and a half times worse. *Duration is heard as a ratio, not as a
+difference*, and the threshold for telling two multi-second intervals apart is around 5–10% of
+their length: `rammers` sits on that boundary, this is nowhere near it. The two differ in kind
+as well — rammers' pauses are about 1.5 s inside a rhythmic work gang, these are 3.6 to 7.5 s
+in a wind with no pulse at all. **Section 13 is now stated as a ratio because of this file**,
+and in ratio the fabric passes comfortably.
+
+**The seam is clickless too**: the first 50 ms reads −91.8 dBFS and the butt-join step is
+**0.00000000** exactly, so the file fades up from true silence rather than starting on an
+edge. **And it never plays alone** — `wind` under it is 0.0% silence, so the fabric's gaps are
+filled by a continuous bed, which is the argument `clerical_actionA/rosary`'s record makes
+about a stem not needing to be seamless by itself. *Nothing needs fixing.*
+
+**What is not explained, and it is the second time in this folder.** Where a copy plays alone
+the correlation sits at **0.87–0.92** rather than the 0.99 a plain excerpt reaches. The
+obvious cause was tested and ruled out: the stem's left channel scores 0.8673 against the
+source's left, 0.8663 against its right and 0.8771 against its mid, so it is not a question of
+which channel was taken — and the side signal scores 0.1470, so the source is near-mono
+itself. The wind in this same folder stops at 0.82 and is unexplained for its own reasons.
+*One residual is a curiosity; two in one folder, both through the same pipeline, is a pattern
+worth naming.* It is named here and not explained.
 
 #### The crows, which are three copies of two birds — and a 200 ms error the layout caught
 
@@ -2282,8 +2507,8 @@ parts are a *floor* rather than silence the arithmetic does not apply and the fi
 something else again; no file here is that case yet.
 
 **Mission has no cue either.** `ordination actionA` is Ordain and has one; `actionB` does not.
-**Twenty-five beds across five duty actions** now have nothing to be levelled against —
-eleven on Build Road, two on Build Shrine, one on each of Give Alms' two actions, and ten
+**Thirty beds across five duty actions** now have nothing to be levelled against —
+eleven on Build Road, seven on Build Shrine, one on each of Give Alms' two actions, and ten
 here. **And Mission is
 the tightest action in the tree for headroom**, summing to **−2.42 dBTP** against Build Roads'
 −5.22, even after the door took the folder's first trim. Add the loudest cue filed and the
@@ -2375,7 +2600,7 @@ ffmpeg. `python3 ui/board_v2/sfx_lab/sfx_levels.py --groups --write` recomputes 
 
 **Whether a track loops is a field too, and absent means yes.** A record may carry
 `"loop": false`, the generator passes it to the bench, and the bench's **loop** column is
-ticked for everything else. Thirty-six of the thirty-seven beds filed loop, which is why the field is
+ticked for everything else. Forty-one of the forty-two beds filed loop, which is why the field is
 written only when the answer is no — the same economy as `gainDb`, where silence means a
 number nobody has set. A one-shot plays once and stops: it is an event with a place in the
 scene rather than an ambience, and it is excluded from the repeat figure, since folding its

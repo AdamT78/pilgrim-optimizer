@@ -278,6 +278,11 @@ def ambient_groups(doc: dict, beds: list, notes: list) -> dict:
                     "duty": b["duty"],
                     "tracks": sum(1 for x in beds if x["action"] == act),
                     "summedTruePeakDbtp": g.get("summedTruePeakDbtp"),
+                    # THE OTHER MEASUREMENT OF THE SAME RENDER, and the one a transition is
+                    # heard by. Peak answers whether an action can clip; loudness answers
+                    # whether crossfading into it will step. They rank this tree differently.
+                    # Same fingerprint, because it is the same render at the same trims.
+                    "summedLoudnessLufs": g.get("summedLoudnessLufs"),
                     "summedAtTrims": g.get("summedAtTrims")}
         if g and g.get("tracks") not in (None, out[act]["tracks"]):
             notes.append("%s: ambientGroups says %s tracks, the folder holds %d -- rerun "

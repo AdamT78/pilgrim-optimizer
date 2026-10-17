@@ -93,6 +93,19 @@ one-shot drops out of the mix line, the window and the repeat figure the moment 
   <button id="fold">fold the duty action levels into the trims</button>
 </div>
 
+<div class="ctl">
+  <b>transition</b>
+  <span id="xfrom" style="color:var(--dim)"></span> &rarr;
+  <select id="xto"></select>
+  <label>over <input id="xsec" type="range" min="0" max="8" step="0.25" value="1.5"
+         style="width:150px"></label><span id="xsecv" style="color:var(--hot)"></span>
+  <label><input id="xpow" type="checkbox" checked> equal power</label>
+  <label><input id="xmatch" type="checkbox"> match loudness</label>
+  <button id="xgo" class="big">cross</button>
+  <span id="xstep" style="color:var(--dim)"></span>
+</div>
+<p class="note" id="xnote"></p>
+
 <p class="note" id="modenote"></p>
 
 <div class="ctl">
@@ -203,6 +216,11 @@ function afterEnd(e){
   paintMix(); paintRows(); paintActions();
 }
 function wantsLayer(f){
+  // THE OUTGOING ACTION IS STILL WANTED WHILE IT IS FADING. Without this clause any repaint
+  // that calls syncLayers() during a crossfade stops the action being faded out, mid-fade,
+  // and the transition becomes the hard switch it was built to replace -- with the gain ramp
+  // still running correctly on a bus that has nothing connected to it.
+  if (XF && actOf(f) === XF.from) return true;
   if (ALL) return actOf(f) === ALL;
   return !!WANT[f] && !(f === cur && playing);
 }
@@ -315,8 +333,25 @@ function b2ab(b64){
   for (var i = 0; i < n; i++) a[i] = s.charCodeAt(i);
   return a.buffer;
 }
+// `ctx` EXISTING IS NOT THE SAME AS THE BUFFERS BEING READY, and reading it as though it were
+// was a real bug with a silent failure. The old guard was `if (ctx) { cb(); return; }`, so a
+// SECOND caller arriving while the first was still decoding got its callback fired at once,
+// with bufs empty -- every layerStart() returned early on `!bufs[f]`, nothing sounded, and no
+// error was raised anywhere. It survived this long because the only way in was a human
+// clicking twice inside the decode window; the transition control made it reachable by
+// clicking ONCE, since `cross` and `play all` are two different ways to start an action.
+// `ready` is the state that was missing and `pending` is the queue that should always have
+// been here.
+var ready = false, pending = [];
+function fireReady(){
+  ready = true;
+  var q = pending; pending = [];
+  q.forEach(function(f){ f(); });
+}
 function init(cb){
-  if (ctx) { cb(); return; }
+  if (ready) { cb(); return; }
+  pending.push(cb);
+  if (ctx) return;            // a decode is already running; this cb goes with the rest
   ctx = new (window.AudioContext || window.webkitAudioContext)();
   master = ctx.createGain(); master.gain.value = Math.pow(10, MONITOR_DB / 20);
   master.connect(ctx.destination);
@@ -327,16 +362,18 @@ function init(cb){
   bedGain = ctx.createGain(); routeBed();
   setTrim(); setGroup();
   var ck = Object.keys(CUES), left = BEDS.length + ck.length;
-  if (!left) { cb(); return; }
+  if (!left) { fireReady(); return; }
+  // A FAILED DECODE USED TO HANG THE PAGE FOREVER. The error path decremented the counter and
+  // nothing else, so if the last outstanding decode failed the count reached zero with the
+  // callback never called -- no sound, no message, no way to tell it from a slow load. Both
+  // paths go through one `done` now: a file that will not decode is one bed missing, not a
+  // dead bench.
+  function done(){ if (--left === 0) fireReady(); }
   BEDS.forEach(function(b){
-    ctx.decodeAudioData(b2ab(b.src), function(buf){
-      bufs[b.file] = buf; if (--left === 0) cb();
-    }, function(){ left--; });
+    ctx.decodeAudioData(b2ab(b.src), function(buf){ bufs[b.file] = buf; done(); }, done);
   });
   ck.forEach(function(k){
-    ctx.decodeAudioData(b2ab(CUES[k].src), function(buf){
-      cueBufs[k] = buf; if (--left === 0) cb();
-    }, function(){ left--; });
+    ctx.decodeAudioData(b2ab(CUES[k].src), function(buf){ cueBufs[k] = buf; done(); }, done);
   });
 }
 function stopSrc(){ if (src) { try { src.stop(); } catch (e) {} src.disconnect(); src = null; } }
@@ -434,7 +471,14 @@ function setGroup(){
   document.getElementById("grpsum").innerHTML = sum == null ? "&mdash;"
       : (sum >= 0 ? "+" : "−") + Math.abs(sum).toFixed(2) +
         (sum > -1 ? " <b style='color:var(--hot)'>over the cue ceiling</b>" : "");
-  if (a && BUS[a]) BUS[a].gain.value = Math.pow(10, v / 20);
+  // DO NOT TOUCH A BUS THAT IS MID-AUTOMATION. Assigning .value while a value curve is
+  // running on the same AudioParam either throws or is silently overridden, depending on the
+  // browser, and either way the fade stops being the thing under test. The slider still
+  // records the number; endCross() applies it when the curve is done.
+  var frozen = XF && (a === XF.from || a === XF.to);
+  // busTarget, not the raw group, so moving the slider does not silently wipe a monitoring
+  // offset that the note line is still claiming is active.
+  if (a && BUS[a] && !frozen) BUS[a].gain.value = busTarget(a);
   paintSettings();
 }
 // ONE PLACE WHERE A TRIM REACHES THE AUDIO, whichever control moved it. A track can be sounding
@@ -626,8 +670,133 @@ function pick(f){
   setTrim(); setGroup(); paintCue(); syncLayers();
   paintRows(); paintMode(); paintActions();
 }
+// A CROSSFADE IS THE ONE CASE THAT HAS TO BREAK THE ONE-SELECTION RULE, so it is a mode and
+// not a loophole. For the length of the fade two actions sound at once; before and after,
+// exactly one does. XF holds the outgoing action for that window and nothing else reads it,
+// which is what keeps `ALL` meaning the same thing it always meant: the action you are on.
+// NOTHING IS MERGED AND NOTHING IS RE-RENDERED. Every track of an action already feeds one
+// gain node -- that is the group bus, built so a master fader cannot disturb a balance -- so
+// fading two complete actions is two automations on nodes that already exist. The same
+// property that makes the group safe makes the transition free.
+var XF = null, XMATCH = {};
+function busTarget(a){ return Math.pow(10, groupDb(a) / 20) * (XMATCH[a] || 1); }
+// MATCHING IS A MONITORING AID AND IS NEVER SAVED. It scales a bus so the incoming action
+// arrives at the loudness of the one you are leaving, which answers "is 1.5 s the right
+// length" without the level step answering it first. It writes nothing to a record: the real
+// fix for a step is a group level somebody chose, and a checkbox that quietly became that
+// would be the worst of both.
+// IT HAS TO OUTLAST THE FADE, which the first version got wrong. Clearing it at the end put
+// the destination back to its own level the instant the crossfade finished -- a smooth two
+// seconds and then a 14.9 dB jump, which is the step it was added to remove, moved half a
+// breath later and made harder to attribute. It persists until the action changes by some
+// other route, and the note line says it is active the whole time it is.
+function xfLoud(a){
+  var g = GROUPS[a] || {};
+  return g.summedLoudnessLufs == null ? null : g.summedLoudnessLufs + groupDb(a);
+}
+function xfStep(a, b){
+  var la = xfLoud(a), lb = xfLoud(b);
+  return (la == null || lb == null) ? null : lb - la;
+}
+function crossTo(b, secs, equalPower){
+  if (!b || !GROUPS[b]) return;
+  var a = curAction();
+  if (!a || a === b) { playAll(b); return; }
+  init(function(){
+    // The transport and any ticked boxes are a different selection, exactly as play all says.
+    stopSrc(); playing = false; paintTransport();
+    if (!ALL) { Object.keys(LAYERS).forEach(layerStop); }
+    WANT = {}; clearBoxes();
+    var t0 = ctx.currentTime, from = a;
+    XMATCH = {};
+    if (document.getElementById("xmatch").checked) {
+      var st = xfStep(from, b);
+      if (st != null) XMATCH[b] = Math.pow(10, -st / 20);
+    }
+    // The incoming action starts silent, at its own zero, so the mix is the same every time.
+    if (BUS[b]) BUS[b].gain.cancelScheduledValues(t0), BUS[b].gain.setValueAtTime(0, t0);
+    XF = {from: from, to: b, until: t0 + secs};
+    ALL = b;
+    BEDS.forEach(function(x){ if (x.action === b) layerStart(x.file, true); });
+    var ga = BUS[from], gb = BUS[b], va = busTarget(from), vb = busTarget(b);
+    if (secs <= 0) {
+      if (ga) ga.gain.setValueAtTime(0, t0);
+      if (gb) gb.gain.setValueAtTime(vb, t0);
+    } else if (equalPower) {
+      // EQUAL POWER BECAUSE TWO DUTY ACTIONS ARE UNCORRELATED. Two unrelated field recordings
+      // add as powers, not as amplitudes, so a linear pair sums to 0.707 at the midpoint and
+      // dips about 3 dB through the middle of every transition. cos/sin holds the sum of
+      // powers constant instead. The opposite is true of correlated material -- the same
+      // recording crossfaded with itself, which is what a LOOP SEAM is -- and that is why
+      // the loop note's folds are equal-power too but for the other reason: there the 1.5 s
+      // convention is joining a file to itself. A linear option is here to be heard, not
+      // because the choice is open.
+      var N = 128, ca = new Float32Array(N), cb2 = new Float32Array(N);
+      for (var i = 0; i < N; i++) {
+        var p = i / (N - 1);
+        ca[i] = va * Math.cos(p * Math.PI / 2);
+        cb2[i] = vb * Math.sin(p * Math.PI / 2);
+      }
+      if (ga) ga.gain.cancelScheduledValues(t0), ga.gain.setValueCurveAtTime(ca, t0, secs);
+      if (gb) gb.gain.setValueCurveAtTime(cb2, t0, secs);
+    } else {
+      if (ga) { ga.gain.cancelScheduledValues(t0); ga.gain.setValueAtTime(va, t0);
+                ga.gain.linearRampToValueAtTime(0, t0 + secs); }
+      if (gb) { gb.gain.setValueAtTime(0, t0); gb.gain.linearRampToValueAtTime(vb, t0 + secs); }
+    }
+    startOff = 0; lastPos = 0; startT = t0;
+    document.getElementById("grp").value = groupDb(b);
+    setGroup(); paintRows(); paintMode(); paintActions(); paintMix(); paintXf();
+    window.setTimeout(function(){ endCross(from); }, Math.max(0, secs * 1000) + 60);
+  });
+}
+// PUTTING THE OUTGOING BUS BACK IS THE STEP THAT IS EASY TO FORGET AND SILENT WHEN MISSED.
+// Its gain is sitting at zero because the fade left it there; the layers are gone, so nothing
+// sounds wrong, and the next time that action plays it plays at nothing. Restore before
+// dropping XF, and restore from the record rather than from a remembered number.
+function endCross(from){
+  if (!XF || XF.from !== from) return;
+  XF = null;
+  BEDS.forEach(function(x){ if (x.action === from) layerStop(x.file); });
+  // The action we left goes back to its own level -- it keeps no monitoring offset, because
+  // it is not the one being auditioned any more.
+  delete XMATCH[from];
+  if (BUS[from]) {
+    BUS[from].gain.cancelScheduledValues(ctx.currentTime);
+    BUS[from].gain.value = Math.pow(10, groupDb(from) / 20);
+  }
+  // The destination keeps whatever offset the fade arrived on, so the end of the fade is not
+  // itself a step. busTarget() carries it; nothing else needs to know.
+  if (ALL && BUS[ALL]) {
+    BUS[ALL].gain.cancelScheduledValues(ctx.currentTime);
+    BUS[ALL].gain.value = busTarget(ALL);
+  }
+  paintRows(); paintMode(); paintActions(); paintMix(); paintXf();
+}
+function paintXf(){
+  var a = curAction(), sel = document.getElementById("xto");
+  document.getElementById("xfrom").textContent = a || "nothing playing";
+  var secs = +document.getElementById("xsec").value;
+  document.getElementById("xsecv").textContent = secs.toFixed(2) + " s";
+  var b = sel.value, st = (a && b) ? xfStep(a, b) : null;
+  var el = document.getElementById("xstep");
+  el.innerHTML = st == null ? "" :
+      "step " + (st >= 0 ? "+" : "−") + Math.abs(st).toFixed(2) + " dB" +
+      (Math.abs(st) >= 3 ? " <b style='color:var(--hot)'>you will hear the level, not the fade</b>" : "");
+  var held = Object.keys(XMATCH).filter(function(k){ return XMATCH[k] !== 1; });
+  var msg = XF ? ("crossing " + XF.from + " → " + XF.to + ", both actions sounding. ") : "";
+  if (held.length) {
+    msg += "MONITORING OFFSET ACTIVE: " + held.map(function(k){
+      return k + " " + (20 * Math.log10(XMATCH[k]) >= 0 ? "+" : "−") +
+             Math.abs(20 * Math.log10(XMATCH[k])).toFixed(2) + " dB";
+    }).join(", ") + " — this is not its level and is not saved. " +
+    "The real fix for a step is a duty action level somebody chose.";
+  }
+  document.getElementById("xnote").textContent = msg;
+}
 function exitAll(){
   if (!ALL) return;
+  if (XF) endCross(XF.from);
   ALL = null;
   Object.keys(LAYERS).forEach(layerStop);
   startOff = 0; lastPos = 0; if (ctx) startT = ctx.currentTime;
@@ -644,7 +813,15 @@ function playAll(a){
   // action stops, because nothing was hidden under it.
   init(function(){
     stopSrc(); playing = false; paintTransport();
+    if (XF) endCross(XF.from);
     Object.keys(LAYERS).forEach(layerStop);
+    // Starting an action outright is the plain case: no offsets, every bus at its own level.
+    Object.keys(XMATCH).forEach(function(k){
+      XMATCH[k] = 1;
+      if (BUS[k]) { BUS[k].gain.cancelScheduledValues(ctx.currentTime);
+                    BUS[k].gain.value = Math.pow(10, groupDb(k) / 20); }
+    });
+    XMATCH = {};
     WANT = {}; clearBoxes();
     ALL = a;
     startOff = 0; lastPos = 0; startT = ctx.currentTime;
@@ -707,6 +884,7 @@ function paintActions(){
            : dirty ? "<span class='stale'>" + sum.toFixed(2) + " at the filed trims</span>"
            : sum.toFixed(2) + " dBTP") + "</td></tr>";
     }).join("") + "</table>";
+  paintXf();   // the transition's subject is whatever action this just repainted
 }
 document.getElementById("play").onclick = function(){
   if (playing) { stopAll(); return; }
@@ -725,6 +903,32 @@ document.getElementById("playall").onclick = function(){
   var a = actOf(cur); if (a) playAll(a);
 };
 document.getElementById("fold").onclick = foldGroups;
+(function(){
+  var sel = document.getElementById("xto");
+  Object.keys(GROUPS).sort().forEach(function(a){
+    var o = document.createElement("option");
+    o.value = a; o.textContent = a + " (" + (GROUPS[a].tracks || 0) + ")";
+    sel.appendChild(o);
+  });
+  sel.onchange = paintXf;
+  document.getElementById("xsec").oninput = paintXf;
+  document.getElementById("xmatch").onchange = function(){
+    // Unticking drops any offset already applied, at once rather than at the next fade.
+    if (!this.checked && ctx) {
+      Object.keys(XMATCH).forEach(function(k){
+        if (BUS[k]) { BUS[k].gain.cancelScheduledValues(ctx.currentTime);
+                      BUS[k].gain.value = Math.pow(10, groupDb(k) / 20); }
+      });
+      XMATCH = {};
+    }
+    paintXf();
+  };
+  document.getElementById("xgo").onclick = function(){
+    crossTo(sel.value, +document.getElementById("xsec").value,
+            document.getElementById("xpow").checked);
+  };
+  paintXf();
+})();
 document.getElementById("grpreset").onclick = function(){
   var a = curAction(); if (!a) return;
   document.getElementById("grp").value = GROUPS[a].groupDb || 0; setGroup(); paintActions();

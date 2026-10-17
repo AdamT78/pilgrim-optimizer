@@ -1,12 +1,20 @@
 # Cutting an ambient bed into a seamless loop
 
-**Status: thirty-seven files under nine duty actions.** Three actions have one track each —
+**Status: forty-two files under nine duty actions.** Three actions have one track each —
 `clerical_actionB/silversmith` (25 s, fire), `give_alms_actionA/alms` (25 s, rain) and
 `give_alms_actionB/donate_building` (32.5 s, a sheltered wind). Six have several.
-`build_roads_actionB/` is the newest and holds two at 25 s: `wind` (winter grass on open
+`build_roads_actionB/` is the newest and holds seven at 25 s, with `gallows_timber`
+(seven resolved placements of one 4.673 s creak, wrap 5.051 s at 2.17× its shortest interior
+pause) and `gallows_rope` (three copies of an 18.486 s rope, wrap 6.643 s and **safe
+outright** — longer than any interior pause, which only `distant_dogs` and it manage here)
+joining: `wind` (winter grass on open
 ground, wrapped with a 2.1 s equal-power fold at its TAIL rather than its head) under
 `crows_ravens` (intermittent, three placed copies of two corvid recordings, wrap gap
-10.09 s against a longest interior gap of 5.06 s — the narrowest margin in this note).
+10.09 s against a longest interior gap of 5.06 s — the narrowest passing margin here) and
+`fabric` (three overlapping copies of one 13.75 s recording; its wrap gap of 3.588 s is
+60 ms under the shortest of its two interior gaps, which fails section 13 as that section
+was *written* and passes it as that section is now *stated* — see section 13 for why the
+rule had to become a ratio, and this is the file that made it).
 `build_roads_actionA/` holds eleven — `rammers`, `gravel`, `far_work`, `worker_footsteps`,
 `horse_snorts`, the ox cart in three (`ox_cart_mechanics`, `ox_cart_stones`, `ox_breathing`)
 and the oil lamp in two (`oil_lamp_rattle`, `oil_lamp_flame`), all 35 s; `oil_lamp_flame` is
@@ -493,6 +501,36 @@ character is irregular pauses. Compare `build_roads_actionA/rammers`, whose wrap
 the pattern. **A wrap gap at or above the interior maximum is safe; one below the interior
 minimum is a tell.** In between, listen.
 
+**THAT RULE COMPARES THE WRONG QUANTITY, AND `build_roads_actionB/fabric` IS THE FILE THAT
+SHOWED IT.** Written in seconds, the rule asks whether the wrap gap is shorter than the
+shortest interior one and says nothing about *by how much relative to the gap itself*. The
+fabric bed's wrap gap is 3.588 s against a shortest interior gap of 3.648 — **60 ms, which is
+1.6% of it**. `rammers` is 0.068 s against 0.768 — **8.9%**. In seconds those two faults are
+the same size, which is how the fabric record first described it, and in the only terms that
+matter they are five and a half times apart. *Duration is perceived as a ratio, not as a
+difference.* The published figure for telling two intervals of a few seconds apart is around
+5-10% of their length, so `rammers` at 8.9% sits on that boundary and the fabric at 1.6% is
+nowhere near it — and the two files make the gap differently audible again, because rammers'
+pauses are around 1.5 s inside a rhythmic work gang while the fabric's are 3.6 to 7.5 s in a
+wind that has no pulse at all.
+**So the rule is a ratio.** A wrap gap at or above the interior maximum is safe; one below
+**0.95×** the shortest interior pause is a tell; in between, listen. In seconds the fabric
+fails and in ratio it passes comfortably, and the ratio is the one to believe. *An interior
+pause means a silence of at least 0.25 s* — below that it is texture rather than a pause, and
+counting it drags the minimum to nothing and the test says nothing.
+**0.95 was chosen against the cases already judged, not picked for roundness.** The first
+value tried was 0.90, and it put `rammers` at 0.91× into "listen" — quietly overturning the
+judgement this section has carried since that bed was filed. 0.95 is also the conservative
+end of the 5-10% discrimination range, which is where a flag whose job is to fetch a human
+belongs. At 0.95: `rammers` 0.91 is a tell, `fabric` 0.98 is not, `gallows_timber` 2.17 is
+not, and `gallows_rope` and `distant_dogs` are safe outright. `sfx_lab/bed_facts.py` prints
+the verdict and the ratio on every bed.
+*A figure that did not reproduce, recorded rather than quietly fixed:* this note has said
+rammers' wrap gap is **0.13 s** shorter than its tightest interior pause since it was written,
+and measured on the shipped file it is **0.068 s**. Same class as the seam ratios in
+`sfx/README.md` — a number taken once by a script nobody kept. The conclusion it supports is
+unaffected either way, so it is left where it is with this line beside it.
+
 **Two more arrived the same day and they sharpen the rule rather than repeat it.**
 `rats_crossing` and `rat_squeaks` are the far end of the scale: four footfalls and three
 squeaks, both bursts inside the same second of a 36 s file, 95.4% and 97.8% exact digital
@@ -523,11 +561,26 @@ sliding probe fails when the source is too thin, the event probe when its window
 
 ## 14. Not done
 
-- **The board plays no bed.** All thirty-seven are filed and audible on the ambient bench;
+- **The board plays no bed.** All forty-two are filed and audible on the ambient bench;
   `bundled_sfx()` still inlines only `tile.ogg` and `confirm.ogg`. This bullet has said "all
   five" since there were five, which is its own small lesson: a count in prose is a fact with
   no test behind it, and nine beds arrived before anyone noticed. The generator prints the
   number on every run — that is the one to believe.
+- **Action-to-action transitions can now be heard, and nothing had to be merged to hear
+  them.** The bench grew a `cross` control on 2026-10-17: pick a destination action, a time
+  and a curve, and the two *complete* ambiences crossfade — eleven tracks against ten, all
+  twenty-one sounding at once through the middle of it. **It needed no new audio and no
+  merged files**, because every track of an action already feeds one gain node. That bus was
+  built so a master fader could not disturb a balance; the same property makes a transition
+  two automations on nodes that exist. *The merge question is a delivery question and this
+  was never waiting on it.*
+  Measured in the browser: equal power holds the sum of powers at **1.0000 across the whole
+  fade**, and the linear option dips to **−2.97 dB** at the midpoint against the −3.01 the
+  arithmetic predicts. Two uncorrelated field recordings add as powers, so equal power is
+  right here — and the reason is the opposite of the one that makes the folds in this note
+  equal-power, where a file is being joined to *itself*.
+  What it cannot tell you yet is how long the fade should be. 1.5 s is still the convention
+  and still has nothing behind it; now there is a way to disagree with it.
 - **Bed-to-bed transitions are unspecified.** One global equal-power time, not a pairwise
   matrix: the matrix never converges, it grows as the square of a bed count that is expected to
   grow, a transition is heard once where a loop seam is heard every lap, and the only thing that
@@ -538,7 +591,7 @@ sliding probe fails when the source is too thin, the event probe when its window
   undecided, as is the fade-in on select, and what happens on deselect or re-select.
 - **The loop checker does not exist as a tool.** The band-match shoulder search, the N-lap
   render and the wrap-window percentile test have been written from scratch for each of the
-  thirty-seven files. Three of them now have a settled shape and one of them, the percentile
+  forty-two files. Three of them now have a settled shape and one of them, the percentile
   test, is the only check that works on a loop that arrives already baked — and none of the
   three applies to a stem that is not wrapped at all, which a good many of these are. None of
   the three can check a metrical loop either; see section 12.
@@ -551,7 +604,7 @@ sliding probe fails when the source is too thin, the event probe when its window
 - **`--groups` re-renders all nine actions when it already knows which one changed.** Every
   action's entry carries `summedAtTrims`, a fingerprint of the `gainDb` values its sum was
   taken from, and a test compares the two without decoding anything. The renderer does not
-  read it: adding one bed to one folder decodes and mixes all thirty-seven files, about
+  read it: adding one bed to one folder decodes and mixes all forty-two files, about
   fourteen seconds where two would do. Harmless at this size and the fix is a few lines —
   skip an action whose fingerprint still matches — but it is the only place in the pipeline
   where the cost grows with the whole tree rather than with the change.
