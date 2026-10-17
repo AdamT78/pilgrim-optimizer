@@ -941,7 +941,7 @@ here as the files being clipped. They are not known to be. Measure the **shipped
 
 ### `ambient/`, the first sounds here that are not events
 
-Forty-two files under nine duty actions, and they are a different kind of thing from
+Forty-nine files under ten duty actions, and they are a different kind of thing from
 everything above.
 
 **They live one folder per duty action** — `ambient/<duty>_<slot>/`, which is the same string
@@ -1679,6 +1679,347 @@ against each other and the group's absolute level is the one judgement here with
 behind it. Give Alms has the same gap on both its actions, with one bed each rather than
 eleven.
 
+### `produce_actionA/`, Produce Wheat in seven — and the first action in weeks to arrive with a cue
+
+Seven 35-second beds, the joint-largest folder here with Build Shrine. Two are continuous and
+confirmed: `wind_sfx_v01.ogg` is open country moving over the field and
+`field_rustle_sfx_v01.ogg` is the crop itself. Five are intermittent —
+`distant_rooster_sfx_v01.ogg`, which does not loop, and `sheaf_handling_sfx_v01.ogg`,
+`stalk_brushing_sfx_v01.ogg`, `straw_workers_sfx_v01.ogg` and `sickle_cutting_sfx_v01.ogg`,
+which do. **And
+`produce_actionA_sfx_v01.ogg` already
+exists**, which makes this the first folder since Taxation to gain beds with something to be
+levelled against. Every bed filed since has gone into an action with no cue; the no-cue tally
+stays at thirty because this one does not join it.
+
+**The two sources controlled each other, which is the cheapest useful arrangement this tree
+has found.** The covering note named both sources for both stems without saying which fed
+which, so neither assignment was taken from the filenames. Each stem was probed against both:
+`wind` matches *open space* **17 of 17 at r up to 0.7917** and the wheat source at 0.0654;
+`field_rustle` matches *bdvictor's wheat* **17 of 17 at up to 0.8000** and the open space at
+0.0369. Two stems, two sources, one probe, and the assignment falls out as a measurement.
+Ivo Vicic's winter grass — the Build Shrine wind's source, the nearest thing in the tree to
+this material — was run as an outside control and reached 0.3312.
+
+#### The rooster, which does not loop and traces harder than anything else here
+
+`distant_rooster_sfx_v01.ogg` carries `"loop": false`, plays once and stops — **the second
+one-shot in the tree** after `ordination_actionB/door_close`, and the first in a folder whose
+other beds are both continuous. The wind and the crop run underneath; the rooster happens
+once, which is what a rooster does.
+
+**Fourteen of fourteen events at r up to 0.9964**, eleven of them above 0.98. Two constant
+placements from one stretch of Joseph SARDIN's 71-second CC0 recording: source 11.605–14.165 s
+at stem 1.975, and 15.159–17.783 s at stem 7.969 — two consecutive crows. **The controls were
+other birds**, which is the hardest arrangement available: Gamemaster Audio's crow caw reaches
+0.0817, Discover Oregon's raven no better, both 0 of 14. Bird against bird, better than twelve
+to one.
+
+**Why this one lands so hard, since it is worth knowing.** The source is mono, already at
+48 kHz, and the excerpts were taken without filtering or level automation inside them — so the
+probe compares the stem against very nearly what is in it. The Build Shrine stems that stop at
+0.82–0.88 were filtered before cutting; the brick that failed outright was filtered *and*
+attenuated 24 dB. **A trace measures how much processing sits between source and stem, as much
+as whether the source is right.** That reframes every weak result in this file as a statement
+about the pipeline rather than about the claim.
+
+**First BigSoundBank source here, so the licence was read rather than inferred.** The sound's
+own page labels it CC0, and the site's FAQ puts attribution as appreciated but not required,
+with commercial use and redistribution permitted. Same grant as the tree's existing `cc0`
+entry, so no new licence id — checked rather than assumed, because a new source site is
+exactly where a tree picks up an obligation it cannot keep.
+
+**Two things the measurement says that the file does not.** `bed_facts.py` reports the wrap as
+**SAFE** — 26.381 s against one interior pause of 3.435 — which is correct arithmetic about a
+question nobody asked, because *a one-shot has no seam*. It is noted here so nobody reads it
+as evidence the loop is good. And it is **not dual mono** despite correlating +0.999355: the
+right channel is the left times **0.7254**, a mono source panned **2.79 dB left**.
+`build_roads_actionB/fabric` is the same trick 2.77 dB *right* — the same magnitude mirrored.
+Two files is not a pattern; a third would be. *The third arrived the same day; see
+`sheaf_handling` below, which also shows that the figures in this paragraph were measured on
+the wrong file.*
+
+**And twenty-four seconds of it do nothing.** Material ends at 10.593 s in a 35-second file, so
+a one-shot that is over in eleven seconds holds a node alive for thirty-five. Harmless, and the
+length matches the folder's other two, but if anything ever counts one-shot lifetimes, that is
+where the waste is.
+
+#### The sheaf handling, which settled a prediction and broke a measurement
+
+`sheaf_handling_sfx_v01.ogg` is the fourth track here and the only one where somebody is
+doing something: cut stalks gathered and moved, 35 s, looping, from Vrymaa's CC0 freesound
+upload `734643__vrymaa__plants-or-straw-hay-dried-cereals.wav`. **Third Vrymaa upload in this
+tree and the first use of this one** — 734665 is `build_roads_actionA/oil_lamp_flame`'s source
+and 734630 was a control that correctly failed against it. One uploader has now supplied a
+bed, a control and a second bed in a different duty action, which is why the licence was read
+on *this upload's* page rather than inferred from the other two.
+
+**Two excerpts, and both placements land on round numbers.** Fourteen of fourteen probed
+events match, and then each sounding run was cross-correlated *whole* against the source
+rather than trusted from the event offsets: run one, stem 13.089–16.095 s, is source
+12.2890–15.2950 at **+0.8000 s** and whole-run **r +0.8092**; run two, stem 24.180–27.233, is
+source 19.6300–22.6830 at **+4.5500 s** and **r +0.8013**. The residuals are 58.7% and 59.8%
+of each run's rms against the 58.6% that r alone predicts, so **nothing is left over** — each
+run is one continuous copy, not an assembly. Both carry a level change, −3.35 and −3.59 dB,
+and neither is polarity-inverted, which separates this bed from both of its wrapped siblings.
+The placements are exact to the sample on a 50 ms grid and the two excerpts sit 4.335 s apart
+in the source. Controls: bdvictor's wheat, the other freesound source in this duty action,
+reaches **0.0651**, and Yuval's wool movement **0.0537**, both 0 of 14 — better than twelve to
+one.
+
+**Its ceiling is 0.81 where the rooster's was 0.996, and that is the controlled version of the
+rooster's own claim.** Both sources arrived mono, 16-bit, already at 48 kHz, with nothing to
+resample and no channel to choose. The only difference is the chain: these excerpts were
+filtered and pulled down 3.4 dB inside the cut and the rooster's were not. *Same source
+conditions, different processing, 0.81 against 0.996.*
+
+**The wrap is safe outright and the margin is the widest of any looping bed here** — 20.856 s
+against an interior maximum of 8.085, **2.58×**, against `crows_ravens` at 2.00, `distant_dogs`
+at 1.83 and `monk_robe` at 1.57. Only the rooster beats it at 7.68 and the rooster does not
+loop.
+
+**And a correction this bed forced, because the first draft of that sentence was wrong.** It
+said four beds clear section 13's first clause outright and named the wrong three. Running
+`bed_facts.py`'s verdict across all forty-six rather than reading it out of the prose gives
+**eleven**: `far_work`, `oil_lamp_rattle`, `ox_breathing`, `crows_ravens`, `gallows_rope`,
+`monk_robe`, `rosary`, `distant_dogs`, `barn_creaks`, this bed, and the rooster. Ten of the
+eleven loop. *A superlative about a population is a claim about every member of it, and the
+only honest way to write one is to compute the population.* Two statements already in this
+file say outright passes are rarer than that; they are listed as open corrections rather than
+quietly rewritten.
+
+**THE THIRD MONO-PANNED BED — AND THE FIRST TWO WERE MEASURED ON THE WRONG FILE.** In the WAV
+stem the right channel is the left times **1.208792** with a residual of **0.00%** and
+**r = 1.000000** exactly: one mono signal panned **1.65 dB right**. The rooster's record
+predicted that a third instance would make a pattern, and this is it. Measured at the stem,
+`fabric` is **+2.77 dB** right and the rooster **−2.77 dB** left — *exactly* mirrored, where
+the shipped-file figures had rounded them apart to 2.77 and 2.79.
+
+**The shipped `.ogg` cannot answer this question at all.** Vorbis joint stereo decorrelates
+the pair: r drops to 0.982254 here, 0.997236 on `fabric` and 0.999355 on the rooster, and a
+scalar fit that leaves no residual in the stem leaves **18.76%** in the encode. A channel
+relationship is a property of the stem and has to be measured there. *That is the exact mirror
+of the silence-percentage finding in this file* — there the figures came from the stem and the
+question was about the shipped asset; here the figures came from the asset and the question
+was about the stem. **Measure the file the question is about**, which sounds too obvious to
+write down and has now been got wrong in both directions.
+
+**What the encode costs the trace, measured on the other side of the chain.** Probing the WAV
+stem instead of the `.ogg` gives 0.8188 against 0.7880 — a **3.9%** drop — with the placements
+identical to the sample. When the "would .ogg sources be easier?" question was answered from
+the *source* side it measured 4.6% with the controls unmoved. Two independent measurements,
+same order, same conclusion: Vorbis costs a few percent of correlation and changes no verdict.
+
+#### The stalk brushing, which came with a recipe and a rejected twin
+
+`stalk_brushing_sfx_v01.ogg` is the fifth track here: two more harvesters working further off
+and to the left, where `sheaf_handling` is the one in front of you. Three gestures from
+BonginkosiMakhubu190225's CC0 `542690__bonginkosimakhubu190225__straw-bush-rustling.wav`,
+22.9 s and the shortest source feeding any bed in this tree.
+
+**The licence rule earned its keep for the first time.** This bed arrived as one of a pair.
+The other, `produce_wheat_hemp_binding_stem_v01_35s.wav`, was built from Paradoxxxical's hemp
+rope (freesound 679292) and that upload is **Attribution 4.0** — so it was dropped before
+being traced, on the project owner's decision, and is not in this tree.
+`ui/assets/gen_credits.py` builds the shipped credits from `ui/assets/attribution.json` alone
+and cannot see this tree, so a CC-BY source filed here creates an obligation the game cannot
+keep. Second time after InspectorJ's church door, *and the first time the check caught it
+before the trace rather than after* — which is the entire reason the rule reads "licence
+first".
+
+**Every number in the supplied notes that could be measured was, and all of them match.**
+`produce_wheat_fieldwork_v04_notes_and_credits.txt` names three gestures with source windows,
+scene positions and pans. Eleven of eleven probed events land at the three stated placements
+— **+0.0500, +9.0300 and +19.5400 s** — with whole-gesture correlations of +0.8534, +0.8510
+and +0.8266. **The pans are the stronger result**: measured from each gesture's channel rms
+under a constant-power law they read **−0.520, −0.320 and −0.520** against the notes'
+−0.52, −0.32 and −0.52, exact to three decimals, which pins the pan *law* and not just the
+values. The notes also claim the source has identical channels; it does, bit-for-bit,
+r = 1.000000. That is the second document-corroborated bed after `tinkering`, but this is a
+trace agreeing with a recipe and **not** a reconstruction — nothing was rebuilt, and the
+distinction is the whole difference between 0.85 and 1.000000.
+
+**Straw against straw, in the same folder.** The control is Vrymaa's dried cereals, the source
+behind `sheaf_handling`, at **0.0485** — and bdvictor's wheat at 0.1131. Both 0 of 11,
+separating better than seventeen to one. This is the hardest control this folder can now
+assemble and it only exists because the folder already had a straw bed; controls get cheaper
+as a tree gets denser.
+
+**A prediction failed here, and the failure is the useful part.** The notes describe spectral
+noise reduction, a 220–6200 Hz band on two gestures and 260–5200 on the third, and cosine gain
+dips on strong transients. From the trace-measures-processing-distance rule this bed was
+expected to land *below* `sheaf_handling`'s 0.81. It lands **above**, at 0.83–0.85. One
+hypothesis was tested and eliminated: applying the notes' own bands to the source before
+correlating makes the match slightly *worse*, by 0.008, 0.006 and 0.038, so band-limiting is
+not what lifted it. The remaining candidate — that subtractive noise reduction strips source
+content which never correlated anyway, so some processing *closes* the gap — is a hypothesis
+and has not been demonstrated. **The rule survives as a tendency, not as an ordering.**
+
+**Its wrap is a tell, and it is the first bed filed here that fails section 13 outright**
+rather than landing in `listen`. Interior pauses of 10.475 and 11.605 s against a wrap gap of
+**8.867** — 0.85× the shortest, where the threshold is 0.95. Fifteen percent is well above the
+5–10% discrimination range, so once a lap the third gesture is followed by a first gesture
+that arrives early. **The fix is arithmetic and is written down so nobody derives it twice:**
+moving the third gesture earlier by **0.56 s** clears the tell, and by **2.74 s** makes the
+wrap the longest pause in the file and passes the first clause outright. Nothing was changed.
+
+**It is not a mono signal panned, and that is the interesting half.** It fits R = 0.4466 × L
+with an 18.84% residual — but unlike `fabric` and the rooster that residual is *real* rather
+than a Vorbis artefact, because the three gestures carry different pans and no single scalar
+can describe the pair. The source is exact dual mono; the stem is genuinely two channels.
+
+**And a superlative that was wrong twice.** The first draft called its 2.83 dB mono-fold cost
+the largest in the tree. Measured across all forty-seven stereo beds, at least eight fold
+harder — `ox_breathing` 4.55, the two gallows beds 3.58 and 3.57, `coins` 3.35,
+`distant_dogs` 3.29, `barn_creaks` 2.99, `alms` 2.98, `oil_lamp_flame` 2.88 — so this is ninth
+at best. **Only six records in the tree state a fold cost at all**, which is exactly why
+reading them gave the wrong answer: `field_rustle`'s record calls its 2.66 dB "the largest
+such cost here" and is wrong by 1.89 dB. *A superlative drawn from the records is a
+superlative about the records.* Same fault as the wrap-outright count, found the same day.
+
+#### The straw workers, where "combined" was the thing worth checking
+
+`straw_workers_sfx_v01.ogg` is the sixth track and the busiest — **ten sounding runs** where
+`sheaf_handling` has two and `stalk_brushing` three, filling the gaps those two leave. It comes
+from Vrymaa's `734643__vrymaa__plants-or-straw-hay-dried-cereals.wav`, **the same upload that
+already feeds `sheaf_handling`**, which is why the first question was not provenance.
+
+**The filename says `combined`, so the first check was what it is combined with.** A stem that
+silently re-used the sibling bed's material would double-track the action and nobody would hear
+why. All ten runs were cross-correlated — lag search, never a fixed offset — against both
+existing intermittent beds: **0.0838** against `sheaf_handling`, **0.0692** against
+`stalk_brushing`. Nothing shared. "Combined" means several gestures in one stem.
+
+**And the geometric proof is better than the statistical one.** The placements resolve to seven
+disjoint source regions — 0.122–2.786, 4.453–6.278, 7.160–8.873, 9.003–9.925, 18.928–19.592,
+24.301–26.397 and 27.284–28.557 s — against `sheaf_handling`'s 12.289–15.295 and
+19.630–22.683. **They do not overlap at all, and the closest approach is 37.8 milliseconds**,
+where this bed's fifth excerpt stops just before the sibling's second begins. Together the two
+use 17.215 s of the 30.919 s recording, 55.7% of it, with no sample counted twice. *That is a
+cleaner separation than any same-upload pair here has managed* — the two lamp beds scored 0.575
+against each other and `monk_robe` against `wool_robe` 0.0209 and 0.0227, but neither pair could
+show its source regions were disjoint. A low correlation says the cuts differ; a disjoint
+interval list says they cannot share a sample.
+
+**Nine of ten runs at |r| ≥ 0.5**, from 0.4971 on the weakest to 0.7406, at eight distinct
+placements on a 10 ms grid. Controls are the other two straw sources in this duty action —
+BonginkosiMakhubu190225 at 0.0732 and bdvictor's wheat at 0.0657, both 0 of 14.
+
+**This is the tightest test the processing-distance rule has had.** `sheaf_handling` reaches
+0.81 from *this same file*; this bed reaches 0.50–0.74. The source is not merely comparable, it
+is identical — same upload, same rate, same channel count, same peak — so the whole difference
+is what the chain did between cutting and exporting. The rooster-versus-sheaf comparison argued
+this with similar source conditions; this argues it with the same source.
+
+**Its wrap is safe outright** at 2.06×, five interior pauses with the longest at 3.947 s against
+a wrap gap of 8.144. So the folder now holds three beds of the same construction by the same
+hand in the same week, two passing section 13 and one failing it.
+
+**And the scalar-pan split is now predictable rather than observed.** Fitted in the WAV stem —
+where `fabric`, `distant_rooster` and `sheaf_handling` all return an exact scalar with 0.00%
+residual — this one gives R = 0.593804 × L with a **46.53%** residual, the loosest in the
+folder, and `stalk_brushing` gives 18.84%. The split is by construction: a bed built from one
+source region panned once fits a scalar exactly, and a bed built from several gestures at
+several pans cannot, because no single number describes two different pans. **Three exact and
+two loose, and which is which is predicted by the number of placements.**
+
+#### The sickle, where one short recording does all the work
+
+`sickle_cutting_sfx_v01.ogg` is the seventh track and the only one that is the harvest itself
+rather than its surroundings or its aftermath: a blade through standing grass and the cut
+stems dragged clear. From hadescolossus's CC0
+`705228__hadescolossus__to-cut-and-drag-the-grass-with-a-knife-and-sickle.aiff`, **a first in
+three ways at once** — the shortest source feeding any bed here by a factor of three and a
+half at 6.409 s, the only AIFF, and the only source not already at this tree's 48 kHz. It was
+resampled before correlating, because a probe at mismatched rates measures nothing.
+
+**Forty of forty runs match, up to r = 0.9015, and they come from only two places.** The
+source positions collapse into 0.0439–0.9580 s and 1.1352–4.0603 s — 3.839 s in all, 59.9% of
+the recording. *Forty placements out of under four seconds is the densest reuse in this tree
+by a wide margin*; "combined" here means one short recording worked very hard.
+
+**The overlap check found the folder's largest bed-to-bed figure, and it is reported rather
+than rounded away.** Against all five existing beds the highest anywhere is **0.2933**, with
+`straw_workers` — roughly four times what the straw pair scored against each other. Both beds
+are dry plant matter being handled, so they genuinely resemble one another. It is still
+nowhere near sharing samples: a shared excerpt returns r near 1.0 at some lag, not 0.29. Same
+conclusion, smaller margin, and the margin is the thing worth watching as this folder fills.
+
+**Resampling cost almost nothing, which was not the prediction.** This is the only source here
+that needed 44.1 → 48 kHz, and a conversion between the project's chain and this probe's
+resampler is exactly the processing distance that has lowered every other trace. It reaches
+**0.90** — higher than `sheaf_handling`'s 0.81 and `straw_workers`' 0.50–0.74, both cut from a
+source already at 48 kHz. **That is the second time in two days the processing-distance rule
+has failed to predict an ordering**, after `stalk_brushing`, and the two failures agree:
+the rule describes a tendency and must not be used to rank.
+
+**Vorbis collapsed 452 runs into 17** — the crows' lesson again, in its largest absolute form.
+The stem holds 452 separate non-silent runs at 31.81% silence; the shipped `.ogg` holds
+seventeen at 29.18%, because the encoder rings across hundreds of sub-100 ms gaps between
+strokes. The crows' 374 → 4 is still the larger *ratio*, 93× against 27×, but 452 is the
+largest stem run count recorded here. *A run count read off a stem describes the edit, not the
+asset.*
+
+**It is the loudest bed in the folder by peak and the third quietest by loudness** — −14.06
+dBTP, 1.87 dB above the wind, and −39.86 LUFS, 6.03 dB below it. A blade transient is loud and
+brief; weather is quiet and continuous. Third peak-versus-loudness disagreement in this folder
+and the sharpest.
+
+**And a prediction held.** `straw_workers`' record proposed that a bed fits an exact channel
+scalar if it is one source region panned once, and cannot if it has several gestures at several
+pans. Forty placements predicted a loose fit, and the stem gives R = 0.4410 × L with an 18.37%
+residual. Three exact and three loose; tested once since it was written, and it held.
+
+#### The source that was a rejected candidate first
+
+`wind winter open space v2.wav` has been in this tree since 2026-10-17, named in
+`build_roads_actionB/wind`'s record as an unnamed file that sat in the same download folder,
+downloaded within the hour, and was probed on exactly the suspicion that produced the CITY
+RUMBLE scare on `night_city` and the G4F scare on `two_horses`. It matched **0 of 12** windows
+at r max 0.2042 and was filed as auditioned and rejected.
+
+**That verdict was correct and still is** — it is not in the Build Shrine wind. It simply was
+not yet anything else either. Three unnamed-file investigations so far: two were auditions
+that went nowhere, and this one was an ingredient waiting for its duty action. *The lesson is
+not that the suspicion was wrong; it is that "absent from this stem" and "unused" are
+different findings, and the record only ever claimed the first.*
+
+Its stated provenance is the thinnest of any Sonniss source here — the bundle and the
+collection (`Blowing winds`, GDC 2019) were given, the publisher, the pack path and a URL were
+not. Nothing turns on it for rights, since the grant covers the whole bundle, but anyone
+refetching it has a bundle and a collection name and nothing more. That is on the record
+rather than smoothed over.
+
+#### Two beds, two folds, opposite ends
+
+**`wind` is `build_roads_actionB/wind`'s exact shape.** A single excerpt at **+111.247 s**,
+every window correlating **negative** so the stem is polarity-inverted against its source, and
+a fold at the **TAIL** — the seventeenth window matches at +76.247, which is 111.247 minus the
+file's own 35.000. Fitting both offsets together puts the crossfade at roughly **2.0 s**,
+crossing near 32.8. Two beds, two sources, two duty actions, same author, same signature:
+*the first evidence that the fold-at-the-tail is a property of the pipeline rather than a
+one-off.*
+
+**And its own sibling disagrees, which is why "pipeline" is as far as that goes.**
+`field_rustle`, made the same day for the same action, folds at the **HEAD** — body at
++40.000, head at +75.000, which is `night_city`'s structure — and is **not** inverted.
+
+**The head fold is long and its length is deliberately not quoted to a decimal.** Fitting body
+against fold across the head, the fold dominates to about 5 s and the body from about 7 — but
+wheat rustle is noise against noise, the two source regions correlate with each other, and a
+two-component fit on material like that is poorly determined; the gains wander. What is solid
+is the probe: the last fold-dominated window is at t=5 and the first body-dominated one at
+t=7. Call it six seconds and stop there. **Four wrapped beds now, four different fold lengths
+— 1.5 s stated, 2.0 on `night_city`, ~2.0 on both winds, ~6 here and about 8 on
+`build_roads_actionA/wind` — and the convention matches none of them.**
+
+**`field_rustle` is the second widest stereo field in the tree**, L/R **+0.1157**, after
+`give_alms_actionA/alms` at +0.0117 — and it is recorded rather than manufactured: best
+inter-channel lag +0.042 ms, so there is no delayed copy of the `oil_lamp_flame` kind. Folding
+it to mono costs **2.66 dB**, the largest such cost here, which is the honest price of real
+width. It also passes **both** wrap tests, which only `build_roads_actionB/wind` had managed
+before.
+
 ### `build_roads_actionB/`, Build Shrine in seven — a fold at the wrong end, and an inverted stem
 
 `wind_sfx_v01.ogg` is 25 s of wind through winter grass, the only bed of a ninth duty action
@@ -1790,8 +2131,10 @@ rather than assume.
 two runs, and its delta of **−11.63 dB on 17 of 247 blocks** is the fifth widest in the tree —
 the first of those five that is two gestures rather than a single burst. The block-count
 identity predicts 11.62, **agreeing to 0.005 dB, the closest of any bed here**. Its wrap is
-**safe outright**, 13.779 s against one interior pause of 8.789, which only `distant_dogs` and
-`gallows_rope` also manage.
+**safe outright**, 13.779 s against one interior pause of 8.789 — 1.57×. *This sentence used to
+end "which only `distant_dogs` and `gallows_rope` also manage", which was never true: computed
+across the tree rather than read out of the records, **thirteen** beds pass outright, twelve of
+them looping.*
 
 #### The tinkering, which was reconstructed rather than traced — and the probe that lied
 
@@ -1892,7 +2235,9 @@ looked exactly like that. Autocorrelated from 0.15 to 3.0 s the source peaks now
 mechanism is offered. What *is* established is coverage: all four sounding runs fall inside a
 placed copy, and the single hole in the coverage, 12.620–13.262 s, is silent in the stem.
 
-**The rope's wrap is safe outright, which is rarer here than it sounds.** Its interior pauses
+**The rope's wrap is safe outright — at 1.10×, and it is not rare.** Thirteen of the forty-nine
+beds clear the first clause outright, better than one in four; the count was simply never taken
+until 2026-10-17. Its interior pauses
 are 2.859 and 6.037 s and the wrap gap is **6.643 s** — longer than the longest interior
 pause, so it clears section 13's first clause without needing the ratio at all. The timber
 reads **5.051 s** against pauses of 2.325, 3.563 and 7.040: shorter than the longest, which
@@ -1904,9 +2249,12 @@ difference-based warning exactly as `fabric` did, and for the same non-reason. T
 threshold and `bed_facts.py`'s three-way verdict are in the loop note; the threshold was
 chosen by running it against the beds already judged rather than picked for roundness.
 
-**Build Shrine now spans 18.2 dB before anybody has set a trim** — the wind at −31.11 LUFS
-down to the rope at −49.35, which is the quietest bed in the folder and the sixth quietest in
-the tree. Five beds summing to −14.72 dBTP, still the roomiest action here.
+**Build Shrine now spans 18.24 dB before anybody has set a trim** — the wind at −31.11 LUFS
+down to the rope at −49.35, which is the quietest bed in the folder and the **seventh**
+quietest in the tree. *It was the sixth until 2026-10-17, when `produce_actionA/stalk_brushing`
+landed 0.11 dB under it and the rank guard caught this sentence and the record it came from.*
+Seven beds summing to −11.57 dBTP, which is the fourth highest summed peak of the ten actions
+— not the roomiest, as this line claimed while the folder still held five.
 
 #### The fabric, where the licence was checked first and the loop does not quite close
 
@@ -2600,7 +2948,7 @@ ffmpeg. `python3 ui/board_v2/sfx_lab/sfx_levels.py --groups --write` recomputes 
 
 **Whether a track loops is a field too, and absent means yes.** A record may carry
 `"loop": false`, the generator passes it to the bench, and the bench's **loop** column is
-ticked for everything else. Forty-one of the forty-two beds filed loop, which is why the field is
+ticked for everything else. Forty-seven of the forty-nine beds filed loop, which is why the field is
 written only when the answer is no — the same economy as `gainDb`, where silence means a
 number nobody has set. A one-shot plays once and stops: it is an event with a place in the
 scene rather than an ambience, and it is excluded from the repeat figure, since folding its
