@@ -2275,17 +2275,66 @@ def test_a_sonniss_record_agrees_with_its_own_path_about_which_bundle_it_came_fr
             # tracklist, headed "GAME AUDIO BUNDLE 2023 - TRACKLIST", and it lists the file. So
             # the path is allowed to constrain the year rather than state it, and the note's year
             # has to fall inside the span. Pasting 2016 or 2026 onto one of these still fails,
-            # which is what this test is for.
+            # which is what this test is for. SINCE 2026-10-17 THE NOTE MAY ALSO RESTATE THE
+            # SPAN, for the case where the tracklist is not to be had -- see the comment at that
+            # branch. Both forms are checked; neither may be wider than the path.
             span = re.search(r"GDC\s*(\d{4})-(\d{4})", raw)
             if span:
+                note = str(entry.get("licenceNote", ""))
+                lo, hi = int(span.group(1)), int(span.group(2))
+                # A NOTE MAY NOW RESTATE THE SPAN INSTEAD OF PICKING A YEAR, and that is a
+                # widening made on purpose rather than a hole. The clause below used to demand a
+                # single year, on the reasoning that the bundle's own tracklist supplies it. For
+                # the file that reasoning was written about it did. For `Dramatic Cat - Horse
+                # Carriage - Draft Horse` it did not: the mirror's folder carries a Readme and a
+                # `Game Audio GDC Bundle 2021-2023 (Part 7) Filelist.xlsx` and no tracklist, and
+                # the pack's year could not be established from anything to hand. The choice was
+                # between writing a year nobody had checked and writing the truth, which is that
+                # the mirror combines three bundles. A GUESS THAT SATISFIES A TEST IS WORSE THAN
+                # A SPAN THAT IS TRUE -- this file is a record of what is known, and a confident
+                # wrong year is the exact fault the per-archive clause above exists to catch.
+                # THE SPAN HAS TO BE THE PATH'S OWN. Writing a wider one would launder an
+                # unknown into a licence claim, so `2020-2023` on a `2021-2023` path still fails.
+                # ORDER MATTERS HERE: the single-year pattern matches the first half of
+                # "2021-2023", so the span has to be looked for first or a span would be read as
+                # a claim of its opening year and checked against itself.
+                noted_span = re.search(r"GameAudioGDC (\d{4})-(\d{4})", note)
+                if noted_span:
+                    if (int(noted_span.group(1)), int(noted_span.group(2))) != (lo, hi):
+                        bad.append("%s: path spans GDC %d-%d, licenceNote claims the span "
+                                   "%s-%s, which is not the same span"
+                                   % (key, lo, hi, noted_span.group(1), noted_span.group(2)))
+                else:
+                    year = re.search(r"GameAudioGDC (\d{4})", note)
+                    if not year:
+                        bad.append("%s: licenceNote states neither a bundle year nor the "
+                                   "path's span" % key)
+                    elif not lo <= int(year.group(1)) <= hi:
+                        bad.append("%s: path spans GDC %d-%d, licenceNote says %s, which is "
+                                   "outside it" % (key, lo, hi, year.group(1)))
+                if re.search(r"archive \d+ of \d+", note):
+                    bad.append("%s: came from the mirror as an individual file, so its "
+                               "licenceNote must not claim an archive number" % key)
+                continue
+            # A FOURTH PATH SHAPE, and the mirror that spells a single year in words. The
+            # same gamesounds.xyz mirror that files 2021-2023 together keeps the older
+            # bundles one year to a folder: "Sonniss.com - GDC 2020 - Game Audio Bundle/
+            # Glitchedtones - Pub Foley". That states its year as plainly as the your.org
+            # form does and matched NONE of the three clauses above -- the span pattern
+            # needs `2021-2023` with no spaces around the hyphen, so `GDC 2020 - Game` slid
+            # past it into the catch-all and was rejected outright. The fix is a clause and
+            # not a looser span regex: widening the span pattern to tolerate spaces would
+            # make it read `2020 - Game` as a span from 2020 to nothing.
+            one = re.search(r"GDC\s*(\d{4})\s*-\s*Game\s*Audio\s*Bundle", raw)
+            if one:
                 note = str(entry.get("licenceNote", ""))
                 year = re.search(r"GameAudioGDC (\d{4})", note)
                 if not year:
                     bad.append("%s: licenceNote states no bundle year" % key)
-                elif not int(span.group(1)) <= int(year.group(1)) <= int(span.group(2)):
-                    bad.append("%s: path spans GDC %s-%s, licenceNote says %s, which is outside "
-                               "it" % (key, span.group(1), span.group(2), year.group(1)))
-                elif re.search(r"archive \d+ of \d+", note):
+                elif year.group(1) != one.group(1):
+                    bad.append("%s: path says GDC %s, licenceNote says %s"
+                               % (key, one.group(1), year.group(1)))
+                if re.search(r"archive \d+ of \d+", note):
                     bad.append("%s: came from the mirror as an individual file, so its "
                                "licenceNote must not claim an archive number" % key)
                 continue

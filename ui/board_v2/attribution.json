@@ -3709,7 +3709,7 @@
       "role": "one of six tracks under ordination actionB, which is Mission. It is one half of a single event: its three squeaks fall between 10.5 and 11.5 s, inside the same second as rats_crossing's four footfalls, so the two are heard as one rat rather than as two layers.",
       "modifications": "ONE BURST IN THIRTY-SIX SECONDS. Three squeaks at 10.481, 11.041 and 11.483 s and nothing else: 98.2% of the file is exact digital silence, the highest proportion of any bed in this tree. The gap across the wrap is 34.999 s, so the loop point falls in the middle of the quiet and cannot land on an event. THE SOURCE IS CONFIRMED AND TWO THIRDS OF THE FILE IS NOT PLACED. The first squeak matches the upload at r = 0.9779 against its position at 0.110 s, which is decisive -- a 0.25 s window landing at 0.98 on a specific spot in a specific 1.4 s file is not chance. The other two reach only 0.19 and 0.22. The upload holds four squeaks in 1.411 s, so the obvious reading is that two of the other three were used with pitch or level changes that correlation cannot follow; that is an inference. THE CONTAINER: Vorbis q6 at the stem's own 48 kHz stereo, no trim and no level change.",
       "measured": "36000 ms, peak -20.6 dB, integrated -48.62 LUFS, true peak -20.49 dBTP, stereo 48 kHz, L/R correlation +0.9391. Gated it reads -34.54 LUFS, 13.80 dB off the ungated figure on 15 of 357 blocks. THAT 13.80 IS A BLOCK COUNT AND NOT A DENSITY: 10*log10(357/15) = 13.77, and it is the largest such delta in the tree because this is the emptiest file in it. Both ends are exact digital silence, so the butt-join step is 0.000000 and the median sample-to-sample test cannot run at all. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT.",
-      "gainDb": 0.0,
+      "gainDb": -17.0,
       "sha256": "609602af7ea6586704138cfc87e2fdcc1ff8bb6814a26d233f107606a046a175"
     },
     "sfx/ambient/ordination_actionB/rats_crossing_sfx_v01.ogg": {
@@ -3741,11 +3741,12 @@
       "provenanceConfidence": "stated-not-corroborated",
       "modifications": "THE SOURCE IS NAMED BY THE COVERING NOTE AND THE AUDIO DOES NOT CORROBORATE IT. This is the first bed in the tree filed in that state, and it is recorded rather than smoothed over, because the whole point of checking sources against the audio is that sometimes the check fails. WHAT WAS TRIED. Event-against-event waveform correlation, the method that placed the dogs at r = 0.999 and the first squeak at r = 0.978, reaches r = 0.074 on all four footfalls -- nothing. A pitch or speed change would destroy waveform correlation, so the source was resampled across fifteen ratios from x0.5 to x3.0 and every one re-probed: the best score anywhere in that sweep is r = 0.18, at x0.60. AND A WEAKER METHOD THAT IS NOT EVIDENCE: amplitude envelopes survive pitch shifting, and the four events score 0.65 to 0.91 against their best-matching IENBA footfall. That looks supportive and is not. The source has 120 onsets, so taking the best of 120 inflates any score, and the same test against an unrelated wooden-stick file still reaches 0.74. The method cannot tell those apart and so cannot identify anything. THE OWNER SUPPLIED THE MISSING HALF: the stem is this upload SPED UP AND LAYERED -- see `design` for by what. That is the explanation, and it also says why no amount of probing was going to find it. Layering sums several source hits into one event, so a probe compares a mixture against a single hit and the correlation falls apart however well the speed is guessed. A further sweep was run on that account -- 80 ms windows on the attacks alone, where whichever layer dominates the onset has the best chance of surviving, across sixty-one speed ratios from x1.00 to x4.00 in steps of 0.05. Best anywhere: r = 0.226. THE CONTROL IS THE FINDING. The identical sweep against deadrobotmusic's wooden stick, a file that is certainly NOT in this stem, reaches r = 0.2965 -- HIGHER than the real source scores. So the method has no discriminating power on this material at all, and the right conclusion is not that the evidence is weak but that correlation cannot speak to this file in either direction. `provenanceConfidence` stays because the audio still has not confirmed anything; what has changed is that the silence is now explained rather than open. The licence position was never at risk -- CC0 either way, and the alternatives on the owner's disk that day were CC0 or Pixabay too. THE CONTAINER: Vorbis q6 at the stem's own 48 kHz stereo, no trim and no level change.",
       "measured": "36000 ms, peak -17.3 dB, integrated -46.57 LUFS, true peak -17.23 dBTP, stereo 48 kHz, L/R correlation +0.8962. Four footfalls at 10.315, 11.378, 11.562 and 11.741 s and nothing else; 95.6% of the file is exact digital silence and the gap across the wrap is 34.574 s. Gated it reads -32.41 LUFS, 13.76 dB off the ungated figure on 15 of 357 blocks, which is 10*log10(357/15) = 13.77 and therefore a block count rather than a density. Both ends are exact digital silence, so the butt-join step is 0.000000. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT.",
-      "gainDb": 0.0,
+      "gainDb": -4.0,
       "sha256": "d3280f3a8396e8cffa9293fb7530251f7edcc2682b5d9a79f52146ed2773d023"
     },
     "sfx/ambient/ordination_actionB/oil_lamp_sfx_v01.ogg": {
-      "state": "present",
+      "state": "absent",
+      "absentNote": "DELETED on 2026-10-17 at the project owner's request, one day after it was filed. NOT A FAULT IN THE FILE: it was traced, measured and correct -- Vrymaa's CC0 recording cut at +22.000 s, dual mono exactly at +1.000000, the only file in the tree whose channels were identical sample for sample. It was a scene decision. The last word on it is in the levels: it was taken to -17.0 dB on the bench before it was dropped, which is a lamp being turned down until it was not there, and then removed rather than left at the bottom of the mix. WHAT EXISTS IF THIS GOES, which is the question the recoverability rule asks: the source is a named CC0 upload anybody can fetch again, and the cut is fully specified above -- 48 kHz stereo from +22.000 s, Vorbis q6, no trim and no level change -- so these bytes can be remade. The sha256 is kept so a re-derivation can be checked against them. The dual-mono distinction passes back to nothing: door_close reads +0.999982, which rounds to the same four decimals and is not the same claim.",
       "kind": "bed",
       "creator": "Vrymaa",
       "licence": "cc0",
@@ -3805,8 +3806,102 @@
       "loop": false,
       "modifications": "A RECIPE, NOT A RECONSTRUCTION, because this cut was made here and can be remade exactly. From the upload: resample 44.1 kHz to 48 kHz stereo; take 7.600 s to 13.600 s, which is 6.000 s holding the closing itself; apply a 5 ms linear fade at each end; attenuate by 2.0 dB (x0.794328); lay it into 36.000 s of silence starting at 3.000 s, so it runs to 9.000 s; encode Vorbis q6. The placed region correlates with the source region at r = 0.9973, which is Vorbis and not a difference in content. THE 5 ms FADES ARE WHAT THE MEASUREMENT ASKED FOR AND NO MORE. Neither cut point sits on a zero crossing -- 7.600 s lands on -47.4 dBFS and 13.600 s on -50.5 dBFS -- but neither is a discontinuity either: against their own immediate neighbours the steps are 0.5x and 1.4x the largest nearby sample difference. Five milliseconds takes both to exactly zero, which is shorter than anything audible on a door and leaves the transient untouched. THE 2.0 dB IS ENCODER HEADROOM AND NOT A BALANCE JUDGEMENT, which matters because this tree's rule is that gain belongs in `gainDb` and not in the audio. The exception is earned: the source touches 0.00 dBFS inside this very cut, two samples in one run, measuring +0.09 dBTP before encoding -- and Vorbis overshoots a full-scale input, which was not a prediction but an observation, the first build coming back at +0.21 dBTP with a sample peak of 0.14 dBFS. A file that decodes above full scale clips in anything that is not floating point, whatever its trim says. Two decibels of headroom lands it at -1.89 dBTP, inside the -1 dBTP line, and the factor is written above so the cut stays reproducible. `gainDb` is still 0.0 and still means nobody has set a level.",
       "measured": "36000 ms, peak -1.92 dB, integrated -28.84 LUFS, true peak -1.89 dBTP, stereo 48 kHz, L/R correlation +1.0000 -- dual mono, inherited from a source that is dual mono in all but name. 83.2% of the file is exact digital silence and both ends are silent, so the butt-join step is 0.000000, which here says nothing at all because the file is not meant to join: it plays once. IT IS THE HOTTEST BED IN THE TREE at -1.89 dBTP, against rammers at -5.90 after its trim, and that is a property of a door rather than a level anybody chose. Gated it reads -15.90 LUFS, 12.94 dB off the ungated figure on 18 of 357 blocks, against 10*log10(357/18) = 12.97 -- the block-count identity again. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT, and this is the one bed where that is likely to want changing first.",
-      "gainDb": 0.0,
+      "gainDb": -1.5,
       "sha256": "4748df803674b2447087beebefd02f20050f6cd8d49670305c776e8fc39a3f5e"
+    },
+    "sfx/ambient/ordination_actionB/distant_cart_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "Dramatic Cat",
+      "licence": "sonniss-gameaudiogdc",
+      "licenceNote": "Sonniss GameAudioGDC 2021-2023 bundle, Part 7. Royalty-free: personal and commercial game use, modification and unlimited projects permitted, no attribution required. The publisher and pack are named here anyway. THE NOTE STATES A SPAN AND NOT A YEAR, which every other Sonniss record here manages, and the difference is worth stating. The gamesounds.xyz mirror files the 2021, 2022 and 2023 bundles under one folder as Part 7, so the path constrains the year to three candidates. For sfx/tithe/wheat_sfx_v02.ogg the year came from the bundle's own tracklist; this pack's folder carries a Readme and a `Game Audio GDC Bundle 2021-2023 (Part 7) Filelist.xlsx` and no tracklist, and nothing to hand dates it further. A YEAR NOBODY HAS CHECKED WOULD READ EXACTLY LIKE ONE SOMEBODY HAD, so the span is written instead and the guard was widened on 2026-10-17 to accept it. The licence grant is identical across all three bundles, so nothing about the permission turns on which. THE CUT IS THIS PROJECT'S OWN.",
+      "design": "BUILT WITH CHATGPT, as the other Mission stems were. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample is meant to trace to the upload in `sources`; see `modifications` for how far measurement got.",
+      "generatedContent": "none",
+      "source": "mission_distant_cart_stem_v02_louder.wav. The stem exists only on the project owner's disk; the thing anyone can fetch again is the file named in `sources`.",
+      "sources": [
+        {
+          "role": "the whole of it, confirmed at r up to 0.8682 -- see `modifications`",
+          "title": "VEHWagn_Wood Cart Roll On Stone Pavement In Courtyard 03_DRCA_HOCA_Kmr81i.wav",
+          "uploader": "Dramatic Cat, in the pack `Horse Carriage - Draft Horse`",
+          "url": "https://gamesounds.xyz/Sonniss.com%20-%20GDC%202021-2023%20-%20Game%20Audio%20Bundle/Dramatic%20Cat%20-%20Horse%20Carriage%20-%20Draft%20Horse/VEHWagn_Wood%20Cart%20Roll%20On%20Stone%20Pavement%20In%20Courtyard%2003_DRCA_HOCA_Kmr81i.wav",
+          "licence": "sonniss-gameaudiogdc",
+          "originalFilename": "VEHWagn_Wood Cart Roll On Stone Pavement In Courtyard 03_DRCA_HOCA_Kmr81i.wav",
+          "measured": "16.460 s, 96 kHz, 24-bit MONO -- supplied on 2026-10-17, after the stem had already been filed without it.",
+          "note": "A wood cart rolling on stone pavement in a courtyard, which is what the stem sounds like and what its name says. The UCS-style prefix VEHWagn and the DRCA/HOCA tail are Dramatic Cat's own cataloguing."
+        }
+      ],
+      "originalFilename": "mission_distant_cart_stem_v02_louder.wav",
+      "originalPath": "gamesounds.xyz/Sonniss.com - GDC 2021-2023 - Game Audio Bundle/Dramatic Cat - Horse Carriage - Draft Horse",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Mission cart -- a cart on stone somewhere off the road",
+      "role": "one of nine tracks under ordination actionB, which is Mission. It loops: a cart passing in the middle distance is weather rather than an event, unlike the door.",
+      "modifications": "CHECKED, AN HOUR AFTER IT WAS FILED, and this record kept both halves on purpose. It went in carrying `stated-not-checked` because the source was not on the project owner's disk; he supplied it, and it traced immediately. FIFTEEN OF SEVENTEEN non-silent one-second windows match at r up to 0.8682, every one of the fifteen at a SINGLE constant offset of -14.000 s -- a straight excerpt, not an assembly like the dogs and not a layering like the horses. The control, the horse source from the same pack and certainly not in this file, reaches 0.2004. WHY THE GAP IS WORTH LEAVING ON THE RECORD rather than quietly overwriting: `stated-not-checked` means nobody looked, and it is a different thing from rats_crossing's `stated-not-corroborated`, which means somebody looked and the audio would not say. One is answered by fetching a file; the other is not answered by anything correlation can do. The hour between filing and checking is the evidence that the first kind is cheap. THE SOURCE IS MONO AND THE WIDTH IS NOT A DELAY. 96 kHz mono in, and the stem's channels peak at an inter-channel lag of exactly 0.0000 ms at r = +1.0000 with a mono fold losing 0.02 dB -- so none of build_roads_actionA/oil_lamp_flame's 4 ms Haas problem is here, which was worth checking on a mono source for the third time. THE CONTAINER: Vorbis q6, resampled from 96 kHz to 48 kHz stereo, no trim and no level change.",
+      "measured": "36000 ms, peak -20.4 dB, integrated -45.19 LUFS, true peak -20.38 dBTP, stereo 48 kHz, L/R correlation +0.9886. 54.3% of the file is exact digital silence and both ends are silent. Gated it reads -41.16 LUFS, 4.03 dB off the ungated figure on 141 of 357 blocks, which is 10*log10(357/141) = 4.03 exactly -- the block-count identity. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT.",
+      "gainDb": 0.0,
+      "sha256": "95fc90484f67e350e0691819ef1bfa87216e655340735539833db29b9f401116"
+    },
+    "sfx/ambient/ordination_actionB/bottle_knock_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "Glitchedtones",
+      "licence": "sonniss-gameaudiogdc",
+      "licenceNote": "Sonniss GameAudioGDC 2020 bundle. Taken as an individual file from the gamesounds.xyz mirror rather than out of a numbered archive, so no archive number applies. Royalty-free: personal and commercial game use, modification and unlimited projects permitted, no attribution required. The publisher and pack are named here anyway. A FOURTH PATH SHAPE FOR THIS LICENCE, and the guard had to learn it: gamesounds.xyz files the older bundles one year to a folder, `Sonniss.com - GDC 2020 - Game Audio Bundle`, which states its year as plainly as the your.org form but matched none of the three clauses the Sonniss test knew. It slid past the span pattern -- which wants `2021-2023` with no spaces round the hyphen -- straight into the catch-all. Widened on 2026-10-17 with a clause of its own rather than a looser span regex, which would have read `2020 - Game` as a span starting nowhere. THE CUT IS THIS PROJECT'S OWN.",
+      "design": "BUILT WITH CHATGPT, as the other Mission stems were. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample is meant to trace to the file in `sources`; see `modifications` for how far measurement got.",
+      "generatedContent": "none",
+      "source": "mission_bottle_knock_stem_v01.wav. The stem exists only on the project owner's disk; the thing anyone can fetch again is the file named in `sources`.",
+      "sources": [
+        {
+          "role": "the whole of it, as stated by the covering note -- NOT YET CHECKED, see `modifications`",
+          "title": "Beer Bottle Knock Over Concrete 02.wav",
+          "uploader": "Glitchedtones, in the pack `Pub Foley`",
+          "url": "https://gamesounds.xyz/Sonniss.com%20-%20GDC%202020%20-%20Game%20Audio%20Bundle/Glitchedtones%20%E2%80%93%20Pub%20Foley/Beer%20Bottle%20Knock%20Over%20Concrete%2002.wav",
+          "licence": "sonniss-gameaudiogdc",
+          "originalFilename": "Beer Bottle Knock Over Concrete 02.wav",
+          "measured": "NOT MEASURED -- this file was not on the project owner's disk when the stem was filed, so nothing about it could be read here.",
+          "note": "A beer bottle knocked over on concrete. The pack name uses an en dash, `Glitchedtones – Pub Foley`, which is why the url percent-encodes it as %E2%80%93; a hyphen there fetches nothing."
+        }
+      ],
+      "originalFilename": "mission_bottle_knock_stem_v01.wav",
+      "originalPath": "gamesounds.xyz/Sonniss.com - GDC 2020 - Game Audio Bundle/Glitchedtones - Pub Foley",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Mission bottle -- something knocked over in the dark",
+      "role": "one of ten tracks under ordination actionB, which is Mission. It loops, like the rats and the dogs: a single event once a lap rather than a thing that happens on the way out, which is what door_close is.",
+      "provenanceConfidence": "stated-not-checked",
+      "modifications": "THE CHECK HAS NOT BEEN RUN, for the same reason it had not been run on the cart: the source file was not on the project owner's disk when the stem was filed. The cart's was supplied an hour later and it traced at once -- fifteen of seventeen windows at r up to 0.8682, all at one offset -- so this is a gap with a known shape and a known remedy rather than a doubt. `provenanceConfidence` reads `stated-not-checked`, which is not the `stated-not-corroborated` that rats_crossing carries: that one was probed and failed, this one has not been probed. The url above is the exact file. THE CONTAINER: Vorbis q6 at the stem's own 48 kHz stereo, no trim and no level change.",
+      "measured": "36000 ms, peak -22.2 dB, integrated -54.10 LUFS, true peak -22.10 dBTP, stereo 48 kHz. ONE BURST IN A LAP, WITH THREE DOMINANT IMPACTS INSIDE IT. Everything audible falls between 10.776 and 11.819 s; the three loudest contacts are at 10.819, 11.006 and 11.129 s, 0.0, -5.4 and -3.2 dB against the first, and smaller ones carry on 12 to 20 dB under them until the burst dies. A bottle going over and settling, not three discrete knocks. An earlier reading filed here said `three knocks between 10.805 and 11.208 s and nothing else`, which named the three and then stopped the file six hundred milliseconds early. 97.0% OF THE SHIPPED FILE IS EXACT DIGITAL SILENCE, against 97.1% of the stem it was built from, and the difference is the encoder rather than the edit: in the stem that second is 51 separate non-zero runs, in the .ogg it is ONE CONTIGUOUS RUN, because Vorbis rings out across the small gaps between contacts. Both ends are silent either way, so it sits beside rat_squeaks as a single event once a lap. Gated it reads -37.04 LUFS, 17.06 dB off the ungated figure on SEVEN of 357 blocks -- against 10*log10(357/7) = 17.08, the block-count identity, and the largest delta in this tree by over three decibels. At -54.10 LUFS it is the SECOND quietest bed here, after build_roads_actionA/ox_cart_stones at -55.19; that was checked rather than assumed, because it looked like the quietest. A DUAL-MONO SOURCE DID NOT SURVIVE THE ENCODER AS DUAL MONO. The stem's two channels are identical sample for sample, L/R +1.000000, and the Vorbis file reads +0.996767. The lamp that was deleted from this folder came through at +1.000000 exactly, so this is not a rule about the codec but something joint stereo does to some material and not others. It is worth knowing before anyone claims dual mono from a shipped .ogg rather than from the stem it came from. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT.",
+      "gainDb": 0.0,
+      "sha256": "6c6d8e85d8fd8d21d2aa4ae0ed0f0909942b113e90976d8aa847b26ee0e173f2"
+    },
+    "sfx/ambient/ordination_actionB/two_horses_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "Dramatic Cat",
+      "licence": "sonniss-gameaudiogdc",
+      "licenceNote": "Sonniss GameAudioGDC 2021-2023 bundle, Part 7. Royalty-free: personal and commercial game use, modification and unlimited projects permitted, no attribution required. The publisher and pack are named here anyway. THE NOTE STATES A SPAN AND NOT A YEAR, which every other Sonniss record here manages, and the difference is worth stating. The gamesounds.xyz mirror files the 2021, 2022 and 2023 bundles under one folder as Part 7, so the path constrains the year to three candidates. For sfx/tithe/wheat_sfx_v02.ogg the year came from the bundle's own tracklist; this pack's folder carries a Readme and a `Game Audio GDC Bundle 2021-2023 (Part 7) Filelist.xlsx` and no tracklist, and nothing to hand dates it further. A YEAR NOBODY HAS CHECKED WOULD READ EXACTLY LIKE ONE SOMEBODY HAD, so the span is written instead and the guard was widened on 2026-10-17 to accept it. The licence grant is identical across all three bundles, so nothing about the permission turns on which. THE CUT IS THIS PROJECT'S OWN.",
+      "design": "BUILT WITH CHATGPT, as the other Mission stems were. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample is meant to trace to the upload in `sources`; see `modifications` for how far measurement got.",
+      "generatedContent": "none",
+      "source": "mission_two_horses_stem_v01.wav. The stem exists only on the project owner's disk; the thing anyone can fetch again is the file named in `sources`.",
+      "sources": [
+        {
+          "role": "both horses -- there is one recording in this file and it is used twice; see `modifications`",
+          "title": "FEETHors_Draft Horse Trot On Concrete 03 STEREO_DRCA_HOCA_UsiPro.wav",
+          "uploader": "Dramatic Cat, in the pack `Horse Carriage - Draft Horse`",
+          "url": "https://gamesounds.xyz/Sonniss.com%20-%20GDC%202021-2023%20-%20Game%20Audio%20Bundle/Dramatic%20Cat%20-%20Horse%20Carriage%20-%20Draft%20Horse/FEETHors_Draft%20Horse%20Trot%20On%20Concrete%2003%20STEREO_DRCA_HOCA_UsiPro.wav",
+          "licence": "sonniss-gameaudiogdc",
+          "originalFilename": "FEETHors_Draft Horse Trot On Concrete 03 STEREO_DRCA_HOCA_UsiPro.wav",
+          "measured": "40.885 s, 96 kHz, 24-bit stereo -- equal to Articulated Sounds' Quiet Streets as the highest-rate source in this tree, resampled to 48 kHz on the way in.",
+          "note": "A draft horse trotting on concrete. One horse, recorded once."
+        }
+      ],
+      "originalFilename": "mission_two_horses_stem_v01.wav",
+      "originalPath": "gamesounds.xyz/Sonniss.com - GDC 2021-2023 - Game Audio Bundle/Dramatic Cat - Horse Carriage - Draft Horse",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Mission horses -- two of them on the road, from one recording",
+      "role": "one of nine tracks under ordination actionB, which is Mission. It loops.",
+      "modifications": "TWO HORSES OUT OF ONE, AND THE MEASUREMENT SHOWS THE TRICK RATHER THAN BEING TOLD IT. Sixteen of seventeen non-silent one-second windows match the source at r up to 0.7724, and the offsets fall into exactly TWO groups: ten windows at -13.700 s and six at +3.250 s. Two constant offsets means two copies of one recording running against each other, displaced by 16.950 s -- which is what the covering note means by layered, and it is a nice case of a claim that a correlation can confirm in its own terms rather than merely fail to contradict. One horse, played twice, out of step with itself. AN UNNAMED CANDIDATE WAS CHECKED AND IS NOT IN IT. `G4F SFX06 - HORSES - Walking on stone 03.wav` was downloaded in the same minute as the source and named nowhere, which is the pattern that produced the CITY RUMBLE scare on night_city. Probed the same way it matches 0 of 17 windows, r max 0.1906. It was auditioned and rejected, and this tree carries nothing from it -- which matters more here than it did there, because G4F is a different publisher and would have brought a different licence with it. THE CONTAINER: Vorbis q6, resampled from 96 kHz to 48 kHz stereo, no trim and no level change.",
+      "measured": "36000 ms, peak -17.5 dB, integrated -44.73 LUFS, true peak -17.50 dBTP, stereo 48 kHz, L/R correlation +0.9918. 54.4% of the file is exact digital silence and both ends are silent. Gated it reads -40.25 LUFS, 4.47 dB off the ungated figure on 127 of 357 blocks, against 10*log10(357/127) = 4.49 -- the block-count identity again. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT.",
+      "gainDb": 0.0,
+      "sha256": "1420f0d6a8e3b55b5a007f4bcf82324e5c8ed1a4964d9563c95f9f870e3223d4"
     },
     "sfx/ambient/build_roads_actionA/ox_cart_mechanics_sfx_v01.ogg": {
       "state": "present",
@@ -4114,6 +4209,78 @@
       "measured": "35000 ms, peak -11.79 dB, integrated -46.76 LUFS, true peak -11.52 dBTP, stereo 48 kHz, L/R correlation +0.9993. THE TRIM IS A STARTING POINT AND THE NUMBER THAT WOULD NORMALLY SET IT IS MISLEADING HERE. Integrated loudness on a track that is four short events inside 35 s is mostly a measurement of its silence, and it points the wrong way. At -46.76 it reads 15.9 dB UNDER devotion's -30.83 while the PEAK reads 6.7 dB OVER it -- a crest factor of 34.9 dB against the sermon's 12.3, and the loudest 400 ms block -35.8 LUFS against -27.6. Levelled to match on integrated this would want a trim of -11.0 and the strikes would peak better than 20 dB above anything the service does. THE GATE IS THE OTHER HALF OF IT: gated, the same file reads -39.6, which is 7.1 dB off the ungated figure recorded here, where every continuous bed in the tree agrees with its own gated figure to within 0.25 dB. docs/sfx_levelling_note.md measures ungated and argued a bed is too even to need the gate; this file and five other stems are the counter-cases and that section now says so. -15.0 lands it at -61.8 LUFS, about 4 dB under devotion's -57.8, on the reading that beads told two pews away are quieter than the service. That is a guess at taste; one slider move changes it. The same caution applies to Allocation's keys stem and is noted there.",
       "gainDb": -3.0,
       "sha256": "c878e60a3cdedc1887cfe9b8b66c15e198ac8ee006557ca24d89de2e52109f90"
+    },
+    "sfx/ambient/build_roads_actionB/wind_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "Ivo Vicic",
+      "licence": "sonniss-gameaudiogdc",
+      "licenceNote": "Sonniss GameAudioGDC 2019 bundle, pack `Ivo Vicic - Winter textures vol.1`. Taken as an individual file from the gamesounds.xyz mirror rather than out of a numbered archive, so no archive number applies. Royalty-free: personal and commercial game use, modification and unlimited projects permitted, no attribution required. The publisher and pack are named here anyway. SAME PATH SHAPE AS THE 2020 BOTTLE, which is why no guard change was needed this time: gamesounds.xyz files the older bundles one year to a folder, `Sonniss.com - GDC 2019 - Game Audio Bundle`, and the fourth clause added on 2026-10-17 for `Beer Bottle Knock Over Concrete 02` reads this form as well. First use of that clause by a record it was not written for. THE CUT AND THE LOOP ARE THIS PROJECT'S OWN.",
+      "design": "BUILT WITH CHATGPT, as the Build Roads, Taxation, Allocation, Devotion and Mission stems were. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample is meant to trace to the one upload in `sources`, and the trace was run; see `modifications` for what it found and for the part of it that is still unexplained.",
+      "generatedContent": "none",
+      "source": "build_shrine_wind_loop_v02_25s.wav. The stem exists only on the project owner's disk; the thing anyone can fetch again is the file named in `sources`.",
+      "sources": [
+        {
+          "role": "the whole bed",
+          "title": "91 Wind_winter grass_2_MS stereo",
+          "uploader": "Ivo Vicic, in the pack `Winter textures vol.1`",
+          "url": "https://gamesounds.xyz/?dir=Sonniss.com+-+GDC+2019+-+Game+Audio+Bundle%2FIvo+Vicic+-+Winter+textures+vol.1",
+          "licence": "sonniss-gameaudiogdc",
+          "originalFilename": "91 Wind_winter grass_2_MS stereo.wav",
+          "measured": "140.581 s, 96 kHz, 24-bit stereo. Resampled to 48 kHz on the way in.",
+          "note": "THE URL IS THE PACK'S DIRECTORY, NOT THE FILE'S, because that is how the mirror was given. The filename above is exact and the pack listing holds it; anybody refetching this wants the directory and then this name. Wind through winter grass, recorded on a mid-side pair -- `MS stereo` in the filename is the technique, and the file is delivered already decoded rather than as raw M/S, which was checked: decoding it again as M+S/M-S makes the match to the stem worse, not better."
+        }
+      ],
+      "originalFilename": "build_shrine_wind_loop_v02_25s.wav",
+      "originalPath": "gamesounds.xyz/Sonniss.com - GDC 2019 - Game Audio Bundle/Ivo Vicic - Winter textures vol.1",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Build Shrine wind -- winter grass on an open hillside",
+      "role": "the only track under build_roads actionB, which is Build Shrine. It loops. THE FIRST BED FOR A NINTH DUTY ACTION, and the second folder under the build_roads duty: build_roads_actionA is Build Road and holds eleven, this is Build Shrine and holds one.",
+      "modifications": "THE SOURCE IS CONFIRMED AND THE CUT IS A SINGLE EXCERPT. Twelve of twelve one-second windows match the source, r up to 0.8237, eleven of them at ONE CONSTANT OFFSET of +42.247 s -- constant to within a millisecond across twenty-one seconds, which rules out any time-stretch despite the suspiciously round 25.000 s length. CONTROLS WERE RUN AND THEY SEPARATE CLEANLY: sandy-ogilvie's hillside wind reaches 0.1571 and EFX `Sheltered from the Wind 02` reaches 0.2107, both 0 of 12 windows. AN UNNAMED CANDIDATE WAS CHECKED TOO -- `wind winter open space v2.wav`, 164 s, downloaded within the same hour and named nowhere, the pattern that produced the CITY RUMBLE scare on night_city and the G4F scare on two_horses. It matches 0 of 12 at r max 0.2042. Auditioned and rejected. THE LOOP IS AN EQUAL-POWER FOLD AT THE TAIL, WHICH IS THE MIRROR OF night_city. The twelfth window, at t=23 s, matches at +17.247 s -- exactly 42.247 minus the file's own 25.000 -- so the end of the stem carries the source material from immediately BEFORE the excerpt begins. Fitting both offsets at once gives the crossfade envelope directly: the body's gain holds flat to 22.2 s, the fold's is zero until 22.2, they cross at about 23.3 and the trade completes by 24.4. A 2.1 s equal-power crossfade. night_city folded the material AFTER the body over its head in 2.0 s; this one folds the material BEFORE the body over its tail in 2.1. Two files, two ends, the same technique and almost the same length -- and this tree's stated convention is 1.5 s, which now disagrees with both. THE STEM IS POLARITY-INVERTED AGAINST THE SOURCE. Every window correlates NEGATIVE, -0.59 to -0.82, never positive. Inaudible alone and it changes nothing about the trace, but it would matter the day a second bed is cut from this same upload, because the two would partially cancel rather than sum -- which is precisely what happened the other way round with Vrymaa's lamp, cut twice for two actions. IT IS ABOUT +9 dB ON THE SOURCE, WITH A LOW CUT. Band by band the stem sits +9.2 dB over the source and holds that to within 0.4 dB from 100 Hz to 20 kHz -- flat, so not an EQ -- while 60-100 Hz reads +7.30 and 20-60 Hz reads +2.35, which is 6.9 dB below the broadband figure. That shape is a high-pass below about 100 Hz and nothing else. WHAT IS NOT EXPLAINED, SAID PLAINLY: after gain, polarity and the low cut, the correlation tops out at 0.82 rather than the 0.99 a straight excerpt reaches, so roughly a third of the variance is unaccounted for. It is not a time-stretch (the offset does not drift), not an EQ (the bands are flat), and not a raw M/S delivery (decoding as M/S scores worse). No cause is proposed here because none was established. THE CONTAINER: Vorbis q6 at the stem's own 48 kHz stereo, no trim, no fade and no level change -- the stem peaks at -14.6 dBFS, so unlike door_close there was no headroom problem to solve before encoding.",
+      "measured": "25000 ms, peak -14.9 dB, integrated -31.11 LUFS, true peak -14.90 dBTP, stereo 48 kHz, L/R correlation +0.529264. Continuous: 0.0% exact digital silence, and the gate keeps all 247 of 247 blocks for a delta of 0.02 dB, which puts it with the seven other continuous beds rather than with the stems. THE SEAM PASSES BOTH WRAP TESTS, WHICH NO OTHER WRAPPED BED HERE HAS DONE. The butt-join step is 0.003480 on the left and 0.000854 on the right, which is 1.42x and 0.36x the file's own median sample-to-sample difference and 0.53x and 0.21x the largest step among its immediate neighbours. build_roads/wind, oil_lamp_flame and night_city each passed the neighbour test and failed the median one; this is the first to pass both, and it is the first bed measured by `sfx_lab/bed_facts.py` rather than by a script written for the occasion. THE STEREO IS REAL AND NOT A HAAS TRICK: best inter-channel lag is -0.021 ms, one sample at 48 kHz, at r +0.5409, so the width is recorded rather than manufactured -- the opposite of build_roads/oil_lamp_flame, whose 4 ms delay combs the moment anything folds it. Folding this one to mono costs 1.19 dB, which is the honest cost of real width. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT.",
+      "gainDb": 0.0,
+      "sha256": "69557db45f2fb0140b59cd2dac7613132da916bfe120c4839b8a2b071def002d"
+    },
+    "sfx/ambient/build_roads_actionB/crows_ravens_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "Gamemaster Audio; Discover Oregon",
+      "licence": "sonniss-gameaudiogdc",
+      "licenceNote": "Sonniss GameAudioGDC 2018 bundle, two packs: `Gamemaster Audio - Animal Sounds` and `Discover Oregon - Ravens and Robins`. Taken as individual files from the gamesounds.xyz mirror rather than out of numbered archives, so no archive number applies. Royalty-free: personal and commercial game use, modification and unlimited projects permitted, no attribution required. The publishers and packs are named here anyway. THE FIRST BED IN THIS TREE DRAWING ON TWO PACKS AT ONCE -- both are inside the same bundle and the same grant, so the single `licence` key is correct and no permission turns on which pack a given caw came from. SAME PATH SHAPE AS THE 2019 WIND AND THE 2020 BOTTLE: `Sonniss.com - GDC 2018 - Game Audio Bundle`, read by the clause added on 2026-10-17. THE ASSEMBLY IS THIS PROJECT'S OWN.",
+      "design": "BUILT WITH CHATGPT, as the other Build Shrine, Build Roads, Taxation, Allocation, Devotion and Mission stems were. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample is meant to trace to the two uploads in `sources`, and both traces were run and both landed; see `modifications`.",
+      "generatedContent": "none",
+      "source": "build_shrine_crows_ravens_stem_v01_25s.wav. The stem exists only on the project owner's disk; the things anyone can fetch again are the two files named in `sources`.",
+      "sources": [
+        {
+          "role": "the crow, used TWICE -- the whole 2.350 s file laid in at +5.150 s and again at +17.690 s",
+          "title": "bird_crow_call_caw_squawk_close_01",
+          "uploader": "Gamemaster Audio, in the pack `Animal Sounds`",
+          "url": "https://gamesounds.xyz/Sonniss.com%20-%20GDC%202018%20-%20Game%20Audio%20Bundle/Gamemaster%20Audio%20-%20Animal%20Sounds/bird_crow_call_caw_squawk_close_01.wav",
+          "licence": "sonniss-gameaudiogdc",
+          "originalFilename": "bird_crow_call_caw_squawk_close_01.wav",
+          "measured": "2.350 s, 96 kHz, 24-bit stereo. Resampled to 48 kHz for the probe.",
+          "note": "A close crow caw. SHORT AND SPARSE, which is the shape that defeats the sliding probe -- see the Mission footsteps record, where a 3.5 s source of isolated events scored 0 of 117 windows because the local-energy floor clamps almost everywhere. Event-against-event matching was used here from the start rather than after a failure."
+        },
+        {
+          "role": "the raven, used ONCE -- the whole 12.583 s file laid in at +6.950 s, under and between the two crow copies",
+          "title": "Ravens 2015 Medlock Raven Close Audio Extracted",
+          "uploader": "Discover Oregon, in the pack `Ravens and Robins`",
+          "url": "https://gamesounds.xyz/Sonniss.com%20-%20GDC%202018%20-%20Game%20Audio%20Bundle/Discover%20Oregon%20-%20Ravens%20and%20Robins/Ravens%202015%20Medlock%20Raven%20Close%20Audio%20Extracted.wav",
+          "licence": "sonniss-gameaudiogdc",
+          "originalFilename": "Ravens 2015 Medlock Raven Close Audio Extracted.wav",
+          "measured": "12.583 s, 44.1 kHz, 32-bit float stereo. Resampled to 48 kHz for the probe.",
+          "note": "Close ravens. THE ONLY 44.1 kHz SOURCE IN THIS FOLDER and one of the few in the tree -- the wind beside it is 96 kHz and the crow above is 96 kHz, so this bed resamples two ways to reach its own 48. `Audio Extracted` in the name is the publisher's, not this project's."
+        }
+      ],
+      "originalFilename": "build_shrine_crows_ravens_stem_v01_25s.wav",
+      "originalPath": "gamesounds.xyz/Sonniss.com - GDC 2018 - Game Audio Bundle/{Gamemaster Audio - Animal Sounds, Discover Oregon - Ravens and Robins}",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Build Shrine crows -- corvids over the hillside",
+      "role": "the second track under build_roads actionB, which is Build Shrine, over wind_sfx_v01.ogg. It loops. Birds against weather: the wind is continuous and this is the thing that happens in it.",
+      "modifications": "BOTH SOURCES CONFIRMED, AND THE LAYOUT IS THREE PLACED COPIES OF TWO RECORDINGS. Probing event against event rather than by sliding window -- the crow is 2.35 s and that is the shape the sliding probe is known to fail on -- eight events were tested against each source. THE CROW MATCHES FIVE OF EIGHT, r up to 0.9731, AT TWO CONSTANT OFFSETS: +5.150 s and +17.690 s, so the whole 2.350 s file is used twice. THE RAVEN MATCHES TWO OF EIGHT, r up to 0.9522, AT ONE OFFSET: +6.950 s. Each event matches the source it came from and scores 0.11 to 0.21 against the other, which is the pair separating itself without a control being needed. A CONTROL WAS RUN ANYWAY and it is decisive: the Build Shrine wind's own source, Ivo Vicic's winter grass, matches 0 of 8 at r max 0.0784. So 0.97 against 0.08. THE PLACEMENTS ACCOUNT FOR THE WHOLE FILE: crow 5.150-7.500, raven 6.950-19.533, crow 17.690-20.040, and the stem's material runs 5.132-20.041. The raven's span overlaps both crow copies, which is what `layered` meant. A 200 ms ERROR WAS CAUGHT BY THE ONE REGION THAT DID NOT ADD UP, and it is worth recording because the probe looked right. The first pass reported the offsets as +5.350, +7.150 and +17.890, which left 5.150-5.350 belonging to nothing -- 200 ms that is not silence but the attack of the first caw, rising from -24.8 to -3.8 dB against the file's loudest tenth of a second. The probe was reporting each match against its EVENT CENTRE while the correlated window began 200 ms earlier. Refitting whole copies settles it: at the corrected offsets the fits give r +0.47, +0.59 and +0.28 over the full span of each copy, and at the uncorrected ones they give r -0.01, -0.07 and -0.00. The whole-copy figures are low against the per-event ones because the stem is 83.8% silence -- each source is heard in bursts, with the rest gated out -- so the per-event numbers are the ones that carry the claim and the whole-copy fits only resolve the alignment. THE CONTAINER: Vorbis q6 at the stem's own 48 kHz stereo, no trim, no fade and no level change; the stem peaks at -23.5 dBFS so there was no headroom problem to solve before encoding.",
+      "measured": "25000 ms, peak -23.6 dB, integrated -45.75 LUFS, true peak -23.58 dBTP, stereo 48 kHz, L/R correlation +0.866666. 83.8% of the file is exact digital silence and both ends are silent. Gated it reads -36.71 LUFS, 9.04 dB off the ungated figure on 31 of 247 blocks, against 10*log10(247/31) = 9.01 -- the block-count identity. THE WRAP IS SAFE BY THE SECTION 13 TEST AND NOT BY MUCH MORE THAN A FACTOR OF TWO: material runs 5.132 to 20.041 s, so the gap across the wrap is 10.091 s against a longest interior gap of 5.056 s. Every other intermittent bed here clears it by far more; this is the closest margin in the tree and still the right side of the line. VORBIS COLLAPSED THE RUN COUNT, WHICH IS THE BOTTLE'S LESSON AGAIN AND LOUDER. The stem has 374 separate non-silent runs at 84.54% silence; the shipped .ogg has FOUR at 83.80%, because the encoder rings out across the hundreds of sub-millisecond gaps between caw transients. Same direction as every other file checked -- the shipped file is the less silent -- but 374 to 4 is the largest collapse seen, and it is a reminder that run counts read off a stem describe the edit and not the asset. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT.",
+      "gainDb": 0.0,
+      "sha256": "4160315a10fa32c5de7f3ee13ca94c87135195c396311fb988d7a1488c8437b5"
     }
   },
   "assetDirs": [
@@ -4191,6 +4358,12 @@
       "summedTruePeakDbtp": -5.22,
       "summedAtTrims": "02c4940d168faac6"
     },
+    "build_roads_actionB": {
+      "groupDb": 0.0,
+      "tracks": 2,
+      "summedTruePeakDbtp": -14.9,
+      "summedAtTrims": "779d103f4362a6f4"
+    },
     "clerical_actionA": {
       "groupDb": 0.0,
       "tracks": 3,
@@ -4217,9 +4390,9 @@
     },
     "ordination_actionB": {
       "groupDb": 0.0,
-      "tracks": 8,
-      "summedTruePeakDbtp": -1.36,
-      "summedAtTrims": "b818af19deca9e04"
+      "tracks": 10,
+      "summedTruePeakDbtp": -2.42,
+      "summedAtTrims": "196a2169ab9617eb"
     },
     "taxation_actionA": {
       "groupDb": 0.0,

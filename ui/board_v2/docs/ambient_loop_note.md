@@ -1,8 +1,12 @@
 # Cutting an ambient bed into a seamless loop
 
-**Status: thirty-three files under eight duty actions.** Three actions have one track each —
+**Status: thirty-seven files under nine duty actions.** Three actions have one track each —
 `clerical_actionB/silversmith` (25 s, fire), `give_alms_actionA/alms` (25 s, rain) and
-`give_alms_actionB/donate_building` (32.5 s, a sheltered wind). Four have several.
+`give_alms_actionB/donate_building` (32.5 s, a sheltered wind). Six have several.
+`build_roads_actionB/` is the newest and holds two at 25 s: `wind` (winter grass on open
+ground, wrapped with a 2.1 s equal-power fold at its TAIL rather than its head) under
+`crows_ravens` (intermittent, three placed copies of two corvid recordings, wrap gap
+10.09 s against a longest interior gap of 5.06 s — the narrowest margin in this note).
 `build_roads_actionA/` holds eleven — `rammers`, `gravel`, `far_work`, `worker_footsteps`,
 `horse_snorts`, the ox cart in three (`ox_cart_mechanics`, `ox_cart_stones`, `ox_breathing`)
 and the oil lamp in two (`oil_lamp_rattle`, `oil_lamp_flame`), all 35 s; `oil_lamp_flame` is
@@ -15,14 +19,17 @@ matched to it exactly). `allocation_actionA/` holds `footsteps`, `keys` and `woo
 (28.5 s, one mix in three stems) under `allocation_wind` (17 s, an independent loop).
 `taxation_actionA/` holds `wheat`, `coins` and `barn_creaks` (30 s stems, not yet wrapped)
 inside `room` (30 s, the background bed they were waiting for).
-`ordination_actionB/` holds eight at 36 s, and they are the three kinds of loop this note knows
+`ordination_actionB/` holds ten at 36 s, and they are the three kinds of loop this note knows
 side by side: `footsteps` and `staff` are **metrical**, closing on arithmetic rather than a
-crossfade (section 12); `distant_dogs`, `rats_crossing` and `rat_squeaks` are
-**intermittent**, each closing because its wrap gap -- 10.32, 34.57 and 35.00 s -- is longer
+crossfade (section 12); `distant_dogs`, `rats_crossing`, `rat_squeaks`, `distant_cart`,
+`two_horses` and `bottle_knock` are **intermittent**, each closing because its wrap gap --
+10.32, 34.57, 35.00, 19.53, 19.54 and 34.91 s -- is longer
 than any interior gap (section 13); and `night_city` is **wrapped**, arriving with a 2.0 s
-equal-power fold over its head. `oil_lamp` and `door_close` are **outside this note entirely**:
-both carry `"loop": false` and play once, so they have no seam to join and nothing here
-applies to them. They are in `sfx/ambient/`, one folder per duty action since a
+equal-power fold over its head. `door_close` is **outside this note entirely**: it carries
+`"loop": false` and plays once, so it has no seam to join and nothing here applies to it.
+*Four of those six intermittent beds have no interior gap at all* -- one unbroken burst in an
+otherwise empty 36 s -- so section 13's test is satisfied by arithmetic rather than by
+comparison, and section 13 says what to measure instead. They are in `sfx/ambient/`, one folder per duty action since a
 fourth track made the filename the wrong place to say which action a bed belongs to, and
 `sfx_lab/generate_sound_bench.py` builds `generated/ambient_bench.html` to hear them looping
 under their own cues. The board itself still plays neither. This note is the method, worked out
@@ -488,10 +495,18 @@ minimum is a tell.** In between, listen.
 
 **Two more arrived the same day and they sharpen the rule rather than repeat it.**
 `rats_crossing` and `rat_squeaks` are the far end of the scale: four footfalls and three
-squeaks, both bursts inside the same second of a 36 s file, 95.6% and 98.2% exact digital
-silence. Their wrap gaps are 34.57 and 35.00 s, which is nearly the whole loop, so the test
+squeaks, both bursts inside the same second of a 36 s file, 95.4% and 97.8% exact digital
+silence measured on the shipped files. Their wrap gaps are 34.57 and 35.00 s, which is nearly
+the whole loop, so the test
 passes so comfortably it stops being informative — *when a file holds one event, the wrap is
 safe unless the event sits against an end, and the thing worth measuring is whether it does.*
+**A third joined them on 2026-10-17 and made the point structural rather than anecdotal.**
+`bottle_knock` is one burst from 10.743 to 11.831 s, wrap gap **34.91 s**, and the three of
+them now occupy **1.65 s of the same lap between them** — 10.252 to 11.900 s all told. Three
+stems built separately on three days, each individually safe by this section's test, and
+together a scene with one busy second and nothing else. *This test says nothing about where in
+the lap an event sits relative to the other tracks, and that is now the thing worth measuring
+in this folder.*
 The harder question those two raise is not about the seam at all: **they are silent at the
 same moments**, by design, because they are one rat and not two layers. A pair like that can
 never give each other a floor, which is the levelling note's point about Build Roads' seven
@@ -508,7 +523,7 @@ sliding probe fails when the source is too thin, the event probe when its window
 
 ## 14. Not done
 
-- **The board plays no bed.** All thirty-three are filed and audible on the ambient bench;
+- **The board plays no bed.** All thirty-seven are filed and audible on the ambient bench;
   `bundled_sfx()` still inlines only `tile.ogg` and `confirm.ogg`. This bullet has said "all
   five" since there were five, which is its own small lesson: a count in prose is a fact with
   no test behind it, and nine beds arrived before anyone noticed. The generator prints the
@@ -523,7 +538,7 @@ sliding probe fails when the source is too thin, the event probe when its window
   undecided, as is the fade-in on select, and what happens on deselect or re-select.
 - **The loop checker does not exist as a tool.** The band-match shoulder search, the N-lap
   render and the wrap-window percentile test have been written from scratch for each of the
-  thirty-three files. Three of them now have a settled shape and one of them, the percentile
+  thirty-seven files. Three of them now have a settled shape and one of them, the percentile
   test, is the only check that works on a loop that arrives already baked — and none of the
   three applies to a stem that is not wrapped at all, which a good many of these are. None of
   the three can check a metrical loop either; see section 12.
@@ -533,6 +548,13 @@ sliding probe fails when the source is too thin, the event probe when its window
   each time, and nothing holds the total to the files. A count with no test behind it is the
   exact fault the bed-count guard was written for, and the fix is a `wrapped` field on the
   record rather than a better sentence here.
+- **`--groups` re-renders all nine actions when it already knows which one changed.** Every
+  action's entry carries `summedAtTrims`, a fingerprint of the `gainDb` values its sum was
+  taken from, and a test compares the two without decoding anything. The renderer does not
+  read it: adding one bed to one folder decodes and mixes all thirty-seven files, about
+  fourteen seconds where two would do. Harmless at this size and the fix is a few lines —
+  skip an action whose fingerprint still matches — but it is the only place in the pipeline
+  where the cost grows with the whole tree rather than with the change.
 - **The composite's master is the first audio source here that cannot be re-fetched.** Every
   other sound in the tree is a download, which is why `sfx/masters/` was deleted — the same
   file can be fetched again from the name in `source`. A DAW mix cannot, and the reason the
