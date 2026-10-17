@@ -2380,7 +2380,15 @@ _FAMILY = ((r"\bduty action", "sfx/duty_actions/"), (r"\bbuilding", "sfx/buildin
 # makes the claim MORE checkable, not less: "sixth quietest" says precisely five clips beat
 # it, so the test asserts the count rather than skipping the sentence.
 _ORDINAL = {"second": 2, "third": 3, "fourth": 4, "fifth": 5, "sixth": 6,
-            "seventh": 7, "eighth": 8, "ninth": 9, "tenth": 10}
+            "seventh": 7, "eighth": 8, "ninth": 9, "tenth": 10, "eleventh": 11,
+            "twelfth": 12, "thirteenth": 13, "fourteenth": 14, "fifteenth": 15,
+            "sixteenth": 16, "seventeenth": 17, "eighteenth": 18, "nineteenth": 19,
+            "twentieth": 20}
+# IT STOPPED AT TENTH AND A TRUE SENTENCE WAS REFUSED FOR IT. On 2026-10-17 Produce Stone
+# added thirteen beds in one delivery and pushed gallows_rope to thirteenth quietest; the
+# corrected record said so, the guard had no word for 13, read the claim as a bid for first
+# place and failed it. A guard that only counts to ten quietly converts an honest rank into
+# a superlative, which is the opposite of its job.
 
 
 def _sound_readings(rec):
@@ -4003,8 +4011,13 @@ _NUMBER_WORDS = {
     "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8,
     "nine": 9, "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14,
     "fifteen": 15, "sixteen": 16, "seventeen": 17, "eighteen": 18, "nineteen": 19,
-    "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50,
+    "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70,
+    "eighty": 80, "ninety": 90,
 }
+# The list ran out at fifty on 2026-10-17, when Produce Stone arrived with thirteen beds in
+# one delivery and took the tree to sixty-three. The guard did the right thing -- it refused
+# a count it could not verify rather than passing it -- but a prose-count guard that stops
+# working at a round number is a guard with an expiry date, so it now reaches ninety-nine.
 
 
 def _spelled(word: str):

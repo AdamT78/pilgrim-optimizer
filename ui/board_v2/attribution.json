@@ -3961,7 +3961,7 @@
       "title": "Build Roads ox cart stone -- the load shifting",
       "role": "one of seven tracks under build roads actionA, and one of three that are the ox cart: the cart itself, the stone it carries, and the animal pulling it. A road gang needs its material brought to it, and this is that arriving. Filed as three separate beds rather than one so the cart can be balanced against the animal.",
       "modifications": "THE CONTAINER AND NOTHING ELSE: Vorbis q6 at the stem's own 48 kHz stereo. No trim, no fade, no level change, no loop made here. 35.000000 s to the sample, 1,680,000 samples, the same as the six beside it. IT IS NOT A SEAMLESS LOOP AND IS NOT MEANT TO BE YET: it opens and closes on exact digital silence, so the step across a butt join is 0.000000 in both channels and means nothing. The wrap goes on the finished mix once the folder is complete. ITS SOURCE IS RECORDED AS THE PROJECT OWNER STATES IT AND COULD NOT BE CORROBORATED, which is a statement about the method and not a doubt about the file. No window from 150 ms to 400 ms matches the upload decisively. Cross-correlation only sees material carried through at 1:1 with its waveform intact, and this one is both heavily filtered -- nothing above 8 kHz survives, from a 96 kHz source -- and placed in short fragments. It is in the same position as rammers, gravel and far_work beside it; three of this folder's seven tracks ARE confirmed, so the method works here when the material allows it. THE OX GROUP IS BAND-LIMITED AND THE WHOLE GROUP SHARES IT. All three read about -55 dB at 6 kHz and -80 to -96 at 8 kHz relative to their own peak, where the near layers of this folder -- rammers, gravel, worker_footsteps -- carry content well past that. The ox cart and far_work are the distance in this scene and are filtered like it. WHERE IT SITS IN THE MIX. build_roads_v08_with_polished_ox_cart_preview.wav is v05 plus these three and nothing else: v05 minus the four earlier stems is zero to two least significant bits, so none of those four moved when the ox arrived. THE THREE DO NOT REPRODUCE v08 EXACTLY, unlike the four. Fitted, v08 holds ox_cart_mechanics at -0.056 dB, ox_cart_stones at -0.052 and ox_breathing at +0.008 -- near enough unity -- and leaves a remainder 20.3 dB under the ox group, peaking at -36.7 dBFS. That remainder is NOT a missing eighth layer: where all three substems are exactly silent it measures -123.8 dB rms, which is nothing, and it decays to nothing within about 100 ms of each event (-9.7 dB immediately, -25.4 at 50 ms, -54.2 at 100, gone by 200). Nor is it bus compression: v08 over the fitted sum reads 0.00 dB at every level. It is a short processing difference on the ox group -- the mix holding a slightly different pass of these same renders. Audibly the same scene; not the bit-exact identity the four gave.",
-      "measured": "35000 ms, peak -23.9 dB, integrated -55.15 LUFS, true peak -23.9 dBTP, stereo 48 kHz, L/R correlation +0.9995 with the side 17.7 dB under the mid. Gated it reads -48.82, 6.33 dB off the ungated figure with 81 of 347 blocks surviving, and 75.3% of it is exact digital silence -- THE EMPTIEST TRACK IN THE TREE, and at -55.15 LUFS also the quietest. THE TRIM IS +6.0, SET BY EAR BY THE PROJECT OWNER on 2026-10-16, in one pass across all eleven tracks of this folder rather than one file at a time -- which is the only way a scene of eleven can be balanced. It lands at -49.15 LUFS and -17.86 dBTP. THE BIGGEST LIFT IN THE TREE and the file that needed it: at -55.15 LUFS untrimmed it was the quietest thing filed, and at +6.0 it still lands under every other Build Roads track. NOTHING COMPUTED THIS. ui/board_v2/sfx_lab/sfx_levels.py derives a cue's trim to -24 LUFS M200 and refuses to touch a bed, because a bed target was tried at -39 LUFS and falsified by the second bed ever filed.",
+      "measured": "35000 ms, peak -23.9 dB, integrated -55.15 LUFS, true peak -23.9 dBTP, stereo 48 kHz, L/R correlation +0.9995 with the side 17.7 dB under the mid. Gated it reads -48.82, 6.33 dB off the ungated figure with 81 of 347 blocks surviving, and 75.3% of it is exact digital silence -- THE EMPTIEST TRACK IN THE TREE, and at -55.15 LUFS the second quietest in the tree. It held first place until 2026-10-17, when produce_actionB/quarry_footsteps arrived at -59.90 and took it. THE TRIM IS +6.0, SET BY EAR BY THE PROJECT OWNER on 2026-10-16, in one pass across all eleven tracks of this folder rather than one file at a time -- which is the only way a scene of eleven can be balanced. It lands at -49.15 LUFS and -17.86 dBTP. THE BIGGEST LIFT IN THE TREE and the file that needed it: at -55.15 LUFS untrimmed it sat below anything else then filed, and at +6.0 it still lands under every other Build Roads track. NOTHING COMPUTED THIS. ui/board_v2/sfx_lab/sfx_levels.py derives a cue's trim to -24 LUFS M200 and refuses to touch a bed, because a bed target was tried at -39 LUFS and falsified by the second bed ever filed.",
       "gainDb": 2.0,
       "sha256": "51556574d5381347e8b3464020cd03c42bfc9a7154ca767a961a67ed31551e1a"
     },
@@ -4371,7 +4371,7 @@
       "title": "Build Shrine gallows rope -- hemp taking the weight",
       "role": "the fifth track under build_roads actionB, which is Build Shrine, with wind, crows_ravens, fabric and gallows_timber. It loops. Paired with gallows_timber_sfx_v01.ogg: the frame and what hangs from it.",
       "modifications": "SOURCE CONFIRMED, THREE COPIES, AND THE CLEANEST PLACEMENT SET IN THE FOLDER. Fourteen of fourteen probed events match at r up to 0.8902, at THREE constant placements: the 18.486 s upload laid in at +0.030, +3.360 and +6.260 s. Every event resolves to one of the three with no stragglers, which is what the timber beside it does not do. TWO CONTROLS, BOTH OF THEM CREAKS. vrymaa's `leather-rub-creaks` reaches 0.3460 and the timber bed's own source reaches 0.1526, both 0 of 14. The leather is the closest control run anywhere in this tree -- creaking cordage against creaking hide -- and it still falls half a scale short of the real thing. THE PLACEMENTS COVER THE MATERIAL: the copies span 0.030-18.516, 3.360-21.846 and 6.260-24.746, and the stem's three sounding runs are 6.177-9.233, 15.271-18.124 and 20.983-24.535, all inside. The first copy's opening six seconds are muted in the stem, so the layers are gated as well as placed. THE CONTAINER: Vorbis q6 at the stem's own 48 kHz stereo, no trim, no fade and no level change; the stem peaks at -17.9 dBFS so there was no headroom problem to solve.",
-      "measured": "25000 ms, peak -17.9 dB, integrated -49.35 LUFS, true peak -17.85 dBTP, stereo 48 kHz, L/R correlation +0.997409. 62.2% of the file is exact digital silence in 3 runs. Gated it reads -44.44 LUFS, 4.91 dB off the ungated figure on 80 of 247 blocks, against 10*log10(247/80) = 4.90 -- the block-count identity. THE WRAP IS SAFE OUTRIGHT, at 1.10x. THIS LINE CALLED THAT RARE AND IT IS NOT: thirteen of the forty-nine beds pass the first clause outright, which is better than one in four, and the figure was never computed until 2026-10-17. Material runs 6.177-24.535, the interior pauses are 2.859 and 6.037 s, and the wrap gap is 6.643 s -- LONGER than the longest interior pause, so it clears section 13's first clause without needing the ratio at all. Both ends are true digital silence, -240 dBFS over 50 ms either side, and the butt-join step is 0.000000. AT -49.35 LUFS it is the quietest of Build Shrine's seven, against the wind's -31.11, so that folder spans 18.24 dB before anybody has set a trim. It is the SEVENTH quietest bed in the tree by integrated loudness, after ox_cart_stones, bottle_knock, candle, far_work, donate_building and stalk_brushing. That ranking was checked rather than written from memory, twice: the first draft of this line said third and the rank guard refused it, and on 2026-10-17 produce_actionA/stalk_brushing landed at -49.46, 0.11 dB under this bed, and the guard caught the stale `sixth` on the same run that added it. A RANK IS A CLAIM ABOUT EVERY FILE ADDED AFTER IT, which is the only reason that guard exists; this sentence has now been corrected by it twice and written correctly by hand zero times. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT.",
+      "measured": "25000 ms, peak -17.9 dB, integrated -49.35 LUFS, true peak -17.85 dBTP, stereo 48 kHz, L/R correlation +0.997409. 62.2% of the file is exact digital silence in 3 runs. Gated it reads -44.44 LUFS, 4.91 dB off the ungated figure on 80 of 247 blocks, against 10*log10(247/80) = 4.90 -- the block-count identity. THE WRAP IS SAFE OUTRIGHT, at 1.10x. THIS LINE CALLED THAT RARE AND IT IS NOT: thirteen of the forty-nine beds pass the first clause outright, which is better than one in four, and the figure was never computed until 2026-10-17. Material runs 6.177-24.535, the interior pauses are 2.859 and 6.037 s, and the wrap gap is 6.643 s -- LONGER than the longest interior pause, so it clears section 13's first clause without needing the ratio at all. Both ends are true digital silence, -240 dBFS over 50 ms either side, and the butt-join step is 0.000000. AT -49.35 LUFS it is the quietest of Build Shrine's seven, against the wind's -31.11, so that folder spans 18.24 dB before anybody has set a trim. It is the THIRTEENTH quietest bed in the tree by integrated loudness, behind quarry_footsteps, ox_cart_stones, quarry_hoist, bottle_knock, moth, candle, far_work, nearby_raven, chisel_reposition, distant_owl, donate_building and stalk_brushing -- six of those twelve arrived with Produce Stone on 2026-10-17. That ranking was checked rather than written from memory, four times: the first draft of this line said third and the rank guard refused it, and twice on 2026-10-17, when produce_actionA/stalk_brushing landed at -49.46, 0.11 dB under this bed, and then produce_actionA/nearby_raven at -51.58 pushed it down again -- the guard caught the stale `sixth` and then the stale `seventh`, each on the run that added the bed responsible. A RANK IS A CLAIM ABOUT EVERY FILE ADDED AFTER IT, which is the only reason that guard exists; this sentence has now been corrected by it twice and written correctly by hand zero times. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT.",
       "gainDb": 0.0,
       "sha256": "a21d233044d6f0ec87f792432aede03aea9317453d03cc58ac4717204dbc58d0"
     },
@@ -4651,13 +4651,14 @@
       "collection": "Pilgrim board_v2 ambient beds",
       "title": "Produce Wheat straw workers -- several hands working the cut crop at once",
       "role": "the sixth track under produce actionA, which is Produce Wheat, with wind_sfx_v01.ogg, field_rustle_sfx_v01.ogg, distant_rooster_sfx_v01.ogg, sheaf_handling_sfx_v01.ogg and stalk_brushing_sfx_v01.ogg. It loops. The busiest track in the folder by a distance -- ten sounding runs where sheaf_handling has two and stalk_brushing three -- and it fills the gaps those two leave rather than competing with them.",
-      "modifications": "THE FILENAME SAYS `combined` AND THE FIRST THING CHECKED WAS WHAT IT IS COMBINED WITH. This folder already holds a bed from this exact upload, so a stem that silently re-used sheaf_handling's material would double-track the action without anybody hearing why. Each of the ten sounding runs was cross-correlated -- lag search, never a fixed offset -- against BOTH existing intermittent beds in the folder: against sheaf_handling it peaks at 0.0838 and against stalk_brushing at 0.0692. Nothing is shared. `combined` means several gestures in one stem, not combined with what is already here. AND THE STRONGER PROOF IS GEOMETRIC RATHER THAN STATISTICAL. The placements resolve to seven disjoint source regions -- 0.122-2.786, 4.453-6.278, 7.160-8.873, 9.003-9.925, 18.928-19.592, 24.301-26.397 and 27.284-28.557 -- and sheaf_handling takes 12.289-15.295 and 19.630-22.683. THE TWO SETS DO NOT OVERLAP AT ALL, and the closest they come is 37.8 MILLISECONDS, where this bed's fifth excerpt stops just before sheaf_handling's second begins. Together the two beds use 17.215 s of the 30.919 s recording, 55.7% of it, with no sample counted twice. THAT IS A CLEANER SEPARATION THAN ANY PREVIOUS SAME-UPLOAD PAIR HERE: the two lamp beds scored 0.575 against each other and monk_robe against wool_robe 0.0209 and 0.0227, but neither pair could show its source regions were disjoint -- a low correlation says the cuts differ, and a disjoint interval list says they cannot share a sample. THE TRACE ITSELF: nine of ten runs match at |r| >= 0.5, from 0.4971 on the weakest to 0.7406, at eight distinct placements on a 10 ms grid. Controls are the other two straw sources feeding this same duty action, BonginkosiMakhubu190225's straw bush at 0.0732 and bdvictor's wheat at 0.0657, both 0 of 14. AND IT IS THE TIGHTEST TEST THE PROCESSING-DISTANCE RULE HAS HAD. sheaf_handling reaches 0.81 from THIS SAME FILE; this bed reaches 0.50-0.74. The source is not merely comparable, it is identical -- same upload, same rate, same channel count, same peak -- so the entire difference is what the chain did between cutting and exporting. The rooster-versus-sheaf comparison argued this with similar source conditions; this argues it with the same source. THE CONTAINER: Vorbis q6 at the stem's own 48 kHz stereo, no trim, no fade and no level change; the stem peaks at -24.2 dBFS so there was no headroom problem to solve.",
+      "modifications": "THE FILENAME SAYS `combined` AND THE FIRST THING CHECKED WAS WHAT IT IS COMBINED WITH. This folder already holds a bed from this exact upload, so a stem that silently re-used sheaf_handling's material would double-track the action without anybody hearing why. Each of the ten sounding runs was cross-correlated -- lag search, never a fixed offset -- against BOTH existing intermittent beds in the folder: against sheaf_handling it peaks at 0.0838 and against stalk_brushing at 0.0692. Nothing is shared. `combined` means several gestures in one stem, not combined with what is already here. AND THE STRONGER PROOF IS GEOMETRIC RATHER THAN STATISTICAL. The placements resolve to seven disjoint source regions -- 0.122-2.786, 4.453-6.278, 7.160-8.873, 9.003-9.925, 18.928-19.592, 24.301-26.397 and 27.284-28.557 -- and sheaf_handling takes 12.289-15.295 and 19.630-22.683. THE TWO SETS DO NOT OVERLAP AT ALL, and the closest they come is 61.0 MILLISECONDS, where this bed's fifth excerpt stops just before sheaf_handling's second begins. THAT FIGURE WAS FIRST FILED AS 37.8 ms AND WAS BUILT WRONG: it took the run boundaries off the shipped .ogg and the source positions off a fit against the stem, mixing two files in one subtraction. Re-measured end to end on the stems with sfx_lab/provenance.py it is 61.0 ms. The disjointness is untouched -- the two beds share no sample on either reading -- but A NUMBER QUOTED TO A TENTH OF A MILLISECOND SHOULD COME FROM ONE FILE, and this one is segmentation-dependent to a few tens of milliseconds, which is why it is now given with that caveat rather than as a precise fact. Together the two beds use 17.215 s of the 30.919 s recording, 55.7% of it, with no sample counted twice. THAT IS A CLEANER SEPARATION THAN ANY PREVIOUS SAME-UPLOAD PAIR HERE: the two lamp beds scored 0.575 against each other and monk_robe against wool_robe 0.0209 and 0.0227, but neither pair could show its source regions were disjoint -- a low correlation says the cuts differ, and a disjoint interval list says they cannot share a sample. THE TRACE ITSELF: nine of ten runs match at |r| >= 0.5, from 0.4971 on the weakest to 0.7406, at eight distinct placements on a 10 ms grid. Controls are the other two straw sources feeding this same duty action, BonginkosiMakhubu190225's straw bush at 0.0732 and bdvictor's wheat at 0.0657, both 0 of 14. AND IT IS THE TIGHTEST TEST THE PROCESSING-DISTANCE RULE HAS HAD. sheaf_handling reaches 0.81 from THIS SAME FILE; this bed reaches 0.50-0.74. The source is not merely comparable, it is identical -- same upload, same rate, same channel count, same peak -- so the entire difference is what the chain did between cutting and exporting. The rooster-versus-sheaf comparison argued this with similar source conditions; this argues it with the same source. THE CONTAINER: Vorbis q6 at the stem's own 48 kHz stereo, no trim, no fade and no level change; the stem peaks at -24.2 dBFS so there was no headroom problem to solve.",
       "measured": "35000 ms, peak -24.2 dB, integrated -44.05 LUFS, true peak -23.62 dBTP, stereo 48 kHz, L/R correlation +0.869536. 66.2% of the file is exact digital silence in six runs, the least silent of the folder's three intermittent beds against stalk_brushing's 88.4% and sheaf_handling's 82.7%. Material runs 6.476 to 33.332 s. Gated it reads -39.16 LUFS, 4.88 dB off the ungated figure on 113 of 347 blocks, against 10*log10(347/113) = 4.87 -- the block-count identity, out by 0.012 dB. THE WRAP IS SAFE OUTRIGHT: five interior pauses, the longest 3.947 s, against a wrap gap of 8.144 -- 2.06x the interior maximum, so it clears section 13's first clause without needing the ratio. Both ends are true digital silence and the butt-join step is 0.000000 on both channels. IT IS NOT A MONO SIGNAL PANNED, AND THE REASON IS NOW A PATTERN RATHER THAN AN OBSERVATION. Fitted in the WAV STEM -- where fabric, distant_rooster and sheaf_handling all return an exact scalar with 0.00% residual -- this one gives R = 0.593804 x L with a 46.53% residual, the loosest in the folder, and stalk_brushing gives 18.84%. THE SPLIT IS BY CONSTRUCTION: a bed built from one source region panned once fits a scalar exactly, and a bed built from several gestures at several pans cannot, because no single number describes two different pans. Three exact and two loose, and which is which is predicted by the number of placements. Folding to mono costs 1.84 dB and the best inter-channel lag is +0.000 ms, so there is no Haas widener. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT.",
       "gainDb": 0.0,
       "sha256": "edb7d609ca56a67bb00f355ca2273b32953f87f30900113a839f7565407b2caf"
     },
     "sfx/ambient/produce_actionA/sickle_cutting_sfx_v01.ogg": {
-      "state": "present",
+      "state": "absent",
+      "absentNote": "REPLACED by sickle_cutting_sfx_v02.ogg on 2026-10-17, hours after it was filed, when a second source was added to the stem. THIS IS THE GENTLEST REPLACEMENT IN THIS TREE AND THAT WAS MEASURED, NOT ASSUMED: v02 minus v01 is exact digital zero across 95.9% of the file, and every sample outside the added region is bit-identical. Nothing was re-cut, re-levelled or re-placed; one gesture was laid in at 27.503-28.874 s and nothing else moved. Peak, true peak, M200, silence fraction, run count and every run boundary are unchanged between the two, which is why the two records' `measured` strings agree on all of them. What changed: integrated loudness -39.86 to -39.65 LUFS, L/R correlation +0.969711 to +0.944579, mono fold 2.86 to 2.74 dB -- all of them the arithmetic of adding one quiet off-centre layer. CONTRAST WITH ordination_actionB/staff_sfx_v01.ogg, the tree's other replacement, where the source changed and only the arrangement survived. Here the source did not change; one was added. The sha256 below is kept so the exact bytes that were here can still be identified.",
       "kind": "bed",
       "creator": "hadescolossus",
       "licence": "cc0",
@@ -4686,6 +4687,548 @@
       "measured": "35000 ms, peak -14.2 dB, integrated -39.86 LUFS, true peak -14.06 dBTP, stereo 48 kHz, L/R correlation +0.969711. IT IS THE LOUDEST BED IN PRODUCE WHEAT BY PEAK AND THE THIRD QUIETEST BY LOUDNESS, which is this folder's third peak-versus-loudness disagreement and the sharpest: at -14.06 dBTP it is 1.87 dB above the wind, and at -39.86 LUFS it is 6.03 dB below it. A blade transient is loud and brief; weather is quiet and continuous. 29.2% of the file is exact digital silence in 17 runs and material runs 1.015 to 33.353 s. Gated it reads -36.35 LUFS, 3.51 dB off the ungated figure on 154 of 347 blocks, against 10*log10(347/154) = 3.53 -- the block-count identity, out by 0.021 dB. THE WRAP IS SAFE OUTRIGHT: fifteen interior pauses, the longest 2.112 s, against a wrap gap of 2.661 -- 1.26x. THE FIRST DRAFT CALLED THAT THE NARROWEST PASS IN THE TREE AND IT IS SEVENTH OF THIRTEEN. The full ordering, computed rather than recalled: barn_creaks 1.03, ox_breathing 1.04, gallows_rope 1.10, oil_lamp_rattle 1.12, rosary 1.13, far_work 1.18, THIS BED 1.26, monk_robe 1.57, distant_dogs 1.83, crows_ravens 2.00, straw_workers 2.06, sheaf_handling 2.58, distant_rooster 7.68 -- thirteen passing outright, twelve of which loop. THAT IS THE THIRD SUPERLATIVE THIS TREE HAS GOT WRONG IN TWO DAYS by reading prose instead of computing a population, after the outright-pass count and the mono-fold cost. The pattern is not carelessness about a particular fact, it is a method: a claim of the form `most` or `only` is a claim about every file, and every file is cheap to check. Both ends are true digital silence and the butt-join step is 0.000000 on both channels. VORBIS COLLAPSED 452 RUNS INTO 17, which is the crows' lesson again and in its largest absolute form. The WAV stem holds 452 separate non-silent runs at 31.81% silence; the shipped .ogg holds SEVENTEEN at 29.18%, because the encoder rings out across hundreds of sub-100 ms gaps between blade strokes. The crows' 374 to 4 is still the larger RATIO, 93x against 27x, but 452 is the largest stem run count recorded here, and the direction is the same one every file has shown: the shipped asset is less silent than the stem it came from. A RUN COUNT READ OFF A STEM DESCRIBES THE EDIT, NOT THE ASSET. IT IS NOT A MONO SIGNAL PANNED, AND THAT WAS PREDICTED RATHER THAN OBSERVED. straw_workers' record proposed that a bed fits an exact scalar if it is built from one source region panned once, and cannot if it has several gestures at several pans. This bed has forty placements, so the prediction was that it would not fit; measured in the WAV stem it gives R = 0.4410 x L with an 18.37% residual. Three exact and three loose now, and the rule has been tested once since it was written and held. Folding to mono costs 2.86 dB and the best inter-channel lag is +0.000 ms, so there is no Haas widener. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT.",
       "gainDb": 0.0,
       "sha256": "26855cf15fe4226c3d8c8c42483eeb82c05e2d00f8f254fca6814aed1e3676ff"
+    },
+    "sfx/ambient/produce_actionA/sickle_cutting_sfx_v02.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "hadescolossus; kyles",
+      "licence": "cc0",
+      "licenceNote": "Creative Commons 0 on freesound for BOTH sources, each read on its own page before anything was measured. kyles' upload is new to this tree and was checked for that reason; hadescolossus' was re-read rather than carried over from the v01 record filed hours earlier, because a licence filed once is evidence about that moment. Both read CC0. Every licence in this tree still reads attributionRequired: false. THE CUT IS THIS PROJECT'S OWN.",
+      "design": "BUILT WITH CHATGPT, as the other Produce Wheat, Build Shrine and Mission stems were. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample is meant to trace to one of the two uploads in `sources`, and both traces were run and landed; see `modifications`.",
+      "generatedContent": "none",
+      "source": "produce_wheat_sickle_cutting_repositioning_combined_stem_v03_35s.wav. The stem exists only on the project owner's disk; the things anyone can fetch again are the three uploads in `sources`, and all three source files are also on disk and were probed directly. THE OGG KEEPS ITS v02 NAME WHILE THE STEM IS A v03, which breaks this tree's habit of matching the two and is deliberate: the v02 bytes were never committed, so there is no history to preserve and an absent record for a file that reached no commit would be noise. The project owner asked for this file to be updated rather than superseded.",
+      "sources": [
+        {
+          "role": "the body of the bed -- forty placements drawn from two regions, carried over from v01 unchanged",
+          "title": "to cut and drag the grass with a knife and sickle",
+          "uploader": "hadescolossus",
+          "url": "https://freesound.org/people/hadescolossus/sounds/705228/",
+          "licence": "cc0",
+          "originalFilename": "705228__hadescolossus__to-cut-and-drag-the-grass-with-a-knife-and-sickle.aiff",
+          "measured": "6.409 s, 44.1 kHz, 32-bit float AIFF, stereo. The shortest source feeding any bed here by a factor of three and a half, the only AIFF, and the only source not already at this tree's 48 kHz -- resampled before correlating, because a probe at mismatched rates measures nothing.",
+          "note": "THIS HALF WAS NOT RE-PROBED AND DOES NOT NEED TO BE. v02 minus v01 is exact digital zero everywhere outside one added gesture, so every sample this source contributed is bit-identical to the bytes the v01 record describes at forty of forty runs, r up to 0.9015. Re-running the trace would measure the same samples against the same file. The subtraction is the stronger evidence and it is cheaper."
+        },
+        {
+          "role": "one added gesture at 27.503-28.874 s -- source 0.1830-1.5540 s",
+          "title": "leaves dry straw brush put down slam",
+          "uploader": "kyles",
+          "url": "https://freesound.org/people/kyles/sounds/454064/",
+          "licence": "cc0",
+          "originalFilename": "454064__kyles__leaves-dry-straw-brush-put-down-slam.flac",
+          "measured": "2.144 s, 48 kHz MONO FLAC. THE SHORTEST SOURCE IN THIS TREE, taking the record from hadescolossus' 6.409 s on the same day, and the first FLAC. Already at this tree's rate and mono, so nothing had to be converted.",
+          "note": "A bundle of dry straw set down hard -- the sound of cut crop being put somewhere, which is the gesture the folder's other six beds leave out. FIRST UPLOAD FROM kyles IN THIS TREE."
+        },
+        {
+          "role": "two footstep gestures at the end -- stem 16.363-16.918 and 29.183-30.027 s",
+          "title": "footsteps shoes dirt floor slow scuff stop",
+          "uploader": "kyles",
+          "url": "https://freesound.org/people/kyles/sounds/451861/",
+          "licence": "cc0",
+          "originalFilename": "451861__kyles__footsteps-shoes-dirt-floor-slow-scuff-stop.flac",
+          "measured": "95.568 s, 48 kHz MONO FLAC. Already at this tree's rate and mono, so nothing had to be converted.",
+          "note": "SECOND kyles UPLOAD IN THIS BED AND IN THIS TREE, after the straw put-down added hours earlier. One uploader now supplies two of this bed's three sources, which is a first here -- every other multi-source bed draws each source from a different author. Somebody walks away over dirt at the end of the loop."
+        }
+      ],
+      "originalFilename": "produce_wheat_sickle_cutting_repositioning_combined_stem_v03_35s.wav",
+      "originalPath": "freesound.org/people/hadescolossus/sounds/705228 + freesound.org/people/kyles/sounds/454064 + freesound.org/people/kyles/sounds/451861",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Produce Wheat sickle cutting -- the blade through the crop, the cut straw set down, and somebody walking off",
+      "role": "the seventh track under produce actionA, which is Produce Wheat, with wind_sfx_v01.ogg, field_rustle_sfx_v01.ogg, distant_rooster_sfx_v01.ogg, sheaf_handling_sfx_v01.ogg, stalk_brushing_sfx_v01.ogg and straw_workers_sfx_v01.ogg. It loops. REPLACES sickle_cutting_sfx_v01.ogg, which is kept in this file as an absent record, and was itself updated in place when footsteps were added -- see `source` for why the filename did not move again.",
+      "modifications": "THE REPLACEMENT WAS SETTLED BY SUBTRACTION BEFORE ANY TRACE WAS RUN, which is the cheapest way to compare two versions of one stem and this tree had not done it before. v02 minus v01 is EXACT DIGITAL ZERO across 95.9% of the file and bit-identical everywhere the difference is zero -- so nothing was re-cut, re-levelled or re-placed, and the whole change is one added gesture. That also means the forty hadescolossus placements in the v01 record describe these bytes too, without re-probing them. PEAK, TRUE PEAK, M200, SILENCE FRACTION, RUN COUNT AND EVERY RUN BOUNDARY ARE IDENTICAL between the two files, which is a strong check on the subtraction: a re-render would have moved at least one of them. THE ADDED LAYER WAS THEN PROBED IN ISOLATION, which is the best probe this tree has been able to arrange. Subtracting v01 leaves the new material alone with no other source under it, so the correlation is not competing with anything: the layer at 27.503-28.874 s matches kyles 0.1830-1.5540 s at r = +0.6665, placement +27.3200 s, gain -26.98 dB. THE RESIDUAL IS 74.6% OF RMS AGAINST THE 74.6% THE CORRELATION PREDICTS -- agreeing to the tenth of a point, so there is nothing unexplained in the window and it is one continuous copy at one gain. That agreement is checked automatically now; see sfx_lab/provenance.py. WHY r IS 0.67 AND NOT 0.99 WITH NOTHING IN THE WAY: the layer is attenuated 26.98 dB, which is the deepest attenuation on any confirmed placement here, and the brick that failed outright on tinkering was filtered AND pulled down 24 dB. Attenuation that deep puts the quiet end of the material into the dither floor, and the floor does not correlate. THE CONTROLS ARE UNUSUALLY GOOD BECAUSE ONE OF THEM IS THIS BED'S OTHER SOURCE: hadescolossus' sickle, which is demonstrably in this file, reaches 0.0512 against the added layer; the folder's two other straw sources reach 0.0309 and 0.0365. A control that is present in the same stem and still fails on the window being tested is as close to a negative control as this material allows. AND THE CONVERSE WAS CHECKED: no run of v01 matches the kyles source above 0.0850, so the new source is not quietly already in the old file. AND THEN FOOTSTEPS WERE ADDED THE SAME WAY, WHICH MADE THE SECOND CHECK TRIVIAL. The v03 stem minus the v02 stem is exact digital zero across 95.9% of the file and bit-identical everywhere else, so again nothing was re-cut and the whole change is one layer -- and the layer turned out to be BYTE-IDENTICAL to produce_wheat_worker_repositioning_stem_v01_35s.wav, a separate stem of just that material sitting in the same folder. Residual between them: -240 dBFS, which is silence. THE LAYER WAS PROBED IN ISOLATION, as the straw was: four runs, three of them substantial, matching kyles' footsteps at r +0.7775 to +0.8001 at TWO constant placements, -46.8600 and -52.5700 s, gains -7.06 to -8.56 dB, every residual agreeing with its predicted sqrt(1-r^2) to a tenth of a point. The fourth run is 66 ms, scores 0.3682, and is flagged as carrying no control power -- it sits at the same placement as the long run beside it, so it is the same gesture split by a zero crossing rather than separate evidence. CONTROLS, AND THE BEST ONE IS FOOTSTEPS AGAINST FOOTSTEPS: Yuval's river gravel reaches 0.3612, this bed's own straw put-down 0.0443 and its own sickle 0.1240. A separation of 2.2x over a control of the same material and the same action, which is narrower than this folder's usual and is reported rather than rounded up. THE SOURCE WAS NOT STATED WHEN THE FILE ARRIVED and nine candidates were probed before asking -- none passed 0.37. Filing would have meant asserting a provenance that could not be shown, so the work stopped until the upload was named. THE CONTAINER: Vorbis q6 at the stem's own 48 kHz stereo, no trim, no fade and no level change; the stem peaks at -14.2 dBFS so there was no headroom problem to solve.",
+      "measured": "35000 ms, peak -14.2 dB, integrated -39.58 LUFS, true peak -14.06 dBTP, stereo 48 kHz, L/R correlation +0.933011. 28.1% of the file is exact digital silence in 16 runs and material runs 1.015 to 33.348 s. Gated it reads -36.41 LUFS, 3.16 dB off the ungated figure on 167 of 347 blocks, against 10*log10(347/167) = 3.18 -- the block-count identity, out by 0.018 dB. THE WRAP IS SAFE OUTRIGHT at 1.26x, fourteen interior pauses with the longest 2.112 s against a wrap gap of 2.667. PEAK AND TRUE PEAK HAVE NOT MOVED ACROSS THREE RENDERS -- -14.2 and -14.06 dBFS through v01, the straw and now the footsteps -- because every layer added since has been at least 7 dB below the blade. IT REMAINS THE LOUDEST BED IN PRODUCE WHEAT BY PEAK AND THE THIRD QUIETEST BY LOUDNESS, the folder's third and sharpest peak-versus-loudness disagreement. WHAT EACH ADDED LAYER COST, EXACTLY: the straw took integrated loudness from -39.86 to -39.65 LUFS, L/R from +0.969711 to +0.944579 and the mono fold from 2.86 to 2.74 dB; the footsteps took them to -39.58, +0.933011 and 2.67. Each quiet off-centre layer widens the image a little further, and that is the whole of the difference both times. It is still not a mono signal panned -- forty-three placements now -- and the stem fits R = 0.4660 x L with a 32.19% residual, against v02's 0.4572 and 28.69% and v01's 0.4410 and 18.37%. THREE RENDERS, THREE LOOSER FITS, each after adding a gesture at a new pan, which is the pan-count rule behaving as nearby_raven restated it. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT.",
+      "gainDb": 0.0,
+      "sha256": "09a36b60bd6cfc1868cdeb3c967d5fc50cf404e1d1aeb9952ab0e631bd7afd50"
+    },
+    "sfx/ambient/produce_actionA/nearby_raven_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "KiddoFish86",
+      "licence": "cc0",
+      "licenceNote": "Creative Commons 0 on freesound: copy, modify, distribute and perform, commercially, without permission and without attribution. Checked at source before anything was measured, which is the door's standing rule. FIRST UPLOAD FROM KiddoFish86 IN THIS TREE. Every licence here still reads attributionRequired: false. THE CUT IS THIS PROJECT'S OWN.",
+      "design": "BUILT WITH CHATGPT, as the other Produce Wheat, Build Shrine and Mission stems were. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample is meant to trace to the one upload in `sources`, and the trace was run and landed; see `modifications`.",
+      "generatedContent": "none",
+      "source": "produce_wheat_nearby_raven_stem_v01_35s.wav. The stem exists only on the project owner's disk; the thing anyone can fetch again is the upload named in `sources`, and in this case the source file is also on disk and was probed directly. THE COVERING MESSAGE NAMED THE STEM'S OWN FILENAME IN THE SOURCE SLOT, a copy-paste slip; the URL was right and the real source file was in the download folder under the name below. Recorded because a record that quietly repaired a stated fact would be hiding the one thing a reader might want to re-check.",
+      "sources": [
+        {
+          "role": "the whole bed -- nine runs from two placements, -25.8000 and -43.3900 s",
+          "title": "Raven_Caw",
+          "uploader": "KiddoFish86",
+          "url": "https://freesound.org/people/KiddoFish86/sounds/274439/",
+          "licence": "cc0",
+          "originalFilename": "274439__kiddofish86__raven_caw.wav",
+          "measured": "91.461 s, 48 kHz, 24-bit MONO. Already at this tree's rate and mono, so no resampling and no channel to choose. Uploaded 18 May 2015. THE FIRST DRAFT CALLED THIS THE LONGEST SOURCE IN THE TREE; it is not close. Six sources are longer, from night_city's 286.594 s down through two winds, the Mission dogs and Yuval's wool at 145.262. Computed, not recalled -- for the fourth time in two days.",
+          "note": "A raven calling close by. The tree's SECOND corvid source after the pair behind build_roads_actionB/crows_ravens, and the first in Produce Wheat -- where it answers the rooster: one bird marks the hour and the other is simply there, over the field, while the work goes on."
+        }
+      ],
+      "originalFilename": "produce_wheat_nearby_raven_stem_v01_35s.wav",
+      "originalPath": "freesound.org/people/KiddoFish86/sounds/274439",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Produce Wheat nearby raven -- a bird over the field, close",
+      "role": "the eighth track under produce actionA, which is Produce Wheat, with wind, field_rustle, distant_rooster, sheaf_handling, stalk_brushing, straw_workers and sickle_cutting. It loops. The second bird in the folder and the near one: distant_rooster is across the field and this is overhead.",
+      "modifications": "NINE OF NINE RUNS MATCH AT TWO CONSTANT PLACEMENTS, -25.8000 and -43.3900 s, with r from 0.8595 to 0.9863 and every residual agreeing with its predicted sqrt(1-r^2) to a tenth of a point -- so each run is one continuous copy at one gain, and the gains are tightly grouped at -26.8 to -28.6 dB. Nine runs resolve to nine source regions totalling 1.571 s, 1.7% of a 91 s recording. AND THE CONTROLS SPLIT THE RUNS IN TWO, WHICH IS THE FINDING HERE. Five bird recordings were run as controls -- the two corvids behind build_roads_actionB/crows_ravens, two unused raven and crow files sitting in the same download folder, and the rooster that feeds this very action. ON THE FOUR RUNS OF 150 ms AND OVER the stated source scores at worst 0.9801 and the best control reaches 0.2671: a separation of 3.67x. ON THE FIVE RUNS UNDER 150 ms the stated source scores at worst 0.8595 and the best control reaches 0.7890: a separation of 1.09x, which is no separation at all. A SHORT BROADBAND TRANSIENT CORRELATES WITH ANY OTHER SHORT BROADBAND TRANSIENT, and on an 88 ms window Joseph SARDIN's rooster -- a different bird, a different continent, a different recording -- reached 0.7890 against this raven's 0.9511. The conclusion is unaffected, because the four substantial runs carry it and they are unambiguous, but the five short ones are not independent evidence and this record does not count them as such. sfx_lab/provenance.py now marks any run under 150 ms as carrying no control power, with this bed as the measurement behind the threshold. IT DOES NOT SHARE MATERIAL WITH THE TREE'S OTHER CORVID BED: against build_roads_actionB/crows_ravens the best any run reaches is 0.5527, and against its own folder-mate distant_rooster 0.7879 -- both on the short runs, and both therefore subject to the same caveat. Different uploads, different birds. THE CONTAINER: Vorbis q6 at the stem's own 48 kHz stereo, no trim, no fade and no level change; the stem peaks at -21.5 dBFS so there was no headroom problem to solve.",
+      "measured": "35000 ms, peak -21.5 dB, integrated -51.58 LUFS, true peak -21.29 dBTP, stereo 48 kHz, L/R correlation +0.991220. IT IS THE QUIETEST BED IN PRODUCE WHEAT BY LOUDNESS at -51.58 LUFS, 2.12 dB under stalk_brushing. In the tree it is the eighth quietest by integrated loudness, behind quarry_footsteps at -59.90 LUFS, ox_cart_stones -55.15, quarry_hoist -54.88, bottle_knock -54.10, moth -53.95, candle -53.73 and far_work -52.01. It was fifth when filed, three hours before Produce Stone moved it. The first draft put both claims in one sentence and overstated the second, and the rank guard refused it -- correctly, because with two rank words in one sentence the guard reads the ordinal belonging to the first and applies it to both. A SECOND DRAFT WAS REFUSED TOO, for quoting the bad claim back while explaining it: the guard cannot tell a sentence that MAKES a claim from one that REPORTS having made it, so a record discussing its own correction has to paraphrase rather than quote. That is a real limit of the guard and it is cheaper to write around than to fix. 91.9% of the file is exact digital silence in two runs; material runs 19.041 to 34.196 s, so the first nineteen seconds are empty and the bird arrives once, late. Gated it reads -38.21 LUFS, 13.36 dB off the ungated figure on 16 of 347 blocks, against 10*log10(347/16) = 13.36 -- THE BLOCK-COUNT IDENTITY AGREEING TO 0.000 dB at the printed precision, which several beds here manage and none beats. THE WRAP IS SAFE OUTRIGHT at 1.61x: one interior pause of 12.309 s against a wrap gap of 19.845. Both ends are true digital silence and the butt-join step is 0.000000. FOLDING TO MONO COSTS 4.16 dB, THE SECOND LARGEST IN THE TREE after build_roads_actionA/ox_breathing at 4.55 and ahead of the two gallows beds at 3.58 and 3.57 -- measured across all stereo beds rather than read out of the records, which is how that ranking has to be made here. IT IS THE FOURTH EXACT MONO-PANNED BED AND THE MOST EXTREME BY A LONG WAY. In the WAV stem the right channel is the left times 4.165300, residual 0.00%, r = 1.000000: one mono signal panned 12.39 dB RIGHT, against fabric's 2.77 right, distant_rooster's 2.77 left and sheaf_handling's 1.65 right. AND IT SHARPENS THE PLACEMENT-COUNT RULE RATHER THAN BREAKING IT. That rule, written on straw_workers, said a bed with several gestures cannot fit an exact scalar. This bed has NINE runs at TWO placements and fits one exactly -- because all nine sit at a single pan. The rule is about distinct PANS, not about runs or placements, and this is the case that separates the three. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT.",
+      "gainDb": 0.0,
+      "sha256": "da841b0a12a34c08d4c2eb4e677a020143fd94638f83efcacddf13df2fff0acf"
+    },
+    "sfx/ambient/produce_actionB/quarry_wind_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "mario1298",
+      "licence": "cc0",
+      "licenceNote": "Creative Commons 0 on freesound: copy, modify, distribute and perform, commercially, without permission and without attribution. Checked at source before anything was measured, which is the door's standing rule. ALL SEVENTEEN SOURCES BEHIND THIS FOLDER WERE CHECKED IN ONE PASS BEFORE A SINGLE STEM WAS ENCODED -- fifteen freesound uploads new to this tree, the two lamp uploads it already carried, and the duty action's own cue. Every one cleared. Every licence in this tree still reads attributionRequired: false. THE CUT IS THIS PROJECT'S OWN.",
+      "design": "BUILT WITH CHATGPT, as the Produce Wheat, Build Shrine and Mission stems were. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample is meant to trace to the upload(s) in `sources`, and the trace was run; see `modifications`.",
+      "generatedContent": "none",
+      "source": "produce_stone_01_quarry_ambience_stem_v01_35s.wav. Supplied in Produce_Stone_Final_Tracks_v14 with a manifest naming every source. The stem exists only on the project owner's disk; the things anyone can fetch again are the uploads in `sources`, and every source file was on disk and probed directly.",
+      "sources": [
+        {
+          "role": "the whole bed",
+          "title": "a gentle breeze, wind 3",
+          "uploader": "mario1298",
+          "url": "https://freesound.org/people/mario1298/sounds/181252/",
+          "licence": "cc0",
+          "originalFilename": "181252__mario1298__a-gentle-breeze-wind-3.wav",
+          "measured": "124.799 s, 48 kHz. Already at this tree's rate.",
+          "note": "FIRST mario1298 UPLOAD IN THIS TREE. The fourth distinct wind recording here, after Ivo Vicic's winter grass, the Sonniss open space and Sandy Ogilvie's Holehead Hill."
+        }
+      ],
+      "originalFilename": "produce_stone_01_quarry_ambience_stem_v01_35s.wav",
+      "originalPath": "freesound.org/people/mario1298/sounds/181252/",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Produce Stone quarry wind -- open weather over the workings",
+      "role": "The continuous one of thirteen under produce actionB, which is Produce Stone. It loops. THIS IS THE BED THAT MAKES THE ACTION AUDIBLE THE INSTANT IT IS SELECTED: 0.0% silence, sounding from sample zero. The folder's twelve other tracks are all intermittent, so if this one were ever removed or trimmed to nothing the action would select into silence.",
+      "modifications": "SOURCE CONFIRMED. The bed is continuous, so it was probed in six two-second windows across its length rather than by run: r up to 0.9123, against a control of cheatinsloth's heavy stone drag at 0.1399 -- a separation of 6.52x. IT IS EXACT DUAL MONO AND THAT IS WORTH KNOWING BEFORE ANY LEVELLING. L/R correlation is +1.000000 and the two channels are array-equal: this is a mono recording in a stereo container, not a stereo field. Folding it to mono costs nothing, panning it does nothing, and it will not widen the action however loud it is set. Only the straw bush behind produce_actionA/stalk_brushing has been fake stereo in this tree before, and that was a SOURCE; this is the first shipped BED that is. THE CONTAINER: Vorbis q6 at the stem's own 48 kHz stereo, no trim, no fade, no level change.",
+      "measured": "35000 ms, peak -12.2 dB, integrated -33.50 LUFS, true peak -12.23 dBTP, stereo 48 kHz, L/R correlation +1.000000. 0.0% of the file is exact digital silence in 1 run. material runs 0.000 to 35.000 s and the wrap gap is 0.000 s. Gated it reads -33.49 LUFS, 0.01 dB off the ungated figure on 347 of 347 blocks, against 10*log10(347/347) = 0.00 -- the block-count identity. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT.",
+      "gainDb": 0.0,
+      "sha256": "705183d9c428a39d71f75badabe64a87f57e3b0a077d26bdee7545de3ea05346"
+    },
+    "sfx/ambient/produce_actionB/oil_lamp_flame_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "Vrymaa",
+      "licence": "cc0",
+      "licenceNote": "Creative Commons 0 on freesound: copy, modify, distribute and perform, commercially, without permission and without attribution. Checked at source before anything was measured, which is the door's standing rule. ALL SEVENTEEN SOURCES BEHIND THIS FOLDER WERE CHECKED IN ONE PASS BEFORE A SINGLE STEM WAS ENCODED -- fifteen freesound uploads new to this tree, the two lamp uploads it already carried, and the duty action's own cue. Every one cleared. Every licence in this tree still reads attributionRequired: false. THE CUT IS THIS PROJECT'S OWN.",
+      "design": "BUILT WITH CHATGPT, as the Produce Wheat, Build Shrine and Mission stems were. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample is meant to trace to the upload(s) in `sources`, and the trace was run; see `modifications`.",
+      "generatedContent": "none",
+      "source": "produce_stone_10_oil_lamp_ambient_strong_shake_v03_35s.wav. Supplied in Produce_Stone_Final_Tracks_v14 with a manifest naming every source. The stem exists only on the project owner's disk; the things anyone can fetch again are the uploads in `sources`, and every source file was on disk and probed directly.",
+      "sources": [
+        {
+          "role": "the whole bed",
+          "title": "Candle & oil lamps - Lighting",
+          "uploader": "Vrymaa",
+          "url": "https://freesound.org/people/Vrymaa/sounds/734665/",
+          "licence": "cc0",
+          "originalFilename": "734665__vrymaa__candle-oil-lamps-lighting.wav",
+          "measured": "55.356 s, 44.1 kHz -- RESAMPLED to this tree's 48 kHz before correlating, because a probe at mismatched rates measures nothing.",
+          "note": "THIRD BED IN THIS TREE FROM THIS UPLOAD and the second one still present: it fed ordination_actionB/oil_lamp_sfx_v01.ogg, which was deleted, and feeds build_roads_actionA/oil_lamp_flame_sfx_v01.ogg, which is live. Those two were the pair that produced the check-the-cut rule, scoring 0.575 against each other -- the loosest same-upload separation in the tree and the standard every later pair is measured against."
+        }
+      ],
+      "originalFilename": "produce_stone_10_oil_lamp_ambient_strong_shake_v03_35s.wav",
+      "originalPath": "freesound.org/people/Vrymaa/sounds/734665/",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Produce Stone oil lamp -- the flame, shaken by the work",
+      "role": "The second continuous track of thirteen under produce actionB, which is Produce Stone. It loops. The lamp at the cutting face. Its flutter deepens when the foreground strikes land, so it is tied to power_strikes by design even though the two are separate tracks.",
+      "modifications": "SOURCE CONFIRMED at r up to 0.9765 across six two-second windows, six of six, against a control of the quarry breeze at 0.1046 -- 9.34x. THE CUT WAS NOT CHECKED AGAINST THE BUILD ROAD LAMP, and that is a gap rather than a conclusion: one upload now feeds two present beds in two duty actions, which is exactly the arrangement the lamp pair's own 0.575 was a warning about. It is recorded here as work not done. THE CONTAINER: Vorbis q6 at the stem's own 48 kHz stereo, no trim, no fade, no level change.",
+      "measured": "35000 ms, peak -21.4 dB, integrated -40.49 LUFS, true peak -21.35 dBTP, stereo 48 kHz, L/R correlation +0.975877. 0.0% of the file is exact digital silence in 1 run. material runs 0.000 to 35.000 s and the wrap gap is 0.000 s. Gated it reads -40.30 LUFS, 0.19 dB off the ungated figure on 333 of 347 blocks, against 10*log10(347/333) = 0.18 -- the block-count identity. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT.",
+      "gainDb": 0.0,
+      "sha256": "ac60fda2ebfb1cc709ee73cc74db0d3745d3a1f37f0af249abacd11f1a5ff56a"
+    },
+    "sfx/ambient/produce_actionB/oil_lamp_rattle_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "ImAFoley",
+      "licence": "cc0",
+      "licenceNote": "Creative Commons 0 on freesound: copy, modify, distribute and perform, commercially, without permission and without attribution. Checked at source before anything was measured, which is the door's standing rule. ALL SEVENTEEN SOURCES BEHIND THIS FOLDER WERE CHECKED IN ONE PASS BEFORE A SINGLE STEM WAS ENCODED -- fifteen freesound uploads new to this tree, the two lamp uploads it already carried, and the duty action's own cue. Every one cleared. Every licence in this tree still reads attributionRequired: false. THE CUT IS THIS PROJECT'S OWN.",
+      "design": "BUILT WITH CHATGPT, as the Produce Wheat, Build Shrine and Mission stems were. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample is meant to trace to the upload(s) in `sources`, and the trace was run; see `modifications`.",
+      "generatedContent": "none",
+      "source": "produce_stone_11_oil_lamp_rattle_stem_v01_35s.wav. Supplied in Produce_Stone_Final_Tracks_v14 with a manifest naming every source. The stem exists only on the project owner's disk; the things anyone can fetch again are the uploads in `sources`, and every source file was on disk and probed directly.",
+      "sources": [
+        {
+          "role": "the whole bed",
+          "title": "Oil Lantern Rattle",
+          "uploader": "ImAFoley",
+          "url": "https://freesound.org/people/ImAFoley/sounds/516739/",
+          "licence": "cc0",
+          "originalFilename": "516739__imafoley__oil-lantern-rattle.wav",
+          "measured": "17.769 s, 48 kHz. Already at this tree's rate.",
+          "note": "SECOND BED IN THIS TREE FROM THIS UPLOAD, after build_roads_actionA/oil_lamp_rattle. Build Road and Produce Stone now both carry a flame bed and a rattle bed from the same two uploads -- the two actions' lamps are the same lamp, differently cut."
+        }
+      ],
+      "originalFilename": "produce_stone_11_oil_lamp_rattle_stem_v01_35s.wav",
+      "originalPath": "freesound.org/people/ImAFoley/sounds/516739/",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Produce Stone oil lamp rattle -- the lamp's metal answering the blows",
+      "role": "The third track of thirteen under produce actionB, which is Produce Stone. It loops. Mechanical rattles from the same lamp, stronger after the heavy strikes and quieter between them.",
+      "modifications": "SOURCE CONFIRMED at r up to 0.9021, ten of ten probed windows, against controls of the lamp flame source at 0.1266 and dslrguide's stone scrape at 0.0583 -- 7.13x. AS WITH THE FLAME, THE CUT WAS NOT COMPARED WITH THE BUILD ROAD RATTLE. THE CONTAINER: Vorbis q6 at the stem's own 48 kHz stereo, no trim, no fade, no level change.",
+      "measured": "35000 ms, peak -16.8 dB, integrated -46.93 LUFS, true peak -16.60 dBTP, stereo 48 kHz, L/R correlation +0.988489. 81.3% of the file is exact digital silence in 10 runs. material runs 2.017 to 32.833 s and the wrap gap is 4.184 s. Gated it reads -39.51 LUFS, 7.42 dB off the ungated figure on 63 of 347 blocks, against 10*log10(347/63) = 7.41 -- the block-count identity. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT.",
+      "gainDb": 0.0,
+      "sha256": "7a49a2aa4784377b18eafbdc864f4bb988c9103ae31de0aa41fe569912ad49a9"
+    },
+    "sfx/ambient/produce_actionB/moth_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "hyperbloodhell",
+      "licence": "cc0",
+      "licenceNote": "Creative Commons 0 on freesound: copy, modify, distribute and perform, commercially, without permission and without attribution. Checked at source before anything was measured, which is the door's standing rule. ALL SEVENTEEN SOURCES BEHIND THIS FOLDER WERE CHECKED IN ONE PASS BEFORE A SINGLE STEM WAS ENCODED -- fifteen freesound uploads new to this tree, the two lamp uploads it already carried, and the duty action's own cue. Every one cleared. Every licence in this tree still reads attributionRequired: false. THE CUT IS THIS PROJECT'S OWN.",
+      "design": "BUILT WITH CHATGPT, as the Produce Wheat, Build Shrine and Mission stems were. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample is meant to trace to the upload(s) in `sources`, and the trace was run; see `modifications`.",
+      "generatedContent": "none",
+      "source": "produce_stone_13_moth_near_oil_lamp_stem_v01_35s.wav. Supplied in Produce_Stone_Final_Tracks_v14 with a manifest naming every source. The stem exists only on the project owner's disk; the things anyone can fetch again are the uploads in `sources`, and every source file was on disk and probed directly.",
+      "sources": [
+        {
+          "role": "the whole bed -- two visits",
+          "title": "moth1",
+          "uploader": "hyperbloodhell",
+          "url": "https://freesound.org/people/hyperbloodhell/sounds/693457/",
+          "licence": "cc0",
+          "originalFilename": "693457__hyperbloodhell__moth1.wav",
+          "measured": "31.046 s, 48 kHz. Already at this tree's rate.",
+          "note": "FIRST hyperbloodhell UPLOAD IN THIS TREE, and the first insect in it."
+        }
+      ],
+      "originalFilename": "produce_stone_13_moth_near_oil_lamp_stem_v01_35s.wav",
+      "originalPath": "freesound.org/people/hyperbloodhell/sounds/693457/",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Produce Stone moth -- two visits to the lamp",
+      "role": "The fourth track of thirteen under produce actionB, which is Produce Stone. It loops. Two moth passes at the left-foreground lamp.",
+      "modifications": "SOURCE CONFIRMED at r up to 0.8271, two of two, against controls of the owl at 0.0459 and the lamp rattle at 0.0436 -- 18.03x, the widest separation in this folder after the hoist. THE CONTAINER: Vorbis q6 at the stem's own 48 kHz stereo, no trim, no fade, no level change.",
+      "measured": "35000 ms, peak -21.3 dB, integrated -53.95 LUFS, true peak -20.72 dBTP, stereo 48 kHz, L/R correlation +0.977433. 86.1% of the file is exact digital silence in 2 runs. material runs 11.425 to 31.375 s and the wrap gap is 15.051 s. Gated it reads -45.59 LUFS, 8.36 dB off the ungated figure on 51 of 347 blocks, against 10*log10(347/51) = 8.33 -- the block-count identity. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT.",
+      "gainDb": 0.0,
+      "sha256": "421d314c76a02c88e2fda5eca5703c7ad146e37138e69ca4f7b33e2042125bea"
+    },
+    "sfx/ambient/produce_actionB/distant_owl_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "cinetony",
+      "licence": "cc0",
+      "licenceNote": "Creative Commons 0 on freesound: copy, modify, distribute and perform, commercially, without permission and without attribution. Checked at source before anything was measured, which is the door's standing rule. ALL SEVENTEEN SOURCES BEHIND THIS FOLDER WERE CHECKED IN ONE PASS BEFORE A SINGLE STEM WAS ENCODED -- fifteen freesound uploads new to this tree, the two lamp uploads it already carried, and the duty action's own cue. Every one cleared. Every licence in this tree still reads attributionRequired: false. THE CUT IS THIS PROJECT'S OWN.",
+      "design": "BUILT WITH CHATGPT, as the Produce Wheat, Build Shrine and Mission stems were. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample is meant to trace to the upload(s) in `sources`, and the trace was run; see `modifications`.",
+      "generatedContent": "none",
+      "source": "produce_stone_14_distant_tawny_owl_stem_v01_35s.wav. Supplied in Produce_Stone_Final_Tracks_v14 with a manifest naming every source. The stem exists only on the project owner's disk; the things anyone can fetch again are the uploads in `sources`, and every source file was on disk and probed directly.",
+      "sources": [
+        {
+          "role": "stated as the whole bed; NOT CORROBORATED",
+          "title": "Tawny owl call",
+          "uploader": "cinetony",
+          "url": "https://freesound.org/people/cinetony/sounds/558214/",
+          "licence": "cc0",
+          "originalFilename": "558214__cinetony__tawny-owl-call.wav",
+          "measured": "5.000 s, 44.1 kHz, resampled to 48 kHz before correlating. THE SHORTEST SOURCE FEEDING ANY BED IN THIS FOLDER, and shorter than the bed's own sounding run.",
+          "provenanceConfidence": "stated-not-corroborated",
+          "note": "FIRST cinetony UPLOAD IN THIS TREE."
+        }
+      ],
+      "originalFilename": "produce_stone_14_distant_tawny_owl_stem_v01_35s.wav",
+      "originalPath": "freesound.org/people/cinetony/sounds/558214/",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Produce Stone distant owl -- one dusk call across the quarry",
+      "role": "The fifth track of thirteen under produce actionB, which is Produce Stone. It loops. A single owl call at 20.4 s. THE ONLY TRACK IN THIS FOLDER WHOSE SOURCE THE MEASUREMENT DOES NOT SUPPORT -- see `modifications` before relying on its attribution.",
+      "modifications": "THE TRACE FAILED AND THE RECORD SAYS SO RATHER THAN DRESSING IT UP. The bed's single sounding run is 20.364-25.420 s, which is 5.056 s -- 1.1% LONGER THAN THE WHOLE SOURCE. Probed against the resampled source it reaches r = 0.0337 where the moth control reaches 0.0308: no separation at all. A SPEED SEARCH WAS RUN ON THE SUSPICION THAT THE CALL HAD BEEN STRETCHED, resampling the source across factors from 0.90 to 1.10; every factor scored at or below 0.0408, with the best at 1.10 and no peak near the 1.011 the duration mismatch implies. So it is not a simple stretch either. THREE EXPLANATIONS REMAIN AND THE MEASUREMENT CANNOT CHOOSE BETWEEN THEM: the call was processed hard enough for distance -- heavy low-pass plus reverb -- that nothing correlates, which would be far beyond anything else in this tree (the tinkering brick, filtered AND pulled down 24 dB, still managed 0.585); the stem came from a different recording; or a different take of the same upload. The licence is not in question -- the upload is CC0 and so is everything else here -- so this is a provenance gap, not a rights one. THE CONTAINER: Vorbis q6 at the stem's own 48 kHz stereo, no trim, no fade, no level change.",
+      "measured": "35000 ms, peak -23.9 dB, integrated -51.21 LUFS, true peak -23.93 dBTP, stereo 48 kHz, L/R correlation +0.934935. 85.6% of the file is exact digital silence in 1 run. material runs 20.364 to 25.420 s and the wrap gap is 29.944 s. Gated it reads -36.21 LUFS, 15.00 dB off the ungated figure on 11 of 347 blocks, against 10*log10(347/11) = 14.99 -- the block-count identity. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT.",
+      "gainDb": 0.0,
+      "sha256": "e9944a7de2e448462775373e7fd85d340c8b2915e9f7d71e15317b2ab7f2e070"
+    },
+    "sfx/ambient/produce_actionB/power_strikes_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "petebuchwald; craigsmith; discofield",
+      "licence": "cc0",
+      "licenceNote": "Creative Commons 0 on freesound: copy, modify, distribute and perform, commercially, without permission and without attribution. Checked at source before anything was measured, which is the door's standing rule. ALL SEVENTEEN SOURCES BEHIND THIS FOLDER WERE CHECKED IN ONE PASS BEFORE A SINGLE STEM WAS ENCODED -- fifteen freesound uploads new to this tree, the two lamp uploads it already carried, and the duty action's own cue. Every one cleared. Every licence in this tree still reads attributionRequired: false. THE CUT IS THIS PROJECT'S OWN.",
+      "design": "BUILT WITH CHATGPT, as the Produce Wheat, Build Shrine and Mission stems were. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample is meant to trace to the upload(s) in `sources`, and the trace was run; see `modifications`.",
+      "generatedContent": "none",
+      "source": "produce_stone_02_foreground_power_strikes_stem_v04_35s.wav. Supplied in Produce_Stone_Final_Tracks_v14 with a manifest naming every source. The stem exists only on the project owner's disk; the things anyone can fetch again are the uploads in `sources`, and every source file was on disk and probed directly.",
+      "sources": [
+        {
+          "role": "the hammer body of each blow",
+          "title": "Sledgehammer Hitting Spike",
+          "uploader": "petebuchwald",
+          "url": "https://freesound.org/people/petebuchwald/sounds/351312/",
+          "licence": "cc0",
+          "originalFilename": "351312__petebuchwald__sledgehammer-hitting-spike.wav",
+          "measured": "13.500 s, 44.1 kHz, resampled before correlating."
+        },
+        {
+          "role": "the chisel contact",
+          "title": "S10-03 Chiseling; Striking chisel with wooden hammer",
+          "uploader": "craigsmith",
+          "url": "https://freesound.org/people/craigsmith/sounds/675978/",
+          "licence": "cc0",
+          "originalFilename": "675978__craigsmith__s10-03-chiseling-striking-chisel-with-wooden-hammer.wav",
+          "measured": "26.598 s, 48 kHz.",
+          "note": "ALSO FEEDS background_workers IN THIS SAME FOLDER, which is the first time one upload has fed two beds of one duty action here."
+        },
+        {
+          "role": "the stone's response",
+          "title": "Stone crash",
+          "uploader": "discofield",
+          "url": "https://freesound.org/people/discofield/sounds/711657/",
+          "licence": "cc0",
+          "originalFilename": "711657__discofield__stone-crash.wav",
+          "measured": "2.500 s, 44.1 kHz, resampled before correlating."
+        }
+      ],
+      "originalFilename": "produce_stone_02_foreground_power_strikes_stem_v04_35s.wav",
+      "originalPath": "freesound.org/people/petebuchwald/sounds/351312/; freesound.org/people/craigsmith/sounds/675978/; freesound.org/people/discofield/sounds/711657/",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Produce Stone power strikes -- the stonecutter's heavy blows",
+      "role": "The sixth track and the loudest thing in the folder of thirteen under produce actionB, which is Produce Stone. It loops. Composite heavy blows; the third is the cleaving stroke. At -6.31 dBTP it peaks 4.0 dB above anything else here and will be the first thing to need a trim.",
+      "modifications": "CONFIRMED, BUT THE WEAKEST SEPARATION IN THE FOLDER AND THE REASON IS STRUCTURAL. Two of the three stated sources land independently and on different runs -- the sledgehammer at r 0.6169 on four of seven windows, the chisel at 0.6325 on one -- while the stone crash reaches only 0.2450. The best control, nox_sound's rock impacts, reaches 0.3810, so the margin is 1.66x where this folder's median is better than six. THAT IS WHAT COMPOSITING COSTS A PROBE: every window of this bed contains all three sources layered at once, so no single source can account for more than its share of the window and correlation with any one of them is capped well below what a plain excerpt reaches. The evidence that it is these sources is the pattern across runs rather than the height of any one score. A RECONSTRUCTION WOULD SETTLE IT, as it did for build_roads_actionB/tinkering, and it is not attempted here because no recipe was supplied. THE CONTAINER: Vorbis q6 at the stem's own 48 kHz stereo, no trim, no fade, no level change.",
+      "measured": "35000 ms, peak -6.3 dB, integrated -36.74 LUFS, true peak -6.31 dBTP, stereo 48 kHz, L/R correlation +0.990879. 89.5% of the file is exact digital silence in 7 runs. material runs 1.997 to 32.561 s and the wrap gap is 4.436 s. Gated it reads -26.53 LUFS, 10.21 dB off the ungated figure on 33 of 347 blocks, against 10*log10(347/33) = 10.22 -- the block-count identity. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT.",
+      "gainDb": 0.0,
+      "sha256": "21e9b2082de3881678170a7c49d40951641361976f5c191c42f5576511489475"
+    },
+    "sfx/ambient/produce_actionB/debris_cleave_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "Nox_Sound; Bluezone Corporation",
+      "licence": "cc0",
+      "licenceNote": "Creative Commons 0 on freesound: copy, modify, distribute and perform, commercially, without permission and without attribution. Checked at source before anything was measured, which is the door's standing rule. ALL SEVENTEEN SOURCES BEHIND THIS FOLDER WERE CHECKED IN ONE PASS BEFORE A SINGLE STEM WAS ENCODED -- fifteen freesound uploads new to this tree, the two lamp uploads it already carried, and the duty action's own cue. Every one cleared. Every licence in this tree still reads attributionRequired: false. THE CUT IS THIS PROJECT'S OWN. ONE SOURCE HERE IS NOT A FREESOUND UPLOAD: the duty action's own cue, which carries the sonniss-gameaudiogdc grant -- royalty-free, commercial use permitted, no attribution required. Its entry in `sources` names that licence; this record's top-level key names the grant covering most of the bed.",
+      "design": "BUILT WITH CHATGPT, as the Produce Wheat, Build Shrine and Mission stems were. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample is meant to trace to the upload(s) in `sources`, and the trace was run; see `modifications`.",
+      "generatedContent": "none",
+      "source": "produce_stone_03_foreground_debris_cleave_stem_v04_35s.wav. Supplied in Produce_Stone_Final_Tracks_v14 with a manifest naming every source. The stem exists only on the project owner's disk; the things anyone can fetch again are the uploads in `sources`, and every source file was on disk and probed directly.",
+      "sources": [
+        {
+          "role": "the chips and most of the bed",
+          "title": "Foley_Rocks_Stones_Impacts_Mono",
+          "uploader": "Nox_Sound",
+          "url": "https://freesound.org/people/Nox_Sound/sounds/567701/",
+          "licence": "cc0",
+          "originalFilename": "567701__nox_sound__foley_rocks_stones_impacts_mono.wav",
+          "measured": "34.155 s, 48 kHz."
+        },
+        {
+          "role": "the cleave event",
+          "title": "Produce Stone duty action cue",
+          "uploader": "Bluezone Corporation",
+          "url": "https://sonniss.com/gameaudiogdc",
+          "licence": "sonniss-gameaudiogdc",
+          "originalFilename": "produce_actionB_sfx_v02.ogg",
+          "measured": "1800 ms, 96 kHz -- RESAMPLED to 48 kHz before correlating.",
+          "note": "THIS IS THE GAME'S OWN DUTY ACTION CUE, USED AS A SOURCE FOR ONE OF ITS OWN BEDS. A first in this tree, and the one source here that is not a freesound upload: it is sfx/duty_actions/produce_actionB_sfx_v02.ogg, Bluezone's falling rock debris from the Sonniss GDC 2023 bundle, already filed and levelled. The licence is unaffected -- the Sonniss grant requires no attribution either -- but see `modifications` for what it means for the mix."
+        }
+      ],
+      "originalFilename": "produce_stone_03_foreground_debris_cleave_stem_v04_35s.wav",
+      "originalPath": "freesound.org/people/Nox_Sound/sounds/567701/; sonniss.com/gameaudiogdc",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Produce Stone debris and cleave -- chips after the blows, and the stone splitting",
+      "role": "The seventh track of thirteen under produce actionB, which is Produce Stone. It loops. Small stone chips following the heavy blows, plus the cleave on the third strike.",
+      "modifications": "SOURCE CONFIRMED AND ONE OF THEM IS THE GAME'S OWN CUE. The rock impacts land at r up to 0.9978 on five of six windows, which is the cleanest trace in this folder. The cue itself lands at 0.9889 on one window, confirming the manifest's claim that it was used. THE CUE BEING INSIDE THE BED HAS A CONSEQUENCE NOBODY HAS DECIDED ON YET: when a player confirms Produce Stone, the cue fires over an ambience that already contains it, so the two will reinforce rather than separate. That is the exact masking case the generic-cue discussion turned on, and it is now a measured fact about this action rather than a worry. A TRACE THAT MAY BE A MISSING SOURCE RATHER THAN A FAILED CONTROL: discofield's stone crash, run here as a control because the manifest lists it only under power_strikes, reaches 0.5550 on one window -- over the match threshold. Given this bed carries the cleave and power_strikes carries the cleaving blow, the likeliest reading is that the manifest under-lists this bed's sources rather than that the control failed. Unresolved, and flagged rather than filed either way. THE CONTAINER: Vorbis q6 at the stem's own 48 kHz stereo, no trim, no fade, no level change.",
+      "measured": "35000 ms, peak -10.3 dB, integrated -42.51 LUFS, true peak -10.29 dBTP, stereo 48 kHz, L/R correlation +0.998328. 90.5% of the file is exact digital silence in 7 runs. material runs 2.227 to 32.708 s and the wrap gap is 4.519 s. Gated it reads -29.21 LUFS, 13.30 dB off the ungated figure on 16 of 347 blocks, against 10*log10(347/16) = 13.36 -- the block-count identity. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT.",
+      "gainDb": 0.0,
+      "sha256": "804cd5516c5100b62d90890a16db3b71e33040b5d7087004358c6d2281883a8c"
+    },
+    "sfx/ambient/produce_actionB/chisel_reposition_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "dslrguide",
+      "licence": "cc0",
+      "licenceNote": "Creative Commons 0 on freesound: copy, modify, distribute and perform, commercially, without permission and without attribution. Checked at source before anything was measured, which is the door's standing rule. ALL SEVENTEEN SOURCES BEHIND THIS FOLDER WERE CHECKED IN ONE PASS BEFORE A SINGLE STEM WAS ENCODED -- fifteen freesound uploads new to this tree, the two lamp uploads it already carried, and the duty action's own cue. Every one cleared. Every licence in this tree still reads attributionRequired: false. THE CUT IS THIS PROJECT'S OWN.",
+      "design": "BUILT WITH CHATGPT, as the Produce Wheat, Build Shrine and Mission stems were. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample is meant to trace to the upload(s) in `sources`, and the trace was run; see `modifications`.",
+      "generatedContent": "none",
+      "source": "produce_stone_15_foreground_chisel_repositioning_stem_v01_35s.wav. Supplied in Produce_Stone_Final_Tracks_v14 with a manifest naming every source. The stem exists only on the project owner's disk; the things anyone can fetch again are the uploads in `sources`, and every source file was on disk and probed directly.",
+      "sources": [
+        {
+          "role": "the whole bed -- four gestures",
+          "title": "Scraping Stone",
+          "uploader": "dslrguide",
+          "url": "https://freesound.org/people/dslrguide/sounds/321488/",
+          "licence": "cc0",
+          "originalFilename": "321488__dslrguide__scraping-stone.wav",
+          "measured": "2.520 s, 48 kHz. The second shortest source in this folder.",
+          "note": "FIRST dslrguide UPLOAD IN THIS TREE."
+        }
+      ],
+      "originalFilename": "produce_stone_15_foreground_chisel_repositioning_stem_v01_35s.wav",
+      "originalPath": "freesound.org/people/dslrguide/sounds/321488/",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Produce Stone chisel repositioning -- the tool reset between blows",
+      "role": "The eighth track of thirteen under produce actionB, which is Produce Stone. It loops. Four restrained metal-on-stone resets between the heavy blows.",
+      "modifications": "SOURCE CONFIRMED at r up to 0.7915, four of four, against controls of the two chisel recordings in this same folder -- craigsmith at 0.2949 and artiom_constantinov at 0.1686. CHISEL AGAINST CHISEL, in the same action, separating 2.68x. A 2.5 s source reused four times, so the four gestures are near-copies of each other by construction. THE CONTAINER: Vorbis q6 at the stem's own 48 kHz stereo, no trim, no fade, no level change.",
+      "measured": "35000 ms, peak -22.0 dB, integrated -51.22 LUFS, true peak -21.99 dBTP, stereo 48 kHz, L/R correlation +0.998403. 94.7% of the file is exact digital silence in 4 runs. material runs 6.519 to 27.289 s and the wrap gap is 14.229 s. Gated it reads -39.80 LUFS, 11.43 dB off the ungated figure on 25 of 347 blocks, against 10*log10(347/25) = 11.42 -- the block-count identity. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT.",
+      "gainDb": 0.0,
+      "sha256": "496eff8930e2c405960000b84d97c1860295edd5cfd7e242c0e986423bfa79ba"
+    },
+    "sfx/ambient/produce_actionB/background_workers_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "artiom_constantinov; craigsmith",
+      "licence": "cc0",
+      "licenceNote": "Creative Commons 0 on freesound: copy, modify, distribute and perform, commercially, without permission and without attribution. Checked at source before anything was measured, which is the door's standing rule. ALL SEVENTEEN SOURCES BEHIND THIS FOLDER WERE CHECKED IN ONE PASS BEFORE A SINGLE STEM WAS ENCODED -- fifteen freesound uploads new to this tree, the two lamp uploads it already carried, and the duty action's own cue. Every one cleared. Every licence in this tree still reads attributionRequired: false. THE CUT IS THIS PROJECT'S OWN.",
+      "design": "BUILT WITH CHATGPT, as the Produce Wheat, Build Shrine and Mission stems were. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample is meant to trace to the upload(s) in `sources`, and the trace was run; see `modifications`.",
+      "generatedContent": "none",
+      "source": "produce_stone_background_workers_merged_stem_v03_35s.wav. Supplied in Produce_Stone_Final_Tracks_v14 with a manifest naming every source. The stem exists only on the project owner's disk; the things anyone can fetch again are the uploads in `sources`, and every source file was on disk and probed directly.",
+      "sources": [
+        {
+          "role": "the workers",
+          "title": "chisel in the quarry",
+          "uploader": "artiom_constantinov",
+          "url": "https://freesound.org/people/artiom_constantinov/sounds/841053/",
+          "licence": "cc0",
+          "originalFilename": "841053__artiom_constantinov__chisel-in-the-quarry.wav",
+          "measured": "37.076 s, 48 kHz.",
+          "note": "FIRST artiom_constantinov UPLOAD IN THIS TREE."
+        },
+        {
+          "role": "the workers",
+          "title": "S10-03 Chiseling; Striking chisel with wooden hammer",
+          "uploader": "craigsmith",
+          "url": "https://freesound.org/people/craigsmith/sounds/675978/",
+          "licence": "cc0",
+          "originalFilename": "675978__craigsmith__s10-03-chiseling-striking-chisel-with-wooden-hammer.wav",
+          "measured": "26.598 s, 48 kHz.",
+          "note": "ALSO FEEDS power_strikes IN THIS SAME FOLDER."
+        }
+      ],
+      "originalFilename": "produce_stone_background_workers_merged_stem_v03_35s.wav",
+      "originalPath": "freesound.org/people/artiom_constantinov/sounds/841053/; freesound.org/people/craigsmith/sounds/675978/",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Produce Stone background workers -- five chisels at five distances",
+      "role": "The ninth track of thirteen under produce actionB, which is Produce Stone. It loops. Five background chisel workers, nearest to farthest, as ONE track.",
+      "modifications": "THIS BED IS A MERGE OF FIVE SUPPLIED STEMS AND THAT WAS A DELIBERATE CHOICE, TAKEN BEFORE ANY LEVELLING. The package supplied workers A to E as separate 35 s stems whose peaks form an exact 1.5 dB ladder -- -19.0, -20.5, -22.0, -23.5, -25.0 -- so their relative balance was already authored rather than deferred. Merging freezes a decision that was already made and saves four records, four trims and four decodes; what it gives up is re-spacing a ladder nobody intends to re-space. THE MERGE WAS VERIFIED BOTH WAYS: the merged file equals the arithmetic sum of its five parts at -240 dBFS, and the thirteen-track set still reproduces the package's own reference mix at -126.4 dBFS, the identical figure the unmerged seventeen gave. The five stems remain in the project owner's package folder, so the merge is reversible. SOURCE CONFIRMED at r up to 0.9366 against artiom_constantinov's quarry chisel, with controls of the sledgehammer and the stone scrape at 0.1914 -- 4.89x. The merged bed sums to -18.36 dBTP, only 0.9 dB above worker A alone, because the five rarely strike together. THE CONTAINER: Vorbis q6 at 48 kHz stereo from the merged 24-bit stem, no trim, no fade, no level change.",
+      "measured": "35000 ms, peak -18.4 dB, integrated -41.57 LUFS, true peak -18.36 dBTP, stereo 48 kHz, L/R correlation +0.832804. 15.3% of the file is exact digital silence in 29 runs. material runs 0.524 to 34.799 s and the wrap gap is 0.725 s. Gated it reads -40.96 LUFS, 0.62 dB off the ungated figure on 303 of 347 blocks, against 10*log10(347/303) = 0.59 -- the block-count identity. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT.",
+      "gainDb": 0.0,
+      "sha256": "15ae53a4ed37879e3d485162fac9e094d270567897bcf13d1b78bf9fc139868a"
+    },
+    "sfx/ambient/produce_actionB/quarry_footsteps_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "Nox_Sound",
+      "licence": "cc0",
+      "licenceNote": "Creative Commons 0 on freesound: copy, modify, distribute and perform, commercially, without permission and without attribution. Checked at source before anything was measured, which is the door's standing rule. ALL SEVENTEEN SOURCES BEHIND THIS FOLDER WERE CHECKED IN ONE PASS BEFORE A SINGLE STEM WAS ENCODED -- fifteen freesound uploads new to this tree, the two lamp uploads it already carried, and the duty action's own cue. Every one cleared. Every licence in this tree still reads attributionRequired: false. THE CUT IS THIS PROJECT'S OWN.",
+      "design": "BUILT WITH CHATGPT, as the Produce Wheat, Build Shrine and Mission stems were. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample is meant to trace to the upload(s) in `sources`, and the trace was run; see `modifications`.",
+      "generatedContent": "none",
+      "source": "produce_stone_09_background_quarry_footsteps_stem_v01_35s.wav. Supplied in Produce_Stone_Final_Tracks_v14 with a manifest naming every source. The stem exists only on the project owner's disk; the things anyone can fetch again are the uploads in `sources`, and every source file was on disk and probed directly.",
+      "sources": [
+        {
+          "role": "the whole bed",
+          "title": "Footsteps_Boots_Gritty_Ground_(Gravel)",
+          "uploader": "Nox_Sound",
+          "url": "https://freesound.org/people/Nox_Sound/sounds/530589/",
+          "licence": "cc0",
+          "originalFilename": "530589__nox_sound__footsteps_boots_gritty_ground_gravel.wav",
+          "measured": "11.433 s, 48 kHz.",
+          "note": "SECOND Nox_Sound UPLOAD IN THIS FOLDER, after the rock impacts behind debris_cleave."
+        }
+      ],
+      "originalFilename": "produce_stone_09_background_quarry_footsteps_stem_v01_35s.wav",
+      "originalPath": "freesound.org/people/Nox_Sound/sounds/530589/",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Produce Stone quarry footsteps -- traffic crossing the workings",
+      "role": "The tenth track of thirteen under produce actionB, which is Produce Stone. It loops. Foot traffic through the quarry, deliberately NOT tied to the chisel workers or to the sleigh crew.",
+      "modifications": "SOURCE CONFIRMED at r up to 0.9287, twelve of twelve. THE CONTROL IS THE OTHER FOOTSTEP RECORDING IN THIS SAME FOLDER, kyles' heavy gravel boots behind sleigh_crew_footsteps, and it reaches 0.4312 -- a separation of only 2.15x, the second narrowest here. Footsteps on gravel against footsteps on gravel is about the hardest control this tree can arrange, and the pair is reported rather than rounded up: both beds trace cleanly to their own source and neither reaches the other's, but the margin is thin and would not survive much more processing. THE CONTAINER: Vorbis q6 at the stem's own 48 kHz stereo, no trim, no fade, no level change.",
+      "measured": "35000 ms, peak -25.1 dB, integrated -59.90 LUFS, true peak -25.07 dBTP, stereo 48 kHz, L/R correlation +0.888457. 75.5% of the file is exact digital silence in 12 runs. material runs 2.764 to 33.796 s and the wrap gap is 3.968 s. Gated it reads -52.65 LUFS, 7.26 dB off the ungated figure on 65 of 347 blocks, against 10*log10(347/65) = 7.27 -- the block-count identity. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT.",
+      "gainDb": 0.0,
+      "sha256": "f4cf4ad966325c8af0ce92b24e9117d99c0cccbd4bd1b50258ca715d1ae4f3fd"
+    },
+    "sfx/ambient/produce_actionB/stone_sleigh_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "group39; caoimhe_s1; cheatinsloth",
+      "licence": "cc0",
+      "licenceNote": "Creative Commons 0 on freesound: copy, modify, distribute and perform, commercially, without permission and without attribution. Checked at source before anything was measured, which is the door's standing rule. ALL SEVENTEEN SOURCES BEHIND THIS FOLDER WERE CHECKED IN ONE PASS BEFORE A SINGLE STEM WAS ENCODED -- fifteen freesound uploads new to this tree, the two lamp uploads it already carried, and the duty action's own cue. Every one cleared. Every licence in this tree still reads attributionRequired: false. THE CUT IS THIS PROJECT'S OWN.",
+      "design": "BUILT WITH CHATGPT, as the Produce Wheat, Build Shrine and Mission stems were. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample is meant to trace to the upload(s) in `sources`, and the trace was run; see `modifications`.",
+      "generatedContent": "none",
+      "source": "produce_stone_06_heavy_stone_sleigh_movement_stem_v03_35s.wav. Supplied in Produce_Stone_Final_Tracks_v14 with a manifest naming every source. The stem exists only on the project owner's disk; the things anyone can fetch again are the uploads in `sources`, and every source file was on disk and probed directly.",
+      "sources": [
+        {
+          "role": "the skids",
+          "title": "Sfx dragging table_Int_ DraggingWood Table on Concrete Floor",
+          "uploader": "group39",
+          "url": "https://freesound.org/people/group39/sounds/708577/",
+          "licence": "cc0",
+          "originalFilename": "708577__group39__sfx-dragging-table_int_-draggingwood-table-on-concrete-floor.wav",
+          "measured": "6.365 s, 48 kHz."
+        },
+        {
+          "role": "stated as part of the drag; THE WEAKEST OF THE THREE",
+          "title": "dragging",
+          "uploader": "caoimhe_s1",
+          "url": "https://freesound.org/people/caoimhe_s1/sounds/268909/",
+          "licence": "cc0",
+          "originalFilename": "268909__caoimhe_s1__dragging.wav",
+          "measured": "11.666 s, 48 kHz.",
+          "provenanceConfidence": "stated-not-corroborated",
+          "note": "Reaches only r 0.3743 and none of five runs clears the threshold. It may be buried under the other two, or it may not be in the bed; the measurement cannot tell, and the other two carry the attribution regardless."
+        },
+        {
+          "role": "the slab's weight",
+          "title": "Heavy Stone Scraping, Being Dragged",
+          "uploader": "cheatinsloth",
+          "url": "https://freesound.org/people/cheatinsloth/sounds/738784/",
+          "licence": "cc0",
+          "originalFilename": "738784__cheatinsloth__heavy-stone-scraping-being-dragged.wav",
+          "measured": "27.794 s, 48 kHz."
+        }
+      ],
+      "originalFilename": "produce_stone_06_heavy_stone_sleigh_movement_stem_v03_35s.wav",
+      "originalPath": "freesound.org/people/group39/sounds/708577/; freesound.org/people/caoimhe_s1/sounds/268909/; freesound.org/people/cheatinsloth/sounds/738784/",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Produce Stone sleigh -- the slab dragged across the quarry floor",
+      "role": "The eleventh track of thirteen under produce actionB, which is Produce Stone. It loops. The haul itself: wooden skids over rough ground with the slab's weight in the gravel.",
+      "modifications": "TWO OF THREE STATED SOURCES CONFIRMED, THE THIRD NOT. group39's skids reach r 0.8697 on five of five runs and cheatinsloth's stone drag 0.5681 on two of five; caoimhe_s1's dragging reaches 0.3743 and clears nothing. Controls are the stone scrape at 0.0555 and the quarry breeze at 0.0752, so the confirmed pair separates 11.56x. The unconfirmed source is marked on its own entry rather than on the record, because the bed's provenance is not in doubt -- only that one ingredient's presence is. THE CONTAINER: Vorbis q6 at the stem's own 48 kHz stereo, no trim, no fade, no level change.",
+      "measured": "35000 ms, peak -15.1 dB, integrated -40.12 LUFS, true peak -15.06 dBTP, stereo 48 kHz, L/R correlation +0.907587. 65.4% of the file is exact digital silence in 5 runs. material runs 14.092 to 29.927 s and the wrap gap is 19.165 s. Gated it reads -35.03 LUFS, 5.09 dB off the ungated figure on 108 of 347 blocks, against 10*log10(347/108) = 5.07 -- the block-count identity. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT.",
+      "gainDb": 0.0,
+      "sha256": "21846bba91835452b000eb7455df11e548c54aca7795a60ceb6d2a207f616feb"
+    },
+    "sfx/ambient/produce_actionB/quarry_hoist_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "mikewest",
+      "licence": "cc0",
+      "licenceNote": "Creative Commons 0 on freesound: copy, modify, distribute and perform, commercially, without permission and without attribution. Checked at source before anything was measured, which is the door's standing rule. ALL SEVENTEEN SOURCES BEHIND THIS FOLDER WERE CHECKED IN ONE PASS BEFORE A SINGLE STEM WAS ENCODED -- fifteen freesound uploads new to this tree, the two lamp uploads it already carried, and the duty action's own cue. Every one cleared. Every licence in this tree still reads attributionRequired: false. THE CUT IS THIS PROJECT'S OWN.",
+      "design": "BUILT WITH CHATGPT, as the Produce Wheat, Build Shrine and Mission stems were. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample is meant to trace to the upload(s) in `sources`, and the trace was run; see `modifications`.",
+      "generatedContent": "none",
+      "source": "produce_stone_07_quarry_hoist_stem_v01_35s.wav. Supplied in Produce_Stone_Final_Tracks_v14 with a manifest naming every source. The stem exists only on the project owner's disk; the things anyone can fetch again are the uploads in `sources`, and every source file was on disk and probed directly.",
+      "sources": [
+        {
+          "role": "the whole bed",
+          "title": "Large rope pulley operated",
+          "uploader": "mikewest",
+          "url": "https://freesound.org/people/mikewest/sounds/394222/",
+          "licence": "cc0",
+          "originalFilename": "394222__mikewest__large-rope-pulley-operated.wav",
+          "measured": "22.560 s, 48 kHz.",
+          "note": "FIRST mikewest UPLOAD IN THIS TREE."
+        }
+      ],
+      "originalFilename": "produce_stone_07_quarry_hoist_stem_v01_35s.wav",
+      "originalPath": "freesound.org/people/mikewest/sounds/394222/",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Produce Stone hoist -- rope and pulley working somewhere behind",
+      "role": "The twelfth track of thirteen under produce actionB, which is Produce Stone. It loops. A distant rope-pulley mechanism, the quietest thing in the folder.",
+      "modifications": "SOURCE CONFIRMED at r up to 0.8824 against controls of the lamp rattle at 0.0300 and the breeze at 0.0261 -- 29.39x, the widest separation in this folder. AND IT BREAKS A RULE THIS TREE HAS STATED SINCE THE CROWS. Every file checked until now has been LESS silent as a shipped .ogg than as a stem, because Vorbis rings across short gaps; the rule is written into bed_facts.py's own docstring. This one inverts it, and not slightly: the stem reads 23.32% exact silence and the shipped file 92.34%, a swing of 69 points in the opposite direction. THE CAUSE IS THAT THE STEM'S 'NON-SILENCE' IS NOT SIGNAL. Its non-zero samples have a median level of -138.5 dBFS -- one least significant bit at 24-bit -- and 90.3% of them sit below -90 dBFS. That is dither, and the encoder correctly rounds it to zero. SO THE RULE NEEDS ITS CONDITION STATED: a shipped file is less silent than its stem when the stem's silence is EXACT; when the stem is dithered below the encoder's resolution the comparison reverses. Three other beds in this folder were checked as a cross-examination and all behave normally, shipping 0.2 to 3.1 points less silent. THE CONTAINER: Vorbis q6 at the stem's own 48 kHz stereo, no trim, no fade, no level change.",
+      "measured": "35000 ms, peak -27.4 dB, integrated -54.88 LUFS, true peak -27.39 dBTP, stereo 48 kHz, L/R correlation +0.996541. 92.3% of the file is exact digital silence in 1 run. material runs 14.028 to 16.711 s and the wrap gap is 32.317 s. Gated it reads -43.76 LUFS, 11.12 dB off the ungated figure on 27 of 347 blocks, against 10*log10(347/27) = 11.09 -- the block-count identity. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT.",
+      "gainDb": 0.0,
+      "sha256": "e26a4659d92480bdc046e1a5912c24c3221bee842f2bcf4e4fc7410a6af1eb28"
+    },
+    "sfx/ambient/produce_actionB/sleigh_crew_footsteps_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "kyles",
+      "licence": "cc0",
+      "licenceNote": "Creative Commons 0 on freesound: copy, modify, distribute and perform, commercially, without permission and without attribution. Checked at source before anything was measured, which is the door's standing rule. ALL SEVENTEEN SOURCES BEHIND THIS FOLDER WERE CHECKED IN ONE PASS BEFORE A SINGLE STEM WAS ENCODED -- fifteen freesound uploads new to this tree, the two lamp uploads it already carried, and the duty action's own cue. Every one cleared. Every licence in this tree still reads attributionRequired: false. THE CUT IS THIS PROJECT'S OWN.",
+      "design": "BUILT WITH CHATGPT, as the Produce Wheat, Build Shrine and Mission stems were. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample is meant to trace to the upload(s) in `sources`, and the trace was run; see `modifications`.",
+      "generatedContent": "none",
+      "source": "produce_stone_08_sleigh_crew_footsteps_stem_v01_35s.wav. Supplied in Produce_Stone_Final_Tracks_v14 with a manifest naming every source. The stem exists only on the project owner's disk; the things anyone can fetch again are the uploads in `sources`, and every source file was on disk and probed directly.",
+      "sources": [
+        {
+          "role": "the whole bed -- five phases",
+          "title": "footsteps boots heavy gravel ext",
+          "uploader": "kyles",
+          "url": "https://freesound.org/people/kyles/sounds/452629/",
+          "licence": "cc0",
+          "originalFilename": "452629__kyles__footsteps-boots-heavy-gravel-ext.wav",
+          "measured": "29.362 s, 48 kHz.",
+          "note": "THIRD kyles UPLOAD IN THIS TREE, after the straw put-down and the dirt-floor footsteps that both went into produce_actionA/sickle_cutting. One uploader now supplies three sources across two duty actions."
+        }
+      ],
+      "originalFilename": "produce_stone_08_sleigh_crew_footsteps_stem_v01_35s.wav",
+      "originalPath": "freesound.org/people/kyles/sounds/452629/",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Produce Stone sleigh crew -- the haulers' feet",
+      "role": "The thirteenth track of thirteen under produce actionB, which is Produce Stone. It loops. Heavy gravel footsteps synchronised to the five sleigh-pull phases, so it is locked in time to stone_sleigh.",
+      "modifications": "SOURCE CONFIRMED at r up to 0.7389, five of five, against the other gravel-footstep recording in this folder at 0.1511 -- 4.89x. THE PAIRING WITH stone_sleigh WAS CONSIDERED FOR A MERGE AND REJECTED BY THE PROJECT OWNER, who kept only the five background workers merged. The two remain separately trimmable even though their timing is locked together. THE CONTAINER: Vorbis q6 at the stem's own 48 kHz stereo, no trim, no fade, no level change.",
+      "measured": "35000 ms, peak -18.9 dB, integrated -48.22 LUFS, true peak -18.82 dBTP, stereo 48 kHz, L/R correlation +0.986657. 66.0% of the file is exact digital silence in 5 runs. material runs 14.092 to 30.252 s and the wrap gap is 18.840 s. Gated it reads -42.89 LUFS, 5.33 dB off the ungated figure on 102 of 347 blocks, against 10*log10(347/102) = 5.32 -- the block-count identity. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT.",
+      "gainDb": 0.0,
+      "sha256": "f346b6a18f4620e4e02a5ed25013e603f5d6c3db138c56388c3fd39a7482f484"
     }
   },
   "assetDirs": [
@@ -4809,10 +5352,10 @@
     },
     "produce_actionA": {
       "groupDb": 0.0,
-      "tracks": 7,
+      "tracks": 8,
       "summedTruePeakDbtp": -13.58,
-      "summedAtTrims": "b4734f1fa335770f",
-      "summedLoudnessLufs": -30.22
+      "summedAtTrims": "0048a1454a013597",
+      "summedLoudnessLufs": -30.16
     },
     "taxation_actionA": {
       "groupDb": 0.0,
@@ -4820,6 +5363,13 @@
       "summedTruePeakDbtp": -12.02,
       "summedAtTrims": "af10ba825d386e88",
       "summedLoudnessLufs": -33.83
+    },
+    "produce_actionB": {
+      "groupDb": 0.0,
+      "tracks": 13,
+      "summedTruePeakDbtp": -5.91,
+      "summedLoudnessLufs": -29.88,
+      "summedAtTrims": "639dac93dc8ff9f0"
     }
   }
 }

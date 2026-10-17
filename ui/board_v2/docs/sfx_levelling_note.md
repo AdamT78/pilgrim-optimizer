@@ -128,7 +128,7 @@ gusts. **Ungated for both classes**, so a bed and a cue are at least measured in
 That sentence stood here from four beds that were each one continuous recording, and it stopped
 being true the moment a duty action started taking **stems**. A stem is a layer of a scene —
 grain handled, coins counted, beads told, robes moving — and a layer of a scene is mostly
-silence waiting for the other layers. Measured across all forty-nine ambient tracks as they
+silence waiting for the other layers. Measured across all sixty-three ambient tracks as they
 stand:
 
 | track | ungated | gated | delta | blocks kept |
@@ -138,49 +138,63 @@ stand:
 | `ordination_actionB/night_city` | −46.13 | −46.13 | +0.00 | 357 of 357 |
 | `clerical_actionA/candle` | −53.69 | −53.69 | +0.00 | 252 of 252 |
 | `clerical_actionB/silversmith` | −32.77 | −32.77 | +0.00 | 247 of 247 |
+| `give_alms_actionA/alms` | −38.37 | −38.36 | −0.01 | 247 of 247 |
+| `produce_actionB/quarry_wind` | −33.50 | −33.49 | −0.01 | 347 of 347 |
+| `build_roads_actionB/wind` | −31.11 | −31.09 | −0.02 | 247 of 247 |
+| `build_roads_actionA/wind` | −39.31 | −39.29 | −0.02 | 307 of 307 |
 | `produce_actionA/wind` | −33.83 | −33.80 | −0.03 | 347 of 347 |
 | `produce_actionA/field_rustle` | −36.17 | −36.15 | −0.03 | 347 of 347 |
-| `build_roads_actionB/wind` | −31.11 | −31.09 | −0.02 | 247 of 247 |
-| `give_alms_actionA/alms` | −38.37 | −38.36 | −0.01 | 247 of 247 |
-| `build_roads_actionA/wind` | −39.31 | −39.29 | −0.02 | 307 of 307 |
+| `produce_actionB/oil_lamp_flame` | −40.49 | −40.30 | −0.19 | 333 of 347 |
 | `build_roads_actionA/oil_lamp_flame` | −44.29 | −44.02 | −0.27 | 327 of 347 |
+| `produce_actionB/background_workers` | −41.57 | −40.96 | −0.62 | 303 of 347 |
 | `give_alms_actionB/donate_building` | −49.68 | −48.91 | −0.77 | 269 of 322 |
 | `allocation_actionA/footsteps` | −30.62 | −29.78 | −0.84 | 233 of 282 |
 | `build_roads_actionA/worker_footsteps` | −38.59 | −37.35 | −1.24 | 262 of 347 |
 | `allocation_actionA/wool_robe` | −31.08 | −29.29 | −1.79 | 187 of 282 |
 | `ordination_actionB/footsteps` | −35.89 | −34.03 | −1.86 | 231 of 357 |
+| `produce_actionA/sickle_cutting` | −39.58 | −36.41 | −3.16 | 167 of 347 |
 | `taxation_actionA/room` | −38.16 | −34.77 | −3.40 | 134 of 297 |
-| `produce_actionA/sickle_cutting` | −39.86 | −36.35 | −3.51 | 154 of 347 |
 | `build_roads_actionA/ox_cart_mechanics` | −38.00 | −34.30 | −3.70 | 149 of 347 |
 | `ordination_actionB/distant_cart` | −45.19 | −41.16 | −4.03 | 141 of 357 |
-| `build_roads_actionB/fabric` | −44.09 | −39.89 | −4.19 | 95 of 247 |
 | `build_roads_actionA/gravel` | −35.94 | −31.76 | −4.18 | 132 of 347 |
+| `build_roads_actionB/fabric` | −44.09 | −39.89 | −4.19 | 95 of 247 |
 | `ordination_actionB/two_horses` | −44.73 | −40.25 | −4.47 | 127 of 357 |
 | `produce_actionA/straw_workers` | −44.05 | −39.16 | −4.88 | 113 of 347 |
 | `build_roads_actionB/gallows_rope` | −49.35 | −44.44 | −4.91 | 80 of 247 |
 | `build_roads_actionB/tinkering` | −42.09 | −37.16 | −4.94 | 80 of 247 |
 | `build_roads_actionA/ox_breathing` | −42.53 | −37.52 | −5.01 | 110 of 347 |
+| `produce_actionB/stone_sleigh` | −40.12 | −35.03 | −5.09 | 108 of 347 |
 | `taxation_actionA/barn_creaks` | −44.40 | −39.19 | −5.20 | 90 of 297 |
-| `build_roads_actionB/gallows_timber` | −46.95 | −41.32 | −5.64 | 68 of 247 |
+| `produce_actionB/sleigh_crew_footsteps` | −48.22 | −42.89 | −5.33 | 102 of 347 |
 | `build_roads_actionA/far_work` | −52.01 | −46.64 | −5.37 | 101 of 347 |
+| `build_roads_actionB/gallows_timber` | −46.95 | −41.32 | −5.64 | 68 of 247 |
 | `build_roads_actionA/rammers` | −35.88 | −30.02 | −5.86 | 90 of 347 |
 | `build_roads_actionA/ox_cart_stones` | −55.15 | −48.82 | −6.33 | 81 of 347 |
 | `ordination_actionB/staff` | −48.86 | −41.87 | −6.99 | 71 of 357 |
 | `ordination_actionB/distant_dogs` | −48.96 | −41.95 | −7.01 | 71 of 357 |
 | `clerical_actionA/rosary` | −46.71 | −39.55 | −7.16 | 67 of 347 |
+| `produce_actionB/quarry_footsteps` | −59.90 | −52.65 | −7.26 | 65 of 347 |
+| `produce_actionB/oil_lamp_rattle` | −46.93 | −39.51 | −7.42 | 63 of 347 |
 | `allocation_actionA/keys` | −35.04 | −27.22 | −7.82 | 47 of 282 |
 | `produce_actionA/sheaf_handling` | −39.58 | −31.48 | −8.10 | 54 of 347 |
 | `taxation_actionA/wheat` | −47.40 | −39.27 | −8.13 | 46 of 297 |
+| `produce_actionB/moth` | −53.95 | −45.59 | −8.36 | 51 of 347 |
 | `build_roads_actionA/horse_snorts` | −44.88 | −36.18 | −8.70 | 47 of 347 |
 | `produce_actionA/distant_rooster` | −45.25 | −36.45 | −8.80 | 46 of 347 |
 | `build_roads_actionB/crows_ravens` | −45.75 | −36.71 | −9.04 | 31 of 247 |
 | `taxation_actionA/coins` | −36.74 | −27.55 | −9.19 | 36 of 297 |
 | `produce_actionA/stalk_brushing` | −49.46 | −40.06 | −9.40 | 40 of 347 |
 | `build_roads_actionA/oil_lamp_rattle` | −48.48 | −38.97 | −9.51 | 39 of 347 |
+| `produce_actionB/power_strikes` | −36.74 | −26.53 | −10.21 | 33 of 347 |
+| `produce_actionB/quarry_hoist` | −54.88 | −43.76 | −11.12 | 27 of 347 |
+| `produce_actionB/chisel_reposition` | −51.22 | −39.80 | −11.43 | 25 of 347 |
 | `build_roads_actionB/monk_robe` | −47.86 | −36.23 | −11.63 | 17 of 247 |
 | `ordination_actionB/door_close` | −28.84 | −15.90 | −12.94 | 18 of 357 |
+| `produce_actionB/debris_cleave` | −42.51 | −29.21 | −13.30 | 16 of 347 |
+| `produce_actionA/nearby_raven` | −51.58 | −38.21 | −13.36 | 16 of 347 |
 | `ordination_actionB/rats_crossing` | −46.57 | −32.81 | −13.76 | 15 of 357 |
 | `ordination_actionB/rat_squeaks` | −48.62 | −34.82 | −13.80 | 15 of 357 |
+| `produce_actionB/distant_owl` | −51.21 | −36.21 | −15.00 | 11 of 347 |
 | `ordination_actionB/bottle_knock` | −54.10 | −37.04 | −17.06 | 7 of 357 |
 
 **The seven continuous beds still agree with their gated figures inside 0.2 dB** (`oil_lamp_flame` makes an eighth at 0.27), exactly as the
@@ -257,8 +271,11 @@ every scrap of its energy is inside the blocks the gate keeps, and the delta red
 
 > **delta = 10 · log₁₀( all blocks ÷ surviving blocks )**
 
-Checked against all forty-nine beds, the prediction agrees with the measured delta to within
-**0.06 dB on forty-eight of them**. The one outside it is `allocation_wind` at 0.19 dB, with
+Checked against all sixty-three beds, the prediction agrees with the measured delta to within
+**0.06 dB on sixty-one of them**. *Produce Stone's thirteen added a second exception and it is
+a hair's breadth one:* `produce_actionB/debris_cleave` reads 13.30 against a predicted 13.36,
+out by **0.062**, which is over the line by two thousandths of a decibel and is reported
+rather than rounded in. The real outlier is still `allocation_wind` at 0.19 dB, with
 every one of its 167 blocks kept. `taxation_actionA/room` at 0.057 is the next worst and sits
 just inside — it was carried here as 0.061 and reads a hair under when the table's own rounded
 figures are used, which is the boundary rather than a counterexample either way. *The delta is
@@ -617,10 +634,11 @@ Still open for ambient:
   headroom is the claim, render the sum: the files are on disk and it costs a minute.
 - **THE PER-FILE SPAN HAS STOPPED BEING THE RIGHT QUANTITY.** This bullet has tracked where
   individual beds land since there were two of them, and Build Roads being levelled on
-  2026-10-16 broke it: of the forty-nine ambient files, eight now sit between −26.5 and
-  −45.5 dBTP and **forty-one sit above −26.5**, the span running −3.4 to −37.5.
-  **TWENTY-ONE ARE STILL UNTRIMMED, AND THEY ARE EXACTLY THE THREE NEWEST FOLDERS** — seven
-  Mission, seven Build Shrine, seven Produce Wheat — which is the honest shape of the backlog
+  2026-10-16 broke it: of the sixty-three ambient files, nine now sit between −26.5 and
+  −45.5 dBTP and **fifty-four sit above −26.5**, the span running −3.4 to −37.5.
+  **THIRTY-FIVE ARE STILL UNTRIMMED, AND THEY ARE EXACTLY THE FOUR NEWEST FOLDERS** — seven
+  Mission, seven Build Shrine, eight Produce Wheat and all thirteen Produce Stone, which is
+  now more than half the tree and is the honest shape of the backlog
   and not a scatter of oversights. *This sentence said "eight" through two days of filing and
   was re-derived rather than incremented on 2026-10-17; a count maintained by hand across a
   burst of additions is the same fault as a bed count in prose, and this one had no guard.*
@@ -645,8 +663,9 @@ Still open for ambient:
   | duty action | loudness | true peak | step from the one above |
   |---|---|---|---|
   | `ordination_actionB` | **−28.85** | −2.42 | |
-  | `build_roads_actionB` | **−30.22** | −11.57 | −1.37 |
-  | `produce_actionA` | **−30.22** | −13.58 | −0.00 |
+  | `produce_actionB` | **−29.88** | −5.91 | −1.03 |
+  | `produce_actionA` | **−30.16** | −13.58 | −0.28 |
+  | `build_roads_actionB` | **−30.22** | −11.57 | −0.06 |
   | `build_roads_actionA` | **−32.44** | −5.22 | −2.22 |
   | `taxation_actionA` | **−33.83** | −12.02 | −1.39 |
   | `clerical_actionB` | **−35.31** | −11.97 | −1.48 |
@@ -658,7 +677,7 @@ Still open for ambient:
   **`clerical_actionA` peaks 10.5 dB above `give_alms_actionA` and is 0.16 dB quieter.** That
   one line is the module header's argument about cues — peak does not predict loudness —
   arriving a second time one level up, on actions rather than clips. Anyone who matched these
-  ten by the peak column would put those two 10 dB apart and be wrong by 10 dB.
+  eleven by the peak column would put those two 10 dB apart and be wrong by 10 dB.
 
   **The shape of it: six actions inside 7 dB, then a 6.61 dB cliff, then three.** The top six
   are close enough that a transition between any pair of them is about the fade; below the
@@ -668,15 +687,18 @@ Still open for ambient:
   *Nothing here is a judgement yet: every `groupDb` is 0, so this is where the beds happened
   to land, not where anybody put them.*
 
-- **TWO ACTIONS NOW SIT AT THE SAME LOUDNESS TO THE HUNDREDTH OF A DECIBEL.** With its
-  seventh bed in, Produce Wheat reads **−30.22 LUFS** and so does Build Shrine — a step of
-  **0.00 dB** between neighbours in the table above, where every other gap is at least 0.16.
-  Nobody arranged it: both actions carry `groupDb` 0 and no trim has been set in either
-  folder, so this is where forty-nine untouched beds happened to land. *It is the one pair in
-  the tree where a crossfade is purely about the fade*, with no level step to hide, and it is
-  worth keeping an eye on precisely because the first trim set in either folder will end it.
-  Their peaks are 2.01 dB apart, −11.57 against −13.58, which is the same argument the
-  paragraph below makes: the two measures are answering different questions.
+- **TWO ACTIONS SIT WITHIN A FIFTIETH OF A DECIBEL OF EACH OTHER, AND THE GAP MOVED WHILE
+  THIS BULLET WAS BEING WRITTEN.** With its seventh bed in, Produce Wheat read **−30.22
+  LUFS** and so did Build Shrine — a step of 0.00 dB. Replacing `sickle_cutting` with v02 a
+  few hours later added one quiet gesture, moved Produce Wheat to **−30.20**, and put it
+  *above* Build Shrine's −30.22 by **0.02 dB**. Nobody arranged either number: both actions
+  carry `groupDb` 0 and no trim is set in either folder, so this is where forty-nine
+  untouched beds happen to land. *It is still the one pair in the tree where a crossfade is
+  essentially all fade and no step*, and the 0.02 dB reversal is the useful part — **a tie
+  between two actions is not a property, it is a coincidence with a date on it**, and one
+  added layer at −27 dB was enough to break it. The first trim set in either folder will end
+  it properly. Their peaks are 2.01 dB apart, −11.57 against −13.58, which is the argument
+  the paragraph below makes: the two measures answer different questions.
 - **A SIXTH BED MADE PRODUCE WHEAT LOUDER AND ITS SUMMED PEAK LOWER.** Adding
   `produce_actionA/straw_workers` moved the action from −30.93 to −30.73 LUFS, which is the
   expected direction, and from **−13.85 to −14.21 dBTP**, which is not: 0.36 dB of true peak
@@ -689,13 +711,14 @@ Still open for ambient:
   simply stop being the maximum. Loudness, which integrates, cannot do this and did not.
   *This is the strongest form of the `coins` lesson in this note: an estimate that assumes
   peaks add would have predicted the opposite sign.*
-- **All ten, at the trims of 2026-10-17**, rendered rather than estimated:
+- **All eleven, at the trims of 2026-10-17**, rendered rather than estimated:
 
   | duty action | beds | sum of peaks | rendered | + the loudest cue filed |
   |---|---|---|---|---|
   | `ordination_actionB` | 10 | +4.05 | **−2.42** | **+2.86** |
+  | `produce_actionB` | 13 | +6.08 | **−5.91** | **+1.13** |
   | `build_roads_actionA` | 11 | +1.39 | **−5.22** | **+1.45** |
-  | `produce_actionA` | 7 | −2.32 | **−13.58** | −1.49 |
+  | `produce_actionA` | 8 | −1.39 | **−13.58** | −1.49 |
   | `allocation_actionA` | 4 | −7.68 | **−10.74** | −0.69 |
   | `clerical_actionB` | 1 | −11.97 | **−11.97** | −1.06 |
   | `taxation_actionA` | 4 | −1.96 | **−12.02** | −1.07 |
