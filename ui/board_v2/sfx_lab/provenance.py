@@ -88,6 +88,39 @@ def load_pair(stem_path, source_path):
     return mono(a), mono(b), sr_a, True
 
 
+SUBSONIC_HZ = 20.0    # below this nothing is heard, but the probe still divides by it
+SUBSONIC_WARN = 0.50  # a source with more than half its energy down there cannot be probed raw
+
+
+def subsonic_fraction(x, sr, cut=SUBSONIC_HZ):
+    """How much of a signal's energy sits below hearing. The number that explains a dead trace.
+
+    NORMALISED CROSS-CORRELATION DIVIDES BY TOTAL ENERGY, so a source carrying inaudible
+    rumble is measured mostly on the rumble. Cinetony's tawny owl (freesound 558214) is
+    97.76% sub-20 Hz -- 29% of it under 5 Hz -- and the hoot everyone actually hears is
+    0.22% of the file. Probed raw against a stem whose chain had removed all of that, it
+    scored 0.0337 against a control at 0.0308 and was filed as not corroborated. High-pass
+    both sides at 100 Hz and the same comparison returns r = 0.9974.
+    """
+    X = np.abs(np.fft.rfft(x))
+    f = np.fft.rfftfreq(len(x), 1.0 / sr)
+    tot = float((X ** 2).sum())
+    return float((X[f < cut] ** 2).sum()) / tot if tot > 0 else 0.0
+
+
+def highpass(x, sr, cut=100.0):
+    """Brick-wall high-pass in the FFT domain, for putting two files in the same band.
+
+    Crude on purpose: this is a measurement aid, not a filter anything ships through, and a
+    brick wall has no phase response to argue about when the point is to compare two signals
+    the same way.
+    """
+    n = len(x)
+    X = np.fft.rfft(x)
+    X[np.fft.rfftfreq(n, 1.0 / sr) < cut] = 0
+    return np.fft.irfft(X, n)
+
+
 def runs(x, sr, min_s=MIN_RUN_S):
     """Sample ranges of exact non-silence, as (start, end) pairs.
 
@@ -289,6 +322,11 @@ def _report(stem_path, source_path, controls, min_s, show_regions):
     print("%s  <-  %s" % (Path(stem_path).name, Path(source_path).name))
     if resampled:
         print("  SOURCE RESAMPLED to the stem's %d Hz before correlating" % sr)
+    sub = subsonic_fraction(src, sr)
+    if sub > SUBSONIC_WARN:
+        print("  *** %.1f%% OF THIS SOURCE'S ENERGY IS BELOW %.0f Hz. A raw probe measures that"
+              % (100 * sub, SUBSONIC_HZ))
+        print("      rumble, not the sound; high-pass both sides before believing a low score.")
     found = locate_all(stem, src, sr, min_s)
     if not found:
         print("  no runs over %.0f ms" % (1000 * min_s))

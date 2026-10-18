@@ -1805,13 +1805,18 @@ def test_the_tile_colour_is_one_of_the_icon_labs_plates_taken_whole():
 def test_every_cue_the_page_plays_has_a_sound_and_a_level():
     """A cue with no gain is silent; a cue with no file is silent. Both read as a broken board.
 
-    THE PAGE NAMES CUES, NOT FILES -- it asks for `hover`, `select` and `confirm`, and the
-    generator decides which clip answers. That indirection is worth having and it is exactly what
-    lets a cue go missing quietly: adding `sfx("warning")` somewhere compiles, builds, ships and
-    does nothing at all. So the call sites are read back out of the template and checked.
+    THE PAGE NAMES CUES, NOT FILES -- it asks for `select` and `confirm`, and the generator
+    decides which clip answers. That indirection is worth having and it is exactly what lets a cue
+    go missing quietly: adding `sfx("warning")` somewhere compiles, builds, ships and does nothing
+    at all. So the call sites are read back out of the template and checked.
 
-    Falsified by playing a cue that SFX_GAIN does not price, or by naming a clip the generator
-    cannot find.
+    THE FILE HALF USED TO ASSUME THE ANSWER. It resolved `sfx/<cue>.ogg` -- true only while the
+    cues happened to be two files at the root named after themselves, which is the one thing the
+    indirection exists to stop anyone relying on. It walks CUE_SET now, so moving the board to
+    another set is a one-line change here and not a rewrite.
+
+    Falsified by playing a cue that SFX_GAIN does not price, or by naming a set whose clips are
+    not on disk.
     """
     page = TMPL.read_text(encoding="utf-8")
     code = re.sub(r"(?m)^\s*//.*$", "", page)
@@ -1827,39 +1832,59 @@ def test_every_cue_the_page_plays_has_a_sound_and_a_level():
     for c, g in gains.items():
         assert 0 < float(g) <= 1, "%s plays at %s, which is not a level" % (c, g)
 
-    # THE CLIP BEHIND EACH CUE HAS TO EXIST. The generator maps cues onto files; this walks the
-    # same map rather than assuming the two file names.
-    gen = (TOOL / "generate_action_board.py").read_text(encoding="utf-8")
-    files = re.findall(r'for cue in \(([^)]*)\)', gen)
-    assert files, "bundled_sfx() no longer lists the cues it bundles"
-    for name in re.findall(r'"([a-z_]+)"', files[0]):
-        f = ROOT / "ui" / "board_v2" / "sfx" / ("%s.ogg" % name)
-        assert f.is_file(), "the generator bundles %s.ogg and there is no such file" % name
+    # THE CLIP BEHIND EACH CUE HAS TO EXIST, and the generator is asked rather than imitated.
+    gen = _load("generate_action_board")
+    assert set(gains) == set(gen.CUE_SLOTS), (
+        "the page prices %s and the generator bundles %s, so one of them is silent or unpriced"
+        % (sorted(gains), sorted(gen.CUE_SLOTS)))
+    bundled, _notes = gen.bundled_sfx()
+    for slot in gen.CUE_SLOTS:
+        f = gen.cue_file(slot)
+        assert f is not None and f.is_file(), (
+            "the board plays %s from set %r and there is no %s_%s_sfx_vNN.ogg under sfx/general/"
+            % (slot, gen.CUE_SET, gen.CUE_SET, slot))
+        assert bundled.get(slot, "").startswith("data:audio/ogg;base64,"), (
+            "%s resolves to %s and the page did not get it" % (slot, f.name))
+
+    # AND THE VERSION IS RESOLVED, NOT FROZEN. Naming a file here is the fault the bench already
+    # hit: file a v02 and the board goes on playing v01 with nothing saying so.
+    assert not re.search(r'"(?:set\d+_)?[a-z_]+_sfx_v\d+\.ogg"',
+                         (TOOL / "generate_action_board.py").read_text(encoding="utf-8")), (
+        "a cue filename with a version in it is written into the generator, which freezes that "
+        "slot at whatever take existed the day it was typed")
 
 
-def test_the_hover_cue_fires_on_the_duty_changing_not_on_every_crossing():
+def test_hovering_a_duty_makes_no_sound_and_fetches_on_the_change_only():
     """mouseover bubbles, so the pointer "arrives" many times over one tile.
 
-    hover() is called from a delegated mouseover, which fires again every time the pointer moves
-    between a tile and the mark inside it -- the same duty, twice. A cue fired on arrival rattles
-    while you hold still over one tile, and a ribbon of eight turns a slow sweep into a stutter.
-    The thing that happened is the duty under the pointer CHANGING.
+    THIS TEST GUARDED A CUE THAT IS GONE. Hovering played `tile.ogg` at 0.12 -- the select clip
+    at a fifth of its gain -- and the rule it needed was that the cue fire on the duty under the
+    pointer CHANGING, because mouseover fires again every time the pointer moves between a tile
+    and the mark inside it, and a ribbon of eight turned a slow sweep into a stutter. The cue was
+    dropped on 2026-10-18: the ribbon answers a hover with light, and a hover is not something a
+    player did.
 
-    Falsified by playing the cue unconditionally in hover(), which is what it would look like if
-    somebody simplified the function.
+    THE RULE OUTLIVED THE CUE, which is why this is rewritten rather than deleted. The bed
+    prefetch now rides on the same event and wants the same guard for a worse reason: unguarded,
+    crossing one tile re-asks for eleven buffers, repeatedly. Falsified by playing anything on
+    hover again, or by prefetching unconditionally.
     """
     page = TMPL.read_text(encoding="utf-8")
     code = re.sub(r"(?m)^\s*//.*$", "", page)
     body = code.split("function hover(")[1].split("\nfunction ")[0]
-    assert 'sfx("hover")' in body, "hovering a duty plays nothing"
-    line = [ln for ln in body.split("\n") if 'sfx("hover")' in ln][0]
-    assert "!==" in line or "!=" in line, (
-        "the hover cue is not guarded by the duty changing, so it fires on every crossing "
-        "between a tile and the mark inside it: %s" % line.strip())
-    # AND THE COMPARISON IS AGAINST WHAT IT WAS, captured before hovered is reassigned.
-    assert body.index("hovered") < body.index('sfx("hover")'), (
-        "the previous duty is not read before `hovered` is overwritten, so the test compares a "
-        "value with itself and is always false")
+    assert "sfx(" not in body, (
+        "hovering plays a sound again; the ribbon answers a hover with light: %s"
+        % [ln.strip() for ln in body.split("\n") if "sfx(" in ln])
+    assert 'sfx("hover")' not in code, "something still asks for a hover cue, which has no gain"
+
+    assert "bedPrefetch(" in body, "hovering no longer warms the beds, so a switch fades in late"
+    line = [ln for ln in body.split("\n") if "bedPrefetch(" in ln]
+    guard = [ln for ln in body.split("\n") if "duty !== was" in ln or "duty != was" in ln]
+    assert guard, "the prefetch is not guarded by the duty changing, so crossing one tile re-asks"
+    assert body.index("was = ") < body.index("bedPrefetch("), (
+        "the previous duty is not captured before `hovered` is overwritten, so the comparison is "
+        "a value against itself and never fires")
+    assert line, "bedPrefetch is named in a comment and never called"
 
 
 def test_a_sound_in_the_tree_says_where_it_came_from():
@@ -2746,27 +2771,33 @@ def test_the_ribbon_holds_still_and_a_tile_that_moves_is_refused():
 
 
 def test_clicking_a_mark_selects_the_action_it_stands_for():
-    """A mark IS its action, so pressing one has to put that action down.
+    """A mark IS its action -- on the duty already selected, which is the part this learned.
 
     THE BUG THIS IS POINTED AT: the mark's handler called pickDuty, which sets the duty and
     CLEARS the slot. So the one thing on the tile that names a single action could not select it,
     and the only way in was the card below -- while the mark lit up under the pointer the whole
     time, which is what made it read as broken rather than as unclickable.
 
-    The TILE's own area still goes through pickDuty, and that is not an oversight: a click on the
-    tile is about the duty and names no action. Falsified by wiring the mark back to pickDuty, or
-    by having pickAction set the duty without the slot.
+    THIS TEST THEN HELD THE OVERCORRECTION IN PLACE. It asserted pickDuty was absent from the
+    handler ENTIRELY, which made the fix above permanent and unqualified -- and the two marks are
+    52% of a two-action tile, so choosing a duty by clicking its tile usually chose an action too,
+    high or low depending on where the pointer landed. An assertion that a function must never
+    call another is stronger than the rule it was written for; what the rule needed was an ORDER.
+    The companion test holds that order; this one holds what it was always for, which is that the
+    mark can still reach its action.
 
     A STATIC CHECK, AND IT SAYS SO. The lab lane installs no browser; the behaviour itself was
-    verified by driving the built page.
+    verified by driving the built page -- five heights on a two-action tile, all landing on the
+    duty with no action, and the second click on each mark taking its action.
     """
     page = TMPL.read_text(encoding="utf-8")
     code = re.sub(r"(?m)^\s*//.*$", "", page)
     seal = code.split("function slotClick(")[1].split("\nfunction ")[0]
     assert "pickAction(" in seal, (
         "the mark's handler does not go through pickAction, so it cannot name an action")
-    assert "pickDuty(" not in seal, (
-        "the mark's handler still calls pickDuty, which sets the duty and clears the slot")
+    assert not re.search(r"^\s*pickDuty\(", seal, re.M), (
+        "the mark's handler calls pickDuty unconditionally again, which sets the duty and clears "
+        "the slot, so a mark cannot choose its action even on the duty you are standing on")
     # AND THE CHOSEN MARK HOLDS ITS SOLID EDGE, by the hover's own rule rather than a second one.
     css = re.sub(r"/\*.*?\*/", " ", page, flags=re.S)
     assert re.search(r"\.seal\.filled:hover\s*,\s*\.seal\.filled\.on\s*\{"
@@ -4170,3 +4201,397 @@ def test_each_duty_action_with_beds_has_a_group_level_and_a_fresh_sum():
             % (action, g.get("summedAtTrims"), want))
         assert isinstance(g.get("summedTruePeakDbtp"), (int, float)), (
             "%s has a trim fingerprint and no measured sum beside it" % action)
+
+
+# =================================================================================================
+# THE BEDS REACHING THE PAGE. Everything above this line guards numbers and pictures; these guard
+# the one thing in the tool that is fetched at run time rather than carried, which is also the one
+# thing that can be wrong without the build saying a word.
+
+
+def test_every_sounded_action_lists_beds_that_are_actually_on_disk():
+    """A url in the manifest that names no file is a fetch that 404s into a silent quarry.
+
+    THE BUILD CANNOT CATCH THIS BY ITSELF because it writes the urls from the directory listing,
+    so it agrees with itself by construction. This asks the question the browser will ask.
+    Falsified by adding a bed to the manifest that is not in the folder.
+    """
+    gen = _load("generate_action_board")
+    beds, _notes = gen.bundled_beds()
+    board = ROOT / "ui" / "board_v2"
+    played = {k: v for k, v in beds.items() if not k.startswith("__")}
+    assert played, "no duty action has a bed"
+    for action, spec in sorted(played.items()):
+        on_disk = sorted(p.name for p in (board / "sfx" / "ambient" / action).glob("*.ogg"))
+        assert [b["name"] for b in spec["beds"]] == on_disk, (
+            "%s: the manifest lists %s and the folder holds %s"
+            % (action, [b["name"] for b in spec["beds"]], on_disk))
+        for b in spec["beds"]:
+            assert (board / b["url"]).is_file(), "%s names %s, which is not there" % (action, b["url"])
+
+
+def test_a_bed_url_cannot_point_outside_the_sfx_folder():
+    """The page fetches these, so a url is a request this repository will answer.
+
+    Falsified by letting an absolute url or one with `..` into the manifest.
+    """
+    gen = _load("generate_action_board")
+    beds, _notes = gen.bundled_beds()
+    for action, spec in sorted((k, v) for k, v in beds.items() if not k.startswith("__")):
+        for b in spec["beds"]:
+            u = b["url"]
+            assert u.startswith("sfx/ambient/"), "%s: %s does not start under sfx/ambient/" % (action, u)
+            assert ".." not in u.split("/") and not u.startswith("/"), "%s: %s escapes" % (action, u)
+            assert u.endswith(".ogg"), "%s: %s is not a bed" % (action, u)
+
+
+def test_every_duty_action_either_has_beds_or_is_named_as_silent():
+    """A slot missing from both lists is a slot nothing decided about.
+
+    THE THREE SILENT ONES ARE A FACT, NOT AN OMISSION, and the page reads `__silent__` to know to
+    fade the previous action out rather than leave it murmuring under an action that has no
+    ambience of its own. Falsified by dropping a slot from `__silent__` while it still has no
+    folder.
+    """
+    gen = _load("generate_action_board")
+    beds, _notes = gen.bundled_beds()
+    said = json.loads(TEXT.read_text(encoding="utf-8"))["duties"]
+    slots = ["%s_%s" % (slug, slot) for slug, _n, _d in gen.G.DUTIES
+             for slot in gen.G.ACTIONS if (said.get(slug) or {}).get(slot)]
+    covered = set(beds.get("__silent__", [])) | {k for k in beds if not k.startswith("__")}
+    assert set(slots) == covered, (
+        "these duty action slots are in neither list: %s" % sorted(set(slots) ^ covered))
+    for k in beds.get("__silent__", []):
+        assert not (ROOT / "ui" / "board_v2" / "sfx" / "ambient" / k).is_dir(), (
+            "%s is listed as silent and has a bed folder" % k)
+
+
+def test_the_page_carries_both_levels_for_every_bed_it_will_play():
+    """attribution.json owns the mix and the page has to have carried it, not defaulted it.
+
+    THE NOTE IN attribution.json REQUIRES BOTH NUMBERS -- per-track gain, then one bus per action
+    -- and a page that shipped with groupDb silently zero would play something nobody auditioned.
+    Falsified by dropping groupDb from the manifest or reading it from somewhere else.
+    """
+    gen = _load("generate_action_board")
+    beds, _notes = gen.bundled_beds()
+    doc = json.loads((ROOT / "ui" / "board_v2" / "attribution.json").read_text(encoding="utf-8"))
+    groups, files = doc["ambientGroups"], doc["files"]
+    assert isinstance(doc.get("ambientMaster"), (int, float)), "attribution.json has no ambientMaster"
+    assert doc.get("ambientMasterNote"), "ambientMaster carries a number and no note saying what it is"
+    assert beds["__master__"] == doc["ambientMaster"]
+    for action, spec in sorted((k, v) for k, v in beds.items() if not k.startswith("__")):
+        assert spec["groupDb"] == groups[action]["groupDb"], (
+            "%s: the page carries %s and attribution.json says %s"
+            % (action, spec["groupDb"], groups[action]["groupDb"]))
+        for b in spec["beds"]:
+            assert b["gainDb"] == float(files[b["url"]].get("gainDb") or 0.0), (
+                "%s: the page carries %s and the record says %s"
+                % (b["url"], b["gainDb"], files[b["url"]].get("gainDb")))
+
+
+def test_the_server_refuses_a_path_that_leaves_the_sfx_folder():
+    """It binds to localhost, and that is a reason to be careful rather than a reason not to be.
+
+    THE ENCODED FORM IS THE ONE THAT MATTERS: a client normalises `/sfx/../x` before it ever
+    leaves, so the rule is only ever tested by `%2e%2e`, which arrives intact. Falsified by
+    comparing the raw string instead of resolving, or by dropping the suffix check.
+    """
+    gen = _load("generate_action_board")
+    board = ROOT / "ui" / "board_v2"
+    good = "/sfx/ambient/produce_actionB/quarry_wind_sfx_v01.ogg"
+    got = gen.served_sfx(good)
+    assert got is not None and got == (board / good.lstrip("/")).resolve()
+    for bad in ("/sfx/%2e%2e/attribution.json", "/sfx/../attribution.json",
+                "/sfx/levels.json", "/sfx/ambient/../../attribution.json",
+                "/sfx/ambient/produce_actionB/../../../duty_text.json"):
+        assert gen.served_sfx(bad) is None, "%s was served" % bad
+
+
+def test_the_crossfade_length_is_written_once():
+    """Two copies of 1.5 disagree the first time one is changed.
+
+    Falsified by naming the number again anywhere else in the template.
+    """
+    page = TMPL.read_text(encoding="utf-8")
+    body = re.sub(r"/\*.*?\*/", "", re.sub(r"^\s*//.*$", "", page, flags=re.M), flags=re.S)
+
+    # THE TEST IS ABOUT THE NUMBER, NOT THE NAME. Counting assignments to BED_FADE_S missed a
+    # second `var BED_FADE_ALT = 1.5` entirely -- the mutation survived, which is the only reason
+    # this is written the way it is. What can diverge is the literal.
+    lines = body.splitlines()
+    at = [i + 1 for i, ln in enumerate(lines) if re.search(r"(?<![\w.])1\.5(?![\w.])", ln)]
+    assert len(at) == 1, "1.5 appears on lines %s; the fade length lives in one place" % at
+    assert re.match(r"\s*var BED_FADE_S = 1\.5;\s*$", lines[at[0] - 1]), (
+        "the only 1.5 in the page is not BED_FADE_S's: %r" % lines[at[0] - 1])
+
+    assert len(re.findall(r"BED_FADE_S\s*=", body)) == 1, "BED_FADE_S is assigned more than once"
+    stray = re.findall(r"setValueCurveAtTime\([^,]+,[^,]+,\s*([^)]+)\)", body)
+    assert stray and all("BED_FADE_S" in s for s in stray), (
+        "a fade is scheduled with a length that is not BED_FADE_S: %s" % stray)
+
+
+def test_every_bed_carries_the_true_length_its_loop_needs():
+    """A loop pinned to the decoder's duration wraps through Vorbis padding every time.
+
+    4 to 17 ms of it, reading -64.7 dB under a bed sitting at -33 -- once per loop, on every bed.
+    sfx/README.md measured it and said the fix was `loopEnd` at the clip's TRUE length, which the
+    decoder is the one thing that cannot report. ogg_seconds() reads it off the container's last
+    granule instead, and this holds that read against the audio the loader actually returns.
+    Falsified by returning buf.duration, a sample count, or the rate of the wrong header.
+    """
+    gen = _load("generate_action_board")
+    beds, _notes = gen.bundled_beds()
+    board = ROOT / "ui" / "board_v2"
+    sys.path.insert(0, str(board / "sfx_lab"))
+    try:
+        import sfx_levels
+    finally:
+        sys.path.remove(str(board / "sfx_lab"))
+    for action, spec in sorted((k, v) for k, v in beds.items() if not k.startswith("__")):
+        for b in spec["beds"]:
+            got = b.get("seconds")
+            assert isinstance(got, float) and got > 0, (
+                "%s carries no usable length: %r" % (b["url"], got))
+            a, sr = sfx_levels.load(str(board / b["url"]))
+            want = len(a) / sr
+            assert abs(got - want) < 5e-5, (
+                "%s: the manifest says %.6f s and the audio is %.6f s" % (b["url"], got, want))
+
+
+def test_the_page_loops_on_that_length_and_not_on_the_buffer():
+    """Carrying the true length and then not using it is the same bug with extra steps.
+
+    Falsified by dropping loopEnd, or by setting it from the AudioBuffer.
+    """
+    page = TMPL.read_text(encoding="utf-8")
+    body = re.sub(r"/\*.*?\*/", "", re.sub(r"^\s*//.*$", "", page, flags=re.M), flags=re.S)
+    assert re.search(r"\.loopStart\s*=\s*0\b", body), "loopStart is never pinned to 0"
+    m = re.search(r"\.loopEnd\s*=\s*([^;]+);", body)
+    assert m, "loopEnd is never set, so every loop wraps through the decoder's padding"
+    assert "seconds" in m.group(1), (
+        "loopEnd is set from %r rather than from the length read off the file" % m.group(1).strip())
+
+
+def test_a_mark_on_an_unselected_duty_chooses_the_duty_and_no_action():
+    """Choosing a duty must not choose an action for you, whatever part of the tile you hit.
+
+    THE MARKS ARE MOST OF THE TILE: 39x39 each inside 57x101, two of them on a duty with two
+    actions, stacked top and bottom and covering 52% of it. While the mark called pickAction
+    unconditionally, aiming at a tile and landing on an action was the usual case rather than the
+    odd one, and WHICH action depended on whether you had clicked high or low. The guard is on the
+    order of the two branches, because the bug is not that pickAction is reachable -- it has to be,
+    on the duty already selected -- but that it was reachable FIRST.
+
+    Falsified by deleting the pickDuty branch, by flipping `!==` to `===`, or by putting the
+    pickAction call ahead of it.
+    """
+    page = TMPL.read_text(encoding="utf-8")
+    m = re.search(r"function slotClick\(ev\)\{(.*?)\n\}", page, re.S)
+    assert m, "slotClick is not where this test expects it"
+    body = re.sub(r"^\s*//.*$", "", m.group(1), flags=re.M)
+
+    guard = re.search(r"if\s*\(\s*d\.duty\s*(!==|===|!=|==)\s*S\.duty\s*\)\s*return\s+pickDuty\(", body)
+    assert guard, "slotClick has no branch sending a mark on another duty to pickDuty"
+    assert guard.group(1) == "!==", (
+        "the branch tests d.duty %s S.duty, which sends the mark of the duty you are ALREADY on "
+        "to pickDuty and clears the action it was meant to choose" % guard.group(1))
+
+    act = body.find("pickAction(")
+    assert act >= 0, "slotClick never reaches pickAction, so a mark cannot choose its action"
+    assert guard.start() < act, (
+        "pickAction is reached before the duty is compared, so a mark still chooses an action on "
+        "a duty that was not selected")
+
+
+def test_the_bench_takes_the_in_use_set_from_the_board_rather_than_its_own_copy():
+    """The bench draws one set with an "in use" tag, and that tag is the only thing on the page
+    saying which of these a player actually hears.
+
+    IT WAS A LITERAL: `chosen: True` typed onto set 1. The board moved to set 3 on 2026-10-18 and
+    the tag would have gone on pointing at set 1 -- not stale data but a stale ASSERTION, the
+    kind that reads as authority. board_cue_set() reads the board's CUE_SET the same way
+    board_gains() already reads its gains.
+
+    AND A FAILED READ TAGS NOTHING. A bench that tags the wrong set is worse than one that tags
+    none, so the fallback is no tag rather than a guess at which set it might be.
+
+    Falsified by hardcoding `chosen` again, by defaulting the set name when the read fails, or by
+    letting the board and the bench disagree about which slots are played.
+    """
+    bench = ROOT / "ui" / "board_v2" / "sfx_lab" / "generate_sound_bench.py"
+    if not bench.is_file():
+        pytest.skip("no sound bench in this tree")
+    spec = importlib.util.spec_from_file_location("_benchgen", bench)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    gen = _load("generate_action_board")
+    got_set, got_slots = mod.board_cue_set()
+    assert got_set == gen.CUE_SET, (
+        "the bench reads the board's set as %r and the board says %r" % (got_set, gen.CUE_SET))
+    assert got_slots == tuple(gen.CUE_SLOTS), (
+        "the bench reads the played slots as %s and the board plays %s"
+        % (list(got_slots), list(gen.CUE_SLOTS)))
+
+    src = bench.read_text(encoding="utf-8")
+    assert not re.search(r'"chosen":\s*(True|False)', src), (
+        "a set carries a hardcoded `chosen`, which is a second answer to a question the board "
+        "already answers")
+    assert "board_cue_set()" in src, "nothing in the bench asks the board which set is in use"
+
+    # AND THE READ IS WHAT THE FLAG IS SET FROM. Calling board_cue_set() somewhere and then
+    # deciding `chosen` another way passes everything above -- which is exactly what the mutation
+    # `st["chosen"] = st["key"] == "set1"` did, and it survived the first version of this test.
+    # The generated page is not tracked, so the assignment itself is the thing to hold.
+    m = re.search(r'st\["chosen"\]\s*=\s*(.+)', src)
+    assert m, "nothing assigns `chosen` to a set"
+    assert "in_use" in m.group(1), (
+        "`chosen` is assigned from %r, which does not come from the board" % m.group(1).strip())
+    assert re.search(r"in_use,\s*in_use_slots\s*=\s*board_cue_set\(\)", src), (
+        "`in_use` is not what board_cue_set() returned, so the tag is a literal wearing a "
+        "derived name")
+
+
+def test_the_bench_tags_no_set_when_it_cannot_read_the_board(tmp_path):
+    """A bench that tags the WRONG set is worse than one that tags none.
+
+    The tag is the only thing on the page saying which of these a player hears, so a fallback
+    that guesses -- which a reasonable person writes, because board_gains() right above it has
+    one -- would put an authoritative "in use" on a set nobody chose. Gains have a sensible
+    default because a slider has to start somewhere; identity does not.
+
+    THE HAPPY PATH CANNOT CATCH THIS, which is why this is its own test: the read succeeds in the
+    real tree, so the fallback branch never runs and a guess sits there untested. Falsified by
+    returning a set name when CUE_SET cannot be found.
+    """
+    bench = ROOT / "ui" / "board_v2" / "sfx_lab" / "generate_sound_bench.py"
+    if not bench.is_file():
+        pytest.skip("no sound bench in this tree")
+    spec = importlib.util.spec_from_file_location("_benchfallback", bench)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    fake = tmp_path / "action_board"
+    fake.mkdir()
+    (fake / "generate_action_board.py").write_text(
+        "# a generator that names no cue set\nSFX_DIR = None\n", encoding="utf-8")
+    mod.BOARD = tmp_path
+    assert mod.board_cue_set() == ("", ()), (
+        "with no CUE_SET to read, the bench answered %r instead of tagging nothing"
+        % (mod.board_cue_set(),))
+
+
+def test_a_bed_the_record_says_does_not_loop_is_carried_as_not_looping():
+    """`loop: false` has been in attribution.json since before the board played anything.
+
+    THE AMBIENT BENCH ALREADY READS IT -- a record only has to say `loop: false` and the bench
+    comes up with that box unticked. The board ignored it and set every source to loop, so
+    Mission's door, one door shutting in 36 seconds of silence, shut again every 36 seconds. The
+    field was right, the bench was right, and the only thing that disagreed was the thing a
+    player hears.
+
+    ABSENT MEANS LOOPING, which is the same default the bench applies; a bed with no opinion is
+    not an unanswered question. Falsified by defaulting to false, by hardcoding true, or by
+    reading the flag off anything but the record.
+    """
+    gen = _load("generate_action_board")
+    beds, _notes = gen.bundled_beds()
+    files = json.loads((ROOT / "ui" / "board_v2" / "attribution.json").read_text(encoding="utf-8"))["files"]
+    seen = 0
+    for action, spec in sorted((k, v) for k, v in beds.items() if not k.startswith("__")):
+        for b in spec["beds"]:
+            assert "loop" in b, "%s carries no loop flag at all" % b["url"]
+            want = bool(files[b["url"]].get("loop", True))
+            assert b["loop"] is want, (
+                "%s: the manifest says loop=%s and the record says %s"
+                % (b["url"], b["loop"], files[b["url"]].get("loop", "absent (means true)")))
+            seen += 0 if want else 1
+    assert seen == sum(1 for k, v in files.items()
+                       if k.startswith("sfx/ambient/") and v.get("state") == "present"
+                       and v.get("loop") is False), (
+        "the manifest carries %d non-looping beds and the records name a different number" % seen)
+    assert seen, "no bed is marked non-looping, so this test is checking nothing"
+
+    # THE DEFAULT, ASKED DIRECTLY. Every bed in the tree has a record, so the `loop` default
+    # never runs in the loop above -- a mutation flipping it to False passed everything here.
+    # A rule that cannot be reached cannot be checked, which is why loop_of() exists.
+    assert gen.loop_of({}) is True, "a bed with nothing filed about it does not loop"
+    assert gen.loop_of(None) is True, "a bed with no record at all does not loop"
+    assert gen.loop_of({"loop": False}) is False, "`loop: false` is not honoured"
+    assert gen.loop_of({"loop": True}) is True
+
+
+def test_a_one_shot_never_gets_a_random_entry_point_whatever_the_setting_says():
+    """A clip that does not loop has one pass, so entering partway does not vary it, it truncates it.
+
+    THIS IS THE BUG, NOT A PRECAUTION. Every bed was started at `Math.random() * loopEnd`.
+    door_close is one door at 2.997 s of 36; distant_rooster is a rooster at 1.975 s of 35. A
+    uniform entry misses them 92% and 94% of the time, so the two tracks whose whole job was to
+    sound at the start of a scene were the two least likely to sound at all.
+
+    SO THE GUARD BELONGS AT THE SOURCE AND NOT IN THE SETTING. BED_START is a choice about
+    looping beds; a one-shot has to start at 0 even when the board is set to "random", which is
+    a property of the clip rather than of the board's mood. Falsified by dropping `s.loop` from
+    the condition, or by reinstating an unconditional random offset.
+    """
+    page = TMPL.read_text(encoding="utf-8")
+    body = re.sub(r"/\*.*?\*/", "", re.sub(r"^\s*//.*$", "", page, flags=re.M), flags=re.S)
+
+    # THE SOURCE HAS TO BE TOLD, not just the manifest filled in. Carrying `loop` and then
+    # setting every source to loop anyway is the bug with the data fixed.
+    m = re.search(r"\bs\.loop\s*=\s*([^;]+);", body)
+    assert m, "no bed source is told whether to loop"
+    assert "b.loop" in m.group(1), (
+        "a source's loop is set from %r rather than from the bed's own flag" % m.group(1).strip())
+
+    m = re.search(r"\.start\(\s*at\s*,\s*([^;]+)\);", body)
+    assert m, "no bed source is started with an explicit offset"
+    offset = m.group(1)
+    assert "Math.random" in offset, "the random entry is gone entirely rather than made a choice"
+    # `s.loop` AND NOT THE SUBSTRING. `"s.loop" in offset` was true of `s.loopEnd`, which sits in
+    # the random expression itself -- so dropping the guard left the assertion passing and the
+    # one-shots back to being missed 9 times in 10. The word boundary is the whole fix.
+    assert re.search(r"\bs\.loop\s*&&", offset), (
+        "the entry point is chosen without asking whether the clip loops, so a one-shot can be "
+        "entered partway and missed: %s" % offset.strip())
+    assert re.search(r'BED_START\s*===?\s*"random"', offset), (
+        "the entry point does not consult BED_START, so the setting does nothing: %s" % offset.strip())
+
+    assert len(re.findall(r'var BED_START = ', body)) == 1, "BED_START is declared more than once"
+    gen = _load("generate_action_board")
+    assert gen.BED_START in ("start", "random"), (
+        "BED_START is %r, which the page does not understand -- anything that is not \"random\" "
+        "silently means \"start\"" % gen.BED_START)
+    beds, _notes = gen.bundled_beds()
+    assert beds["__start__"] == gen.BED_START, "the page did not get the setting"
+
+
+def test_no_cue_record_claims_which_set_is_live():
+    """A provenance record saying a clip is "in use" is a second home for CUE_SET.
+
+    THIS HAS NOW GONE STALE TWICE IN ONE DAY. The bench carried `chosen: True` on set 1 and drew
+    an "in use" tag from it; eleven records and five lines of sfx/README.md said the same thing
+    in prose. The board moved to set 3 and every one of them was wrong -- not wrong data, wrong
+    ASSERTIONS, which read as authority and are what somebody checks against.
+
+    A RECORD DESCRIBES THE CLIP. How long it is, where it was cut, what it is licensed under --
+    facts about the file, true for as long as the file exists. Which cue a player hears is a
+    build setting that changes without touching a single byte of audio, and it has one home.
+
+    Falsified by writing "in use", "not in use" or "the board plays" back into a cue's record.
+    """
+    doc = json.loads((ROOT / "ui" / "board_v2" / "attribution.json").read_text(encoding="utf-8"))
+    claim = re.compile(r"in use|actually plays|the board plays|the one shipping", re.I)
+    bad = []
+    for path, e in sorted(doc["files"].items()):
+        if not (path.startswith("sfx/general/") or path in ("sfx/tile.ogg", "sfx/confirm.ogg")):
+            continue
+        for field in ("role", "measured", "design", "licenceNote"):
+            text = e.get(field) or ""
+            for m in claim.finditer(text):
+                bad.append("%s / %s: ...%s..."
+                           % (path.split("/")[-1], field, text[max(0, m.start() - 45):m.end() + 45]))
+    assert not bad, (
+        "these cue records state which set is live, which CUE_SET already answers:\n  "
+        + "\n  ".join(bad))

@@ -521,7 +521,18 @@ function hover(duty, slot){
   // changing is the thing that happened.
   var was = hovered ? hovered.duty : null;
   hovered = duty ? {duty: duty, slot: slot || null} : null;
-  if (duty && duty !== was) sfx("hover");
+  // FETCHED WHILE THE POINTER IS STILL MOVING. An action with eleven beds is 2.85 MB and takes a
+  // noticeable moment to decode; asked for only on the click, the fade would start into silence.
+  // Hovering a duty is the warning that a selection may be coming.
+  //
+  // ON THE CHANGE, NOT ON THE CROSSING -- the rule the hover CUE used to need and the prefetch
+  // needs for the same reason. mouseover bubbles and fires again every time the pointer moves
+  // between a tile and the mark inside it, which is the same duty twice; unguarded, a slow sweep
+  // would re-ask for the same eleven buffers on every one of those.
+  if (duty && duty !== was) {
+    var info = dutyOf(duty);
+    bedPrefetch(duty + "_" + (slot || (info && info.actions === 1 ? "actionA" : "actionB")));
+  }
   setStatus();
   lightFace(duty);
 }
@@ -832,8 +843,185 @@ var SFX = __SFX__;
 //
 // 0.7 is the picker's own volume slider, so confirm comes out of the board at the level it came
 // out of the picker.
-var SFX_GAIN = {hover: 0.12, select: 0.5, confirm: 0.7};
+// NO HOVER. There were three cues and the first fired on the pointer merely crossing a tile,
+// which is not something a player did -- the ribbon answers a hover with light already, and a
+// noise on top of it makes a slow sweep across eight duties into a stutter. Selecting and
+// confirming are the two moments that are an act, and those are the two that sound.
+var SFX_GAIN = {select: 0.5, confirm: 0.7};
 var SFX_ON = true, actx = null, BUF = {};
+
+// THE AMBIENT BEDS. A duty action is a place, and choosing it should put you in that place --
+// which is a different kind of sound from a cue and is built differently all the way down.
+//
+// THEY ARE FETCHED, NOT CARRIED. generate_action_board.py's bundled_beds() explains the size
+// arithmetic; what matters here is the consequence: a page opened from disk has its cues and no
+// beds, and bedNote() says so in the note line rather than leaving the quarry mysteriously quiet.
+var BEDS = __BEDS__;
+var BED_SILENT = BEDS.__silent__ || [];
+var BED_MASTER_DB = BEDS.__master__ || 0;
+// "start" or "random" -- where a LOOPING bed enters its clip. The generator's BED_START says
+// which, and why the answer used to be the other one.
+var BED_START = BEDS.__start__ || "start";
+// 1.5 SECONDS, AND IT IS ONE TRANSITION RATHER THAN TWO. The outgoing action fades out while the
+// incoming fades in over the same second and a half, so the change takes 1.5 s end to end and not
+// 3. EQUAL POWER, NOT LINEAR: two beds that are not the same recording do not cancel, so their
+// POWERS add, and a linear pair sums to 0.5 of the power at the midpoint -- an audible 3 dB dip
+// in the middle of every switch. sin and cos hold the sum at 1.
+var BED_FADE_S = 1.5;
+var BED_KEEP = 3;               // actions whose buffers stay decoded; see bedEvict()
+
+var bedBuf = {}, bedWant = {}, bedVoice = {}, bedUse = [], bedOn = null, bedMaster = null;
+
+function bedDb(db){ return Math.pow(10, db / 20); }
+
+// AN EQUAL-POWER CURVE, HANDED OVER WHOLE. setValueCurveAtTime takes the shape as samples, which
+// is the only way to get a cosine out of a parameter that otherwise ramps linearly or
+// exponentially -- and exponentialRamp cannot reach zero at all, so it cannot fade anything out.
+function bedCurve(up){
+  var n = 65, c = new Float32Array(n);
+  for (var i = 0; i < n; i++) {
+    var t = (i / (n - 1)) * Math.PI / 2;
+    c[i] = up ? Math.sin(t) : Math.cos(t);
+  }
+  return c;
+}
+
+function bedReady(){
+  if (!actx) return false;
+  if (!bedMaster) {
+    bedMaster = actx.createGain();
+    bedMaster.gain.value = bedDb(BED_MASTER_DB);
+    bedMaster.connect(actx.destination);
+  }
+  return true;
+}
+
+// ONE FETCH PER FILE, HOWEVER MANY TIMES IT IS ASKED FOR. Hover prefetches and selection asks
+// again a moment later; without this the second ask would start a second download of the same
+// 2 MB and decode it twice.
+function bedLoad(url){
+  if (bedBuf[url]) return Promise.resolve(bedBuf[url]);
+  if (bedWant[url]) return bedWant[url];
+  bedWant[url] = fetch(url).then(function(r){
+    if (!r.ok) throw new Error(r.status + " on " + url);
+    return r.arrayBuffer();
+  }).then(function(b){
+    return new Promise(function(res, rej){ actx.decodeAudioData(b, res, rej); });
+  }).then(function(buf){
+    bedBuf[url] = buf; delete bedWant[url]; return buf;
+  })["catch"](function(e){ delete bedWant[url]; throw e; });
+  return bedWant[url];
+}
+
+function bedPrefetch(key){
+  if (!bedReady() || !BEDS[key]) return;
+  BEDS[key].beds.forEach(function(b){ bedLoad(b.url)["catch"](function(){}); });
+}
+
+// 35 SECONDS OF STEREO AT 48 kHz IS 13.4 MB DECODED, and the eleven sounded actions come to 847
+// MB between them. Nothing keeps them all; the three most recently used stay, which covers the
+// one playing, the one fading out, and the one you are about to go back to.
+function bedEvict(){
+  while (bedUse.length > BED_KEEP) {
+    var gone = bedUse.shift();
+    if (gone === bedOn || !BEDS[gone]) continue;
+    BEDS[gone].beds.forEach(function(b){ delete bedBuf[b.url]; });
+  }
+}
+
+function bedStop(key, at){
+  var v = bedVoice[key];
+  if (!v) return;
+  delete bedVoice[key];
+  v.fade.gain.cancelScheduledValues(at);
+  v.fade.gain.setValueCurveAtTime(bedCurve(false), at, BED_FADE_S);
+  v.sources.forEach(function(s){ try { s.stop(at + BED_FADE_S + 0.05); } catch (e) {} });
+  setTimeout(function(){ try { v.fade.disconnect(); } catch (e) {} }, (BED_FADE_S + 0.5) * 1000);
+}
+
+// THE FADE IS ITS OWN NODE AND IT SITS ABOVE THE GROUP. The group gain is the duty action's own
+// level, the thing that gets set by ear, and a fade written onto it would be fighting whatever
+// that level is at the moment the switch happens -- set it mid-crossfade and the ramp would snap.
+// Two nodes keep them independent: the group says how loud this place is, the fade says how far
+// in you are. And because the group is ONE node above every bed in the action, moving it cannot
+// change the balance between them.
+function bedStart(key, at){
+  var spec = BEDS[key];
+  var fade = actx.createGain(), group = actx.createGain();
+  fade.gain.setValueAtTime(0, at);
+  fade.gain.setValueCurveAtTime(bedCurve(true), at, BED_FADE_S);
+  group.gain.value = bedDb(spec.groupDb || 0);
+  group.connect(fade); fade.connect(bedMaster);
+  var v = {fade: fade, group: group, sources: []};
+  bedVoice[key] = v;
+  spec.beds.forEach(function(b){
+    var buf = bedBuf[b.url];
+    if (!buf) return;
+    var s = actx.createBufferSource(), g = actx.createGain();
+    s.buffer = buf;
+    // A BED IS NOT ALWAYS A LOOP, AND attribution.json HAS SAID SO ALL ALONG. `loop: false` is on
+    // door_close and distant_rooster, the ambient bench reads it and comes up with those boxes
+    // unticked, and this player set every source to loop regardless -- so Mission's door, which
+    // is one door shutting in 36 seconds of silence, shut again every 36 seconds for as long as
+    // you stood there. Absent means looping; only a record that says otherwise does otherwise.
+    s.loop = b.loop !== false;
+    // PINNED TO THE FILE'S OWN LENGTH, NOT THE BUFFER'S. decodeAudioData returns 4 to 17 ms of
+    // Vorbis padding past the true end, and looping on buf.duration wraps through it every time:
+    // a hole at -64.7 dB under a bed sitting at -33, once per loop, on every bed. The real length
+    // is read out of the container at build time -- see ogg_seconds() -- because the decoder is
+    // the one thing that cannot tell you. Set on every source; a non-looping one ignores them.
+    s.loopStart = 0;
+    s.loopEnd = b.seconds || buf.duration;
+    g.gain.value = bedDb(b.gainDb || 0);
+    s.connect(g); g.connect(group);
+    // WHERE TO ENTER THE CLIP, AND A ONE-SHOT HAS NO SAY IN IT. BED_START is the board's choice
+    // for LOOPING beds: "random" keeps the scene from being a recording you have heard -- started
+    // at 0 every time, Produce Stone's owl calls exactly 20.4 s after every selection -- and
+    // "start" puts every bed at its own beginning.
+    //
+    // THE GUARD IS HERE AND NOT IN THE SETTING. A clip that does not loop has one pass, so an
+    // entry point partway in does not vary it, it truncates it: door_close is one door at 2.997 s
+    // of 36, distant_rooster a rooster at 1.975 s of 35, and a uniform random entry missed them
+    // 92% and 94% of the time. The two tracks whose whole job was to sound at the start of a
+    // scene were the two least likely to sound at all. So `s.loop` decides, not the constant.
+    s.start(at, (s.loop && BED_START === "random") ? Math.random() * s.loopEnd : 0);
+    v.sources.push(s);
+  });
+}
+
+// WHAT IS SELECTED IS WHAT PLAYS, asked from render() rather than from the three click handlers.
+// pickDuty, pickAction and select all reach the same two fields and all call render(), so one
+// test here covers every route in -- including the one that sets no action at all, where the
+// right answer is silence.
+function bedsFollow(){
+  if (!SFX_ON || !bedReady()) return;
+  var key = (S.duty && S.slot) ? (S.duty + "_" + S.slot) : null;
+  if (key && !BEDS[key]) key = null;          // a slot with no folder; BED_SILENT names them
+  if (key === bedOn) return;
+  var at = actx.currentTime;
+  if (bedOn) bedStop(bedOn, at);
+  bedOn = key;
+  if (!key) return;
+  var urls = BEDS[key].beds.map(function(b){ return b.url; });
+  bedUse = bedUse.filter(function(k){ return k !== key; }); bedUse.push(key); bedEvict();
+  Promise.all(urls.map(bedLoad)).then(function(){
+    // STILL THE ONE SELECTED? A decode can take a second on an action with eleven beds, and in
+    // that second the player may have moved on. Starting it then would fade in a place nobody is
+    // standing in any more.
+    if (bedOn !== key || bedVoice[key]) return;
+    bedStart(key, actx.currentTime);
+  })["catch"](function(e){ bedNote(String(e && e.message || e)); });
+}
+
+// SAYING SO IS PART OF THE FEATURE. A board opened by double-clicking fetches nothing, so the
+// cues work and the ambience does not, and the difference between that and a bug is this line.
+function bedNote(why){
+  var n = document.getElementById("note");
+  if (!n || n.textContent.indexOf("click anywhere once") >= 0) return;
+  n.textContent = (location.protocol === "file:")
+    ? "the duty action ambience needs the page served — run the generator with --serve; the interface sounds work either way"
+    : ("the ambience could not load — " + why);
+}
 
 function sfxWake(){
   if (actx) return;
@@ -861,8 +1049,13 @@ function sfxUnlock(){
   removeEventListener("pointerdown", sfxUnlock, true);
   removeEventListener("keydown", sfxUnlock, true);
   sfxWake();
-  if (actx && actx.state === "suspended") actx.resume().then(sfxBadge, sfxBadge);
-  else sfxBadge();
+  // AND THE BED THE BOARD IS ALREADY SITTING ON. The page restores its last selection before any
+  // gesture has happened, so by the time sound is allowed the render that would have started the
+  // ambience is long past. Without this the board opens on Produce Stone in silence and stays
+  // there until you pick something else.
+  if (actx && actx.state === "suspended") actx.resume().then(function(){ sfxBadge(); bedsFollow(); },
+                                                             sfxBadge);
+  else { sfxBadge(); bedsFollow(); }
 }
 addEventListener("pointerdown", sfxUnlock, true);
 addEventListener("keydown", sfxUnlock, true);
@@ -887,7 +1080,11 @@ function sfxBadge(){
 
 function sfx(cue){
   if (!SFX_ON || !actx) return;
-  var buf = BUF[cue === "confirm" ? "confirm" : "tile"];
+  // THE CUE IS THE KEY NOW. This used to read `cue === "confirm" ? "confirm" : "tile"` -- a
+  // ternary that quietly answered every cue that was not confirm with the tile clip, so a
+  // misspelled cue made a sound instead of nothing and `hover` and `select` shared a file by
+  // arrangement rather than by lookup. The generator decides what is behind a name; this asks.
+  var buf = BUF[cue];
   if (!buf) return;
   if (actx.state === "suspended") actx.resume();
   var s = actx.createBufferSource(), g = actx.createGain();
@@ -919,11 +1116,26 @@ function slotClick(ev){
   ev.stopPropagation();
   var d = ev.currentTarget.dataset;
   if (S.editing) return pickFile({kind: d.kind, duty: d.duty || S.duty, slot: d.slot});
-  // IN PLAY A MARK IS ITS ACTION. Clicking one used to call pickDuty, which sets the duty and
-  // CLEARS the slot -- so the mark for an action could not select that action, and the only way
-  // in was to click the card. The tile's own area still goes through pickDuty, because a click on
-  // the tile is about the duty and names no action.
-  if (d.duty) pickAction(d.duty, d.slot);
+  // IN PLAY A MARK IS ITS ACTION -- ONCE YOU ARE ALREADY ON ITS DUTY. Clicking one used to call
+  // pickDuty, which sets the duty and CLEARS the slot, so the mark for an action could not select
+  // that action and the only way in was the card. Making the mark select its action fixed that
+  // and overshot: ON A DUTY WITH TWO ACTIONS THE TWO MARKS COVER 52% OF THE TILE, 39x39 each
+  // inside 57x101, stacked top and bottom, so only a narrow middle band and the side margins ever
+  // reached pickDuty. Aiming at a tile and hitting an action was the usual case rather than the
+  // odd one, and which action you got depended on whether you had clicked high or low.
+  //
+  // SO THE MARK ANSWERS A DIFFERENT QUESTION DEPENDING ON WHERE YOU ALREADY ARE. On a duty that
+  // is not selected, the question the click asks is "which duty", and the answer is the duty with
+  // no action chosen -- the same answer the bare tile gives, which is the point: the whole tile
+  // now behaves as one target for choosing a duty. On the duty already selected, the question is
+  // "which action", and the mark answers it. A duty with one action is unaffected either way,
+  // because pickDuty chooses that action itself.
+  //
+  // IT COSTS A SECOND CLICK to reach an action on a duty you are not standing on, and that is the
+  // trade: the card below is the one-click route to an action and is what the cards are for.
+  if (!d.duty) return;
+  if (d.duty !== S.duty) return pickDuty(d.duty);
+  pickAction(d.duty, d.slot);
 }
 // A CLICK CHOOSES; IT DOES NOT UN-CHOOSE. Both of these used to toggle, so pressing the same
 // mark or the same card twice put the action back down. That was invisible while nothing marked
@@ -1004,6 +1216,7 @@ function render(){
   // the column showing two marks rather than three.
   document.getElementById("mark-" + COMMIT).classList.toggle("off", !S.slot);
   setStatus();
+  bedsFollow();
 }
 
 // =================================================================================================
@@ -1181,6 +1394,11 @@ document.getElementById("bSound").addEventListener("click", function(){
   SFX_ON = !SFX_ON;
   sfxBadge();
   if (SFX_ON) sfx("select");
+  // THE BUTTON MEANS SOUND, AND THE AMBIENCE IS SOUND. Turning it off has to take the bed with
+  // it or the board goes on murmuring under a control that says it is silent -- and it leaves on
+  // the same 1.5 s fade, because a scene cut dead is a worse answer than a scene walked out of.
+  if (!SFX_ON && bedOn && actx) { bedStop(bedOn, actx.currentTime); bedOn = null; }
+  else if (SFX_ON) bedsFollow();
 });
 
 // ---- FULL SCREEN, ON F --------------------------------------------------------------------

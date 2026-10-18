@@ -106,10 +106,12 @@ function coverage(have, total, word){
 }
 
 var h = ["<h2>General</h2>",
-  '<p class=lead>Each version is a complete set of cues. The board asks for <code>hover</code>, ' +
-  '<code>select</code> and <code>confirm</code> by name, so a version is just a different answer ' +
-  'to those three — and it is chosen whole, because what makes a set work is how its clips sit ' +
-  'against <em>each other</em>.</p>'];
+  '<p class=lead>Each version is a complete set of cues. The board asks for its cues by name, ' +
+  'so a version is just a different answer to them — and it is chosen whole, because what makes ' +
+  'a set work is how its clips sit against <em>each other</em>. It asks for <b>' +
+  (D.inUseSlots.length ? D.inUseSlots.join("</b> and <b>") : "nothing") + '</b> today; a slot a ' +
+  'set carries and the board does not ask for is marked <em>not played</em> rather than left ' +
+  'looking like it is in service.</p>'];
 D.sets.forEach(function(s){
   h.push('<div class="set' + (s.chosen ? ' chosen' : '') + '"><div class=sethead>' +
     '<span class=setid>' + esc(s.id) + '</span><span class=setname>' + esc(s.name) + '</span>' +
@@ -117,7 +119,8 @@ D.sets.forEach(function(s){
     '<button class=seq data-set="' + esc(s.id) + '">play the set</button></div>' +
     '<p class=setnote>' + esc(s.note) + '</p>');
   s.slots.forEach(function(sl){
-    h.push(sl[1] ? card(sl[1], sl[0] + " — " + sl[1].label, sl[2], s.id, sl[0])
+    var name = sl[0] + (sl[3] ? " — NOT PLAYED by the board" : "");
+    h.push(sl[1] ? card(sl[1], name + " — " + sl[1].label, sl[2], s.id, sl[0])
                  : empty(sl[0], "no clip in this set"));
   });
   h.push("</div>");
