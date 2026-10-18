@@ -46,6 +46,25 @@ def board_gains() -> dict:
     return {k: float(v) for k, v in re.findall(r"(\w+)\s*:\s*([\d.]+)", m.group(1))}
 
 
+def board_cue_set() -> tuple[str, tuple]:
+    """Which general set the board plays and which of its slots, read from the board's own build.
+
+    THE SAME TRICK board_gains() ALREADY PLAYS, for the same reason: the board decides, and the
+    bench's job is to report the decision rather than hold a second copy of it. It held one --
+    `chosen: True` typed onto set 1 -- which drew an "in use" tag that stopped being true the
+    moment the board moved to set 3 and would have gone on being drawn.
+
+    A FAILED READ RETURNS NO SET, not a guess. A bench that tags the wrong set is worse than one
+    that tags none: the tag is the only thing on the page saying which of these a player hears.
+    """
+    gen = (BOARD / "action_board" / "generate_action_board.py").read_text(encoding="utf-8")
+    s = re.search(r'^CUE_SET = "([a-z0-9_]+)"', gen, re.M)
+    slots = re.search(r"^CUE_SLOTS = \(([^)]*)\)", gen, re.M)
+    if not s:
+        return "", ()
+    return s.group(1), tuple(re.findall(r'"([a-z_]+)"', slots.group(1) if slots else ""))
+
+
 def ogg_facts(path: pathlib.Path) -> dict:
     """Channels, sample rate and length, read straight out of the Ogg pages.
 
@@ -320,6 +339,7 @@ def main() -> int:
         return None if p is None else clip("%s/%s" % (folder, p.name), p.stem)
 
     gains = board_gains()
+    in_use, in_use_slots = board_cue_set()
     # THE GENERAL CUES ARE A SET AND NOT THREE FILES, which is why this is a list of sets rather
     # than a flat list of slots. A set is a complete answer to "what does the interface sound
     # like" and the slots inside one were levelled against each other; comparing set 1's confirm
@@ -329,12 +349,12 @@ def main() -> int:
     # action with no clip, because a set missing a slot is an incomplete answer and the page
     # should say so -- the alternative is a set that looks finished and goes quiet on hover.
     sets = [
-        {"id": "v1", "name": "Kenney interface sounds", "chosen": True,
+        {"id": "v1", "key": "set1", "name": "Kenney interface sounds",
          "note": "cut from one CC0 montage, levelled against each other, never normalised",
          "slots": [("hover", clip("tile.ogg", "tile.ogg"), gains.get("hover", .12)),
                    ("select", clip("tile.ogg", "tile.ogg -- the same clip, louder"), gains.get("select", .5)),
                    ("confirm", clip("confirm.ogg", "confirm.ogg"), gains.get("confirm", .7))]},
-        {"id": "v2", "name": "ElevenLabs set", "chosen": False,
+        {"id": "v2", "key": "set2", "name": "ElevenLabs set",
          "note": "generated, not cut; no hover, and both cues run 2 s against the Kenney set's "
                  "70 ms -- a different idea of an interface, not a longer version of this one",
          # RESOLVED, NOT SPELLED OUT. Writing "general/set2_select_sfx_v01.ogg" here was the
@@ -346,7 +366,7 @@ def main() -> int:
          "slots": [("hover", None, gains.get("hover", .12)),
                    ("select", newest("general", "set2_select"), gains.get("select", .5)),
                    ("confirm", newest("general", "set2_confirm"), gains.get("confirm", .7))]},
-        {"id": "v3", "name": "Drum figure", "chosen": False,
+        {"id": "v3", "key": "set3", "name": "Drum figure",
          # THE SELECT IS THE CONFIRM'S OWN TAIL, which no other set does and which is the whole
          # idea rather than an economy. Both are cut to the same sample at 17.800 s of one
          # recording, so the select is literally the confirm's last 742 ms and the confirm adds
@@ -361,6 +381,16 @@ def main() -> int:
                    ("select", newest("general", "set3_select"), gains.get("select", .5)),
                    ("confirm", newest("general", "set3_confirm"), gains.get("confirm", .7))]},
     ]
+    # DERIVED, ONE PLACE, AFTER THE FACT. `chosen` was a literal on set 1; it is now whatever the
+    # board says, and a slot the board does not play is marked so rather than drawn as if it were
+    # in service. Set 1 predates the naming convention and keeps its files at the sfx root, so it
+    # answers to `set1` here without having files called that -- the day it is wanted back, the
+    # two Kenney clips get filed under general/set1_*.ogg like everything else.
+    for st in sets:
+        st["chosen"] = bool(in_use) and st["key"] == in_use
+        for i, (slot, c, g) in enumerate(st["slots"]):
+            st["slots"][i] = (slot, c, g, st["chosen"] and slot not in in_use_slots)
+
     tithe = [{"name": n, "clip": newest("tithe", k)}
              for k, n in (("wheat", "Wheat"), ("stone", "Stone"), ("silver", "Silver"))]
     duties = []
@@ -421,7 +451,7 @@ def main() -> int:
     tmpl = (LAB / "sound_bench.html.tmpl").read_text(encoding="utf-8")
     page = tmpl.replace("__DATA__", json.dumps(
         {"sets": sets, "tithe": tithe, "duties": duties, "buildings": builds,
-         "misc": misc, "targetLufs": -24.0}))
+         "misc": misc, "targetLufs": -24.0, "inUseSlots": list(in_use_slots)}))
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(page, encoding="utf-8")
 
@@ -436,7 +466,7 @@ def main() -> int:
     print("  wrote %s  (%d KB)" % (OUT_AMBIENT, OUT_AMBIENT.stat().st_size // 1024))
     print("  ambient   %d of %d duty actions have a bed, in %d file%s"
           % (len(used), slots, len(beds), "" if len(beds) == 1 else "s"))
-    drawn = [c for c in ([s for st in sets for _, s, _ in st["slots"]]
+    drawn = [c for c in ([sl[1] for st in sets for sl in st["slots"]]
                          + [t["clip"] for t in tithe]
                          + [a["clip"] for d in duties for a in d["actions"]]
                          + [b["clip"] for b in builds] + misc) if c]

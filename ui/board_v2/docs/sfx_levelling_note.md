@@ -780,8 +780,16 @@ Still open for ambient:
   warning on every build — so the eleven were balanced against each other by ear and the
   group's absolute level is the one judgement with no reference behind it. Give Alms has the
   same gap on both its actions, with one bed each rather than eleven.
-- **The board plays no bed yet.** `bundled_sfx()` inlines `tile.ogg` and `confirm.ogg` and
-  nothing else, so `generated/ambient_bench.html` is where beds are heard today.
-- **Whoever wires them in must pin `loopEnd`.** Chrome's `decodeAudioData` returns up to 17 ms
-  of Vorbis padding past the end, which loops as a dropout 30 dB below the bed. The reasoning
-  and the measurement are in `ambient_loop_note.md`.
+- **The board plays the beds now**, as of 2026-10-18. `bundled_beds()` carries a manifest and
+  the beds are fetched from the repository's own `sfx/ambient/` by `--serve`; the cues stay
+  inlined so a page opened straight from disk keeps them. Both levels are applied the way
+  `ambientGroupsNote` requires — one gain per bed, then **one** node per action, then
+  `ambientMaster`. The bench is still where a bed is *auditioned*; the board is where the
+  action-to-action transition is now heard.
+- **`loopEnd` is pinned, and the length does not come from the decoder.** This bullet used to
+  be a warning to whoever wired them in, and it was read in time: the first version of the
+  player looped on `buf.duration` and would have wrapped through 4 to 17 ms of Vorbis padding
+  on every bed. `ogg_seconds()` reads the true length off the container's last granule at build
+  time and the manifest carries it. All sixty-three agree with the loader to under 0.05 ms.
+  *A warning left in a note is only worth what the next person's search turns up* — this one
+  was found by grepping for stale claims, not by remembering it.

@@ -430,12 +430,16 @@ the other two at the peak, which is the band-limited 24 kHz source showing, not 
 
 ### Set 2, recovered
 
-The board's interface cues come in **sets**, and there are three. Set 1 is the Kenney montage the
-board actually plays. Set 2 is `general/set2_select_sfx_v01.ogg` and
-`general/set2_confirm_sfx_v01.ogg` — ElevenLabs output, **not in use**, and with **no hover at
-all**, which the bench draws as a gap rather than hiding. Set 3 is below.
+The board's interface cues come in **sets**, and there are three. Set 1 is the Kenney montage.
+Set 2 is `general/set2_select_sfx_v01.ogg` and `general/set2_confirm_sfx_v01.ogg` — ElevenLabs
+output, with **no hover at all**, which the bench draws as a gap rather than hiding. Set 3 is
+below.
 
-| | set 1 (in use) | set 2 | set 3 |
+*Which set is live is `CUE_SET` in `generate_action_board.py`, and this file does not restate
+it.* It used to say "in use" in five places and every one of them was wrong within a day of the
+board moving; the bench reads `CUE_SET` and draws the tag, which is the one place to look.
+
+| | set 1 | set 2 | set 3 |
 | --- | --- | --- | --- |
 | hover | 67 ms | — | 71 ms |
 | select | 67 ms | 2000 ms | 742 ms |
@@ -457,8 +461,8 @@ source became a wrong licence that stood for weeks.
 ### Set 3, where the select is the confirm's own tail
 
 `general/set3_hover_sfx_v01.ogg`, `general/set3_select_sfx_v01.ogg` and
-`general/set3_confirm_sfx_v01.ogg` are all cut from one Pixabay drum track, **not in use**. It is
-the only set besides the one shipping that answers all three slots — set 2 still has no hover.
+`general/set3_confirm_sfx_v01.ogg` are all cut from one Pixabay drum track. It is the only set
+besides set 1 that answers all three slots — set 2 still has no hover.
 The hover was added last and only works because it is filtered; see below.
 
 What makes this set different from the other two is that its two cues are not siblings but
@@ -482,12 +486,15 @@ and inside its own reverb, so what rings after the landing is the recording rath
 ### The hover is the hardest slot, and the only one with a measurable spec
 
 A hover fires on every pointer move, plays at gain **0.12** against confirm's 0.7, and must stop
-before the next one starts. `tile.ogg` has done that job unexamined since the beginning; measured,
-it turns out to be a tight specification:
+before the next one starts. `tile.ogg` did that job unexamined from the beginning; measured, it
+turns out to be a tight specification. *The board no longer has a hover cue at all* — it was
+dropped on 2026-10-18, because a hover is not something a player did and the ribbon already
+answers one with light — so what follows is now a specification for a slot nobody fills, kept
+because the measurement is the interesting part and because the slot may come back:
 
 | | length | crest | 20 dB down in | peak below 200 Hz |
 | --- | --- | --- | --- | --- |
-| `tile.ogg` — in use | 67 ms | 17.1 dB | 16 ms | −47.9 dB |
+| `tile.ogg` — set 1 | 67 ms | 17.1 dB | 16 ms | −47.9 dB |
 | set 3 hover | 71 ms | 18.2 dB | 12 ms | −101.2 dB |
 | the same window, unfiltered | 60 ms | 10.2 dB | 36 ms | **−6.7 dB** |
 
@@ -498,8 +505,8 @@ thing more gently: 10.2 dB and 36 ms against 17.1 and 16.
 
 **So set 3's hover is the tree's second filtered clip**, and the Mint test is what let it through:
 the kick is under 200 Hz, the tick is above 2 kHz, and the band between them is 7 dB down, so
-nothing worth keeping shares a band with what was removed. Filtered, it measures *better* than the
-cue in use on both transient figures.
+nothing worth keeping shares a band with what was removed. Filtered, it measures *better* than
+`tile.ogg` on both transient figures.
 
 **The window was found by search rather than by ear.** All fifteen beat and off-beat positions on
 the track's 0.310 s grid were cut to 60 ms, high-passed and scored; 15.040 won outright. The
@@ -1701,22 +1708,52 @@ applied to.* Doing it first meant one pass of fifteen pages instead of fifteen i
 and it would have caught a CC BY before any measuring, as it did on the hemp rope that
 morning.
 
-**Ten of the thirteen trace cleanly**, at separations from 2.15× to 29.39×. Three did not and
-each failed differently:
+**Ten of the thirteen trace cleanly on the first probe**, at separations from 2.15× to 29.39×.
+Three did not, each for a different reason, and one of those three has since been resolved
+outright — by discovering the probe was at fault:
 
 | bed | stated | best control | note |
 |---|---|---|---|
-| `distant_owl` | **0.0337** | 0.0308 | no separation at all — see below |
+| `distant_owl` | **0.0337** | 0.0308 | no separation — and the probe was wrong; see below |
 | `power_strikes` | 0.6325 | 0.3810 | composite of three sources; 1.66× |
 | `debris_cleave` | 0.9978 | 0.5550 | the "control" is probably a missing source |
 
-**The owl does not trace, and a speed search says it is not a stretch either.** Its single
+**The owl did not trace, and after a day the fault turned out to be the probe's.** Its single
 sounding run is 5.056 s against a 5.000 s source — 1.1% longer than the whole recording. Probed
-against the resampled source it reaches **0.0337** where the moth control reaches 0.0308.
+against the resampled source it reached **0.0337** where the moth control reached 0.0308.
 Resampling the source across factors from 0.90 to 1.10 never beat **0.0408**, with no peak near
-the 1.011 the duration implies. Either it was processed past recognition for distance, or it
-came from a different recording. Filed `stated-not-corroborated`; the licence is not in
+the 1.011 the duration implies, so it was not a simple stretch either. Three explanations were
+open — processing past recognition for distance, a different recording, a different take — and
+it was filed `stated-not-corroborated` and carried that way.
+
+*The real answer was a fourth nobody had looked for: the probe was not measuring the owl.*
+**97.76% of the source file's energy sits below 20 Hz** — inaudible rumble, 29% of it below
+5 Hz — and the hoot itself is 0.22% of the file. Normalised cross-correlation divides by total
+energy, so it was scoring that rumble against a bed whose chain had high-passed the rumble
+away, and 0.0337 was an honest answer to the wrong question. All eighteen source entries behind
+this folder were measured: the owl is the most subsonic-dominated by a factor of thirty-four,
+with the quarry wind's breeze next at 2.85%, then dragging at 1.68%. **High-pass both sides at
+100 Hz and the same probe returns 0.9974.**
+
+**Then it was reconstructed rather than traced, which is the stronger test.** The project owner
+supplied the chain — the full 5 s source at original pitch and speed, placed at 20.40 s, panned
+to about +0.48 with stereo width narrowed to 40%, high-passed near 120 Hz and low-passed near
+4.3 kHz, two distance reflections at ~120 ms / 5.5% and ~230 ms / 2.5%, peak set to about
+−24 dBFS, 35 ms in and 280 ms out — and the rebuild reproduces the shipped bed at **r = +0.9966
+lag-searched, with 0.0 ms of drift**, landing at 20.3640 s; at the stated placement with no
+search at all it is **+0.9880**. Both discrepancies that started this fall out of the rebuild:
+the run begins 36 ms before the stated 20.400 because Vorbis rings backwards into the silence
+ahead of a transient, and it ends 210 ms early because the last of the fade-out lies under the
+encoder's resolution. The 5.056 s run is longer than the 5.000 s source because the reflections
+extend the tail — which is also why the speed search found nothing. The licence was never in
 question.
+
+**A low r is a statement about the probe as much as about the file.** `provenance.py` now
+computes `subsonic_fraction()` and warns when a source is dominated by energy no audible chain
+would keep, and `test_provenance.py` carries a case that fails on a buried source and passes
+once both sides are high-passed. *The rule this tree had already written — that a trace is only
+as good as the band it is measured in — existed; it was not applied until a bed failed badly
+enough to force it.*
 
 **`power_strikes` shows what compositing costs a probe.** Two of its three sources land
 independently on different runs — the sledgehammer at 0.6169 on four of seven windows, the
@@ -1730,8 +1767,14 @@ player confirms Produce Stone, the cue will fire over an ambience that already c
 the two reinforce rather than separate. The generic-confirm discussion turned on exactly this
 masking case, and it is now a measured fact about one action. Separately, discofield's stone
 crash — run as a control because the manifest lists it only under `power_strikes` — reaches
-0.5550 here, which most likely means the manifest under-lists this bed's sources rather than
-that the control failed.
+0.5550 here. *That was filed as a likely manifest omission and it is not one.* The window is a
+**65 ms** run, under the 150 ms below which this tree has measured that nothing discriminates,
+and the cue scores **0.4079** on the same window while its real placement is a 1.57 s run
+elsewhere at 0.9889. The two sources correlate at only **0.0850** against each other, and
+subtracting the cue from its own run moves discofield 0.1225 → 0.1495. The manifest is right;
+the bed has two sources. *The threshold that explains this was established four hours before
+the figure was filed and simply wasn't applied — the script reported a maximum across runs
+without checking the winning run's length.*
 
 **The five background workers are one track by choice.** They arrived as five stems whose peaks
 form an exact 1.5 dB ladder — −19.0, −20.5, −22.0, −23.5, −25.0 — so the balance was authored,
@@ -3252,7 +3295,15 @@ and was never going to match. Against a convention with no force here, 48 kHz is
 browser resamples to on decode, it is what was auditioned and approved, and it saves about 12%
 on files that are already five to ten times the size of any cue.
 
-**Whoever wires these into the board needs one thing that is not in the file.** Chrome's
+**They are wired in now, and this is the thing that made it work.** The board has played them
+since 2026-10-18; the first version of its player looped on the decoded buffer's duration and
+this paragraph is what stopped it shipping that way. `generate_action_board.py`'s
+`ogg_seconds()` reads the true length off the container's last granule position at build time —
+no decoder involved, which is the point — and the manifest carries it so `loopEnd` can be set
+in seconds. All sixty-three agree with the loader to under 0.05 ms, and two tests hold the read
+and its use in place.
+
+**Chrome's**
 `decodeAudioData` returns 176 to 764 samples past the true end of a Vorbis file — 4 to 17 ms of
 padding, 6 dB down on some and near-silent on others. Looped raw, that pads every wrap with a
 dropout: rendered offline and measured in 2 ms windows, the hole reads −64.7 dB against a bed

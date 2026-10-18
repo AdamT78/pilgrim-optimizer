@@ -319,6 +319,42 @@ def test_a_window_with_no_energy_cannot_win_however_perfectly_it_correlates():
     assert abs(p.r - exact) < 1e-12, "reported %.12f, exact %.12f" % (p.r, exact)
 
 
+def test_a_source_buried_under_subsonics_is_flagged_and_rescued_by_a_high_pass():
+    """Inaudible energy defeats a normalised correlation, and the module says so.
+
+    Cross-correlation divides by total energy, so a source carrying heavy sub-20 Hz rumble is
+    measured mostly on the rumble. Cinetony's tawny owl is **97.76%** sub-20 Hz and its hoot is
+    0.22% of the file; probed raw against a stem whose chain had removed the rumble it scored
+    0.0337 against a control at 0.0308 and was filed as not corroborated. High-passed at 100 Hz
+    the same comparison returns 0.9974. This reproduces that shape: an audible event buried
+    under rumble forty times its amplitude.
+
+    Falsified by making `highpass` a no-op, or by dropping `subsonic_fraction` -- the diagnosis
+    is the useful half, because a score of 0.03 looks like a wrong source and not like a
+    measurement problem.
+    """
+    n = int(1.0 * SR)
+    t = np.arange(n) / SR
+    call = np.sin(2 * np.pi * 500 * t) * np.exp(-6 * t)      # the audible part
+    rumble = 40.0 * np.sin(2 * np.pi * 7 * t)                # inaudible, and enormous
+    src = np.zeros(4 * SR)
+    at = int(1.5 * SR)
+    src[at:at + n] = call + rumble
+    stem = 0.5 * call                                        # the chain kept only the call
+
+    assert P.subsonic_fraction(src, SR) > 0.9, P.subsonic_fraction(src, SR)
+    assert P.subsonic_fraction(stem, SR) < 0.01
+
+    raw = P.locate(stem, src, SR)
+    hp = P.locate(P.highpass(stem, SR), P.highpass(src, SR), SR)
+    assert abs(raw.r) < 0.3, "raw probe scored %.4f; the rumble is not dominating" % raw.r
+    assert abs(hp.r) > 0.9, "high-passed probe scored %.4f, expected a clean match" % hp.r
+    # Within a couple of milliseconds: a brick-wall filter smears the onset of a decaying
+    # tone, so demanding the exact sample here would be testing the filter, not the match.
+    assert abs(hp.offset - at) <= int(0.002 * SR), (
+        "matched at %d, material is at %d" % (hp.offset, at))
+
+
 def test_locate_refuses_rather_than_guesses_when_it_cannot_search():
     """Degenerate inputs return None instead of a confident wrong answer.
 

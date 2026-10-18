@@ -212,6 +212,26 @@ Two riders: it has to compose with whatever fade-in the bed gets at select, and 
 playback non-deterministic, which matters only for testing. With beds scoped to two duty actions
 and heard repeatedly, this is where the anti-repetition budget is best spent.
 
+**And a third rider, which cost two tracks before it was written down.** Everything above was
+worked out on continuous texture — section 9 says so about itself, and this section inherited
+the assumption without restating it. A random entry into a texture is a variation. A random
+entry into a **one-shot** is a truncation: the clip has one pass, so entering partway does not
+vary it, it removes whatever came before. `ordination_actionB/door_close` is one door at
+2.997 s of 36 seconds; `produce_actionA/distant_rooster` is a rooster at 1.975 s of 35. A
+uniform entry misses them **92%** and **94%** of the time. Both carry `"loop": false` and the
+ambient bench has shown them unticked since they were filed — so the two tracks whose whole job
+was to sound at the start of a scene became the two least likely to sound at all, and the board
+looped them on top of that, shutting Mission's door again every 36 seconds.
+
+*The board was built from this section and took the advice without its condition, which is the
+section's fault as much as the board's.* `generate_action_board.py` carries `BED_START`, which
+is `"start"` today and `"random"` when the anti-repetition budget is wanted back; either way a
+non-looping bed enters at 0, enforced at the source rather than left to the setting, because
+whether a clip can bear a random entry is a property of the clip. **The cost of `"start"` is
+exactly what this section warned about** — every bed re-enters at 0 on each selection, so the
+owl calls 20.4 s after every pick of Produce Stone. Beds of different lengths inside one action
+still drift against each other while an action is held, but they resynchronise on every select.
+
 ## 9. Sparse event material, and a loop built in the mix instead of cut from one
 
 Everything up to here was worked out on **continuous texture** — fire, rain, a room, a howl —
@@ -582,11 +602,15 @@ sliding probe fails when the source is too thin, the event probe when its window
 
 ## 14. Not done
 
-- **The board plays no bed.** All sixty-three are filed and audible on the ambient bench;
-  `bundled_sfx()` still inlines only `tile.ogg` and `confirm.ogg`. This bullet has said "all
-  five" since there were five, which is its own small lesson: a count in prose is a fact with
-  no test behind it, and nine beds arrived before anyone noticed. The generator prints the
-  number on every run — that is the one to believe.
+- ~~**The board plays no bed.**~~ **It does, as of 2026-10-18.** All sixty-three reach it
+  through `bundled_beds()`, selecting a duty action crossfades to that action's ambience over
+  1.5 s, and the three slots with no folder — Construct's two and Ordain — are carried as a
+  named `__silent__` list so the page fades the previous action *out* rather than leaving it
+  playing under an action that has none. This bullet said "all five" since there were five,
+  which was its own small lesson: a count in prose is a fact with no test behind it, and nine
+  beds arrived before anyone noticed. There is now a test that the manifest and the folders
+  agree, so the count has something behind it at last. The generator still prints it on every
+  run.
 - **Action-to-action transitions can now be heard, and nothing had to be merged to hear
   them.** The bench grew a `cross` control on 2026-10-17: pick a destination action, a time
   and a curve, and the two *complete* ambiences crossfade — eleven tracks against ten, all

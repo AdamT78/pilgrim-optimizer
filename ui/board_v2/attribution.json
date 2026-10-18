@@ -2321,7 +2321,7 @@
       "originalPath": "kenney.nl/assets/interface-sounds",
       "collection": "Pilgrim board_v2 interface sounds",
       "title": "interface tick",
-      "role": "BOTH the hover and the select cue, at gains 0.12 and 0.50 -- one sound at two strengths",
+      "role": "SET 1's hover and select, one sound at two strengths. WHICH SET IS LIVE IS NOT THIS RECORD'S BUSINESS, and was asserted here for months: `CUE_SET` in generate_action_board.py names it and the bench reads that, so a record answering the same question was a second answer waiting to go stale. It did, on 2026-10-18: the board moved to set 3 and this line went on describing two gains that nothing applied. A record describes the clip",
       "modifications": "mono as (L+R)/2, no fade in, short fade out, NO normalising, Vorbis q6. Verified against the source by correlation: r = 0.9999 at 0.725 s.",
       "licenceNote": "Kenney Interface Sounds, CC0 (public domain, no attribution required).",
       "reproducibleBy": "ui/board_v2/sfx/README.md records the cut point and the four decisions",
@@ -2338,7 +2338,7 @@
       "originalPath": "kenney.nl/assets/interface-sounds",
       "collection": "Pilgrim board_v2 interface sounds",
       "title": "confirm tick",
-      "role": "the confirm cue, at gain 0.70 -- the picker's own volume slider",
+      "role": "SET 1's confirm. The gain it was auditioned at, 0.70, was the picker's own volume slider; what the board applies today is `CUE_SET`'s business and not this record's",
       "modifications": "mono as (L+R)/2, no fade in, short fade out, NO normalising, Vorbis q6. Correlates with the source at r = 0.9998.",
       "licenceNote": "Kenney Interface Sounds, CC0 (public domain, no attribution required).",
       "reproducibleBy": "ui/board_v2/sfx/README.md",
@@ -2356,10 +2356,10 @@
       "originalPath": "Downloads/SoundFX/ (loose; the generation itself is not recoverable)",
       "collection": "Pilgrim board_v2 interface sounds",
       "title": "set 2 -- select",
-      "role": "the select cue of SET 2, an alternative to the Kenney set the board actually plays. NOT IN USE: nothing reads this file, and the set has no hover at all. Content ends at 1710 ms of 2000.",
+      "role": "the select cue of SET 2. The set has no hover at all. Content ends at 1710 ms of 2000.",
       "modifications": "UNEDITED but for the container: mono as (L+R)/2 and Vorbis q6. No trim, no fade, no level change. Summing checked: both channels alive and correlated. THE TRAILING SILENCE IS LEFT IN, as is the length -- see measured, because the length is the interesting thing about this set rather than an oversight.",
       "reproducibleBy": "NOT REPRODUCIBLE. The prompt was not recorded and the same prompt would not return the same audio -- the same gap Ordain has.",
-      "measured": "2000 ms, peak -8.4 dB. TWENTY-FIVE TIMES THE LENGTH of the cue in use: the Kenney select is 67 ms. A two-second select on a board where selection resolves nothing until Confirm is a different design, not a longer version of the same one, and that is the question this set poses.",
+      "measured": "2000 ms, peak -8.4 dB. TWENTY-FIVE TIMES THE LENGTH of set 1's select, which is 67 ms. A two-second select on a board where selection resolves nothing until Confirm is a different design, not a longer version of the same one, and that is the question this set poses.",
       "sha256": "d73da717d2ae8ee7d0a6bff9176ad9108138f95d5744f56ee90b9b26796b9a41",
       "gainDb": 0.3
     },
@@ -2373,10 +2373,10 @@
       "originalPath": "Downloads/SoundFX/ (loose; the generation itself is not recoverable)",
       "collection": "Pilgrim board_v2 interface sounds",
       "title": "set 2 -- confirm",
-      "role": "the confirm cue of SET 2, an alternative to the Kenney set the board actually plays. NOT IN USE: nothing reads this file, and the set has no hover at all. Content ends at 1500 ms of 2000.",
+      "role": "the confirm cue of SET 2. The set has no hover at all. Content ends at 1500 ms of 2000.",
       "modifications": "UNEDITED but for the container: mono as (L+R)/2 and Vorbis q6. No trim, no fade, no level change. Summing checked: both channels alive and correlated. THE TRAILING SILENCE IS LEFT IN, as is the length -- see measured, because the length is the interesting thing about this set rather than an oversight.",
       "reproducibleBy": "NOT REPRODUCIBLE. The prompt was not recorded and the same prompt would not return the same audio -- the same gap Ordain has.",
-      "measured": "2000 ms, peak -2.9 dB, against the Kenney confirm's 77 ms. It is also 5.5 dB louder than its own select, where the pair in use sit 1.1 dB apart, so the two sets are levelled on different assumptions.",
+      "measured": "2000 ms, peak -2.9 dB, against the Kenney confirm's 77 ms. It is also 5.5 dB louder than its own select, where set 1's pair sit 1.1 dB apart, so the two sets are levelled on different assumptions.",
       "sha256": "55830ecc4718e1b93f3415e94f91f5d600083389fdf9b55b1b3bff4841c5d3e8",
       "gainDb": -7.2
     },
@@ -3018,7 +3018,7 @@
       "collection": "Pilgrim board_v2 interface cues",
       "source": "jungle-drum-jingle-257482, uploaded to Pixabay by the tomas_herudek account. 17.055 to 17.800 s.",
       "title": "Set 3 select -- the landing",
-      "role": "the select cue of set 3, which is NOT in use. Starts on the off-beat at 17.080 and runs into the track's final hit. The off-beat is a real subdivision in the recording and was checked for before cutting there -- it is a pickup, not a slice out of the middle of a bar",
+      "role": "the select cue of set 3. Starts on the off-beat at 17.080 and runs into the track's final hit. The off-beat is a real subdivision in the recording and was checked for before cutting there -- it is a pickup, not a slice out of the middle of a bar",
       "modifications": "CUT 17.055 to 17.800 s. 8 ms fade in, because the mix is dense and there is no silence anywhere to start from. CUT ON THE BEAT GRID, NOT BY DURATION. The master's kick drum is dead regular at 0.310 s -- 193 BPM -- with beats at 15.040, 15.350, 15.655, 15.970, 16.285, 16.590, 16.910 and 17.220 s, found by band-splitting below 180 Hz and taking envelope peaks. A plain onset detector found almost nothing on this file because the mix never drops far enough between hits for a level jump to register; the kick band is what exposes the grid. Every window here starts on a hit and none was chosen for its length. BOTH CUES END AT 17.800 s, which is 580 ms past the track's final beat and inside its own reverb, so the ring is the recording's rather than a fade's invention. Same 200 ms raised-cosine fade out on both. Mono as (L+R)/2, 48 kHz kept, Vorbis q6, no level change. Channels correlate +0.6185, summing costs 0.58 dB. Not clipped: zero full-scale samples in either channel of the master. THIS CLIP IS THE CONFIRM'S OWN TAIL. Its 742 ms are the last 742 ms of set3_confirm_sfx_v01.ogg, identical to within 377 samples that are this clip's own fade in. That is deliberate and it is the set's idea: select asks, confirm answers, and both land on the same hit. It is recorded here because a reader finding two files with identical endings would otherwise reasonably suspect a mistake.",
       "measured": "742 ms, peak -1.6 dB, mean -15.9 dB. Not clipped. Identity lands at its own peak inside the first 150 ms. Ends 23.5 dB below that. Centroid 1154 Hz, 85% rolloff 148 Hz -- the rolloff is low because a drum track's energy is nearly all kick, and the centroid is dragged up by cymbal content that carries little of it. Neither number says much here; the clip is a rhythm, not a timbre.",
       "gainDb": -11.0,
@@ -3034,7 +3034,7 @@
       "collection": "Pilgrim board_v2 interface cues",
       "source": "jungle-drum-jingle-257482, uploaded to Pixabay by the tomas_herudek account. 16.578 to 17.800 s.",
       "title": "Set 3 confirm -- two beats into the landing",
-      "role": "the confirm cue of set 3, which is NOT in use. Starts on the beat at 16.590, so three hits and an off-beat run into the landing. AT 1222 ms IT IS FIFTEEN TIMES THE LENGTH OF THE CONFIRM THE BOARD ACTUALLY PLAYS, which is 80 ms. That is the same question set 2 poses and it is a question about what an interface should sound like, not about this clip",
+      "role": "the confirm cue of set 3. Starts on the beat at 16.590, so three hits and an off-beat run into the landing. AT 1222 ms IT IS FIFTEEN TIMES THE LENGTH OF SET 1's CONFIRM, which is 80 ms. That is the same question set 2 poses and it is a question about what an interface should sound like, not about this clip",
       "modifications": "CUT 16.578 to 17.800 s. 8 ms fade in. CUT ON THE BEAT GRID, NOT BY DURATION. The master's kick drum is dead regular at 0.310 s -- 193 BPM -- with beats at 15.040, 15.350, 15.655, 15.970, 16.285, 16.590, 16.910 and 17.220 s, found by band-splitting below 180 Hz and taking envelope peaks. A plain onset detector found almost nothing on this file because the mix never drops far enough between hits for a level jump to register; the kick band is what exposes the grid. Every window here starts on a hit and none was chosen for its length. BOTH CUES END AT 17.800 s, which is 580 ms past the track's final beat and inside its own reverb, so the ring is the recording's rather than a fade's invention. Same 200 ms raised-cosine fade out on both. Mono as (L+R)/2, 48 kHz kept, Vorbis q6, no level change. Channels correlate +0.6185, summing costs 0.58 dB. Not clipped: zero full-scale samples in either channel of the master. ITS LAST 742 ms ARE set3_select_sfx_v01.ogg, sample for sample bar that clip's 8 ms ramp. The confirm is the select with 477 ms of run-up in front. Shorter confirms were cut from 16.900 and from the off-beat at 17.080 and not taken; the one at 17.080 was only 130 ms longer than the select and stopped being a separate cue.",
       "measured": "1222 ms, peak -1.4 dB, mean -14.6 dB. Not clipped. Identity lands at its own peak inside the first 150 ms. Ends 24.1 dB below that, 17% of the clip being envelope. AGAINST THE OTHER TWO CONFIRMS: set 1's is 80 ms at -1.3 dB and set 2's is 2000 ms at -2.9. This sits between them in length and is the loudest of the three. Centroid 2050 Hz and 85% rolloff 214 -- see the select's record for why neither figure is worth much on a drum loop.",
       "gainDb": -11.1,
@@ -3050,9 +3050,9 @@
       "originalPath": "pixabay.com",
       "collection": "Pilgrim board_v2 interface cues",
       "title": "Set 3 hover -- a filtered tick",
-      "role": "the hover cue of set 3, which is NOT in use. Completes the set: set 3 is now the only set besides the one shipping that answers all three slots. A hover fires on every pointer move and plays at gain 0.12 against confirm's 0.7, so it has about 18 dB less to work with than anything else on the board",
+      "role": "the hover cue of set 3. Completes the set: set 3 is the only set besides set 1 that answers all three slots. A hover fires on every pointer move and plays at gain 0.12 against confirm's 0.7, so it has about 18 dB less to work with than anything else on the board",
       "modifications": "HIGH-PASSED AT 2 kHz, AND THE SECOND CLIP IN THIS TREE WITH EQ. Mint was the first; the test it set was that the thing removed and the thing kept must share no band, and that test passes here -- the kick sits under 200 Hz, the tick lives above 2 kHz, and the 200-2000 Hz band between them is 7 dB down. Half-octave raised-cosine transition, applied before the mono sum. Cut 15.032 to 15.092 s, 3 ms fade in, 18 ms fade out, 48 kHz kept, Vorbis q6, no level change. WITHOUT THE FILTER THIS IS NOT A HOVER AT ANY LENGTH, which is why the EQ is here and is not a preference. The raw window measures crest 10.2 dB and takes 36 ms to fall 20 dB, against tile.ogg's 17.1 and 16 ms, and sits at -6.7 dB below 200 Hz where tile.ogg is at -47.9. It is a kick, and a kick on every pointer move. Filtered it measures crest 18.2 and 12 ms, both better than the cue in use. THE WINDOW WAS CHOSEN BY SEARCH, NOT BY EAR FIRST. All fifteen beat and off-beat positions on the track's 0.310 s grid were cut to 60 ms, high-passed and scored on crest and on time to fall 20 dB. 15.040 won outright at 17.6 dB and 12 ms; the next best was 17.065, which is exactly where the select opens and was passed over for that reason. THERE IS NO UNFILTERED ANSWER ANYWHERE IN THE FILE: the track runs full mix from sample 0 to its last beat with no intro and no breakdown, so no window of it is free of kick.",
-      "measured": "71 ms, peak -5.5 dB, mean -23.8 dB. Not clipped. Crest 18.2 dB and 20 dB of decay inside 12 ms, against tile.ogg's 17.1 dB and 16 ms -- a faster and more transient cue than the one the board plays. At the board's hover gain of 0.12 it lands at -23.9 dB effective, 3.1 dB under tile.ogg's -20.8. NOTHING BELOW 200 Hz: the band peak there is -101.2 dB, which is the filter's doing and is the single property that makes this usable. Centroid 6185 Hz, loudest band 2-6 kHz at -8.7 dB by peak. AGAINST ITS OWN SET: 71 ms against the select's 742 and the confirm's 1222, so set 3 has the same shape as set 1 -- a tick, then two longer cues -- rather than set 2's two equal two-second blocks.",
+      "measured": "71 ms, peak -5.5 dB, mean -23.8 dB. Not clipped. Crest 18.2 dB and 20 dB of decay inside 12 ms, against tile.ogg's 17.1 dB and 16 ms -- a faster and more transient cue than set 1's. At the board's hover gain of 0.12 it lands at -23.9 dB effective, 3.1 dB under tile.ogg's -20.8. NOTHING BELOW 200 Hz: the band peak there is -101.2 dB, which is the filter's doing and is the single property that makes this usable. Centroid 6185 Hz, loudest band 2-6 kHz at -8.7 dB by peak. AGAINST ITS OWN SET: 71 ms against the select's 742 and the confirm's 1222, so set 3 has the same shape as set 1 -- a tick, then two longer cues -- rather than set 2's two equal two-second blocks.",
       "gainDb": 1.4,
       "sha256": "aaeccd12c85a50f19c1a1adf76a4f11034d20c8c55b579dba3c1197b2b5206d5"
     },
@@ -4905,14 +4905,14 @@
       "source": "produce_stone_14_distant_tawny_owl_stem_v01_35s.wav. Supplied in Produce_Stone_Final_Tracks_v14 with a manifest naming every source. The stem exists only on the project owner's disk; the things anyone can fetch again are the uploads in `sources`, and every source file was on disk and probed directly.",
       "sources": [
         {
-          "role": "stated as the whole bed; NOT CORROBORATED",
+          "role": "the whole bed; CORROBORATED BY RECONSTRUCTION at r = +0.9966",
           "title": "Tawny owl call",
           "uploader": "cinetony",
           "url": "https://freesound.org/people/cinetony/sounds/558214/",
           "licence": "cc0",
           "originalFilename": "558214__cinetony__tawny-owl-call.wav",
           "measured": "5.000 s, 44.1 kHz, resampled to 48 kHz before correlating. THE SHORTEST SOURCE FEEDING ANY BED IN THIS FOLDER, and shorter than the bed's own sounding run.",
-          "provenanceConfidence": "stated-not-corroborated",
+          "provenanceConfidence": "confirmed-by-reconstruction",
           "note": "FIRST cinetony UPLOAD IN THIS TREE."
         }
       ],
@@ -4920,8 +4920,8 @@
       "originalPath": "freesound.org/people/cinetony/sounds/558214/",
       "collection": "Pilgrim board_v2 ambient beds",
       "title": "Produce Stone distant owl -- one dusk call across the quarry",
-      "role": "The fifth track of thirteen under produce actionB, which is Produce Stone. It loops. A single owl call at 20.4 s. THE ONLY TRACK IN THIS FOLDER WHOSE SOURCE THE MEASUREMENT DOES NOT SUPPORT -- see `modifications` before relying on its attribution.",
-      "modifications": "THE TRACE FAILED AND THE RECORD SAYS SO RATHER THAN DRESSING IT UP. The bed's single sounding run is 20.364-25.420 s, which is 5.056 s -- 1.1% LONGER THAN THE WHOLE SOURCE. Probed against the resampled source it reaches r = 0.0337 where the moth control reaches 0.0308: no separation at all. A SPEED SEARCH WAS RUN ON THE SUSPICION THAT THE CALL HAD BEEN STRETCHED, resampling the source across factors from 0.90 to 1.10; every factor scored at or below 0.0408, with the best at 1.10 and no peak near the 1.011 the duration mismatch implies. So it is not a simple stretch either. THREE EXPLANATIONS REMAIN AND THE MEASUREMENT CANNOT CHOOSE BETWEEN THEM: the call was processed hard enough for distance -- heavy low-pass plus reverb -- that nothing correlates, which would be far beyond anything else in this tree (the tinkering brick, filtered AND pulled down 24 dB, still managed 0.585); the stem came from a different recording; or a different take of the same upload. The licence is not in question -- the upload is CC0 and so is everything else here -- so this is a provenance gap, not a rights one. THE CONTAINER: Vorbis q6 at the stem's own 48 kHz stereo, no trim, no fade, no level change.",
+      "role": "The fifth track of thirteen under produce actionB, which is Produce Stone. It loops. A single owl call at 20.4 s. THE ONLY TRACK IN THIS FOLDER WHOSE SOURCE A DIRECT PROBE COULD NOT SUPPORT -- it was carried for a day as stated-not-corroborated and then confirmed, first by high-passing both sides and then by rebuilding it from the stated recipe; see `modifications`, which keeps the failed trace rather than replacing it.",
+      "modifications": "THE DIRECT TRACE FAILED, THE RECORD SAID SO FOR A DAY, AND THEN THE FAILURE TURNED OUT TO BE THE PROBE'S. The bed's single sounding run is 20.364-25.420 s, which is 5.056 s -- 1.1% LONGER THAN THE WHOLE SOURCE. Probed against the resampled source it reaches r = 0.0337 where the moth control reaches 0.0308: no separation at all. A SPEED SEARCH WAS RUN ON THE SUSPICION THAT THE CALL HAD BEEN STRETCHED, resampling the source across factors from 0.90 to 1.10; every factor scored at or below 0.0408, with the best at 1.10 and no peak near the 1.011 the duration mismatch implies. So it is not a simple stretch either. THREE EXPLANATIONS WERE OPEN AT THAT POINT -- processing far beyond anything else in this tree, a different recording, or a different take -- AND THE REAL ANSWER WAS A FOURTH NOBODY HAD LOOKED FOR: THE PROBE WAS NOT MEASURING THE OWL. 97.76% OF THE SOURCE FILE'S ENERGY SITS BELOW 20 Hz, inaudible rumble, 29% of it below 5 Hz; the hoot itself is 0.22% of the file. Normalised cross-correlation divides by total energy, so it was scoring the rumble against a bed whose chain had high-passed that rumble away, and 0.0337 was the honest answer to the wrong question. The owl is the most subsonic-dominated source behind this folder by a factor of thirty-four: all eighteen source entries were measured and the next worst is the quarry wind's breeze at 2.85%, then dragging at 1.68% and the stone crash at 1.33%. HIGH-PASS BOTH SIDES AT 100 Hz AND THE SAME PROBE RETURNS r = 0.9974. THEN IT WAS RECONSTRUCTED RATHER THAN TRACED, which is the stronger test: the project owner supplied the chain -- full 5 s source at original pitch and speed, placed at 20.40 s, panned to about +0.48 with the stereo width narrowed to 40%, high-passed near 120 Hz and low-passed near 4.3 kHz, two distance reflections at ~120 ms / 5.5% and ~230 ms / 2.5%, peak set to about -24 dBFS, 35 ms fade in and 280 ms fade out -- and the rebuild reproduces the shipped bed at r = +0.9966 LAG-SEARCHED, WITH 0.0 ms OF DRIFT, landing at 20.3640 s. At the stated placement with no search at all it is +0.9880. THE TWO DISCREPANCIES THAT STARTED THIS BOTH FALL OUT OF THE REBUILD: the run begins 36 ms before the stated 20.400 because Vorbis rings backwards into the silence ahead of a transient, and it ends at 25.420 against the rebuild's 25.630 because the last 210 ms of the fade-out lies under the encoder's resolution. The 5.056 s run is longer than the 5.000 s source because the reflections extend the tail, not because anything was stretched -- which is also why the speed search found no peak. THE LESSON IS WRITTEN INTO THE TOOL: `provenance.py` now computes `subsonic_fraction()` and warns when a source is dominated by energy no audible chain would keep, and `tests/action_board/test_provenance.py` holds a case that fails on a buried source and passes once high-passed. A LOW r IS A STATEMENT ABOUT THE PROBE AS MUCH AS ABOUT THE FILE. The licence was never in question -- the upload is CC0 and so is everything else here. THE CONTAINER: Vorbis q6 at the stem's own 48 kHz stereo, no trim, no fade, no level change.",
       "measured": "35000 ms, peak -23.9 dB, integrated -51.21 LUFS, true peak -23.93 dBTP, stereo 48 kHz, L/R correlation +0.934935. 85.6% of the file is exact digital silence in 1 run. material runs 20.364 to 25.420 s and the wrap gap is 29.944 s. Gated it reads -36.21 LUFS, 15.00 dB off the ungated figure on 11 of 347 blocks, against 10*log10(347/11) = 14.99 -- the block-count identity. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT.",
       "gainDb": 0.0,
       "sha256": "e9944a7de2e448462775373e7fd85d340c8b2915e9f7d71e15317b2ab7f2e070"
@@ -5010,7 +5010,7 @@
       "collection": "Pilgrim board_v2 ambient beds",
       "title": "Produce Stone debris and cleave -- chips after the blows, and the stone splitting",
       "role": "The seventh track of thirteen under produce actionB, which is Produce Stone. It loops. Small stone chips following the heavy blows, plus the cleave on the third strike.",
-      "modifications": "SOURCE CONFIRMED AND ONE OF THEM IS THE GAME'S OWN CUE. The rock impacts land at r up to 0.9978 on five of six windows, which is the cleanest trace in this folder. The cue itself lands at 0.9889 on one window, confirming the manifest's claim that it was used. THE CUE BEING INSIDE THE BED HAS A CONSEQUENCE NOBODY HAS DECIDED ON YET: when a player confirms Produce Stone, the cue fires over an ambience that already contains it, so the two will reinforce rather than separate. That is the exact masking case the generic-cue discussion turned on, and it is now a measured fact about this action rather than a worry. A TRACE THAT MAY BE A MISSING SOURCE RATHER THAN A FAILED CONTROL: discofield's stone crash, run here as a control because the manifest lists it only under power_strikes, reaches 0.5550 on one window -- over the match threshold. Given this bed carries the cleave and power_strikes carries the cleaving blow, the likeliest reading is that the manifest under-lists this bed's sources rather than that the control failed. Unresolved, and flagged rather than filed either way. THE CONTAINER: Vorbis q6 at the stem's own 48 kHz stereo, no trim, no fade, no level change.",
+      "modifications": "SOURCE CONFIRMED AND ONE OF THEM IS THE GAME'S OWN CUE. The rock impacts land at r up to 0.9978 on five of six windows, which is the cleanest trace in this folder. The cue itself lands at 0.9889 on one window, confirming the manifest's claim that it was used. THE CUE BEING INSIDE THE BED HAS A CONSEQUENCE NOBODY HAS DECIDED ON YET: when a player confirms Produce Stone, the cue fires over an ambience that already contains it, so the two will reinforce rather than separate. That is the exact masking case the generic-cue discussion turned on, and it is now a measured fact about this action rather than a worry. A CONTROL THAT LOOKED LIKE A MISSING SOURCE AND WAS NOT, RESOLVED 2026-10-18. discofield's stone crash, run here as a control because the manifest lists it only under power_strikes, reached 0.5550 on one window and was filed as a likely manifest omission. IT IS THE SHORT-RUN ARTEFACT AND NOTHING ELSE. That window is a 65 ms run at 26.131-26.196 s, well under the 150 ms below which this tree has measured that nothing discriminates -- and THE CUE SCORES 0.4079 ON THE SAME WINDOW, which it cannot be doing honestly, because the cue's real placement is a 1.57 s run at 9.176 s where it reaches 0.9889. Two checks settle it: the cue and discofield's crash, correlated against each other whole and lag-searched, reach only 0.0850, so they are not the same recording; and subtracting the cue's fitted contribution from its own run moves discofield from 0.1225 to 0.1495, so they are independent. THE MANIFEST IS CORRECT and this bed has two sources. The rule that explains it was established on produce_actionA/nearby_raven four hours before this figure was filed, and was not applied because the trace script reported a maximum across runs without checking how long the winning run was -- A THRESHOLD IS ONLY WORTH HAVING IF THE TOOL APPLIES IT, and sfx_lab/provenance.py now flags short runs in its own output. THE CONTAINER: Vorbis q6 at the stem's own 48 kHz stereo, no trim, no fade, no level change.",
       "measured": "35000 ms, peak -10.3 dB, integrated -42.51 LUFS, true peak -10.29 dBTP, stereo 48 kHz, L/R correlation +0.998328. 90.5% of the file is exact digital silence in 7 runs. material runs 2.227 to 32.708 s and the wrap gap is 4.519 s. Gated it reads -29.21 LUFS, 13.30 dB off the ungated figure on 16 of 347 blocks, against 10*log10(347/16) = 13.36 -- the block-count identity. THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT.",
       "gainDb": 0.0,
       "sha256": "804cd5516c5100b62d90890a16db3b71e33040b5d7087004358c6d2281883a8c"
@@ -5292,66 +5292,68 @@
     "cutouts"
   ],
   "ambientFoldersNote": "A BED LIVES IN A FOLDER NAMED AFTER THE DUTY ACTION IT PLAYS UNDER -- sfx/ambient/<duty>_<slot>/, the same string the action's own cue is named with, so sfx/ambient/taxation_actionA/ sits beside sfx/duty_actions/taxation_actionA_sfx_v01.ogg. IT USED TO BE THE FILENAME'S JOB. A flat sfx/ambient/ resolved a bed to its action by dropping trailing words off the stem until one matched a duty action's name, so `allocation_wind` found Allocation. That works for two tracks and stops working for four: a stem wants a name that says what it IS -- wheat, coins, barn creaks -- and those names collide across actions the moment two duties both have wheat in them. The folder now owns which action, the filename owns which track, and neither repeats the other. Unlike slotFolders above, this one IS derivable and is not a mapping: the folder name is the duty key and the slot joined by an underscore, and the generator refuses a folder that does not name a real duty action rather than guessing.",
-  "ambientGroupsNote": "A SECOND LEVEL, ONE PER DUTY ACTION, AND IT IS A MIX PARAMETER RATHER THAN PROVENANCE. Each bed's own `gainDb` is its balance against the other beds of its action; `groupDb` here is where that whole action sits against the other actions. The two multiply: a track is heard at gainDb + groupDb. WHY TWO NUMBERS INSTEAD OF ONE. Folding a group move back into each track's gainDb gives the same sound once and then throws the structure away -- there is no longer an action level to revisit, only N numbers that happened to move together, and the next adjustment is N slider moves again. Kept apart, balancing within an action and matching actions to each other stay separate jobs, which is how they are actually done. THE GROUP CANNOT CHANGE THE BALANCE INSIDE AN ACTION, BY CONSTRUCTION. On the bench it is one gain node that every track of the action feeds, so it scales all of them by the same factor; it is not added into each track's gain, where a clamp or a rounding could pull one of them out of line. Anything that plays these beds must do the same: per-track gain, then one bus gain per action. summedTruePeakDbtp IS A RENDERED MEASUREMENT, NOT A SUM OF PEAKS -- the action's beds mixed at their trims and measured, which on Build Roads reads -3.05 dBTP where adding the individual peaks says +1.86. It scales exactly with groupDb, so the bench shows summedTruePeakDbtp + groupDb and that figure is exact rather than pessimistic. IT GOES STALE WHEN ANY TRIM MOVES, so `summedAtTrims` fingerprints the gainDb values it was computed from and a test refuses the pair when they disagree; `python3 ui/board_v2/sfx_lab/sfx_levels.py --groups --write` recomputes both. THE BOARD DOES NOT PLAY BEDS YET. When bundled_sfx() finally does, it has to apply both numbers or what ships will not be what was auditioned.",
+  "ambientMasterNote": "THE ONE GAIN THE WHOLE BOARD PASSES THROUGH, and it is arithmetic rather than taste. The loudest action after its group trim is clerical_actionA at -3.60 dBTP. An equal-power crossfade holds both actions at 0.7071 through the middle of a switch, so two whose peaks coincide reach 1.4142 times one of them, and the confirm cue can land on top of that. THE CUE FIGURE WAS WRONG WHEN THIS NOTE WAS FIRST WRITTEN -- it said 0.7 x -0.30 dBFS, a peak no cue in this tree has ever had; the Kenney confirm it meant peaks at -1.26. The board now plays general/set3_confirm at -1.38 dBFS, so the cue reaches 0.7 x -1.38 = -4.48 dBFS. At -4.5 dB the worst case comes to -0.80 dBFS, which is the point: the bound is PROVABLE rather than probable, and clipping that only happens when three peaks coincide is the kind nobody reproduces and everybody hears. It costs 4.5 dB of a board whose loudest moment is otherwise 3.6 dB under full scale, so it costs nothing worth keeping. RECOMPUTE IT WHEN THE TRIMS ARE SET, AND WHEN THE CUE SET CHANGES: the figure follows the loudest action and the loudest cue, not the other way round. It was rechecked against set3 on 2026-10-18 and -4.5 still held, which is the only reason it did not move.",
+  "ambientMaster": -4.5,
+  "ambientGroupsNote": "A SECOND LEVEL, ONE PER DUTY ACTION, AND IT IS A MIX PARAMETER RATHER THAN PROVENANCE. Each bed's own `gainDb` is its balance against the other beds of its action; `groupDb` here is where that whole action sits against the other actions. The two multiply: a track is heard at gainDb + groupDb. WHY TWO NUMBERS INSTEAD OF ONE. Folding a group move back into each track's gainDb gives the same sound once and then throws the structure away -- there is no longer an action level to revisit, only N numbers that happened to move together, and the next adjustment is N slider moves again. Kept apart, balancing within an action and matching actions to each other stay separate jobs, which is how they are actually done. THE GROUP CANNOT CHANGE THE BALANCE INSIDE AN ACTION, BY CONSTRUCTION. On the bench it is one gain node that every track of the action feeds, so it scales all of them by the same factor; it is not added into each track's gain, where a clamp or a rounding could pull one of them out of line. Anything that plays these beds must do the same: per-track gain, then one bus gain per action. summedTruePeakDbtp IS A RENDERED MEASUREMENT, NOT A SUM OF PEAKS -- the action's beds mixed at their trims and measured, which on Build Roads reads -3.05 dBTP where adding the individual peaks says +1.86. It scales exactly with groupDb, so the bench shows summedTruePeakDbtp + groupDb and that figure is exact rather than pessimistic. IT GOES STALE WHEN ANY TRIM MOVES, so `summedAtTrims` fingerprints the gainDb values it was computed from and a test refuses the pair when they disagree; `python3 ui/board_v2/sfx_lab/sfx_levels.py --groups --write` recomputes both. THE BOARD PLAYS THESE NOW, through generate_action_board.py's bundled_beds(), and it applies both numbers the way this note requires: one gain node per bed for `gainDb`, then ONE node per action for `groupDb`, then `ambientMaster`. THE NUMBERS BELOW ARE PROVISIONAL AND MEANT TO BE OVERWRITTEN. They were not authored; each was set to bring its action's `summedLoudnessLufs` to the median action, -33.83, rounded to half a decibel and clamped at 12 dB, so that selecting one duty action after another is not a lottery while 35 of the 63 beds still carry gainDb 0.0. A FLOOR TO START FROM, NOT A MIX -- and matching integrated loudness is not the same as matching how loud two places feel, which is the judgement the trims exist for.",
   "ambientGroups": {
     "allocation_actionA": {
-      "groupDb": 0.0,
+      "groupDb": 2.0,
       "tracks": 4,
       "summedTruePeakDbtp": -10.74,
       "summedAtTrims": "596b1ed3448511ba",
       "summedLoudnessLufs": -35.8
     },
     "build_roads_actionA": {
-      "groupDb": 0.0,
+      "groupDb": -1.5,
       "tracks": 11,
       "summedTruePeakDbtp": -5.22,
       "summedAtTrims": "02c4940d168faac6",
       "summedLoudnessLufs": -32.44
     },
     "build_roads_actionB": {
-      "groupDb": 0.0,
+      "groupDb": -3.5,
       "tracks": 7,
       "summedTruePeakDbtp": -11.57,
       "summedAtTrims": "01c19ab04a476840",
       "summedLoudnessLufs": -30.22
     },
     "clerical_actionA": {
-      "groupDb": 0.0,
+      "groupDb": 8.5,
       "tracks": 3,
       "summedTruePeakDbtp": -12.1,
       "summedAtTrims": "55fb3502d5b64e8b",
       "summedLoudnessLufs": -42.57
     },
     "clerical_actionB": {
-      "groupDb": 0.0,
+      "groupDb": 1.5,
       "tracks": 1,
       "summedTruePeakDbtp": -11.97,
       "summedAtTrims": "d1be912ce9e889d4",
       "summedLoudnessLufs": -35.31
     },
     "give_alms_actionA": {
-      "groupDb": 0.0,
+      "groupDb": 8.5,
       "tracks": 1,
       "summedTruePeakDbtp": -24.96,
       "summedAtTrims": "a55762d9e46ea469",
       "summedLoudnessLufs": -42.41
     },
     "give_alms_actionB": {
-      "groupDb": 0.0,
+      "groupDb": 10.0,
       "tracks": 1,
       "summedTruePeakDbtp": -22.83,
       "summedAtTrims": "d13b1f124f2ec0e1",
       "summedLoudnessLufs": -43.72
     },
     "ordination_actionB": {
-      "groupDb": 0.0,
+      "groupDb": -5.0,
       "tracks": 10,
       "summedTruePeakDbtp": -2.42,
       "summedAtTrims": "196a2169ab9617eb",
       "summedLoudnessLufs": -28.85
     },
     "produce_actionA": {
-      "groupDb": 0.0,
+      "groupDb": -3.5,
       "tracks": 8,
       "summedTruePeakDbtp": -13.58,
       "summedAtTrims": "0048a1454a013597",
@@ -5365,7 +5367,7 @@
       "summedLoudnessLufs": -33.83
     },
     "produce_actionB": {
-      "groupDb": 0.0,
+      "groupDb": -4.0,
       "tracks": 13,
       "summedTruePeakDbtp": -5.91,
       "summedLoudnessLufs": -29.88,

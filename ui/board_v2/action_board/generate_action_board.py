@@ -51,6 +51,7 @@ import json
 import pathlib
 import re
 import sys
+import urllib.parse
 import webbrowser
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -74,6 +75,52 @@ MANIFEST = BOARD / "metadata" / "action_board.json"
 # things to keep in step. The fallback below is the tree as it stood when `seals` was the only kind
 # of mark there was; what the tree actually has is attribution.json's business.
 MARK_SUBDIR = "seals"
+
+# WHICH OF THE BENCH'S GENERAL CUE SETS THE BOARD PLAYS, and which of its slots it uses. The sets
+# live in sfx/general/ as `<set>_<slot>_sfx_vNN.ogg` and the bench auditions them whole, because
+# what makes a set work is how its clips sit against each other rather than any one of them.
+#
+# NAMED, NOT SPELLED OUT. The bench learned this the hard way: writing a filename here freezes a
+# slot at whatever version existed the day it was typed, so filing a v02 produces a file nobody
+# reads. The stem is built from these two and resolved to the highest version on disk.
+#
+# AND THE BENCH READS THIS RATHER THAN KEEPING ITS OWN COPY. It draws an "in use" tag on one set,
+# which was a hardcoded `chosen: True` sitting on set 1 — a second answer to a question this
+# constant already answers, and one that would have gone on claiming set 1 was in use from the
+# moment this line changed.
+CUE_SET = "set3"
+# NO HOVER, BY CHOICE AND NOT BY ABSENCE -- set 3 has a hover clip and the board does not play it.
+# A cue on hover means the ribbon makes a noise while the pointer merely crosses it, and the
+# board already answers a hover with light. Selecting and confirming are the two moments a player
+# does something. The bed prefetch still rides on hover; that is a fetch, not a sound.
+CUE_SLOTS = ("select", "confirm")
+
+# WHERE A BED'S PLAYBACK ENTERS ITS CLIP. "start" begins every bed at 0; "random" begins each at
+# a random point in its own length.
+#
+# IT WAS "random" AND UNCONDITIONAL, AND THAT WAS WRONG IN A WAY WORTH WRITING DOWN. The reason
+# for it was real -- started at 0 every time, Produce Stone's owl calls exactly 20.4 s after every
+# selection and the quarry becomes a recording you have heard. But a bed is not always a texture.
+# `door_close` is one door in 36 seconds of silence, at 2.997 s; `distant_rooster` is a rooster at
+# 1.975 s. A uniform random entry misses those 92% and 94% of the time, so the two tracks whose
+# whole job is to sound at the start of a scene were the two least likely to sound at all.
+#
+# A ONE-SHOT IGNORES THIS WHATEVER IT SAYS, and the page enforces that rather than trusting this
+# constant to be set sensibly: a non-looping clip entered halfway is a clip you miss, which is not
+# a variation on anything. The setting is only ever a choice about looping beds.
+BED_START = "start"
+
+
+def loop_of(entry: dict | None) -> bool:
+    """Whether one bed loops, by its attribution record. ABSENT MEANS LOOPING.
+
+    A FUNCTION FOR ONE `.get` BECAUSE THE DEFAULT IS THE WHOLE RULE. Written inline it was
+    `loops.get(rel, True)` in one place and `e.get("loop", True)` in another, and a mutation
+    flipping either to False survived every test -- not because the tests were weak but because
+    every bed in the tree has a record, so the default never ran. A rule that cannot be reached
+    cannot be checked; pulled out here it can be asked directly with nothing filed at all.
+    """
+    return bool((entry or {}).get("loop", True))
 
 
 def mark_folders() -> tuple:
@@ -508,6 +555,23 @@ def bundled_backdrop() -> tuple[str, list]:
     return uri, notes
 
 
+def cue_file(slot: str) -> pathlib.Path | None:
+    """The clip behind one cue: `general/<CUE_SET>_<slot>_sfx_vNN.ogg`, highest NN wins.
+
+    THE SAME RESOLUTION THE BENCH USES, so the board plays the take the bench auditions rather
+    than whichever one was current when a filename was typed. Kept out of bundled_sfx() so a test
+    can ask it directly -- the bench's own note on this says a closure cannot be tested, and that
+    was learned by having one.
+    """
+    folder = SFX_DIR / "general"
+    best: tuple[int, pathlib.Path | None] = (0, None)
+    for p in folder.glob("%s_%s_sfx_v*.ogg" % (CUE_SET, slot)):
+        m = re.match(re.escape("%s_%s" % (CUE_SET, slot)) + r"_sfx_v(\d+)$", p.stem)
+        if m and int(m.group(1)) > best[0]:
+            best = (int(m.group(1)), p)
+    return best[1]
+
+
 def bundled_sfx() -> tuple[dict, list]:
     """The interface sounds, inlined like everything else the page draws.
 
@@ -515,23 +579,152 @@ def bundled_sfx() -> tuple[dict, list]:
     board is opened from disk and handed around, so a cue that lived beside it as a separate
     request would simply be silent for everyone but the person who built it.
 
-    THEY ARE TINY and no re-encode happens here. A mark is 200 x 200 PNG because the page chose
-    its size; a sound has no size to choose, so these are carried across byte for byte -- the two
-    of them together are under 10 KB, which is a two-hundredth of one duty action card.
+    THEY ARE SMALL and no re-encode happens here. A mark is 200 x 200 PNG because the page chose
+    its size; a sound has no size to choose, so these are carried across byte for byte. The beds
+    are fetched instead, for reasons bundled_beds() sets out -- the difference is three orders of
+    magnitude, not a change of principle.
 
-    NAMED BY WHAT THEY DO, NOT BY WHAT THEY ARE. `tile` and `confirm` are cues; the file that
-    happens to be behind a cue is a choice that will change, and the page should not have to.
+    NAMED BY WHAT THEY DO, NOT BY WHAT THEY ARE. The page asks for `select` and `confirm`; which
+    clip answers is CUE_SET's business and changes without the page knowing. It used to ask for
+    `hover` too and got `tile.ogg` at a fifth of the select's gain -- the same clip twice, once
+    quietly -- and that cue is gone rather than re-pointed.
     """
     out: dict = {}
     notes: list = []
     if not SFX_DIR.is_dir():
         return out, ["no sfx/ at %s, so the board is silent" % SFX_DIR]
-    for cue in ("tile", "confirm"):
-        f = SFX_DIR / ("%s.ogg" % cue)
-        if not f.is_file():
-            notes.append("%s.ogg is missing, so that cue is silent" % cue)
+    for cue in CUE_SLOTS:
+        f = cue_file(cue)
+        if f is None:
+            notes.append("no %s_%s_sfx_vNN.ogg under sfx/general/, so the %s cue is silent"
+                         % (CUE_SET, cue, cue))
             continue
         out[cue] = "data:audio/ogg;base64," + base64.b64encode(f.read_bytes()).decode("ascii")
+    return out, notes
+
+
+def ogg_seconds(path: pathlib.Path) -> float | None:
+    """How long a Vorbis file really is, read out of its own container.
+
+    THE PAGE CANNOT ASK THE DECODER THIS. Chrome's `decodeAudioData` hands back 176 to 764 samples
+    PAST the true end -- 4 to 17 ms of Vorbis padding -- so an AudioBuffer's `duration` is longer
+    than the clip. Looped on that figure, every wrap gets a hole: rendered offline and measured in
+    2 ms windows it reads -64.7 dB against a bed sitting at -33. sfx/README.md has the measurement
+    and says what to do, which is to pin `loopEnd` to the real length; this is where the real
+    length comes from.
+
+    IT IS IN THE FILE, EXACTLY. The granule position on an Ogg page is the sample index of the end
+    of the audio it completes, so the last page's granule divided by the rate in the identification
+    header is the sample count -- no decoding, no numpy, and no trusting prose in a record.
+
+    IN SECONDS, BECAUSE loopEnd IS. The AudioContext runs at whatever rate the device reports and
+    not necessarily at the 48 kHz these were encoded at, so a sample count would be wrong on
+    exactly the machines nobody tests on.
+    """
+    try:
+        raw = path.read_bytes()
+    except OSError:
+        return None
+    first = raw.find(b"\x01vorbis")
+    last = raw.rfind(b"OggS")
+    if first < 0 or last < 0 or last + 14 > len(raw) or first + 16 > len(raw):
+        return None
+    rate = int.from_bytes(raw[first + 12:first + 16], "little")
+    granule = int.from_bytes(raw[last + 6:last + 14], "little", signed=True)
+    if rate <= 0 or granule <= 0:
+        return None
+    return granule / float(rate)
+
+
+def bundled_beds() -> tuple[dict, list]:
+    """Which ambient beds each duty action has, as PATHS -- the one thing here that is not inlined.
+
+    THE CUES ARE INLINED AND THE BEDS ARE NOT, and that is a size argument rather than a change of
+    mind. `tile` and `confirm` together are 9,884 bytes, which is a two-hundredth of one duty
+    action card, so carrying them costs nothing and a page opened straight from disk keeps every
+    sound it makes when you click. The sixty-three beds are 16.62 MB, 22.17 MB once base64 has
+    added its third, and they would take this page from 2.81 MB to about 25 MB -- a nine-fold
+    growth, re-decoded on every reload, for audio nobody hears until an action is chosen.
+
+    SO THE BOARD NOW HAS A SERVED MODE AND A DISK MODE, and it says which one it is in. Fetch is
+    blocked on file://, so a page opened by double-clicking has its cues and no beds, and the note
+    line tells you that rather than leaving you to wonder why the quarry is silent. `--serve`
+    already existed for the save button; it now serves these too.
+
+    NOTHING IS COPIED. The urls point at this repository's own sfx/ambient/, read by serve() at
+    request time, so the beds are never duplicated into generated/ and a re-encoded bed is live on
+    the next reload without a rebuild.
+
+    BOTH LEVELS COME OUT OF attribution.json AND NEITHER IS INVENTED HERE. Per-file `gainDb` sits
+    beside the file it belongs to; per-action `groupDb` is in the `ambientGroups` block, which
+    already existed with a note, a tool that writes it and a test that refuses it when it goes
+    stale. `ambientMaster` is the one gain the whole board passes through. A SECOND HOME FOR A
+    NUMBER IS TWO ANSWERS, and this function wrote one for an hour before the test that guards
+    `ambientGroups` pointed out there was already a place for it.
+
+    A bed with no record is still listed and still plays -- at 0.0 dB, with a note -- because a
+    missing provenance entry is a filing problem and silence would be a worse answer to it.
+    """
+    out: dict = {}
+    notes: list = []
+    folder = SFX_DIR / "ambient"
+    if not folder.is_dir():
+        return out, ["no sfx/ambient/ at %s, so no duty action has a bed" % folder]
+
+    gains: dict = {}
+    # ABSENT MEANS LOOPING, which is the rule the ambient bench already reads this field by: a
+    # record only has to say `loop: false`. Three say so and the board ignored all three, so a
+    # door that should shut once shut every 36 seconds.
+    loops: dict = {}
+    master, groups = 0.0, {}
+    if ATTRIB_FILE.is_file():
+        doc = json.loads(ATTRIB_FILE.read_text(encoding="utf-8"))
+        for path, e in (doc.get("files") or {}).items():
+            if path.startswith("sfx/ambient/") and e.get("state") == "present":
+                gains[path] = float(e.get("gainDb") or 0.0)
+                loops[path] = loop_of(e)
+        master = float(doc.get("ambientMaster") or 0.0)
+        groups = {k: float(v.get("groupDb") or 0.0)
+                  for k, v in (doc.get("ambientGroups") or {}).items()}
+    if not groups:
+        notes.append("attribution.json has no ambientGroups, so every action plays at 0.0 dB")
+
+    text = duty_text()
+    silent = []
+    for slug, _name, _deg in G.DUTIES:
+        said = text.get(slug) or {}
+        for slot in G.ACTIONS:
+            if not said.get(slot):
+                continue
+            key = "%s_%s" % (slug, slot)
+            d = folder / key
+            files = sorted(p for p in d.glob("*.ogg")) if d.is_dir() else []
+            if not files:
+                silent.append(key)
+                continue
+            beds = []
+            for f in files:
+                rel = "sfx/ambient/%s/%s" % (key, f.name)
+                if rel not in gains:
+                    notes.append("%s has no attribution record, so it plays at 0.0 dB" % rel)
+                secs = ogg_seconds(f)
+                if secs is None:
+                    notes.append("could not read a length out of %s, so it will loop on the "
+                                 "decoder's padded duration" % rel)
+                beds.append({"url": rel, "name": f.name, "gainDb": gains.get(rel, 0.0),
+                             "seconds": secs, "loop": loops.get(rel, loop_of(None))})
+            if key not in groups:
+                notes.append("%s has beds and no ambientGroups entry, so it plays at 0.0 dB" % key)
+            out[key] = {"groupDb": groups.get(key, 0.0), "beds": beds}
+
+    # A SILENT ACTION IS A FACT, NOT AN OMISSION, so it is written down where the page can read it
+    # rather than inferred from a missing key. The page fades the previous action out on one of
+    # these: an action with no ambience should BE silent, not inherit the last quarry you stood in.
+    out["__silent__"] = sorted(silent)
+    out["__master__"] = master
+    out["__start__"] = BED_START
+    if silent:
+        notes.append("no bed folder for %s, so those actions are silent" % ", ".join(sorted(silent)))
     return out, notes
 
 
@@ -541,9 +734,10 @@ def build() -> tuple[str, list]:
     art, by_duty, notes = bundled_art()
     seals, seal_by_duty, snotes = bundled_seals()
     sfx, xnotes = bundled_sfx()
+    beds, dnotes = bundled_beds()
     backdrop, bnotes = bundled_backdrop()
     controls, cnotes = bundled_controls()
-    notes += snotes + xnotes + bnotes + cnotes
+    notes += snotes + xnotes + dnotes + bnotes + cnotes
 
     text = duty_text()
     duties = {}
@@ -576,6 +770,7 @@ def build() -> tuple[str, list]:
         "__CONTROLS__": json.dumps(control_text()),
         "__IMAGES__": json.dumps({**art, **seals, **controls}),
         "__SFX__": json.dumps(sfx),
+        "__BEDS__": json.dumps(beds),
         "__BACKDROP__": json.dumps(backdrop),
         "__WHEEL_SVG__": json.dumps(wheel_svg()),
         "__SAVEKEYS__": json.dumps(SAVE_KEYS),
@@ -592,6 +787,32 @@ def build() -> tuple[str, list]:
         raise SystemExit("the template still has %s in it, so the build is incomplete"
                          % ", ".join(left))
     return page, notes
+
+
+def served_sfx(request_path: str) -> pathlib.Path | None:
+    """The file a /sfx/ request names, or None if it names something it may not have.
+
+    SEPARATE FROM THE HANDLER SO IT CAN BE TESTED. The rule this applies is the only part of the
+    server worth arguing about, and a rule that can only be exercised by starting an HTTP server
+    is a rule that gets exercised once.
+
+    IT RESOLVES FIRST AND ASKS WHERE IT LANDED SECOND. `..` is the attack everybody writes a rule
+    for; a symlink inside sfx/ pointing at the home directory is not spelled with dots and walks
+    straight past any rule that only reads the string. resolve() follows both, so one question --
+    is the result still under sfx/ -- answers both. The extension is checked on the RESOLVED path
+    for the same reason.
+
+    The server binds to 127.0.0.1 and this still refuses. Nobody else being able to reach it is a
+    reason to be careful about what it serves, not a reason to skip the check.
+    """
+    want = urllib.parse.unquote(request_path.split("?", 1)[0]).lstrip("/")
+    base = (BOARD / "sfx").resolve()
+    try:
+        f = (BOARD / want).resolve()
+        f.relative_to(base)
+    except (ValueError, OSError):
+        return None
+    return f if f.suffix.lower() == ".ogg" else None
 
 
 def serve(page_path: pathlib.Path, port: int, open_it: bool) -> None:
@@ -615,6 +836,27 @@ def serve(page_path: pathlib.Path, port: int, open_it: bool) -> None:
         def do_GET(self):                                            # noqa: N802
             if self.path in ("/", "/index.html"):
                 return self._send(200, page_path.read_bytes(), "text/html; charset=utf-8")
+            # THE BEDS, READ OUT OF THE REPOSITORY RATHER THAN COPIED BESIDE THE PAGE. 16.62 MB
+            # duplicated into generated/ would be 16.62 MB to keep in step, and a re-encoded bed
+            # would need a rebuild to be heard. This way the next reload has it.
+            #
+            # IT RESOLVES THE PATH AND THEN CHECKS WHERE IT LANDED, which is the only test that
+            # holds: `..` is the obvious attack and the one everybody writes a rule for, but a
+            # symlink inside sfx/ pointing anywhere is not spelled with dots and would walk
+            # straight past a rule that only reads the string. resolve() follows both, so asking
+            # whether the result is still under sfx/ answers both at once. This binds to localhost
+            # and still refuses, because "nobody else can reach it" is a reason to be careful
+            # about what it serves, not a reason to skip the check.
+            if self.path.startswith("/sfx/"):
+                f = served_sfx(self.path)
+                if f is None:
+                    # ONE REFUSAL FOR BOTH REASONS, and it names neither. Whether the path left
+                    # sfx/ or simply is not a bed, the answer to whoever asked is the same, and a
+                    # message that distinguishes them is a message that tells them which.
+                    return self._send(403, json.dumps({"error": "not served"}))
+                if not f.is_file():
+                    return self._send(404, json.dumps({"error": "not found"}))
+                return self._send(200, f.read_bytes(), "audio/ogg")
             return self._send(404, json.dumps({"error": "not found"}))
 
         def do_POST(self):                                           # noqa: N802
