@@ -1,9 +1,9 @@
 # Cutting an ambient bed into a seamless loop
 
-**Status: forty-nine files under ten duty actions.** Three actions have one track each —
+**Status: sixty-three files under eleven duty actions.** Three actions have one track each —
 `clerical_actionB/silversmith` (25 s, fire), `give_alms_actionA/alms` (25 s, rain) and
 `give_alms_actionB/donate_building` (32.5 s, a sheltered wind). Seven have several.
-`produce_actionA/` is the newest and holds seven at 35 s, and between them they use **four
+`produce_actionA/` is the newest and holds eight at 35 s, and between them they use **four
 different ways of reaching the loop point, one of which does not work**. The two continuous
 ones are **wrapped at opposite ends**: `wind` folds over its TAIL in about 2 s, as
 `build_roads_actionB/wind` does, and `field_rustle` folds over its HEAD across about six
@@ -582,7 +582,7 @@ sliding probe fails when the source is too thin, the event probe when its window
 
 ## 14. Not done
 
-- **The board plays no bed.** All forty-nine are filed and audible on the ambient bench;
+- **The board plays no bed.** All sixty-three are filed and audible on the ambient bench;
   `bundled_sfx()` still inlines only `tile.ogg` and `confirm.ogg`. This bullet has said "all
   five" since there were five, which is its own small lesson: a count in prose is a fact with
   no test behind it, and nine beds arrived before anyone noticed. The generator prints the
@@ -608,11 +608,29 @@ sliding probe fails when the source is too thin, the event probe when its window
   genuinely varies pair to pair is the level difference, which the levelling removes. Left 12 dB
   apart, a transition swings 6.1 dB; matched, the excursion falls into the beds' own
   fluctuation. If one pair ever misbehaves, per-bed in and out times compose and stay linear.
+- **EVERY DUTY ACTION MUST HOLD AT LEAST ONE CONTINUOUS BED, AND THAT IS NOW A RULE RATHER
+  THAN AN ACCIDENT.** It was stated by the project owner on 2026-10-17: every action carries a
+  weather bed, or night in Mission's case. It matters because of how selection is designed to
+  sound — *there is no cue on selecting a duty action.* The ambience starting IS the
+  acknowledgement, so an action whose beds all begin with silence would select into nothing and
+  read as a dead click. Produce Wheat has beds that start 5.6 s and 19.0 s in, and they are only
+  safe because the wind and the crop run underneath them; Produce Stone's twelve intermittent
+  tracks are safe because `quarry_wind` does. Weather and night are the right carriers precisely
+  because they are continuous by nature and cannot acquire a silent head the way a gesture stem
+  can.
+  *There is no guard yet and the obvious one would be wrong.* A test that reads the silence
+  figure out of each record's `measured` prose would pass today and lie tomorrow: twenty-seven
+  of the sixty-three records phrase that sentence differently from the rest, so a regex over
+  them finds no continuous bed in Build Road or Mission and would fail on two actions that are
+  perfectly fine. The same fragility rebuilt the delta table wrong in this repository on the day
+  this was written. **The guard needs a `silencePct` field on the record, written by
+  bed_facts.py**, exactly as the unwrapped-bed count above needs a `wrapped` field — a number in
+  a field can be tested, a number in a sentence cannot.
 - **Start and stop behaviour is unspecified.** Ambience ends on confirm, but hard or faded is
   undecided, as is the fade-in on select, and what happens on deselect or re-select.
 - **The loop checker does not exist as a tool.** The band-match shoulder search, the N-lap
   render and the wrap-window percentile test have been written from scratch for each of the
-  forty-nine files. Three of them now have a settled shape and one of them, the percentile
+  sixty-three files. Three of them now have a settled shape and one of them, the percentile
   test, is the only check that works on a loop that arrives already baked — and none of the
   three applies to a stem that is not wrapped at all, which a good many of these are. None of
   the three can check a metrical loop either; see section 12.
@@ -622,11 +640,11 @@ sliding probe fails when the source is too thin, the event probe when its window
   each time, and nothing holds the total to the files. A count with no test behind it is the
   exact fault the bed-count guard was written for, and the fix is a `wrapped` field on the
   record rather than a better sentence here.
-- **`--groups` re-renders all ten actions when it already knows which one changed.** Every
+- **`--groups` re-renders all eleven actions when it already knows which one changed.** Every
   action's entry carries `summedAtTrims`, a fingerprint of the `gainDb` values its sum was
   taken from, and a test compares the two without decoding anything. The renderer does not
-  read it: adding one bed to one folder decodes and mixes all forty-nine files, about
-  fourteen seconds where two would do. Harmless at this size and the fix is a few lines —
+  read it: adding one bed to one folder decodes and mixes all sixty-three files, about
+  eighteen seconds where two would do. Harmless at this size and the fix is a few lines —
   skip an action whose fingerprint still matches — but it is the only place in the pipeline
   where the cost grows with the whole tree rather than with the change.
 - **The composite's master is the first audio source here that cannot be re-fetched.** Every
