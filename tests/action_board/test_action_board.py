@@ -4337,26 +4337,87 @@ def test_every_bed_carries_the_true_length_its_loop_needs():
     4 to 17 ms of it, reading -64.7 dB under a bed sitting at -33 -- once per loop, on every bed.
     sfx/README.md measured it and said the fix was `loopEnd` at the clip's TRUE length, which the
     decoder is the one thing that cannot report. ogg_seconds() reads it off the container's last
-    granule instead, and this holds that read against the audio the loader actually returns.
+    granule instead, and this holds that read against two other answers.
+
+    IT HELD IT AGAINST A DECODER FIRST, AND CI HAD NO DECODER. The first version called
+    sfx_levels.load(), which shells out to ffprobe; it passed here, passed on the project owner's
+    machine through the Linux VM, and died in CI with FileNotFoundError. generate_sound_bench.py's
+    ogg_facts() carries that exact lesson in its docstring -- "NO ffprobe, AND THAT IS THE POINT"
+    -- written after the same mistake in the same tree, and this test was written anyway. A test
+    is a build dependency like any other.
+
+    SO IT ASKS TWO THINGS THAT NEED NOTHING INSTALLED. ogg_facts() is a second reader of the same
+    container written independently, in another module, with struct instead of int.from_bytes --
+    so an offset or a signedness error shows up as a disagreement. And every bed's record already
+    states the length a DECODER measured when the file was filed, which is the ground truth the
+    ffprobe call was reaching for, written down months ago and free to read.
+
     Falsified by returning buf.duration, a sample count, or the rate of the wrong header.
     """
     gen = _load("generate_action_board")
+    bench = ROOT / "ui" / "board_v2" / "sfx_lab" / "generate_sound_bench.py"
+    spec_b = importlib.util.spec_from_file_location("_benchfacts", bench)
+    facts_mod = importlib.util.module_from_spec(spec_b)
+    spec_b.loader.exec_module(facts_mod)
+
     beds, _notes = gen.bundled_beds()
     board = ROOT / "ui" / "board_v2"
-    sys.path.insert(0, str(board / "sfx_lab"))
-    try:
-        import sfx_levels
-    finally:
-        sys.path.remove(str(board / "sfx_lab"))
+    files = json.loads((board / "attribution.json").read_text(encoding="utf-8"))["files"]
+    checked = 0
     for action, spec in sorted((k, v) for k, v in beds.items() if not k.startswith("__")):
         for b in spec["beds"]:
             got = b.get("seconds")
             assert isinstance(got, float) and got > 0, (
                 "%s carries no usable length: %r" % (b["url"], got))
-            a, sr = sfx_levels.load(str(board / b["url"]))
-            want = len(a) / sr
-            assert abs(got - want) < 5e-5, (
-                "%s: the manifest says %.6f s and the audio is %.6f s" % (b["url"], got, want))
+
+            f = facts_mod.ogg_facts(board / b["url"])
+            assert f["sr"], "%s: the bench's reader found no sample rate" % b["url"]
+            theirs = f["samples"] / f["sr"]
+            assert abs(got - theirs) < 1e-9, (
+                "%s: ogg_seconds says %.9f s and ogg_facts says %.9f s, so one of the two "
+                "readers has an offset wrong" % (b["url"], got, theirs))
+
+            m = re.match(r"\s*(\d+)\s*ms", files[b["url"]].get("measured") or "")
+            assert m, "%s: its record states no length, so there is nothing to check against" % b["url"]
+            assert abs(got - int(m.group(1)) / 1000.0) < 5e-4, (
+                "%s: the container says %.6f s and the record's decoded measurement says %s ms"
+                % (b["url"], got, m.group(1)))
+            checked += 1
+    assert checked == 63, "expected 63 beds to check, checked %d" % checked
+
+
+def test_a_last_page_that_ends_no_packet_is_refused_rather_than_read_as_huge(tmp_path):
+    """Ogg writes a granule of -1 on a page where no packet finishes. It is legal and it is not
+    a length.
+
+    READ SIGNED IT IS -1, the length is refused, and the generator notes that the bed will loop
+    on the decoder's padded duration -- a 17 ms flaw. Read UNSIGNED it is 18446744073709551615,
+    which divided by 48000 is a loopEnd of twelve million years: the loop never comes round and
+    the bed plays once. The failure modes are not close to each other.
+
+    THIS EXISTS BECAUSE THE MUTATION SURVIVED. Flipping signed=True to signed=False changed
+    nothing across all sixty-three beds, because none of them happens to carry a negative
+    granule -- so the corpus could not tell the two apart and the sign looked like decoration.
+    A file that does carry one is four lines to make. Falsified by reading the granule unsigned,
+    or by returning a length for a non-positive one.
+    """
+    gen = _load("generate_action_board")
+    real = ROOT / "ui" / "board_v2" / "sfx" / "ambient" / "produce_actionB" / "quarry_wind_sfx_v01.ogg"
+    raw = bytearray(real.read_bytes())
+    assert gen.ogg_seconds(real) == 35.0, "the fixture this is built from is not the file expected"
+
+    j = raw.rfind(b"OggS")
+    raw[j + 6:j + 14] = b"\xff" * 8                      # granule -1, signed
+    hacked = tmp_path / "no_packet_ends_here.ogg"
+    hacked.write_bytes(bytes(raw))
+    assert gen.ogg_seconds(hacked) is None, (
+        "a granule of -1 was read as a length of %r" % (gen.ogg_seconds(hacked),))
+
+    # AND THE BUILD SAYS SO RATHER THAN SHIPPING IT QUIETLY, which is the other half: a bed whose
+    # length cannot be read still plays, on the padded duration, and the note is what tells you.
+    src = (TOOL / "generate_action_board.py").read_text(encoding="utf-8")
+    assert "could not read a length out of" in src, (
+        "a bed with an unreadable length is bundled with no note saying its loop is unpinned")
 
 
 def test_the_page_loops_on_that_length_and_not_on_the_buffer():
