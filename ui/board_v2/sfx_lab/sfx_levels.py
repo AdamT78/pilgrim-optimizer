@@ -156,6 +156,42 @@ def load(path):
     return a.reshape(-1, ch), sr
 
 
+def container_samples(path):
+    """How long the file actually is, per its own container, in samples at its own rate.
+
+    NOT len(decoded)/sr, WHICH IS LONGER AND BY A DIFFERENT AMOUNT EVERY TIME. A Vorbis decode
+    returns 1 to 20 ms past the last granule, so seventeen beds cut to exactly 35.000 s come
+    back as six different lengths. Anything that compares lengths to decide whether two files
+    hold step has to read the container or it is comparing padding.
+
+    THIS COST 12.19 dB ON ONE ACTION. `group_sums` classified tracks by decoded length, found
+    six lengths where there is one, treated twelve of produce_actionB's seventeen beds as
+    drifting and added their peaks linearly -- the +14 dB shortcut its own docstring exists to
+    refuse, arriving through the back door. It reported +6.17 dBTP where the phase-locked sum
+    is -6.02. Every multi-bed action was overstated, allocation_actionA by 13.01 dB.
+
+    THE READ IS THE SAME ONE generate_action_board.ogg_seconds AND generate_sound_bench.ogg_facts
+    ALREADY MAKE, and this is the third copy. It is here rather than imported because this is the
+    module the other measuring tools import, not the other way round; the duplication is noted
+    so that whoever consolidates them can find all three. Returns None for a non-Ogg file or a
+    container with no usable granule, and the caller falls back to the decode.
+    """
+    try:
+        raw = pathlib.Path(path).read_bytes()
+    except OSError:
+        return None
+    first = raw.find(b"\x01vorbis")
+    last = raw.rfind(b"OggS")
+    if first < 0 or last < 0:
+        return None
+    rate = int.from_bytes(raw[first + 12:first + 16], "little")
+    # SIGNED, because Ogg writes -1 on a page where no packet finishes and an unsigned read
+    # turns that into 1.8e19 samples.
+    granule = int.from_bytes(raw[last + 6:last + 14], "little", signed=True)
+    if rate <= 0 or granule <= 0:
+        return None
+    return rate, granule
+
 def channels(a):
     """(n,) or (n, ch) in, (n, ch) out. Lets the measures take either shape."""
     return a if a.ndim == 2 else a.reshape(-1, 1)
@@ -275,9 +311,17 @@ def group_sums(doc, write=False):
 
     PHASE-LOCKED TRACKS ARE SUMMED, DRIFTING ONES ARE BOUNDED. Tracks of the same length hold
     step and can simply be added; one of a different length -- Build Roads' 31 s wind against
-    ten 35 s stems, Allocation's 17 s howl against 28.5 -- lands somewhere different every lap,
-    so its own peak is added as a bound rather than pretending a phase. The result is therefore
-    the worst case over all phases, which is the number a ceiling wants.
+    ten 35 s stems, Clerical's 25.5 s candle against two 35 s -- lands somewhere different every
+    lap, so its own peak is added as a bound rather than pretending a phase. The result is
+    therefore the worst case over all phases, which is the number a ceiling wants.
+
+    AND "THE SAME LENGTH" MEANS THE CONTAINER'S LENGTH, which this read off the decode until
+    2026-10-18 and so got wrong on every action with more than one bed. Vorbis decodes 1 to 20
+    ms long, by a different amount per file, so beds cut to one length present as several and
+    the bound is applied to tracks that are in fact phase-locked. produce_actionB read +6.17
+    dBTP against a true -6.02, and allocation_actionA was 13.01 dB high. With the container read
+    the only tracks still bounded are the two that genuinely differ, which are the two named
+    above. See container_samples.
 
     IT SCALES EXACTLY WITH THE GROUP LEVEL, which is why one figure per action is enough: the
     bench shows summedTruePeakDbtp + groupDb and that is exact, not an estimate.
@@ -299,6 +343,11 @@ def group_sums(doc, write=False):
         rendered, lengths = [], []
         for k in keys:
             a, sr = load(BOARD / k)
+            # THE CONTAINER'S LENGTH, NOT THE DECODER'S -- see container_samples. Truncating
+            # also keeps the decoder's padding out of the sum itself.
+            facts = container_samples(BOARD / k)
+            if facts and facts[0] == sr and 0 < facts[1] <= len(a):
+                a = a[:facts[1]]
             g = float(files[k].get("gainDb") or 0.0)
             rendered.append((round(len(a) / sr, 6), a * (10 ** (g / 20))))
             lengths.append(round(len(a) / sr, 6))

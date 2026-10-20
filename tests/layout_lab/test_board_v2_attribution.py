@@ -9,6 +9,11 @@ did not, and the difference showed.
 
 The file is data, not documentation: a reader that answers "may we ship this, and who do we
 credit" has to be able to trust that a missing entry is impossible rather than merely unlikely.
+
+THE SCOPE IS WHAT GETS SHIPPED. Gitignored working folders -- build output, the WAV masters, beds
+parked on their way out, third-party reference images -- are not assets here, because a file git
+refuses to track reaches nobody and credits nobody. See NOT_SHIPPED below, and the test that
+holds each exclusion against the gitignore line behind it.
 """
 import hashlib
 import json
@@ -40,9 +45,42 @@ ASSET_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".svg", ".gif", ".avif",
 # assumed.
 GENERATED = "generated"
 
+# GITIGNORED IS NOT SHIPPED, SO IT IS NOT AN ASSET HERE. This guard asks "may we ship this, and
+# who do we credit"; a file git refuses to track is not shipped, so there is nobody to credit and
+# nothing to record. That reasoning was already being applied to `generated/` and hardcoded as the
+# single exception -- the comment above spells it out and then names one directory. The rule is
+# the general form of that exception, and generalising it cost no coverage: on the day it was
+# written the guard was failing on 197 files, EVERY ONE OF THEM GITIGNORED, and not one shippable
+# asset in the tree was unrecorded.
+#
+# THE 197 ARE WHY THIS MATTERS AND NOT JUST WHY IT IS SAFE. 160 were WAV masters under
+# sfx/_masters/, a folder created months after this guard was written; 36 were beds parked in
+# _to_delete/ on their way out; one was a reference image. The guard had been red for days,
+# saying 197 false things and, buried among them, nothing true. A guard nobody reads is not a
+# guard, and the failure mode of a stale exclusion list is that somebody deletes the test.
+#
+# THE EXCLUSION IS HARDCODED ON PURPOSE rather than read out of git. Shelling out to
+# `git check-ignore` would make a test depend on a binary being present, which is the exact
+# mistake test_every_bed_carries_the_true_length records in its own docstring: it called ffprobe,
+# passed everywhere a human ran it, and died in CI with FileNotFoundError. So the list is written
+# here next to the gitignore line that justifies each entry, and
+# test_every_folder_the_entry_check_skips_is_one_git_ignores holds the two together. Remove the
+# ignore rule and the exclusion fails loudly instead of quietly becoming a hole.
+NOT_SHIPPED = {
+    "generated":  ("ui/.gitignore", "generated/"),
+    "_to_delete": (".gitignore", "_to_delete/"),
+    "_masters":   (".gitignore", "ui/board_v2/sfx/_masters/*"),
+    "_reference": (".gitignore", "ui/board_v2/duty_art_lab/_reference/"),
+}
+
 
 def _is_generated(p):
     return GENERATED in p.relative_to(TREE).parts
+
+
+def _not_shipped(p):
+    """True for anything inside a directory the repository refuses to track."""
+    return bool(NOT_SHIPPED.keys() & set(p.relative_to(TREE).parts))
 
 
 @pytest.fixture(scope="module")
@@ -52,7 +90,7 @@ def record():
 
 def _assets():
     return sorted(p for p in TREE.rglob("*")
-                  if p.is_file() and p.suffix.lower() in ASSET_SUFFIXES and not _is_generated(p))
+                  if p.is_file() and p.suffix.lower() in ASSET_SUFFIXES and not _not_shipped(p))
 
 
 def _generated_assets():
@@ -87,6 +125,52 @@ def test_every_asset_in_the_tree_has_an_entry(record):
     assert not missing, (
         "%d asset(s) under ui/board_v2/ have no entry in attribution.json: %s%s"
         % (len(missing), ", ".join(missing), _suggested(missing)))
+
+
+def test_every_folder_the_entry_check_skips_is_one_git_ignores(record):
+    """The skip list, held against the thing that justifies it.
+
+    THE ENTRY CHECK IS ONLY HONEST WHILE ITS SKIP LIST IS TRUE. Every name in NOT_SHIPPED is a
+    hole in the one guard that stops an unrecorded asset reaching the tree, and the hole is
+    justified by a single line in a gitignore file. Delete that line and the folder becomes
+    shippable while the guard goes on looking away from it — which is the failure this module
+    was written to stop, arriving through the door the fix opened.
+
+    So the justification is checked rather than trusted. This is not a gitignore implementation
+    and does not try to be: it asserts the exact line is still there, which is all that is needed
+    to turn "somebody removed the ignore rule" from silence into a named failure.
+
+    IT ALSO CHECKS THE OTHER DIRECTION, because the skip list interacts with the guard next door.
+    `test_the_record_does_not_name_files_that_are_gone` builds its idea of what is in the tree
+    from the same walk, so a `present` record pointing inside a skipped folder would be reported
+    as naming a file that is gone — a true-sounding failure with a wrong explanation. There are
+    none today. If one ever appears it should fail here, where the message says what it is.
+
+    Falsified by adding a name to NOT_SHIPPED without an ignore rule behind it, or by removing an
+    ignore rule and leaving the name.
+    """
+    assert NOT_SHIPPED, "the skip list is empty, so the walk skips nothing -- is that intended?"
+    for name, (where, line) in sorted(NOT_SHIPPED.items()):
+        f = ROOT / where
+        assert f.is_file(), (
+            "%s skips %r on the strength of %s, which does not exist" % (__name__, name, where))
+        lines = [ln.strip() for ln in f.read_text(encoding="utf-8").splitlines()]
+        assert line in lines, (
+            "the entry check skips every %r directory under ui/board_v2/ because %s ignores it "
+            "with the line %r, and that line is no longer in %s. Either restore it, or drop %r "
+            "from NOT_SHIPPED so the files inside are recorded like any other asset."
+            % (name, where, line, where, name))
+        assert name in line, (
+            "NOT_SHIPPED maps %r to the line %r, which does not mention it -- one of the two is "
+            "a copy-paste error" % (name, line))
+
+    inside = sorted(k for k, v in record["files"].items()
+                    if v.get("state", "present") == "present"
+                    and NOT_SHIPPED.keys() & set(pathlib.PurePosixPath(k).parts))
+    assert not inside, (
+        "%d record(s) point inside a folder the walk skips, so nothing checks them and "
+        "test_the_record_does_not_name_files_that_are_gone will call them stale: %s"
+        % (len(inside), ", ".join(inside)))
 
 
 def test_the_record_does_not_name_files_that_are_gone(record):

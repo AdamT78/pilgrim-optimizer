@@ -1,9 +1,13 @@
 # Cutting an ambient bed into a seamless loop
 
-**Status: sixty-three files under eleven duty actions.** Three actions have one track each —
+**Status: ninety files under eleven duty actions.** Three actions have one track each —
 `clerical_actionB/silversmith` (25 s, fire), `give_alms_actionA/alms` (25 s, rain) and
 `give_alms_actionB/donate_building` (32.5 s, a sheltered wind). Seven have several.
-`produce_actionA/` is the newest and holds eight at 35 s, and between them they use **four
+`taxation_actionA/` is the newest, nine at 25 s, rebuilt whole against new artwork and **the
+only folder here where one bed loops and eight do not** — `room` runs continuously and the other
+eight open and close on exact digital silence, 50.4% to 97.1% of their length;
+`produce_actionB/` is the largest at seventeen, `allocation_actionA/` holds fourteen and
+`produce_actionA/` thirteen. Between them they use **four
 different ways of reaching the loop point, one of which does not work**. The two continuous
 ones are **wrapped at opposite ends**: `wind` folds over its TAIL in about 2 s, as
 `build_roads_actionB/wind` does, and `field_rustle` folds over its HEAD across about six
@@ -34,12 +38,16 @@ rule had to become a ratio, and this is the file that made it).
 `horse_snorts`, the ox cart in three (`ox_cart_mechanics`, `ox_cart_stones`, `ox_breathing`)
 and the oil lamp in two (`oil_lamp_rattle`, `oil_lamp_flame`), all 35 s; `oil_lamp_flame` is
 wrapped and the other nine are not, and under them all sits `wind` (31 s, wrapped, and the
-only track there that is not 35 s). The largest folder in the tree, and the first action with beds and no cue
-of its own.
+only track there that is not 35 s). The first action with beds and no cue of its own.
 `clerical_actionA/` holds `devotion` (35 s, a service) with `candle` (25.5 s, an independent
 loop that drifts against it) and `rosary` (35 s, a stem placed against the service and so
-matched to it exactly). `allocation_actionA/` holds `footsteps`, `keys` and `wool_robe`
-(28.5 s, one mix in three stems) under `allocation_wind` (17 s, an independent loop).
+matched to it exactly). `allocation_actionA/` was rebuilt whole on 2026-10-18 and holds **fourteen** at 35 s, all
+aligned to 00:00 and all wrapped at the same boundary -- the first folder where the loop
+question has one answer instead of several. **It was rebuilt twice in that one day**: fifteen
+stems filed by sound type, then fourteen filed by journey, which is the structure described at
+the end of `../sfx/README.md`. Its four predecessors (`footsteps`, `keys`, `wool_robe` at
+28.5 s under `allocation_wind` at 17 s, an independent loop that drifted against them) are
+retired; only the wind's Hzandbits source survives the change.
 `taxation_actionA/` holds `wheat`, `coins` and `barn_creaks` (30 s stems, not yet wrapped)
 inside `room` (30 s, the background bed they were waiting for).
 `ordination_actionB/` holds ten at 36 s, and they are the three kinds of loop this note knows
@@ -602,7 +610,7 @@ sliding probe fails when the source is too thin, the event probe when its window
 
 ## 14. Not done
 
-- ~~**The board plays no bed.**~~ **It does, as of 2026-10-18.** All sixty-three reach it
+- ~~**The board plays no bed.**~~ **It does, as of 2026-10-18.** All ninety reach it
   through `bundled_beds()`, selecting a duty action crossfades to that action's ambience over
   1.5 s, and the three slots with no folder — Construct's two and Ordain — are carried as a
   named `__silent__` list so the page fades the previous action *out* rather than leaving it
@@ -643,8 +651,9 @@ sliding probe fails when the source is too thin, the event probe when its window
   because they are continuous by nature and cannot acquire a silent head the way a gesture stem
   can.
   *There is no guard yet and the obvious one would be wrong.* A test that reads the silence
-  figure out of each record's `measured` prose would pass today and lie tomorrow: twenty-seven
-  of the sixty-three records phrase that sentence differently from the rest, so a regex over
+  figure out of each record's `measured` prose would pass today and lie tomorrow: when this was
+  written twenty-seven of the then sixty-three records phrased that sentence differently from
+  the rest, so a regex over
   them finds no continuous bed in Build Road or Mission and would fail on two actions that are
   perfectly fine. The same fragility rebuilt the delta table wrong in this repository on the day
   this was written. **The guard needs a `silencePct` field on the record, written by
@@ -654,7 +663,7 @@ sliding probe fails when the source is too thin, the event probe when its window
   undecided, as is the fade-in on select, and what happens on deselect or re-select.
 - **The loop checker does not exist as a tool.** The band-match shoulder search, the N-lap
   render and the wrap-window percentile test have been written from scratch for each of the
-  sixty-three files. Three of them now have a settled shape and one of them, the percentile
+  beds in turn -- sixty-three of them when this was written, ninety now. Three of them now have a settled shape and one of them, the percentile
   test, is the only check that works on a loop that arrives already baked — and none of the
   three applies to a stem that is not wrapped at all, which a good many of these are. None of
   the three can check a metrical loop either; see section 12.
@@ -667,8 +676,9 @@ sliding probe fails when the source is too thin, the event probe when its window
 - **`--groups` re-renders all eleven actions when it already knows which one changed.** Every
   action's entry carries `summedAtTrims`, a fingerprint of the `gainDb` values its sum was
   taken from, and a test compares the two without decoding anything. The renderer does not
-  read it: adding one bed to one folder decodes and mixes all sixty-three files, about
-  eighteen seconds where two would do. Harmless at this size and the fix is a few lines —
+  read it: adding one bed to one folder decodes and mixes all ninety files, about
+  twenty seconds where two would do, and Allocation's rebuild on 2026-10-18 paid that cost
+  to change one folder. Harmless at this size and the fix is a few lines —
   skip an action whose fingerprint still matches — but it is the only place in the pipeline
   where the cost grows with the whole tree rather than with the change.
 - **The composite's master is the first audio source here that cannot be re-fetched.** Every
@@ -683,3 +693,146 @@ sliding probe fails when the source is too thin, the event probe when its window
 - **Only the fire's span was searched exhaustively.** The cathedral's search covered the quiet
   passage from 78 to 162 s, not the whole 286 s master, because the choir passages are not
   bed material.
+
+---
+
+## 15. The whole tree, tested at once — and what package-by-package review had been missing
+
+Everything above was worked out one bed at a time, as each arrived. On 2026-10-18 the test in
+section 13 and the two checks in section 9 were run across **all the then eighty-two beds in one
+pass**,
+which had never been done, and it found four loop failures that package review had let through.
+
+**That is the finding, and it is about method rather than about the four files.** A loop test is
+cheap, and every one of these beds was reviewed on arrival by somebody who meant to check it.
+What review could not do is compare a bed against the tree. Running the sweep took under three
+minutes and would have caught all four on the days they landed.
+
+### The shape census
+
+| shape | beds | |
+| --- | ---: | --- |
+| intermittent, wrap gap at or above the longest interior pause | 28 | safe outright |
+| a single burst with no interior pause at all | 14 | safe by arithmetic — section 13's second clause |
+| intermittent, wrap gap between 0.95× the shortest and the longest | 15 | listen |
+| intermittent, wrap gap under 0.95× the shortest | **4** | **fails** |
+| continuous — no silence of 0.25 s anywhere | 19 | the fold test, below |
+| material running edge to edge, wrap gap exactly 0.000 s | 2 | neither test applies; see below |
+
+**Forty-two of the sixty-three beds that contain silence pass without anyone having crafted
+anything**, because they are events in silence and have no seam to join. That is the strongest
+argument in this note for building beds that shape wherever the material allows, and it is now a
+clause in the delivery spec rather than a preference recorded here.
+
+### The four that fail
+
+| bed | wrap gap | shortest interior | ratio | |
+| --- | ---: | ---: | ---: | --- |
+| `taxation_actionA/coins` | 4.250 s | 5.385 s | **0.79×** | open |
+| `build_roads_actionA/ox_cart_mechanics` | 5.763 s | 6.763 s | **0.85×** | **fixed same day** |
+| `produce_actionA/stalk_brushing` | 8.808 s | 10.390 s | **0.85×** | open |
+| `build_roads_actionA/rammers` | 0.696 s | 0.768 s | **0.91×** | **fixed same day** |
+
+`stalk_brushing` and `rammers` were already named in this note, found one at a time. `coins` and
+`ox_cart_mechanics` are new and were found only by the sweep. All four were declared seamless on
+delivery.
+
+**Two of the four were corrected within hours**, because Build Roads happened to be mid-rebuild
+when the sweep ran: `rammers` now wraps on **2.907 s against a longest interior pause of 2.491**
+and `ox_cart_mechanics` on **6.963 s against 6.801**, so both pass section 13's first clause
+outright rather than on the ratio. *Neither needed a redesign* — `rammers` had its last four
+strikes moved up to 2.25 s earlier and `ox_cart_mechanics` its final activity block moved 1.20 s
+earlier, and that was the whole of it. **The cost of fixing a wrap gap is usually seconds of
+silence, not a rebuild**, which is the argument for running this test on arrival rather than
+letting a bed into the tree and finding it in a sweep eight actions later. `coins` and
+`stalk_brushing` remain open.
+
+**Two beds report a wrap gap of exactly 0.000 s** — `ordination_actionB/footsteps` and
+`produce_actionB/background_worker_b` — which the gap test flags and should not. Their material
+runs edge to edge with no leading or trailing silence at all, so there is no wrap gap to compare
+and section 13 simply does not apply to them. The first is metrical and closes on arithmetic by
+section 12. *A test that reports a failure on material it was never about is a fault in the
+test*, and the condition to check first is whether the file has a wrap gap at all.
+
+### The continuous nineteen, and a result that cuts both ways
+
+The two checks of section 9 — the step across the join against the file's own median
+sample-to-sample difference, and where a 1.5 s window centred on the wrap falls in the
+distribution of all such windows across three passes — were run on all nineteen.
+
+Six sit above 3× on the step: `build_roads_actionA/oil_lamp_flame` at **5.4×**,
+`give_alms_actionA/alms` at 4.8×, `ordination_actionB/night_city` at 4.3×,
+`produce_actionA/wind` at 4.0×, `produce_actionB/quarry_wind` at 3.7× and
+`taxation_actionA/room` at 3.1×. The window test finds two holes. `produce_actionB/background_worker_c` sits at the **9th
+percentile and 10.65 dB under its own median**, which is the shape section 9 warns about — a join
+with no click in it and a hole behind it. And `build_roads_actionB/wind` sits at the **0th
+percentile**: the loop's own quietest window *was* the seam, 2.36 dB under the median, with both
+ends 1.1 to 1.7 dB below the body — a fade rather than a fold, on the only continuous bed in its
+action.
+
+**That one was fixed on 2026-10-19** and is the first bed this test has sent back. Re-folded, its
+wrap sits at the **89.7th percentile, 0.68 dB above** the median, and the join step reads 1.39×
+the file's own median stereo sample step. *The test earned itself the day after it was written.*
+`background_worker_c` remains open.
+
+**Two of the six were cut here, not delivered.** `alms` and — at 3.0×, just under the line —
+`devotion` were wrapped by the same hand that wrote this note, against the method this note
+argues for. *So this is not a result about suppliers.* The continuous fold is the hard part of
+the problem for whoever does it, and the thing that separates a good one from a bad one is that
+somebody measured it, not who held the file.
+
+**Read these nineteen figures as candidates rather than as verdicts.** They were taken on the
+decoded `.ogg` rather than on the 24-bit master, and Vorbis has its own edge behaviour; the
+numbers name files worth opening, and the master is what settles each one. The intermittent test
+above does not have this problem, because a gap between events survives the encoder intact.
+
+---
+
+## 16. `clerical_actionA`, six beds delivered already looping
+
+**Added 2026-10-19 from `Devotion_Clerical_v02`,** which replaced this action's three beds with
+six. It is the first entry in this note where **nothing had to be cut here**: the loop was built by
+the supplier for all six, to the numbers section 5 asks for, and every one of them passes on
+arrival.
+
+### The three intermittent beds pass outright
+
+| bed | wrap gap | longest interior pause | shortest | verdict |
+| --- | ---: | ---: | ---: | --- |
+| `robe_movement` | 7.69 s | 6.78 s | 6.70 s | safe outright |
+| `prayer_beads` | 7.94 s | 6.85 s | 0.27 s | safe outright |
+| `wood_cracks` | 11.80 s | 11.19 s | 8.04 s | safe outright |
+
+Section 13's rule is that a wrap gap at least as long as the longest interior pause cannot be
+heard as a pause, and all three clear it — `wood_cracks` by 0.61 s, which is the narrowest margin
+of the three and still the right side of the line.
+
+*`prayer_beads` is worth a second look because its shortest interior pause is 0.27 s.* That is the
+gap between two strikes inside one movement, not a gap between movements, and the rule reads the
+longest pause rather than the shortest for exactly this reason: a bed whose events cluster has a
+short gap everywhere and it tells you nothing about the wrap.
+
+### The three continuous beds, and one inherited weak wrap
+
+| bed | join step | wrap window, three passes | against its own median |
+| --- | ---: | ---: | ---: |
+| `candlelight` | 0.60× | 78.3rd percentile | +1.17 dB |
+| `slow_breathing` | 1.73× | 47.5th percentile | −0.15 dB |
+| `background_sermon` | 0.93× | **9.86th percentile** | **−1.35 dB** |
+
+Every join step is well inside the limit of three. **The sermon's wrap is the weakest in the
+action and it was not caused by this delivery** — the accepted v01 measured 9.86 as well, and the
+v02 pass only moved the bed's balance from −0.05 dB to 0.000, which cannot move a wrap. It clears
+section 9's fifth-percentile floor with about five points to spare, and it is the first thing to
+open if a lap of this action ever sounds like it dips.
+
+### What this entry adds to section 15's caution
+
+Section 15 closes by warning that its nineteen continuous figures were taken on the decoded `.ogg`
+rather than on the master. **The same caution turned out to matter for width and fold, not just for
+loops.** Measuring the clerical six both ways found the encode widening every one of them — most at
+`robe_movement`, 0.82 dB — because Vorbis puts quantisation noise into the side channel. One bed,
+`wood_cracks`, crosses the 1 dB fold limit on the encode while passing on the master. It is recorded
+in `../sfx/README.md` and in `sfx_levelling_note.md`; it belongs here only as evidence that *the
+decoded `.ogg` and the master are different files for every measurement this project takes, not
+only for loop wraps.*

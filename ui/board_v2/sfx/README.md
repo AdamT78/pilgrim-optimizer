@@ -948,7 +948,7 @@ here as the files being clipped. They are not known to be. Measure the **shipped
 
 ### `ambient/`, the first sounds here that are not events
 
-Sixty-three files under eleven duty actions, and they are a different kind of thing from
+Ninety files under eleven duty actions, and they are a different kind of thing from
 everything above.
 
 **They live one folder per duty action** — `ambient/<duty>_<slot>/`, which is the same string
@@ -967,7 +967,8 @@ says it twice — because moving a file is cheap and renaming one costs a record
 New tracks are named for what they are: `footsteps`, `keys`, `wheat`, `coins`, `barn_creaks`,
 `candle`, `room`, `rosary`, `wool_robe`, `rammers`, `far_work`, `ox_breathing`, `wind`,
 `oil_lamp_flame`, `horse_snorts`, `staff`, `distant_dogs`, `night_city`, `rat_squeaks`,
-`rats_crossing`, `door_close`, `distant_cart`, `two_horses`, `bottle_knock`.* A cue is an
+`rats_crossing`, `door_close`, `distant_cart`, `two_horses`, `bottle_knock`, `tally_knife`,
+`tally_leather`, `stone_block`, `peasant_cloth_left`, `peasant_cloth_right`.* A cue is an
 event: it
 fires, it is 70 ms to 1.6 s long, and it is over. A bed runs underneath a selected duty action
 for as long as the player leaves it selected, so it loops, and almost every rule in this file
@@ -989,6 +990,12 @@ delivered spaced pair. Broadband statistics cannot separate the two cases at all
 L/R decompositions of two independent equal-power channels are the same pair of signals — so
 only the per-band reading settles it. It is also the easiest thing here to loop: its best start
 scores 0.17 dB of shoulder mismatch, the closest match in the tree.
+
+> **All four beds described in this section and the next were retired on 2026-10-18** and
+> Allocation was rebuilt — first from fifteen stems, then, the same day, from fourteen. What
+> they were and how they were measured is kept because the measurements are still the record of
+> how this tree learned to read a bed; what replaced them is at the end of this file under
+> *Allocation, rebuilt twice in a day*. Only the wind's Hzandbits source survives the change.
 
 `ambient/allocation_actionA/footsteps_sfx_v01.ogg` and `keys_sfx_v01.ogg` are a queue of monks
 waiting with a key handed over at the front: a **28.5 s** loop in stems — two at first and
@@ -1288,7 +1295,122 @@ quieter than the service. A guess at taste, and one slider move from a different
 than a stereo field, and means the downmix costs nothing. It sits centred in front of
 Devotion's +0.51 cathedral, which is the right way round.
 
-### `taxation_actionA/`, four tracks and the hardest source here
+### `taxation_actionA/`, nine tracks against new artwork
+
+> **All four beds described in the section below were retired on 2026-10-20** and the folder
+> rebuilt from nine. **Nothing is shared with them** — not a sample, and in three cases not even
+> a source recording. The old section is kept because its measurements are still the record of
+> how those files were understood, and because the room's loop argument is the clearest statement
+> in this tree of what an unloopable recording looks like.
+
+Nine beds, **25.000 s**, 48 kHz stereo, and the whole lap is one mix rather than nine
+independent stems: the nine sum to the reference mix at **maximum absolute sample difference
+0.000e+00, 0 differing samples of 2,400,000**. Every bed carries `gainDb` 0.0 because the balance
+between them is baked into the stems, so an action-level move scales all nine together and cannot
+disturb it.
+
+| file | what it is | from |
+|---|---|---|
+| `wheat_sfx_v02.ogg` | two pours and a scatter of seeds off the boards | 199930 thedapperdan + 755503 thatonecode, **CC0** |
+| `coins_sfx_v02.ogg` | four counting events and the pile shifting | 458399 Breviceps + 828846 wjb_88, **CC0** |
+| `tally_knife_sfx_v01.ogg` | three notches: grain, coin, stone | RutgerMuller 104001/104010/104011, **CC0** |
+| `tally_leather_sfx_v01.ogg` | the collector's glove, taking hold before each cut | 388307 isbeorn, **CC0** |
+| `stone_block_sfx_v01.ogg` | the block set on the table, then shoved square | 264757 kessir + 502511 Rudmer_Rotteveel, **CC0** |
+| `barn_creaks_sfx_v02.ogg` | four structural creaks | 395108 dudehg, **CC0** |
+| `room_sfx_v02.ogg` | the barn around everything, the only continuous bed | 22607 martypinso, **CC0** |
+| `peasant_cloth_left_sfx_v01.ogg` | the grain-bearer settling at the table edge | InMotionAudio *Mask Foley*, Sonniss GDC2024 |
+| `peasant_cloth_right_sfx_v01.ogg` | the stone-bearer taking hold | InMotionAudio *Mask Foley*, Sonniss GDC2024 |
+
+**Eight sources CC0, one under Sonniss bundle terms.** The cloth is the only bed in the action
+that is not public domain, and the only item in the whole duty action besides the tile cue.
+
+**Twenty-five seconds, and nothing was cut to get there.** The lap was built at 30 and shortened
+by compressing the approach to the stone and trimming the head and tail. *30 s was never a tree
+standard* — of 137 ambient beds, 99 are 35 s and 16 are 25 s, and **the only four at 30 s were
+this action's own**.
+
+#### What the audit found, which is why nothing survived
+
+Three filed records described a recording that was not in their stem, and **every one of them
+carried a sha256 that still matched its own `.ogg`.** The integrity tests passed throughout and
+could not have caught it: a hash proves the file has not changed, not that the `source` field
+describes it.
+
+| bed | the record said | the stem actually used |
+|---|---|---|
+| `wheat` | 556974 lucasfuchs, *Pouring grain or seeds* | 199930 thedapperdan, *Rice Pour* |
+| `barn_creaks` | 433999 snake16547, *Old wood door creak* | `moniker_subriquet-…-171122.mp3`, **no URL, no licence, lossy** |
+| `tally_leather` | a Sonniss gloves recording, bundle terms | 388307 isbeorn, *creaky-leather* — **CC0** |
+
+The stone and the leather were settled by **cross-correlation rather than by asking**. The
+stone's three elements read r = +1.0000, +1.0000 and +0.9999 against named in-points. The
+leather's four gestures read +0.8663 to +0.9064 against isbeorn and +0.1398 to −0.1772 against
+the Sonniss file the record named — 0.86 rather than 0.99 being what a 44.1 → 48 kHz resample
+costs, and against 0.13 it is not ambiguous. *That one was the good kind of surprise: the bed is
+CC0 and needs no bundle-terms tag.*
+
+**Two NonCommercial sources got deep into this work on measurement alone.** `325529`, a wooden
+chair considered as the stone nudge, was measured in full, ranked against four alternatives and
+written into a build prompt before its licence page was opened — **CC BY-NC 3.0**. `68343`,
+Robinhood76's grain in a bucket, went further: it was built into a bed, mixed, delivered and
+auditioned, and was caught only by the audit — **CC BY-NC 4.0**. Both are gone, and the rule is
+now explicit: **check the licence before measuring anything, not after.** All nine sources behind
+this lap were verified against their own pages on 2026-10-20 before a stem was encoded.
+
+#### One bed was over the fold limit on its own master, and the fix broke its silence
+
+Encoding widens — Vorbis quantisation noise is uncorrelated between channels and lands in the
+side signal — so every bed here is measured on the `.ogg` and not on the master. **Beds over the
+tree's 1 dB per-band limit after encoding: 0.**
+
+Four needed correcting and one of those was never the encoder's fault. First pass:
+`peasant_cloth_left` −1.235 and `peasant_cloth_right` −1.068 at 16 kHz, `room` −1.010 at 2 kHz,
+`tally_knife` −1.835 at 16 kHz. The three 16 kHz failures are quantisation noise in a band
+carrying 3.6–4.2% of the energy. **`tally_knife` measured −1.860 on its own 24-bit master** — it
+arrived over the limit. Fixed by summing the two channels above 10 kHz on the three, and a small
+extra narrowing on `room`.
+
+**That fix destroyed each file's digital silence and no width check could see it.** An FFT taken
+over the whole buffer is not time-limited, so the sum leaked energy into every silent sample and
+`tally_knife` went from 91.7% silence to 0.0%. The mask — zero everything below −90 dB of peak —
+was restored afterwards and all four re-encoded and re-verified. *A repair aimed at one
+measurement has to be checked against the others.*
+
+#### `room` is the only continuous bed, and its first build pumped
+
+25.000 s from 89.25 s of the 127.3 s master, with the following 1.5 s folded back over the head
+as an equal-power crossfade. Step across the wrap **0.05 dB**, against a median adjacent-window
+step of 0.56 dB and a 90th percentile of 1.52 — **the seam is smoother than a typical point
+inside the loop.** Three laps measure identical to one pass.
+
+**The build before it passed every check and pumped once a lap.** Its join was clean by sample
+step, 1.7× the median and well inside tolerance, and its head was **3.09 dB quieter than its
+tail**. The check had only ever compared continuity across the seam, never level. A 3 dB step in
+a continuous bed is heard as the bed breathing, and that metric is now part of the check.
+
+**A gain ramp was tried and discarded.** Correcting the level into the existing window is the
+obvious repair and it does not work: a ramp's endpoints do not meet, and the corrected build
+measured a wrap step **5.7× the median** — an audible level step traded for an audible click. The
+window was reselected for continuity instead.
+
+#### The stone is the loudest thing in the tree's ambient set
+
+`stone_block` peaks at **−2.59 dBFS**, 9.5 dB above anything else in the lap, and it is panned to
+5.3 dB right **by pulling the left channel down rather than raising the right** — a symmetric pan
+would reach +0.43 dBFS and clip.
+
+**It needed a side-scale before it could be placed at all.** Its shove was cut from 12.380 s of
+its source, inside a region measured days earlier, for a different purpose, as anti-phase: 12.0 to
+13.8 s of that recording folds −3.4 to −5.8 dB in mono. Re-cutting does not help — seven
+alternative windows were measured and 250 and 500 Hz fail across the whole file — so the repair is
+side × 0.22 on the shove and × 0.70 on the placement, and the bed's −13.97 de-panned width is what
+that cost.
+
+**This action's summed true peak went from −12.02 to −2.64 dBTP**, which makes it the loudest duty
+action in the tree after its group trim, 4.2 dB above the next. `ambientMaster` is computed from
+that figure and has not been recomputed — see `../docs/sfx_levelling_note.md`.
+
+### `taxation_actionA/`, four tracks and the hardest source here — RETIRED 2026-10-20
 
 `room_sfx_v01.ogg` is the barn the other three sit inside — a **30.000 s** loop from 49.75 s of
 saintstereo's 143 s **CC0** barn interior, and the first Taxation track that is **not** a stem
@@ -1386,6 +1508,14 @@ trim is −3.97 dBTP and Taxation's is −12.90. The ceiling is a rule about wha
 a description of what is filed, and the note now says so.
 
 ### `build_roads_actionA/`, a work gang in eleven tracks — and the first duty here with no cue
+
+> **All eleven beds described in this section were retired on 2026-10-18** and replaced from
+> `Build_Roads_Final_Tracks_v15_11Stems_VERIFIED_R1`. **Nothing about what they are made of
+> changed** — the eleven are the same recordings, redistributed across the stereo field so the
+> scene matches the action's own artwork. Everything below is kept because the measurements are
+> still the record of how these files were understood, and because the v05 arithmetic and the
+> source-matching work still describe the material. What replaced them is at the end of this
+> file under *Build Roads, re-placed rather than rebuilt*.
 
 `ambient/build_roads_actionA/rammers_sfx_v01.ogg`, `gravel_sfx_v01.ogg`,
 `far_work_sfx_v01.ogg` and `worker_footsteps_sfx_v01.ogg` are a road being laid: the surface
@@ -1686,19 +1816,27 @@ against each other and the group's absolute level is the one judgement here with
 behind it. Give Alms has the same gap on both its actions, with one bed each rather than
 eleven.
 
-### `produce_actionB/`, Produce Stone in thirteen — a whole action in one delivery
+### `produce_actionB/`, Produce Stone in seventeen — a whole action, delivered three times
 
-The eleventh duty action to get a bed and the first to arrive **complete**: thirteen tracks,
-a written manifest naming every source, and a reference mix to check them against. Everything
-before this was filed one bed at a time.
+The eleventh duty action to get a bed and the first to arrive **complete**: a written manifest
+naming every source, and a reference mix to check the stems against. Everything before this was
+filed one bed at a time. *It then arrived complete three times* — thirteen tracks in v14,
+seventeen in v15 after the first review, and seventeen again in v16 after a second review sent
+the five background workers back. What is in the tree is v16.
 
-**The thirteen, by folder in the supplied package:** `quarry_wind_sfx_v01.ogg` (the continuous
-one), `oil_lamp_flame_sfx_v01.ogg`, `oil_lamp_rattle_sfx_v01.ogg`, `moth_sfx_v01.ogg` and
-`distant_owl_sfx_v01.ogg` for the ambience and dusk; `power_strikes_sfx_v01.ogg`,
-`debris_cleave_sfx_v01.ogg` and `chisel_reposition_sfx_v01.ogg` for the foreground
-stonecutter; `background_workers_sfx_v01.ogg` and `quarry_footsteps_sfx_v01.ogg` behind them;
-and `stone_sleigh_sfx_v01.ogg`, `quarry_hoist_sfx_v01.ogg` and
-`sleigh_crew_footsteps_sfx_v01.ogg` for the haul.
+**The seventeen, by folder in the supplied package:** `quarry_wind_sfx_v02.ogg`,
+`oil_lamp_flame_sfx_v01.ogg`, `oil_lamp_rattle_sfx_v01.ogg`, `moth_sfx_v01.ogg` and
+`distant_owl_sfx_v01.ogg` for the ambience and dusk; `power_strikes_sfx_v02.ogg`,
+`debris_cleave_sfx_v03.ogg` and `chisel_reposition_sfx_v02.ogg` for the foreground
+stonecutter; `background_worker_a_sfx_v01.ogg`, `background_worker_b_sfx_v01.ogg`,
+`background_worker_c_sfx_v01.ogg`, `background_worker_d_sfx_v01.ogg`,
+`background_worker_e_sfx_v01.ogg` and `quarry_footsteps_sfx_v01.ogg` behind them;
+and `stone_sleigh_sfx_v01.ogg`, `quarry_hoist_sfx_v02.ogg` and
+`sleigh_crew_footsteps_sfx_v01.ogg` for the haul. *The three continuous ones are the wind, the lamp flame and
+worker A* — all three at 0.0% silence. The six files they replace — `quarry_wind_sfx_v01.ogg`, `power_strikes_sfx_v01.ogg`,
+`debris_cleave_sfx_v01.ogg`, `chisel_reposition_sfx_v01.ogg`, `quarry_hoist_sfx_v01.ogg` and
+`background_workers_sfx_v01.ogg` — are out of the tree, with their records kept at
+`state: absent` because a record that vanishes takes its provenance with it.
 
 **Seventeen sources, all checked before a single stem was encoded.** Fifteen freesound uploads
 new to this tree, the two lamp uploads it already carried, and — a first — the duty action's
@@ -1762,9 +1900,16 @@ account for more than its share. The evidence is the pattern across runs, not th
 score.
 
 **And `debris_cleave` contains the game's own cue.** `produce_actionB_sfx_v02.ogg` is in there
-at **r 0.9889**, confirming the manifest. *That has a consequence nobody has decided on:* when a
-player confirms Produce Stone, the cue will fire over an ambience that already contains it, so
-the two reinforce rather than separate. The generic-confirm discussion turned on exactly this
+at **r 0.9889**, confirming the manifest. *The consequence this paragraph used to draw from that
+was wrong and was acted on before anybody checked it:* it said that confirming Produce Stone
+would fire the cue over an ambience already containing it, so the two would reinforce rather
+than separate. **The board does not play per-action cues.** It plays one generic select and one
+generic confirm out of `general/`, and `duty_actions/` is walked for artwork only -- nothing in
+that folder reaches a player as sound. The doubling cannot happen, and has not been possible
+since the board moved to generic cues. The cascade was removed from v15's cleave on this
+reasoning, and v17 put it back: `debris_cleave_sfx_v03.ogg` restores the v14 waveform inside v15's room, and its envelope measures
+identical to v14 on every figure — peak 0.34 s into the window, 20 dB down 0.64 s later, 11.9%
+of the window's energy still to come 0.3 s past the peak. The generic-confirm discussion turned on exactly this
 masking case, and it is now a measured fact about one action. Separately, discofield's stone
 crash — run as a control because the manifest lists it only under `power_strikes` — reaches
 0.5550 here. *That was filed as a likely manifest omission and it is not one.* The window is a
@@ -1776,16 +1921,55 @@ the bed has two sources. *The threshold that explains this was established four 
 the figure was filed and simply wasn't applied — the script reported a maximum across runs
 without checking the winning run's length.*
 
-**The five background workers are one track by choice.** They arrived as five stems whose peaks
-form an exact 1.5 dB ladder — −19.0, −20.5, −22.0, −23.5, −25.0 — so the balance was authored,
-not deferred. The merge was verified both ways: it equals the sum of its parts at **−240 dBFS**,
-and the thirteen-track set still reproduces the package's reference mix at **−126.4 dBFS**, the
-same figure the unmerged seventeen gave.
+**The five background workers were one track by choice, and that choice did not survive.** They
+arrived in v14 as five stems whose peaks form an exact 1.5 dB ladder — −19.0, −20.5, −22.0,
+−23.5, −25.0 — so the balance read as authored rather than deferred, and merging them froze a
+decision already taken: one record instead of five, one decode instead of five, and a ladder
+nobody intended to re-space. The merge was verified both ways and the arithmetic was right — it
+equalled the sum of its parts at **−240 dBFS**, and the thirteen-track set reproduced the
+package's reference mix at **−126.4 dBFS**, the same figure the unmerged seventeen gave.
 
-**`quarry_wind` is exact dual mono**, L/R +1.000000 and array-equal — a mono recording in a
-stereo container. Panning it does nothing and folding it costs nothing. It is also the folder's
-only continuous bed, so it is what makes the action audible the instant it is selected; the
-other twelve are all intermittent.
+*What the arithmetic could not see was how the five had been built.* Every strike in each stem
+sat at one level — within exactly **1.00 dB** of that stem's median, with the loudest and second
+loudest **bit-identical in peak** — and the stereo was amplitude-panned mono: a least-squares
+fit of side against mid left exactly **18.000%** of the side energy unexplained on all five, at
+|r(side,mid)| **0.9055** on all five to four decimals. Five copies of one process, and freezing
+the ladder would have frozen that with it. They were sent back, rebuilt independently, and are
+now five beds. Each has its own strike schedule and its own side field, and that was checked
+rather than assumed: side field against side field across all ten pairs reaches **0.021**, each
+worker's side against every other worker's mid reaches **0.038**, and the 20 ms strike envelopes
+correlate between −0.058 and +0.029.
+
+**`quarry_wind` was exact dual mono and is not any more.** v01 was L/R +1.000000 and
+array-equal — a mono recording in a stereo container, which panning could not widen and folding
+could not cost anything. `quarry_wind_sfx_v02.ogg` is the same upload rebuilt: side/mid
+**−7.50 dB**, L/R **+0.696899**, the side signal **100.0%** unexplained by a least-squares fit to
+mid, and no lag anywhere in ±400 ms reaching past **0.038**. Three checks and not one, because a
+widener on a mono source passes the first two. *And it was never the folder's only continuous
+bed, which the sentence that stood here claimed and this file contradicted two records away.*
+`oil_lamp_flame_sfx_v01.ogg` has read 0.0% silence since v14 and its own record calls itself
+continuous; `background_worker_a_sfx_v01.ogg` is a third as of v16. So the claim that this one
+bed is all that keeps the action from selecting into silence was wrong when it was written, not
+merely overtaken — and it was repeated here on 2026-10-18 by someone reading only the record
+that made it.
+
+**Two rounds of review, and what each one found.** v14 was measured against the written contract
+in `../docs/duty_action_soundscape_delivery_spec.md` and sent back on three counts: the ambience
+was dual mono, the cleave carried the action's own cue at r 0.9889, and the workers were one
+merged stem. v15 fixed all three. *The second of those three should never have been asked for*
+-- see the paragraph above on what the board actually plays -- and v17 restored the cascade it
+removed, one stem changed and the other sixteen returned byte-identical. It is left in this
+list because the round happened and the other two findings stand. **What the removal cost was
+not level or spectrum, which is why nothing caught it**: v15 matched v14 within 0.04 dB RMS and
+0.6 dB in every octave band over the cleave window, and still turned a cascade into a crack.
+The contract gained an envelope clause out of it. *Its verification file then turned out to be measuring
+something else.* The octave mono-fold table reported a single broadband figure in all nine band
+slots on eight of ten stems — it was a delta against v14 rather than the absolute fold, and it
+carried a sign no fold metric can produce — and it stated a correlation against the game's cue,
+a file the supplier has never held. The rebuilt workers were still panned mono at one strike
+level. v16 is v15 with those five rebuilt and nothing else touched: the other twelve stems are
+byte-identical, and their v15 hashes were re-checked against the v16 package here rather than
+taken on the supplier's word.
 
 **And the hoist breaks a rule this file has stated since the crows.** Every bed checked until
 now ships *less* silent than its stem, because Vorbis rings across short gaps. This one inverts
@@ -1803,13 +1987,42 @@ has a cue of its own. Its cue peaks at −0.3 dBFS, so beds and cue together lan
 **+3.4 dBTP** at worst alignment. Nothing is trimmed yet and this is where the trimming will
 have to start.
 
-### `produce_actionA/`, Produce Wheat in eight — and the first action in weeks to arrive with a cue
+### `produce_actionA/`, Produce Wheat in thirteen — the first action whose soundstage was specified before it was built
 
-Eight 35-second beds, the largest folder here. Two are continuous and confirmed:
-`wind_sfx_v01.ogg` is open country moving over the field and `field_rustle_sfx_v01.ogg` is
-the crop itself. Six are intermittent — `distant_rooster_sfx_v01.ogg`, which does not loop,
-and `sheaf_handling_sfx_v01.ogg`, `stalk_brushing_sfx_v01.ogg`, `straw_workers_sfx_v01.ogg`,
-`sickle_cutting_sfx_v02.ogg` and `nearby_raven_sfx_v01.ogg`, which do. **And
+**Thirteen 35-second beds, rebuilt from eight on 2026-10-18.** Three are continuous:
+`wind_sfx_v02.ogg` is open country moving over the field, `field_rustle_sfx_v02.ogg` is the crop
+itself, and `stalk_brushing_sfx_v02.ogg` is the stubble that fills the whole frame of the
+artwork. The woman in the foreground is four stems at one position —
+`sheaf_handling_sfx_v02.ogg`, `sheaf_settling_sfx_v01.ogg`, `worker_repositioning_sfx_v01.ogg`
+and `straw_binding_close_sfx_v01.ogg`. Four people work the left edge:
+`worker_a_sickle_sfx_v01.ogg`, `worker_b_sickle_sfx_v01.ogg`, `worker_a_straw_sfx_v01.ogg` and
+`worker_b_straw_sfx_v01.ogg`. Two birds: `distant_rooster_sfx_v02.ogg`, which does not loop, and
+`nearby_raven_sfx_v02.ogg`.
+
+**THE LAYOUT WAS SENT WITH THE REQUEST RATHER THAN MEASURED AFTERWARDS**, read off this action's
+own artwork — the cutters on the left edge, the woman's hands at 55% of the frame, the raven on
+the fence at 96%. The delivery met every one of the thirteen placements with a largest error of
+**0.00 dB**. Before that, v1's own layout had the same worker's hands at 1.6 dB right and her
+settling gesture 3.8 dB LEFT, because those gestures were merged into a stem with the background
+cutters and took its pan; and two pan slots, +8.0 and +4.6 dB, were shared between four different
+people for the same reason. See `../docs/soundstage_layout.md`.
+
+**The eight it replaces were two merges and six singles.** `sickle_cutting_sfx_v02.ogg` held two
+background cutters, the foreground settling gesture and the repositioning; `straw_workers_sfx_v01.ogg`
+held close binding detail and two workers at different distances. One gain each, so near and far
+could never be balanced against one another. Three rounds: v1 went back for the merges and a field
+rustle losing 3.5 dB folded to mono, v2 fixed the structure and the layout but replayed one sample
+five times inside 1.2 s in both straw stems — three of the five bit-identical to ten decimal places
+— and v3 rebuilt those two and narrowed the rustle's top end. Ten of the thirteen are byte-identical
+between v2 and v3.
+
+**One fault is open and it is this tree's, not the supplier's.** The woman's four stems sit at
+−26.74 dB side/mid, which is a mono source panned and nothing more: a position with no size.
+The layout table asked for a placement and said nothing about width, so none was given. The table
+now carries a width column and those four have a target of −10 to −12 dB, in line with Produce
+Stone's foreground at −10.8 to −11.0.
+
+**And
 `produce_actionA_sfx_v01.ogg` already
 exists**, which makes this the first folder since Taxation to gain beds with something to be
 levelled against. Every bed filed since has gone into an action with no cue; the no-cue tally
@@ -2293,6 +2506,13 @@ width. It also passes **both** wrap tests, which only `build_roads_actionB/wind`
 before.
 
 ### `build_roads_actionB/`, Build Shrine in seven — a fold at the wrong end, and an inverted stem
+
+> **All seven beds described in this section were retired on 2026-10-19** and replaced from
+> `Build_Shrine_Final_Tracks_v05_VERIFIED`. **Nothing about what they are made of changed** — the
+> seven are the same recordings, redistributed across the stereo field so the scene matches the
+> action's own artwork. Everything below is kept because the measurements are still the record of
+> how these files were understood. What replaced them is at the end of this file under *Build
+> Shrine, placed from its picture*.
 
 `wind_sfx_v01.ogg` is 25 s of wind through winter grass, the only bed of a ninth duty action
 and **the second folder under the build_roads duty**: `actionA` is Build Road and holds
@@ -3189,23 +3409,40 @@ than pessimistic.
 
 | duty action | beds | rendered sum at today's trims |
 | --- | --- | --- |
-| `build_roads_actionA` | 11 | **−5.22 dBTP** |
-| `ordination_actionB` | 4 | −10.23 |
-| `allocation_actionA` | 4 | −10.74 |
+| `ordination_actionB` | 10 | **−2.42 dBTP** |
+| `taxation_actionA` | 9 | **−2.64** |
+| `build_roads_actionA` | 11 | −5.31 |
+| `produce_actionB` | 17 | −5.75 |
+| `allocation_actionA` | 14 | −7.06 |
 | `clerical_actionB` | 1 | −11.97 |
-| `taxation_actionA` | 4 | −12.02 |
-| `clerical_actionA` | 3 | −12.10 |
+| `build_roads_actionB` | 7 | −12.03 |
+| `produce_actionA` | 13 | −13.36 |
+| `clerical_actionA` | 6 | −16.38 |
 | `give_alms_actionB` | 1 | −22.83 |
 | `give_alms_actionA` | 1 | −24.96 |
+
+*Taxation moved from four beds at −12.02 to nine at −2.64 on 2026-10-20, which is a 9.4 dB jump
+and almost all of it one transient: `stone_block` peaks at −2.59 dBFS. Its `groupDb` is 0.0, so
+after group trims it is now the loudest action on the board by 4.2 dB — see
+`../docs/sfx_levelling_note.md` for what that does to `ambientMaster`, which has not been
+recomputed. `clerical_actionA` is corrected here from a stale 3 beds at −12.10.*
 
 **That spread is the whole case for the second level, and it has now been used.** It was
 **33 dB** when the eight were only ever balanced inside themselves — `give_alms_actionA` a
 single rain bed at −35.96 against eleven tracks of work gang at −3.05, which is not a pair of
 numbers anybody chose. One pass of matching actions against each other on the bench, folded
-into the trims, brought it to **19.7 dB**, with five of the eight inside 2 dB of each other
-between −10.2 and −12.1. Build Roads stays 5 dB hotter than that cluster and Give Alms' two sit
-10 dB under it, which is a judgement rather than an accident, and the first time this table has
-been able to record one.
+into the trims, brought it to **19.7 dB** across those eight. It reads **22.54 dB** across
+eleven today, four of which sit inside 0.53 dB of each other between −11.57 and −12.10, with
+Ordination 9.7 dB hotter than that cluster and Give Alms' two 11 dB under it. The actions filed
+since that pass have not been through one.
+
+*Every figure in this table moved on 2026-10-18 and none of the audio did.* `group_sums` decided
+which beds hold step by comparing their **decoded** lengths, and a Vorbis decode runs 1 to 20 ms
+long by a different amount per file — so beds all cut to 35.000 s presented as six lengths, most
+were treated as drifting, and their peaks were added linearly. *That is the shortcut this very
+paragraph warns against, arriving through the back door.* It read **+6.17 dBTP** on Produce
+Stone against a true −6.02, and **13.01 dB** high on Allocation. It now reads the container
+granule, and the only beds still bounded are the two that genuinely differ in length.
 
 *The trims under it are no longer all of one kind.* Some were set against the bed's own
 neighbours and some arrived by folding an action level onto a track nobody had considered
@@ -3221,7 +3458,7 @@ ffmpeg. `python3 ui/board_v2/sfx_lab/sfx_levels.py --groups --write` recomputes 
 
 **Whether a track loops is a field too, and absent means yes.** A record may carry
 `"loop": false`, the generator passes it to the bench, and the bench's **loop** column is
-ticked for everything else. Sixty-one of the sixty-three beds filed loop, which is why the field is
+ticked for everything else. Eighty-four of the ninety beds filed loop, which is why the field is
 written only when the answer is no — the same economy as `gainDb`, where silence means a
 number nobody has set. A one-shot plays once and stops: it is an event with a place in the
 scene rather than an ambience, and it is excluded from the repeat figure, since folding its
@@ -3300,7 +3537,7 @@ since 2026-10-18; the first version of its player looped on the decoded buffer's
 this paragraph is what stopped it shipping that way. `generate_action_board.py`'s
 `ogg_seconds()` reads the true length off the container's last granule position at build time —
 no decoder involved, which is the point — and the manifest carries it so `loopEnd` can be set
-in seconds. All sixty-three agree with the loader to under 0.05 ms, and two tests hold the read
+in seconds. All ninety agree with the loader to under 0.05 ms, and two tests hold the read
 and its use in place.
 
 **Chrome's**
@@ -3318,3 +3555,608 @@ resources, fourteen duty actions, twenty-four buildings — with the ones that h
 as gaps, because a list of what is missing is a plan and a list of what exists is not. It reads
 the clips off disk and the lists out of `duty_text.json` and `configs/buildings.json`, so it
 cannot disagree with what ships.
+
+---
+
+## Allocation, rebuilt twice in a day
+
+**The first duty action replaced outright rather than added to, and then replaced again.** On
+2026-10-18 Allocation's four beds — `footsteps`, `keys`, `wool_robe` and `allocation_wind` —
+were retired and fifteen took their place, from
+`Allocation_Final_Tracks_v36_15Stems_VERIFIED`. Those fifteen were filed by **sound type**: all
+the walking in one bed, all the locks in another, all the doors in a third. Before the day was
+out they were retired in turn and **fourteen** took *their* place, from
+`Allocation_Final_Tracks_v38_14Stems_VERIFIED`, filed by **journey** — one bed per monk,
+carrying his whole path. The folder is the only one in the tree that has been through a
+structural change rather than a content one, and it is the reason the rest of this section is
+worth reading.
+
+**Almost nothing survives from before the fifteen.** The old beds measured against the new ones
+reach −0.147 (`footsteps`), +0.074 (`keys`) and −0.061 (`wool_robe`) — noise. Only the wind
+carries over, at **+0.771**, because the new wind is cut from the same Hzandbits master as the
+file it replaces. One source reappears without its audio: Fenodyrie's keys jingling backs both
+the retired `keys` bed and `key_handoffs`.
+
+**The fourteen reconstruct their own reference mix at zero differing samples** out of 3,360,000,
+checked here by assembling them independently rather than by reading the package's verification
+file; its 70 s preview is two bit-exact passes of that mix with no fade at the join, and all
+seventeen SHA256s in that file match the bytes on disk.
+
+### The scene, which nobody had written down until the third delivery
+
+Five monks wait in a row near the camera. Each in turn takes two steps forward, receives a key
+from the almoner on the left, and leaves — one right through a door, one left through a door,
+one two steps back and up the wooden stairs, one right through a third door, and one
+forward-right and down the stone stairs. A reader turns pages twice in the background right and
+shifts once; a torch burns on the left wall; a mouse crosses at the far left.
+
+**None of that was recorded anywhere while two complete packages were built to it.** Writing it
+down is what produced every finding below, because a scene you can state is a scene you can
+measure against. The layout as delivered is in `../docs/soundstage_layout.md`.
+
+### Four rounds of review, and what each one found
+
+*This package arrived four times.* The first delivery put the entire foreground choreography —
+footsteps, key handoffs, locks, doors, and both staircases, eight sources — into **one stem**.
+That is the five-workers merge again, except pre-merged and not reversible from anything on
+disk: the engine applies one gain per duty action, so the whole choreography would have moved as
+a block for ever. It came back as sixteen separate stems, and those sixteen reconstructed the
+mix exactly.
+
+The second review found three things the sixteen still carried:
+
+| | found | settled at |
+| --- | --- | --- |
+| three **exact dual-mono** stems | `wood_stairs`, both torch passes: L and R array-equal | rebuilt with real stereo |
+| two "wind passes" that were **one recording** | gust = base × 1.078565, residual −132.2 dBFS | collapsed to one stem |
+| an unintended **−3.05 dBFS** spike | the stone-stair entry, 12 dB over the queue footsteps | reduced to −9.00 |
+
+The third review is the one that changed the structure, and it is described under *The five
+monks were one monk five times* below. The fourth corrected a single stem and nothing else.
+
+**The dual-mono rebuild is the part worth keeping as method.** The risk in widening a mono file
+is that the width comes from delayed or phase-inverted copies, which comb-filter the moment
+anyone sums to mono — and a board game gets played on laptop speakers. So the acceptance test
+was stated as a number before the work was done: *the mono sum must stay within 1 dB of the
+original in every octave band.* The torches came back losing **0.712 and 0.723 dB with an
+octave span of 0.000 dB** — flat to three decimals across all ten bands, which is the signature
+of genuine decorrelation. Two further checks ruled out the cheap ways to hit a width target: a
+scalar fit of the side channel against the mid leaves **96.4% and 98.8%** of the side energy
+unexplained, so it is not a scaled copy; and over a ±400 ms search the strongest side-against-mid
+alignment is **r = +0.19 and +0.11 at zero lag**, where a Haas-style delayed copy would read 0.8
+or more.
+
+**The brief had an error in it and the numbers caught it.** The first attempt came back at
+side/mid −20.0 and −18.3 dB, far narrower than the −5 dB asked for. Asking for −5 dB *and* a
+1 dB fold limit was impossible: a 1 dB fold limit caps width at **−5.87 dB** side/mid, because
+folding to mono discards the side channel and the loss is 10·log₁₀(1 + side/mid). The corrected
+target was −7 to −8 dB, which costs 0.64 to 0.79 dB, and both torches landed at **−7.500**.
+
+| side/mid | mono fold loses |
+| --- | --- |
+| −20 dB | 0.04 dB |
+| −12 dB | 0.27 dB |
+| −8 dB | 0.64 dB |
+| −7 dB | 0.79 dB |
+| −6 dB | 0.97 dB |
+
+*That table has since been used twice more in this folder.* The two mice were the widest beds
+here at −5.43 and −5.82 dB side/mid and missed the fold limit by 0.23 and 0.08 dB — **they were
+at the edge of the arithmetic rather than badly built**, and narrowing them to −7.16 and −7.12
+put them inside with nothing audible lost. The wind went the other way: at −16.85 dB it was far
+*too narrow* for a continuous bed, and was widened to **−6.97**, keeping the decorrelation
+method, because only the amount was wrong.
+
+**And the stone-stair fix paid for itself.** Its first footfall was the loudest sample in the
+whole soundscape — a background monk starting a staircase, 5.8 dB above anything else in his own
+route and 12 dB above the queue walking past you. Reduced to −9.00 dBFS, matching the route's
+next loudest impact at −8.90. The edit was surgical: changed samples spanned **23.553 to
+24.350 s and the difference outside that window was exactly zero**. The whole action gained
+**4.96 dB of headroom**. That material is now inside `monk_05_near_stone_stairs`.
+
+### The five monks were one monk five times
+
+This is the finding that forced the restructure, and it could not be seen until the scene was
+written down.
+
+**`key_handoffs` played one sample five times.** Its five keys landed at 2.00, 7.20, 12.40,
+17.60 and 22.00 s — four of those gaps exactly **5.20 s** — and all five peaks were
+**bit-identical at a raw value of 0.0621503592**. Five keys, one recording, one level, on a
+metronome. **`footsteps` sat on the same grid**: 2.48, 7.58, 12.78, 17.98, 22.38 s, with four of
+its six loudest peaks bit-identical. **`torch_base` did it inside a continuous bed**, which is
+worse, because a listener hears the bed pulse: peaks at 4.10, 10.50, 16.84, 23.24 and 29.58 s,
+bit-identical, a **6.4-second cell repeated five times** inside a 35-second loop.
+
+*An interquartile spread is blind to all of this* — the fault that Produce Wheat's straw workers
+taught. The statistic that catches it is the **gap between the loudest and second-loudest
+event**, which reads 0.00 dB on a replayed sample and will not read 0.00 dB on anything else.
+
+Across the five journey stems there are now **63 events with 63 distinct peak values and nothing
+shared between any two**, and the rebuilt `torch_base` holds 102 events at 0.26–0.48 s spacing
+with no repeated cell and no two peaks alike. The five journeys also **overlap** rather than
+queueing on a grid: monk 2 steps forward at 5.4 s while monk 1 is still walking away at 8.1 s.
+
+### Why one bed per monk, and what it costs
+
+**A monk's journey is one continuous gesture and it sat on four faders.** With the walking in
+one bed, the robes in another, the locks in a third and the doors in a fourth, lowering the
+doors made a monk arrive silently, and no monk could take a different path from any other.
+
+The trade is deliberate and was accepted before the work was done: **the stair sounds and the
+footsteps can no longer be levelled as groups**, because a path must not change loudness halfway
+along. What it buys is five different people doing five different things, and the first beds in
+this tree whose motion column is not `static`.
+
+**Each monk's stem is mostly silence and begins and ends in silence**, so all five loop safely
+despite travelling — a traversing source teleports at the wrap only if it is still audible when
+it gets there.
+
+**The last correction was to one monk.** Monk 2 walked to 8.0 dB left, unlocked a door 3 dB away
+from himself and opened it 5 dB further out again at 13.1 dB left, which would have been the
+hardest-panned event in the project and cost him 1.33 dB of mono fold at 1 kHz. It was inherited
+rather than introduced: the by-type package had its left lock at +4.6 and its left door at
++13.1, 8.5 dB apart, while both right pairs agreed within half a decibel. One stem was
+re-rendered, touching **49,471 samples between 10.886 and 11.917 s** and nothing else; the other
+thirteen came back byte-identical and were checked against their previous hashes.
+
+**The key became the signature event it depicts.** It was the quietest thing in the action at
+−24.1 dBFS, 0.7 dB right and 17.2 dB narrow — against footsteps at −15.9 and stone stairs at
+−10.8 — in an action whose entire subject is a key changing hands. It is now five different
+takes at five different levels off the 5.2 s grid, at **1.8 dB left** where the almoner's hand
+meets the monk's, **−9.8 dB** wide, peaking at **−9.0 dBFS**, and the loudest thing in the
+folder. It therefore breaks the 4 dB intra-stem spread rule, **declared as a deliberate
+exception** the way Produce Stone's cleave is.
+
+### The fourteen
+
+| | | |
+| --- | --- | --- |
+| `allocation_wind_sfx_v03.ogg` | continuous | the interior howl, widened to −6.97 dB; Hzandbits under the Sonniss grant |
+| `torch_base_sfx_v02.ogg` | continuous | the wall flame at rest, rebuilt without its 6.4 s pulse; LordStirling CC0 |
+| `torch_gust_sfx_v01.ogg` | continuous | the same flame answering the wind, unchanged since v36 |
+| `monk_01_right_door_sfx_v01.ogg` | 1 journey | 3.5 R → 8.0 R, lock and door; yuval CC0 |
+| `monk_02_left_door_sfx_v01.ogg` | 1 journey | 4.5 R → 8.0 L across centre, lock and door; yuval CC0 |
+| `monk_03_back_wood_stairs_sfx_v01.ogg` | 1 journey | two steps back, pan held, then the wooden ascent; Vrymaa CC0 |
+| `monk_04_right_door_sfx_v01.ogg` | 1 journey | 5.0 R → 5.5 R, a nearer door; jemburyturner and Mariayolanda511 CC0 |
+| `monk_05_near_stone_stairs_sfx_v01.ogg` | 1 journey | forward +4.4 dB, then the stone descent; Sadiquecat CC0 |
+| `key_handoffs_sfx_v02.ogg` | 5 runs | the five handoffs, the action's signature event; Mediasaur and Fenodyrie CC0 |
+| `page_turns_sfx_v01.ogg` | 2 runs | the distant reader, fabiopx CC0, unchanged since v35 |
+| `reader_reposition_sfx_v01.ogg` | 1 run | one gesture before the page, Sheyvan CC0, unchanged since v35 |
+| `mouse_scurry_in_sfx_v02.ogg` | **no loop** | the mouse arriving, narrowed to −7.12 dB; IENBA CC0 |
+| `mouse_squeak_sfx_v01.ogg` | **no loop** | the mouse squeaking, berboberbo CC0, unchanged since v35 |
+| `mouse_scurry_out_sfx_v02.ogg` | **no loop** | the mouse fleeing, narrowed to −7.16 dB; IENBA CC0 |
+
+`mouse_scurry_out` at −64.75 LUFS is **the quietest bed in the tree**, and `mouse_scurry_in` at
+−60.95 is the second; between them they pushed three older records' rank claims out of date on
+the day they landed, which the rank guard caught and named, and they moved again by a few
+hundredths when they were narrowed.
+
+**Ten beds changed and four did not.** `torch_gust`, `page_turns`, `reader_reposition` and
+`mouse_squeak` are byte-identical to the deliveries they came from — three of them back to v35,
+through two rebuilds. That was asked for and checked by hash rather than taken on trust, which
+is the standing rule for anything a request does not open: a re-encode of an untouched stem is a
+change nobody decided on.
+
+### What the folder now contains
+
+Three continuous beds carry the room — `allocation_wind`, `torch_base` and `torch_gust` — and
+eleven are intermittent. The two torch passes sit at the same wall: their L/R balances agree to
+**0.519 dB** and their widths to **0.000 dB**, so the torch does not slide sideways when a gust
+hits, while their side channels correlate at only **−0.005** and so do not collapse into one
+image.
+
+**Three beds carry `loop: false`** — the three mouse stems, which are one event in three parts.
+The package's own note is that the mouse "occurs only once so it remains a detail rather than a
+feature", and a mouse crossing the room every thirty-five seconds is a feature. *Both replaced
+mouse stems had to have that flag carried forward by hand*, because `loop` absent means looping
+and a re-delivery is a new record: the flag is a decision about the scene and nothing in a new
+package restates it. The reader repositioning is also a single gesture and was left looping,
+because a reader shifting in a chair that often is plausible where a mouse is not.
+
+**The action's summed figures moved with the rebuild**, measured rather than estimated:
+fourteen tracks at **−7.06 dBTP** and **−29.03 LUFS**, against the fifteen's −8.05 and −29.20.
+It remains the second loudest action in the tree, 0.18 dB under Mission.
+
+**The dither rule has a second instance**, found on the retired `footsteps_sfx_v02` and recorded
+because it is a property of the encoder rather than of that file. It read 7.1% exact silence as
+a stem and **54.0%** shipped — the inversion `quarry_hoist` first showed. The cause is the same:
+the stem's non-zero samples had a median of **−134.95 dBFS**, one 24-bit LSB, and 57.6% of them
+sat below −90 dBFS. That is dither, and Vorbis rounds it away. Audible content was untouched at
+**0.999719**. One observation was a curiosity; two make it a rule with a stated condition.
+
+**One measurement in this folder is still outside the contract.** `page_turns_sfx_v01` folds
+−1.72 dB at 125 Hz and −1.17 dB at 250 Hz, in bands holding 5.9% of the stem. It is
+byte-identical to the v35 delivery and was deliberately not asked for in either rebuild, on the
+rule that a stem which is not being opened is not re-rendered for a tenth of a decibel. It is
+the thing to fold in if that stem is ever touched for another reason.
+
+---
+
+## Build Roads, re-placed rather than rebuilt
+
+**The first action corrected for where its sounds are rather than for what they are.** On
+2026-10-18 all eleven beds were replaced from
+`Build_Roads_Final_Tracks_v15_11Stems_VERIFIED_R1`. Not one of them changed what it is made of:
+nine correlate at **r = +1.0000** against the stems they replace, so only the stereo was
+redistributed, and the two that do not — `ox_cart_mechanics` at +0.7962 and `rammers` at
++0.0048 — were retimed rather than re-recorded, which is established below. The folder count is
+unchanged at eleven and the tree stays at eighty-two.
+
+**The eleven:**
+
+| | | |
+| --- | --- | --- |
+| `rammers_sfx_v02.ogg` | 0.7 dB L | the surface compacted, the loudest bed here; ldezem CC0 |
+| `gravel_sfx_v02.ogg` | 2.9 dB L | the stone going down, now a field; yuval CC0 |
+| `far_work_sfx_v02.ogg` | 2.4 dB R | the same gang receding into the picture |
+| `worker_footsteps_sfx_v02.ogg` | 0.8 dB R | boots on the new surface; yuval CC0 |
+| `ox_cart_mechanics_sfx_v02.ogg` | 6.0 dB L | the cart at the frame's left edge; craigsmith CC0 |
+| `ox_cart_stones_sfx_v02.ogg` | 6.0 dB L | its load, at the same position exactly; oldome CC0 |
+| `ox_breathing_sfx_v02.ogg` | 4.8 dB L | the animals in the shafts, inboard of the cart; elricadavis CC0 |
+| `horse_snorts_sfx_v02.ogg` | 4.0 dB L | the rider's horse behind them; ohmypro CC0 |
+| `oil_lamp_rattle_sfx_v02.ogg` | 5.1 dB R | the lantern on its post; imafoley CC0 |
+| `oil_lamp_flame_sfx_v02.ogg` | 5.1 dB R | the wick burning, continuous; vrymaa CC0 |
+| `wind_sfx_v02.ogg` | centre | the weather, continuous, and still **31 s** against ten of 35 |
+
+Nine landed at **0.00 dB** of the placement read off the artwork; `rammers` at −0.11 and the two
+cart stems at −0.49, declared.
+
+### Ten of eleven beds sat within 2.7 dB of centre
+
+This action has the widest subject in the tree — the picture runs from a loaded ox cart at the
+left edge to a lantern and open water at the right — and it had the narrowest stage. The cart
+measured 2.4 dB left. The lantern, which is the only warm light in the frame at 82% across it,
+measured 1.3. The horse behind the ox team measured 0.5 dB **right**.
+
+**The ox trio was inside out.** The animals read 6.5 dB left while their own cart read 2.4, and
+in the picture the cart is at the very edge with the oxen inboard of it. *A group panned by ear
+rather than by position tends to come out that way*, because loudness is heard as nearness and
+nearness as centre, so the heaviest, nearest object drifts toward the middle. A cart and the
+stone it carries are **one object and share one position exactly** — the rule the Produce Wheat
+rebuild established for a person's hands, holding here for a thing rather than a person.
+
+### The request asked for something that does not exist, and the supplier caught it
+
+**A source panned to balance *B* cannot have a side/mid ratio below**
+
+> `20·log10( (r − 1) / (r + 1) )`, where `r = 10^(B/20)`
+
+which at 6.5 dB is **−8.93 dB**. The request asked the cart for 6.5 dB L *and* −10 to −12 dB
+side/mid, which cannot both be true. It was delivered at 6.01 dB L — inside the ±0.5 dB
+tolerance — and −9.54 dB, the narrowest image that balance allows, declared as the one departure
+from the table.
+
+**Five of the eleven rows were affected and only the two carts were wholly impossible**; the
+other three straddled their floor, landed inside their bands and so nothing flagged them.
+
+**This is the mirror of a limit already in this file.** The fold note records that a 1 dB
+mono-fold limit caps width at about **−5.87 dB** side/mid — an upper bound. This is the lower
+bound, and it comes from the pan. *Width has a ceiling and a floor and they are set by different
+things.*
+
+### Side/mid counts pan and width together, which is why the measure changed
+
+Panning a source **creates** side energy, so for anything placed off centre the figure this tree
+has been calling width is partly a statement about where the source is. Equalise the two
+channels' energies first and re-measure, and four beds that hit their width target turn out to
+have almost none:
+
+| bed | balance | side/mid as filed | de-panned |
+|---|---:|---:|---:|
+| `horse_snorts` | 4.0 L | −12.13 | **−19.82** |
+| `oil_lamp_rattle` | 5.1 R | −10.15 | **−18.39** |
+| `ox_breathing` | 4.8 L | −10.02 | **−15.69** |
+| `ox_cart_mechanics` | 6.0 L | −9.54 | **−32.21** |
+| `ox_cart_stones` | 6.0 L | −9.52 | **−29.98** |
+
+Width is therefore now recorded **after the channels are energy-matched**, a figure that belongs
+to the source rather than to its position, and one that can never conflict with a balance
+target. See `../docs/soundstage_layout.md`.
+
+**The two cart stems are exact panned mono on the master and are not in the container.**
+De-panned they measure −111.6 and −96.2 dB as delivered and −32.2 and −30.0 as shipped, because
+**Vorbis cannot represent a perfectly correlated pair** — it introduces a little channel
+independence of its own. That is the same lesson `ordination_actionB/bottle_knock` records from
+the other direction, where a dual-mono stem came through the encoder at +0.996767 rather than
++1.000000, and it is the reason a claim about channel identity has to be made against the stem
+rather than against the shipped file.
+
+**Set against all that, the widths that really were about width improved.** `gravel` went from
+−21.55 to **−7.52 dB** de-panned: it was a point pretending to be the stone going down across a
+whole work site, and it is now a genuine field with 100% of its side energy unexplained by any
+least-squares fit to mid. `oil_lamp_rattle` went from −38.02 to −18.39, `worker_footsteps` from
+−16.04 to −11.00, `far_work` from −9.28 to −7.91.
+
+### Three beds failed the mono fold and all three failed on width
+
+| bed | side/mid before | worst fold before | now |
+|---|---:|---:|---:|
+| `oil_lamp_flame` | −1.58 dB | **−7.27 dB** at 125 Hz | −0.90 |
+| `wind` | −2.70 dB | **−3.46 dB** at 1 kHz | −0.81 |
+| `ox_breathing` | −1.28 dB | **−2.76 dB** at 125 Hz | −0.64 |
+
+`oil_lamp_flame` carried the worst fold in this tree: it lost between 1.21 and 7.27 dB in *every*
+band that carried it, including the 250 Hz band holding 46% of the stem. `ox_breathing` was the
+most consequential, because the band it lost 2.76 dB in holds **57%** of the ox — on a laptop
+speaker more than half the animal disappeared. All eleven now fold within **0.90 dB**.
+
+### Two loop failures, found by testing the whole tree at once
+
+`rammers` wrapped on 0.696 s against a shortest interior pause of 0.768 — **0.91×**, a tell by
+the ratio rule — and `ox_cart_mechanics` on 5.763 s against 6.763, **0.85×**. Both had been
+declared seamless. They now wrap on **2.907 s against a longest interior pause of 2.491** and
+**6.963 s against 6.801**: outright passes, not ratio judgements. Neither was found by reviewing
+this package; both came out of the sweep described in §15 of `../docs/ambient_loop_note.md`.
+
+### `rammers` replayed one strike twice, and its correlation lies about why that changed
+
+Two pairs of its fourteen strikes were **bit-identical in peak** — strikes 4 and 7 at a raw value
+of 0.4013268948, strikes 9 and 12 at 0.3948360682 — in the loudest bed of the action. It now
+reads **14 distinct peak values of 14** and a loudest-to-second-loudest gap of **0.489 dB**
+against 0.000.
+
+**Its lag-zero correlation against the file it replaces reads +0.0048, and that means nothing at
+all.** The fourteen strikes are the same fourteen recordings: each one matches the old stem at
+**r = +0.998**, ten jittered by 50 ms or less and the last four moved up to 2.25 s earlier to
+open the wrap gap. *A correlation taken at one lag cannot tell retiming from replacement*, and on
+a stem of sparse events it will read as zero for a change of a few hundred milliseconds. The
+check that answers the question is to correlate each event separately and let the lag fall where
+it wants.
+
+### The lamp flame's join reads exactly zero, which is why it was checked twice
+
+Its boundary step measures **0.000× the median sample step** — and a step of exactly zero is the
+signature of a forced value match rather than a fold, which is the trap §9 of the loop note was
+written about: *the absence of a click is not the absence of a seam.* So it was asked the other
+question. Sliding a 1.5 s window across three passes puts the wrap at the **22.5th percentile and
+2.74 dB under the file's median**, where the flame's own quietest window is **8.07 dB** under,
+and tracing the level across the join in 200 ms steps shows it varying between −42.9 and
+−66.3 dB either side. The fold is real and the zero step sits on top of it.
+
+### What was kept, deliberately
+
+**Every trim is carried forward unchanged** — `rammers` +2.0, `ox_cart_stones` +2.0,
+`oil_lamp_rattle` −1.0, `ox_breathing` −2.0, `horse_snorts` −3.0, `ox_cart_mechanics` −6.0,
+`far_work` −6.5, `worker_footsteps` −7.5, and `gravel`, `oil_lamp_flame` and `wind` at −11.0.
+That is only legitimate because **every stem's total energy came back within 0.000 dB** of the
+file it replaces, which the request asked for and which was checked here against the masters. A
+re-pan moves energy between channels; one that had not preserved the sum would have invalidated
+eleven trims without saying so. The action's summed figures barely moved as a result: **−5.31
+dBTP and −32.45 LUFS**, against −5.22 and −32.44 before.
+
+**The wind is still 31.000 s against ten stems of 35.000**, which is deliberate — a continuous
+bed at a different length drifts against the rest instead of pulsing with them every lap — and it
+is why the package's reference mix is the unity sum of **ten** stems rather than eleven. Looping
+a 31 s file into a 35 s mix would have misrepresented it.
+
+### One thing left open
+
+`horse_snorts` lost real width: **−14.38 to −19.82 dB de-panned**. It is a distant point source,
+which is defensible for a horse standing behind an ox team, and it is narrower than the
+delivery spec's "not below −14 dB" guidance for a distant point. Recorded rather than queued; it
+can be folded in whenever that stem next opens for another reason.
+
+---
+
+## Build Shrine, placed from its picture — and three ways a whole-stem number lies
+
+**Replaced on 2026-10-19 from `Build_Shrine_Final_Tracks_v05_VERIFIED`.** Seven beds in, seven
+out, the same seven recordings redistributed across the stereo field so the scene matches the
+action's own artwork. Every stem correlates at **r = +0.996 or better** against the file it
+replaces, every stem's **total energy is unchanged to 0.000 dB**, and no trim has ever been set
+in this folder — so the delivered levels are the scene's balance and preserving the sums was the
+only thing keeping that true. The tree stays at eighty-two.
+
+**The seven:**
+
+| | | |
+| --- | --- | --- |
+| `tinkering_sfx_v02.ogg` | 1.4 dB L | stone set at the shrine, the loudest bed here |
+| `wind_sfx_v02.ogg` | centre | the hillside, the only continuous bed |
+| `fabric_sfx_v02.ogg` | 2.1 dB R | the monk's robe as he changes posture |
+| `monk_robe_sfx_v02.ogg` | 2.1 dB R | the same man, the same position to the hundredth |
+| `crows_ravens_sfx_v02.ogg` | 4.8 dB R | two corvids on the gallows beam |
+| `gallows_timber_sfx_v02.ogg` | 4.8 dB R | the frame they are sitting on |
+| `gallows_rope_sfx_v02.ogg` | 4.8 dB R | what hangs from it |
+
+Six landed at **0.00 dB** of the placement read off the artwork; `tinkering` at −0.22.
+
+**Four beds share one position and that is correct.** The gallows, its rope and the two birds
+perched on its crossbeam are one object in the picture at 80% of frame. They separate by content
+and level rather than by pan — a creaking frame low and broad, hemp under load, two corvid calls
+high and sharp.
+
+### The two faults this action cost two rounds for were both in the request
+
+**The first asked for a width that does not exist.** `gallows_timber` and `gallows_rope` sat at
+9.7 dB right and folded −1.02 and −1.01 dB, over the limit. *The entire fold was the pan*: at
+9.72 dB the pan alone costs 1.00 dB before any content is considered. They were also exact panned
+mono, sitting on the width floor their own pan imposed — side/mid **−5.84 against a floor of
+−5.89**. Bringing them to 4.8 dB right, where the gallows actually stands, fixed both failures
+without touching a sample.
+
+**The second gave a four-event bed one number.** `crows_ravens` held two bright calls at 6.2 dB
+left and two darker ones at 7.3 dB right — **13.5 dB apart** — averaging to the 4.1 dB left that
+was filed. A single prescribed balance of 4.8 dB right translated that split as a block and put
+two calls at **16.1 dB right**, further out than anything this project has made, Allocation's
+13.1 dB door included. That, and not width, caused a −1.77 dB fold. All four calls now sit at
+−4.800 dB and the stem folds −0.30.
+
+### And the third: a de-panned width figure that was measuring a split
+
+When the four calls were brought together, the stem's de-panned width fell from **−11.45 dB to
+−95.68** — which reads as a bed losing everything, and is the exact fault the de-panned
+convention had been introduced to prevent two days earlier.
+
+**It had no width to lose.** Measured individually, every event in the previous version was
+already exact panned mono: **−102.7, −92.5, −93.5 and −106.1 dB**. The −11.45 was *the distance
+between the two positions being counted as width* — de-panning a stem by its whole-stem energy
+ratio does not de-pan an event that sits at a different balance from the stem average, and the
+leftover per-event pan survives into the side channel. Modelling the old file as four mono events
+at their measured balances predicts **−10.1 dB** of apparent width from the split alone, against
+the −11.45 measured.
+
+**So a de-panned width figure is only meaningful for a stem whose events share one position.**
+That is the third shape one error has taken in three days — a whole-stem number standing in for a
+stem that holds more than one placed thing. First `side/mid` conflating pan with width, then a
+whole-stem balance hiding a 13.5 dB split, then a whole-stem de-panned width reporting that same
+split as size. All three are now contract items in `../docs/duty_action_soundscape_delivery_spec.md`.
+
+*The supplier's verification file reported the per-event de-panned figure and this one did not.*
+It was not asked for in that form and it is the number that settled it.
+
+### The fold ceiling is per band and it tightens as you pan out
+
+The −5.87 dB cap this tree has been quoting is the figure **at centre, broadband**. It applies
+band by band, and it falls the further a stem is panned — **−7.22 dB at 4.8 dB**, −8.68 at 6.5,
+−11.12 at 8. `crows_ravens` has a 1 kHz octave that is −5.9 dB wide, right on the no-pan limit;
+it passed at one placement and failed at another with not one sample changed, because the move
+took the requirement past what that band could meet. Neither figure is visible in a broadband
+width number.
+
+### The wind had two faults and was the first bed caught by the new wrap test
+
+At **−5.12 dB** side/mid it was wider than a continuous bed is asked to be, folding −5.63 dB at
+500 Hz and −2.40 at 250 Hz where 18% of it sits. It is now −7.00 dB and folds −0.79 dB.
+
+**And its loop point was the quietest moment in the file.** Sliding a 1.5 s window across three
+passes put the wrap at the **0th percentile** — the loop's own minimum *was* the seam — 2.36 dB
+under the median, with both ends 1.1 to 1.7 dB below the body. That is a fade, not an equal-power
+fold. It is the first bed caught by the continuous-wrap test added to the delivery spec the day
+before. Re-folded, the wrap sits at the **89.7th percentile, 0.68 dB above** the median, and the
+join step reads 1.39× the file's own median stereo sample step.
+
+**The rebuilt wind is polarity-inverted relative to its predecessor** — r = **−0.71** aligned
+circularly at a 0.253 s offset, and −0.85 in each of the three bands holding 91% of its energy.
+It is the same recording re-cut and flipped. Inaudible alone, nothing sums it against the old
+version, and it is written down here so that a future check reading −0.71 is not mistaken for
+different material.
+
+### `fabric` is the monk, not canvas, and its own record said otherwise
+
+Its record called it *"cloth under tension, which is what a shrine under construction has"* and
+its delivered filename is `fabric_flapping`. **The picture shows a finished shrine with no canvas
+and no scaffolding anywhere** — a monk bent over a lit candle in its niche — and the project owner
+states the bed is him changing his posture, twice a lap. It and `monk_robe` are therefore **one
+subject and share one position exactly**, which an earlier reading of this scene called a rule-3
+fault. *A record can be wrong about its own subject*, and the picture plus the person who
+commissioned it settle it, not the filename.
+
+### Six of the seven had no width at all
+
+Only `crows_ravens` appeared to, and that turned out to be the split. The other six ran **−23.6
+to −30.2 dB** de-panned — a direction with no size — and are now between −11.00 and −13.05, built
+from genuinely different material: all seven read 100% of side energy unexplained by a
+least-squares fit to mid, and the strongest side-against-mid alignment over ±400 ms is
+**|r| ≤ 0.18**, where a Haas-style delayed copy reads 0.8 or more.
+
+### The action got quieter by 0.71 dB and not one sample of energy moved
+
+Its summed figures went from −11.57 dBTP and −30.22 LUFS to **−12.03 dBTP and −30.93 LUFS**.
+Neither is a level change.
+
+**The true peak fell because a summed peak is a statement about one sample**, and redistributing
+seven beds across the field moves where the maximum lands — the same mechanism recorded in
+`../docs/sfx_levelling_note.md` when a sixth Produce Wheat bed made that action's peak *lower*.
+
+**The loudness fell because the gate took more blocks.** Ungated, the seven sum to **−29.88 LUFS
+before and after, identically**; per-stem energies agree to within 0.03 dB. What changed is that
+the gate discarded −0.34 dB of the mix before and **−1.06 dB** after, because the re-cut wind
+redistributed its energy across the lap and more blocks now fall under the relative threshold.
+*An integrated figure can move while nothing about the level does*, and the ungated number is the
+one to check before anybody concludes an action has been turned down.
+
+### The filenames collide, and that is this file's doing
+
+The v05 delivery reused the previous delivery's filenames for the six stems whose audio did not
+change, because the request asked for "the existing names" and meant the stem's identity rather
+than its filename. **Six names each denote two different pieces of audio** — the file in
+`Build_Shrine_Final_Tracks_v05_VERIFIED` and an older one in `Build_Shrine_Final_Tracks`. Only
+`crows_ravens` counts up properly, to `_v02`. Every record in this folder therefore names its
+package in `source`, and `originalFilename` alone does not identify the file for this action.
+*The convention is that versions count up and nothing is overwritten; a request has to ask for
+that rather than assume it.*
+
+---
+
+## Devotion, the first action where nothing needed widening — and the encode that undid a little of it
+
+**Filed on 2026-10-19 from `Devotion_Clerical_v02`.** Six stems in, three beds out: this delivery
+**replaces** the three beds this folder already played and adds three more, so the tree goes from
+eighty-two to eighty-five and `clerical_actionA` from three tracks to six. All six are 35.000 s to
+the sample, sum to their own reference mix with **zero differing 24-bit samples**, and arrived with
+**every width already inside the band its role asks for** — the first delivery here of which that is
+true. The whole of the v02 round was placement.
+
+**The six:**
+
+| | | |
+| --- | --- | --- |
+| `robe_movement_sfx_v01.ogg` | 3.7 dB L | the monk's robe, filling half the frame |
+| `slow_breathing_sfx_v01.ogg` | 1.0 dB L | his breath, read at his face |
+| `prayer_beads_sfx_v01.ogg` | 0.2 dB L | the rosary in his clasped hands |
+| `background_sermon_sfx_v01.ogg` | centre | the service, from the back of the building |
+| `candlelight_sfx_v01.ogg` | 3.2 dB R | the candle, the only light in the picture |
+| `wood_cracks_sfx_v01.ogg` | 7.2 dB R | the heavy bench at the right edge |
+
+**Every placement landed within a thousandth of a decibel** of what was asked — +3.700, +1.000,
++0.200, −0.000, −3.200, −7.200 — and the as-filed widths landed on the request's *predictions* to
+within **0.04 dB** on all six. That second number is the de-panned convention paying for itself: the
+request computed what the as-filed figure would become once the pan was added, before the files
+existed, and it was right six times.
+
+### Three beds were replaced and the replacements are not strangers
+
+`background_sermon` is the **same cathedral master as the retired `devotion`, cut 3.5 s later** —
+85.000 s against 81.50, confirmed to the sample by four 2 s excerpts correlating at **r = +0.9997**
+at a constant offset. `prayer_beads` is the retired `rosary` **with room added and the bead timing
+kept**: +0.9628 at zero lag, and strike by strike twelve of fifteen clusters match at exactly zero
+offset. `candlelight` is a **genuinely different cut** of the same freesound candle, at +0.015.
+
+*The 25.5 s candle retires and the argument that made it 25.5 s retires with it.* A continuous bed
+at a length of its own drifts rather than pulsing in step, which is why Build Roads' wind is 31 s —
+but that was reasoned when this action had two beds. With **three** continuous beds, moving one off
+35 s leaves the other two locked anyway, and all three are even enough that a repeat has nothing to
+announce itself with: measured in 1.5 s windows they vary by 1.10, 1.41 and 3.51 dB with no
+detectable event in any of them.
+
+### The Vorbis encode widens, and this is the first folder where that was measured
+
+Every width and fold figure this project has quoted has been measured on the 24-bit master. **The
+game plays the `.ogg`**, and q6 adds decorrelated quantisation noise straight into the side channel.
+`robe_movement` goes from **−11.32 dB de-panned on the master to −10.50 as encoded**, 0.82 dB of
+widening — broadband cloth noise at a low level is where coding noise is the largest share of the
+band. It is still inside the −10 to −12 dB its role asks for.
+
+`wood_cracks` is the one that crosses something. Its 2 kHz band widens **−11.02 → −10.21**, and the
+stem's mono fold goes from **−0.952 dB on the master to −1.006 as encoded** — over the 1 dB limit, by
+0.006. That band carries 1.4% of a bed that is 81% silence.
+
+**It was kept at q6 on purpose.** q8 clears it to −0.965 for 24 kB. Sweeping every shipped `.ogg` in
+the tree the same day — the first time that has been done — found **fourteen of the eighty-five over
+1 dB**, worst `give_alms_actionA/alms` at **−4.664**, then taxation's `coins` at −3.566 and
+ordination's `night_city` at −3.432. This bed's 0.006 dB is the mildest of the fourteen, with
+`produce_actionA/wind` next at −1.014. Re-encoding one file to clear it while thirteen worse ones
+stand would be cosmetic, and the finding belongs to the tree rather than to this folder.
+
+*The retirement took two of them out.* Measured the same day before they were moved, the `devotion`
+and `candle` beds this delivery replaces folded −3.186 and −2.400 — so the sweep read sixteen over
+the limit at the moment it ran, and fourteen once the filing finished.
+
+### Two numbers to look at first if this action is ever reopened
+
+**`candlelight` has 0.024 dB of fold margin** — −0.976 dB at 500 Hz, where a quarter of it sits. The
+pan is not what put it there: at centre it already folded −0.696 and the move added 0.280.
+
+**`background_sermon`'s loop wrap sits at the 9.86th percentile**, 1.35 dB under its own median,
+against candlelight's 78th and the breathing's 48th. It clears the fifth-percentile floor and it was
+**inherited, not caused** — v01 measured 9.86 as well, so the re-pan to centre could not have moved
+it and did not.
+
+### No trim is set anywhere in this folder, and that is the point
+
+The supplier's mix hierarchy *is* the scene's balance — beads and robe closest, breathing under them,
+candle quieter, timber sparse, sermon deliberately recessed — and the six sum to a reference mix that
+was checked here by reassembly. Moving one `gainDb` breaks that sum. The action's level against other
+actions is `groupDb`, which went **+8.5 → +2.5** so that six beds at unity land where three beds at
+their old trims did: −34.0 LUFS effective, against a tree that runs −33.5 to −34.4.

@@ -642,8 +642,8 @@ def bundled_beds() -> tuple[dict, list]:
     THE CUES ARE INLINED AND THE BEDS ARE NOT, and that is a size argument rather than a change of
     mind. `tile` and `confirm` together are 9,884 bytes, which is a two-hundredth of one duty
     action card, so carrying them costs nothing and a page opened straight from disk keeps every
-    sound it makes when you click. The sixty-three beds are 16.62 MB, 22.17 MB once base64 has
-    added its third, and they would take this page from 2.81 MB to about 25 MB -- a nine-fold
+    sound it makes when you click. The ninety beds are 20.11 MB, 26.81 MB once base64 has
+    added its third, and they would take this page from 2.73 MB to about 30 MB -- an eleven-fold
     growth, re-decoded on every reload, for audio nobody hears until an action is chosen.
 
     SO THE BOARD NOW HAS A SERVED MODE AND A DISK MODE, and it says which one it is in. Fetch is
