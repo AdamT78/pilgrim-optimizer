@@ -128,7 +128,7 @@ gusts. **Ungated for both classes**, so a bed and a cue are at least measured in
 That sentence stood here from four beds that were each one continuous recording, and it stopped
 being true the moment a duty action started taking **stems**. A stem is a layer of a scene —
 grain handled, coins counted, beads told, robes moving — and a layer of a scene is mostly
-silence waiting for the other layers. Measured across all sixty-three ambient tracks as they
+silence waiting for the other layers. Measured across the then sixty-three ambient tracks as they
 stand:
 
 | track | ungated | gated | delta | blocks kept |
@@ -271,7 +271,7 @@ every scrap of its energy is inside the blocks the gate keeps, and the delta red
 
 > **delta = 10 · log₁₀( all blocks ÷ surviving blocks )**
 
-Checked against all sixty-three beds, the prediction agrees with the measured delta to within
+Checked against all sixty-three beds the tree held at the time, the prediction agrees with the measured delta to within
 **0.06 dB on sixty-one of them**. *Produce Stone's thirteen added a second exception and it is
 a hair's breadth one:* `produce_actionB/debris_cleave` reads 13.30 against a predicted 13.36,
 out by **0.062**, which is over the line by two thousandths of a decibel and is reported
@@ -634,7 +634,7 @@ Still open for ambient:
   headroom is the claim, render the sum: the files are on disk and it costs a minute.
 - **THE PER-FILE SPAN HAS STOPPED BEING THE RIGHT QUANTITY.** This bullet has tracked where
   individual beds land since there were two of them, and Build Roads being levelled on
-  2026-10-16 broke it: of the sixty-three ambient files, nine now sit between −26.5 and
+  2026-10-16 broke it: of the then sixty-three ambient files, nine sat between −26.5 and
   −45.5 dBTP and **fifty-four sit above −26.5**, the span running −3.4 to −37.5.
   **THIRTY-FIVE ARE STILL UNTRIMMED, AND THEY ARE EXACTLY THE FOUR NEWEST FOLDERS** — seven
   Mission, seven Build Shrine, eight Produce Wheat and all thirteen Produce Stone, which is
@@ -663,27 +663,28 @@ Still open for ambient:
   | duty action | loudness | true peak | step from the one above |
   |---|---|---|---|
   | `ordination_actionB` | **−28.85** | −2.42 | |
-  | `produce_actionB` | **−29.88** | −5.91 | −1.03 |
-  | `produce_actionA` | **−30.16** | −13.58 | −0.28 |
-  | `build_roads_actionB` | **−30.22** | −11.57 | −0.06 |
-  | `build_roads_actionA` | **−32.44** | −5.22 | −2.22 |
-  | `taxation_actionA` | **−33.83** | −12.02 | −1.39 |
+  | `allocation_actionA` | **−29.03** | −7.06 | −0.18 |
+  | `produce_actionB` | **−29.92** | −5.75 | −0.89 |
+  | `produce_actionA` | **−30.28** | −13.36 | −0.36 |
+  | `build_roads_actionB` | **−30.93** | −12.03 | −0.65 |
+  | `build_roads_actionA` | **−32.45** | −5.31 | −1.52 |
+  | `taxation_actionA` | **−33.83** | −12.02 | −1.38 |
   | `clerical_actionB` | **−35.31** | −11.97 | −1.48 |
-  | `allocation_actionA` | **−35.80** | −10.74 | −0.49 |
-  | `give_alms_actionA` | **−42.41** | −24.96 | −6.61 |
+  | `give_alms_actionA` | **−42.41** | −24.96 | −7.10 |
   | `clerical_actionA` | **−42.57** | −12.10 | −0.16 |
   | `give_alms_actionB` | **−43.72** | −22.83 | −1.15 |
 
-  **`clerical_actionA` peaks 10.5 dB above `give_alms_actionA` and is 0.16 dB quieter.** That
+  **`clerical_actionA` peaks 12.86 dB above `give_alms_actionA` and is 0.16 dB quieter.** That
   one line is the module header's argument about cues — peak does not predict loudness —
   arriving a second time one level up, on actions rather than clips. Anyone who matched these
-  eleven by the peak column would put those two 10 dB apart and be wrong by 10 dB.
+  eleven by the peak column would put those two 12.9 dB apart and be wrong by 12.9 dB.
 
-  **The shape of it: six actions inside 7 dB, then a 6.61 dB cliff, then three.** The top six
-  are close enough that a transition between any pair of them is about the fade; below the
-  cliff sit the three single-bed actions, and a crossfade into one of those is about the
-  level, whatever the fade does. The full spread is **14.87 dB** against the peak column's
-  22.55 — so the actions are better matched than the peaks suggest, and still not matched.
+  **The shape of it: eight actions inside 6.5 dB, then a 7.10 dB cliff, then three.** The top
+  eight are close enough that a transition between any pair of them is about the fade; below
+  the cliff sit Give Alms' two single-bed actions and Clerical's three-bed candle and rosary,
+  and a crossfade into one of those is about the level, whatever the fade does. The full
+  spread is **14.87 dB** against the peak column's
+  22.54 — so the actions are better matched than the peaks suggest, and still not matched.
   *Nothing here is a judgement yet: every `groupDb` is 0, so this is where the beds happened
   to land, not where anybody put them.*
 
@@ -699,6 +700,16 @@ Still open for ambient:
   added layer at −27 dB was enough to break it. The first trim set in either folder will end
   it properly. Their peaks are 2.01 dB apart, −11.57 against −13.58, which is the argument
   the paragraph below makes: the two measures answer different questions.
+- **AN ACTION GOT 0.71 dB QUIETER WITH NOT ONE SAMPLE OF ENERGY MOVED, AND THE GATE DID IT.**
+  Build Shrine's seven beds were re-panned and re-widened on 2026-10-19 with every stem's total
+  energy preserved to 0.000 dB, and the action's integrated loudness fell from −30.22 to
+  **−30.93 LUFS**. **Ungated it reads −29.88 before and after, identically.** What moved is how
+  much the relative gate discards: −0.34 dB of the mix before, **−1.06 dB** after, because the
+  re-cut wind redistributed its energy across the lap and more blocks fell under the threshold.
+  *An integrated figure can move while nothing about the level does.* Check the ungated number
+  before concluding an action has been turned down — and note that this is the same instrument
+  the block-count identity in §7 reads from the other direction, where the delta between gated
+  and ungated measures a bed's density rather than its level.
 - **A SIXTH BED MADE PRODUCE WHEAT LOUDER AND ITS SUMMED PEAK LOWER.** Adding
   `produce_actionA/straw_workers` moved the action from −30.93 to −30.73 LUFS, which is the
   expected direction, and from **−13.85 to −14.21 dBTP**, which is not: 0.36 dB of true peak
@@ -790,6 +801,109 @@ Still open for ambient:
   be a warning to whoever wired them in, and it was read in time: the first version of the
   player looped on `buf.duration` and would have wrapped through 4 to 17 ms of Vorbis padding
   on every bed. `ogg_seconds()` reads the true length off the container's last granule at build
-  time and the manifest carries it. All sixty-three agree with the loader to under 0.05 ms.
+  time and the manifest carries it. All ninety agree with the loader to under 0.05 ms.
   *A warning left in a note is only worth what the next person's search turns up* — this one
   was found by grepping for stale claims, not by remembering it.
+- **`ambientMaster` no longer holds its bound, and the number has not been moved.** Filing
+  Taxation's nine beds on 2026-10-20 took that action's `summedTruePeakDbtp` from **−12.02 to
+  −2.64 dBTP**, and its `groupDb` is 0.0, so it is now the loudest action on the board after
+  group trims — **−2.64 against −6.81 for the next**, which is `build_roads_actionA`. Almost all
+  of the jump is one transient: `stone_block` peaks at −2.59 dBFS and the other eight beds
+  together peak 9.5 dB below it.
+
+  `ambientMasterNote` states a **provable** worst case: an equal-power crossfade holds two
+  actions at 0.7071, two whose peaks coincide reach 1.4142× one of them, and the confirm cue at
+  −1.38 dBFS lands on top at 0.7. Run with the loudest action as it now stands, that comes to
+  **+1.72 dBFS at the current −4.5**, which clips. Before this filing it was **−0.16 dBFS** with
+  Build Roads loudest, so the bound held and holds no longer.
+
+  **Two levers, and both are a judgement rather than arithmetic.** `ambientMaster` would need
+  about **−8.5** to restore a 0 dBFS bound, which costs every action 4 dB for one transient in
+  one of them. Or Taxation's `groupDb` goes to about **−4.0** — the whole-action fader, which
+  `ambientGroupsNote` guarantees cannot disturb the balance inside the action — giving a worst
+  case of −0.09 dBFS, or **−4.5** for −0.29 dBFS and a little more room. *The second is the
+  smaller change and is probably right, but it is an audition decision and the trims in this
+  tree are set by ear.* Recorded here rather than acted on.
+
+  *Two figures in the note itself are also stale and were not corrected:* it names
+  `clerical_actionA` at −3.60 dBTP as the loudest action after its group trim, where that action
+  now measures −16.38 and trims to −13.88, and its stated worst case of −0.80 dBFS does not
+  reproduce from any current set of numbers.
+
+---
+
+## EVERY WIDTH AND FOLD FIGURE IN THIS PROJECT WAS MEASURED ON A FILE THE GAME DOES NOT PLAY
+
+**Found on 2026-10-19, filing the Devotion delivery.** The delivery spec's mono-fold limit, the
+per-band fold ceiling, the de-panned width targets, the pan floor — all of it has been measured on
+the supplier's 24-bit WAV masters, every time, in every review this project has run. **The board
+plays the Vorbis encode.** Those are different files, and until this day nobody had measured both.
+
+**Vorbis q6 widens.** Quantisation noise is uncorrelated between the channels, so it lands in the
+side signal and reads as width that is not in the master:
+
+| bed | de-panned, master → q6 | worst fold, master → q6 |
+|---|---:|---:|
+| `robe_movement` | −11.32 → **−10.50** | −0.579 → −0.602 |
+| `slow_breathing` | −11.38 → −10.99 | −0.471 → −0.503 |
+| `prayer_beads` | −11.50 → −11.36 | −0.355 → −0.350 |
+| `background_sermon` | −7.65 → −7.63 | −0.754 → −0.758 |
+| `candlelight` | −7.60 → −7.57 | −0.977 → −0.976 |
+| `wood_cracks` | −13.54 → −13.45 | −0.952 → **−1.006** |
+
+**One bed crosses a contract limit on the encode and passes on the master.** `wood_cracks` folds
+−0.952 dB at 2 kHz as delivered and **−1.006 dB** once encoded. The broadband width figure hides
+where it happens: the 2 kHz band alone goes −11.02 → −10.21, 0.81 dB, in a band carrying **1.4% of
+a bed that is 81% silence**. That is exactly where coding noise is the largest share of what is
+there — a sparse bed's quiet bands are mostly encoder, not material.
+
+*The amount of widening tracks how little signal a band has, not how wide it is.* `candlelight`,
+the widest bed in the action at −7.6, moved 0.03 dB. `robe_movement`, low-level broadband cloth,
+moved 0.82.
+
+### So the limit was never being applied to the thing it governs, and the tree shows it
+
+Sweeping the mono fold of **every shipped `.ogg`** — the first time that has been done — found
+**fourteen of the eighty-five over the 1 dB limit**. (The sweep ran mid-filing, with the Devotion
+beds already in and the three they replace not yet out, and read sixteen of eighty-eight; the two
+that left were `clerical_actionA/devotion` at **−3.186** and `clerical_actionA/candle` at **−2.400**,
+which is worth knowing because retiring them is the only thing that has ever reduced this count.)
+
+| | worst band | |
+|---|---:|---|
+| `give_alms_actionA/alms` | **−4.664 dB** | 8 kHz, 7.2% of it |
+| `taxation_actionA/coins` | −3.566 | 8 kHz, 2.7% |
+| `ordination_actionB/night_city` | −3.432 | 4 kHz, 4.7% |
+| `taxation_actionA/barn_creaks` | −1.998 | 250 Hz, 20.0% |
+| `allocation_actionA/page_turns` | −1.720 | 125 Hz, 6.2% |
+| `ordination_actionB/distant_dogs` | −1.544 | 2 kHz, 7.3% |
+| `ordination_actionB/staff` | −1.487 | 4 kHz, 4.4% |
+| `give_alms_actionB/donate_building` | −1.299 | 31 Hz, 3.3% |
+| `produce_actionB/distant_owl` | −1.280 | 1 kHz, **99.6%** |
+| `taxation_actionA/room` | −1.255 | 8 kHz, 1.8% |
+| `produce_actionA/field_rustle_v02` | −1.061 | 2 kHz, 5.3% |
+| `produce_actionA/stalk_brushing_v02` | −1.035 | 8 kHz, 19.8% |
+| `produce_actionA/wind_v02` | −1.014 | 250 Hz, 5.0% |
+| `clerical_actionA/wood_cracks` | −1.006 | 2 kHz, 1.2% |
+
+**Most of these are not encode artefacts.** At −4.66 and −3.57 the encode's two or three hundredths
+are irrelevant; those beds were wide when they were cut, and the fold limit simply arrived after
+they were filed. Only `wood_cracks` is a case where the encode is the difference between passing
+and failing. *The sweep matters because it says what the limit is actually worth as a property of
+the tree, which is: it governs new deliveries and has never been checked against the old ones.*
+
+`produce_actionB/distant_owl` is the one to look at first. Its failing band carries **99.6% of the
+bed** — this is not a sliver of energy in a corner of the spectrum, it is the whole file.
+
+### `wood_cracks` was kept at q6 and that was a decision
+
+q8 clears it to −0.965 dB for 24 kB, and q10 returns it to the master's −0.952 for 95 kB. Neither
+was taken. Re-encoding one file to recover 0.006 dB while thirteen worse beds stand unchanged buys
+tidiness in one record and nothing in the tree; the uniform q6 convention is worth more than the
+hundredth of a decibel, and the overage is written into the bed's own record rather than hidden by
+a one-off exception.
+
+**What should change is the measurement, not the encoder.** A fold figure belongs to the shipped
+file. The delivery spec can keep asking suppliers for master measurements — that is what they
+have — but the number this tree records should be taken after encoding, and the sixteen above are
+what happens when it is not.

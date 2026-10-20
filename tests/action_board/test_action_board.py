@@ -2414,7 +2414,90 @@ _ORDINAL = {"second": 2, "third": 3, "fourth": 4, "fifth": 5, "sixth": 6,
 # corrected record said so, the guard had no word for 13, read the claim as a bid for first
 # place and failed it. A guard that only counts to ten quietly converts an honest rank into
 # a superlative, which is the opposite of its job.
+#
+# AND THEN IT STOPPED AT TWENTIETH, WHICH WAS WORSE. On 2026-10-18 Allocation's fifteen pushed
+# the same bed to TWENTY-SECOND. This table has no compound, so `.get("twenty-second", 1)`
+# fell through to its default and the guard reported the record as "claims 2-" -- it did not
+# fail to parse, it parsed WRONGLY and then described a claim nobody had made. A lookup whose
+# miss means "first place" cannot tell absence from ignorance. `_spelled()` further down had
+# already learned the hyphen rule for exactly this reason; _ordinal_of() now shares it.
 
+
+# WORDS THAT LOOK LIKE A RANK BUT THIS GUARD CANNOT READ. A sentence saying "the thirtieth
+# quietest" must stop the suite rather than be read as first place; a sentence saying "the
+# only quietest" is ordinary prose and must not. The difference cannot be guessed, so the
+# shapes that count as an attempted rank are listed.
+_ORDINAL_SHAPED = frozenset(
+    ["twenty-first", "twenty-second", "twenty-third", "twenty-fourth", "twenty-fifth",
+     "twenty-sixth", "twenty-seventh", "twenty-eighth", "twenty-ninth", "thirtieth",
+     "fortieth", "fiftieth", "sixtieth", "seventieth", "eightieth", "ninetieth",
+     "hundredth"]
+    + ["%s-%s" % (t, u) for t in ("thirty", "forty", "fifty", "sixty", "seventy")
+       for u in ("first", "second", "third", "fourth", "fifth", "sixth", "seventh",
+                 "eighth", "ninth")])
+
+
+def _ordinal_of(word: str):
+    """twenty-second -> 22. None when the word is not an ordinal at all.
+
+    RETURNS None RATHER THAN A DEFAULT, so the caller has to decide what an unparseable word
+    means instead of silently being handed 1.
+    """
+    parts = word.lower().split("-")
+    if len(parts) == 1:
+        return _ORDINAL.get(parts[0])
+    if len(parts) == 2 and parts[0] in _NUMBER_WORDS and _NUMBER_WORDS[parts[0]] >= 20:
+        # "FIRST" IS NOT IN _ORDINAL AND THAT IS DELIBERATE: alone it is the superlative
+        # itself, which needs no ordinal. As the tail of a compound it is an ordinary 1, and
+        # leaving it out made "thirty-first" unreadable -- found by the test below, not by a
+        # record, because no record has yet had to say it.
+        tail = 1 if parts[1] == "first" else _ORDINAL.get(parts[1])
+        if tail is not None and tail < 10:
+            return _NUMBER_WORDS[parts[0]] + tail
+    return None
+
+
+def _claimed_place(sentence: str, word: str, key: str = "?") -> int:
+    """Which place a superlative sentence is claiming. No ordinal means first.
+
+    EXTRACTED SO THE REFUSAL BRANCH CAN BE REACHED. Inline, the "this is an ordinal I cannot
+    read" path was dead: no record in the tree says "thirtieth", so deleting the branch changed
+    nothing and a mutation of it survived. provenance.py's normalise() and the bench's
+    newest_version() were pulled out for the same reason -- a rule that only runs when the
+    corpus happens to contain the right sentence is a rule nobody is checking.
+    """
+    m = re.search(r"\b([\w-]+)\s+%s\b" % word, sentence, re.I)
+    if not m:
+        return 1
+    got = _ordinal_of(m.group(1))
+    if got is not None:
+        return got
+    # AN ORDINAL THIS GUARD CANNOT READ IS NOT FIRST PLACE. The old code defaulted to 1 and so
+    # turned "twenty-second" into a claim on the top spot, then failed the record for making it.
+    if m.group(1).lower() in _ORDINAL_SHAPED:
+        raise AssertionError(
+            "%s writes the rank as %r, which this guard cannot read, so the claim cannot be "
+            "checked. Teach _ordinal_of() the word rather than rewording the record."
+            % (key, m.group(1)))
+    return 1
+
+
+def _bare_counts(text: str):
+    """Every "<number> ambient files|tracks" in a document that claims to be the count NOW.
+
+    EXTRACTED FOR THE SAME REASON as _claimed_place: once the two historical sentences were
+    marked, no document exercised the live branch any more, so removing the history exemption
+    altogether changed no outcome and the mutation survived. Returns (word, value) pairs.
+    """
+    out = []
+    for historical, said in re.findall(
+            r"\b(then\s+)?([A-Za-z]+(?:-[A-Za-z]+)?)\s+ambient\s+(?:files|tracks)\b",
+            text, re.IGNORECASE):
+        got = _spelled(said)
+        if got is None or historical:
+            continue
+        out.append((said, got))
+    return out
 
 def _sound_readings(rec):
     """peak dB, integrated LUFS, spectral centroid and length, out of each record's `measured`."""
@@ -2538,8 +2621,7 @@ def test_no_sound_claims_a_rank_in_the_set_that_the_set_contradicts():
                           and (r[metric] < mine if sign > 0 else r[metric] > mine)]
                 # An ordinal immediately before the word sets which place is being claimed;
                 # with none, the claim is first place and `want` is zero clips above it.
-                ord_m = re.search(r"\b(\w+)\s+%s\b" % word, sentence, re.I)
-                place = _ORDINAL.get(ord_m.group(1).lower(), 1) if ord_m else 1
+                place = _claimed_place(sentence, word, key)
                 want = place - 1
                 if len(beaten) != want:
                     nth = "" if place == 1 else " %s-" % place
@@ -4130,17 +4212,28 @@ def test_the_prose_count_of_beds_is_the_number_of_beds():
 
     # The levelling note counts them too, in its own phrasing: "<word> ambient files|tracks".
     # Same fact, third document, and it drifts for the same reason.
-    bare = re.compile(r"\b([A-Za-z]+(?:-[A-Za-z]+)?)\s+ambient\s+(?:files|tracks)\b", re.IGNORECASE)
+    #
+    # "THE THEN SIXTY-THREE" IS HISTORY AND IS LEFT ALONE. These notes record measurements made
+    # on the tree as it stood, and a sentence like "measured across the then sixty-three ambient
+    # tracks" does not go stale -- it was true, it says when, and rewriting the number would make
+    # it false. The guard could not tell that from a live claim and refused an honest sentence on
+    # 2026-10-18, which is the same failure mode as an ordinal table that stops at twenty.
+    #
+    # THE EXEMPTION IS ONE WORD AND IT HAS TO BE WRITTEN ON PURPOSE. `then` immediately before
+    # the number is visible in the prose and reads as history to a person; it cannot be arrived
+    # at by leaving a sentence alone, which is the drift this guard exists to catch. It can of
+    # course be abused by someone who wants the guard quiet -- but then the sentence is simply
+    # false, and a false sentence about the past reads as one, which a bare stale integer does
+    # not. That asymmetry is the whole reason this test is only pointed at counts.
     for rel in ("docs/sfx_levelling_note.md", "sfx/README.md", "docs/ambient_loop_note.md"):
         doc = board / rel
         if not doc.is_file():
             continue
-        for said in bare.findall(doc.read_text(encoding="utf-8")):
-            got = _spelled(said)
-            if got is None:          # "the ambient files", "its ambient tracks" -- not a count
-                continue
+        for said, got in _bare_counts(doc.read_text(encoding="utf-8")):
             assert got == len(beds), (
-                "%s says %s ambient files; sfx/ambient/ holds %d" % (rel, said, len(beds)))
+                "%s says %s ambient files; sfx/ambient/ holds %d. If the sentence is recording a "
+                "past measurement rather than the tree now, write it as 'the then %s ambient "
+                "files' so it reads as history." % (rel, said, len(beds), said))
 
 
 def test_each_duty_action_with_beds_has_a_group_level_and_a_fresh_sum():
@@ -4383,7 +4476,7 @@ def test_every_bed_carries_the_true_length_its_loop_needs():
                 "%s: the container says %.6f s and the record's decoded measurement says %s ms"
                 % (b["url"], got, m.group(1)))
             checked += 1
-    assert checked == 63, "expected 63 beds to check, checked %d" % checked
+    assert checked == 90, "expected 90 beds to check, checked %d" % checked
 
 
 def test_a_last_page_that_ends_no_packet_is_refused_rather_than_read_as_huge(tmp_path):
@@ -4396,15 +4489,22 @@ def test_a_last_page_that_ends_no_packet_is_refused_rather_than_read_as_huge(tmp
     the bed plays once. The failure modes are not close to each other.
 
     THIS EXISTS BECAUSE THE MUTATION SURVIVED. Flipping signed=True to signed=False changed
-    nothing across all sixty-three beds, because none of them happens to carry a negative
+    nothing across any bed in the tree, because none of them happens to carry a negative
     granule -- so the corpus could not tell the two apart and the sign looked like decoration.
     A file that does carry one is four lines to make. Falsified by reading the granule unsigned,
     or by returning a length for a non-positive one.
     """
     gen = _load("generate_action_board")
-    real = ROOT / "ui" / "board_v2" / "sfx" / "ambient" / "produce_actionB" / "quarry_wind_sfx_v01.ogg"
+    # ANY 35 s BED WILL DO AND NAMING ONE WAS A MISTAKE. This read
+    # produce_actionB/quarry_wind_sfx_v01.ogg by name until 2026-10-18, when that bed was
+    # superseded by v02 and left the tree -- and the test failed on a missing fixture rather
+    # than on anything it exists to check. The fixture is a carrier for a granule, so it is
+    # picked by the property it needs instead.
+    beds = [p for p in sorted((ROOT / "ui" / "board_v2" / "sfx" / "ambient").rglob("*.ogg"))
+            if "_to_delete" not in p.parts and gen.ogg_seconds(p) == 35.0]
+    assert beds, "no 35 s bed in the tree to build the fixture from"
+    real = beds[0]
     raw = bytearray(real.read_bytes())
-    assert gen.ogg_seconds(real) == 35.0, "the fixture this is built from is not the file expected"
 
     j = raw.rfind(b"OggS")
     raw[j + 6:j + 14] = b"\xff" * 8                      # granule -1, signed
@@ -4656,3 +4756,53 @@ def test_no_cue_record_claims_which_set_is_live():
     assert not bad, (
         "these cue records state which set is live, which CUE_SET already answers:\n  "
         + "\n  ".join(bad))
+
+
+def test_the_rank_guard_refuses_an_ordinal_it_cannot_read():
+    """An ordinal this guard does not know must stop the suite, not become first place.
+
+    THIS IS HERE BECAUSE BOTH BRANCHES WERE DEAD AGAINST THE TREE. No record says "thirtieth",
+    so the refusal never ran and a mutation deleting it survived; the table stopped at
+    "twentieth", so "twenty-second" fell through its default and the guard reported a claim on
+    first place that no record had made. A lookup whose miss means 1 cannot tell absence from
+    ignorance, and a corpus that never contains the hard case cannot tell you that.
+
+    Falsified by restoring the silent default, by unlearning the hyphen rule, or by dropping
+    the shape list so an unknown ordinal passes as prose.
+    """
+    assert _ordinal_of("second") == 2
+    assert _ordinal_of("thirteenth") == 13
+    assert _ordinal_of("twentieth") == 20
+    assert _ordinal_of("twenty-second") == 22, "the hyphen rule is gone"
+    assert _ordinal_of("thirty-first") == 31
+    assert _ordinal_of("quietest") is None, "an ordinary word is not an ordinal"
+    assert _ordinal_of("only") is None
+
+    assert _claimed_place("it is the quietest bed", "quietest") == 1
+    assert _claimed_place("it is the TWENTY-SECOND quietest bed", "quietest") == 22
+    assert _claimed_place("the only quietest reading here", "quietest") == 1, (
+        "an ordinary word before the superlative must read as first place, not refuse")
+    with pytest.raises(AssertionError) as e:
+        _claimed_place("it is the thirtieth quietest bed", "quietest", "some_record")
+    assert "thirtieth" in str(e.value) and "some_record" in str(e.value)
+
+
+def test_the_count_guard_reads_a_dated_count_as_history_and_nothing_else():
+    """"the then sixty-three ambient files" is a record of a measurement, not a stale claim.
+
+    AND THE EXEMPTION MUST BE EXACTLY ONE WORD WIDE. Once the two historical sentences in the
+    levelling note were marked, no document exercised the live branch any more -- so making the
+    exemption unconditional changed no outcome and the mutation survived. The corpus stopped
+    being able to tell the two apart, which is the same hole the ordinal had.
+
+    Falsified by exempting every count, by exempting none, or by letting a word other than
+    `then` turn the guard off.
+    """
+    assert _bare_counts("holds seventy-four ambient files today") == [("seventy-four", 74)]
+    assert _bare_counts("across the then sixty-three ambient tracks") == [], (
+        "a dated reading is being checked against the tree as if it were a claim about now")
+    assert _bare_counts("of the ambient files, nine sat low") == [], "not a count at all"
+    assert _bare_counts("the previously sixty-three ambient files") == [("sixty-three", 63)], (
+        "a word other than `then` exempts a count, so the guard can be switched off by accident")
+    both = _bare_counts("the then sixty-three ambient files; seventy-four ambient tracks now")
+    assert both == [("seventy-four", 74)], both

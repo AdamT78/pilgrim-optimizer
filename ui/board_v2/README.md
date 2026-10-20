@@ -252,6 +252,16 @@ Chrome will not overwrite a download -- a second save arrives as `framing (1).js
 - `docs/ambient_composite_guide.md` -- the other way to make a bed, when no single recording
   is the thing you want: build the scene out of parts. Allocation's queue is the worked
   example and the method is the point.
+- `docs/duty_action_soundscape_delivery_spec.md` -- the contract a soundscape package is
+  accepted against, written to be sent to whoever is producing it, verbatim. It is not new
+  policy: the format, the width and fold limits and the peak rule are what
+  `sfx_levelling_note.md` and `ambient_loop_note.md` arrived at, gathered into one place and
+  stated as requirements so they can be met before a delivery rather than measured after it.
+  The appendix lists the failures that have actually arrived, which is the part that works.
+- `docs/soundstage_layout.md` -- where every bed sits left to right, per duty action, and how
+  that placement was made: amplitude-panned to a point, or built as a field with no single
+  position. Produce Stone's table was written by measuring a scene nobody had specified, which
+  is why the file exists; placement is now stated in the request before the stems are built.
 
 ## What is not decided yet
 

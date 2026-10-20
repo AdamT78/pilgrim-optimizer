@@ -77,3 +77,13 @@ ui/board_v2/layout_lab/sessions/
 tests/layout_lab/lab.html
 tests/layout_lab/lab_mut*.html
 tests/layout_lab/.mut*_stash/
+
+# THE WAV MASTERS, WHICH GIT IS THE WRONG PLACE FOR AND THE ONLY THING HERE THAT CANNOT BE
+# REGENERATED. Seven delivered packages come to about 700 MB and the set will pass a gigabyte;
+# the shipped .ogg files in sfx/ambient/ are committed and are what the game plays. These are
+# the 24-bit masters they were encoded from, kept so the claims in attribution.json stay
+# checkable -- a record that says fifteen stems sum to their reference mix at zero differing
+# samples is unfalsifiable once the stems are gone. The README is deliberately NOT ignored, so
+# the folder is not an invisible hole in the tree.
+ui/board_v2/sfx/_masters/*
+!ui/board_v2/sfx/_masters/README.md
