@@ -1,8 +1,17 @@
 # Duty Action Soundscape — Delivery Specification
 
+**Revision 2026-10-20.** §§14–16 and the additions marked *(2026-10-20)* are new in this
+revision; everything else is unchanged.
+
 Send this with (or before) any Duty Action soundscape package. It is the full list of things
 that get checked on arrival. Everything here has been failed by a real delivery at least once,
 so none of it is theoretical.
+
+*One qualification on that, added in this revision.* §§1–13 were written from supplier packages
+that arrived and were rejected. §§14–16 come from a soundscape this project built in-house, and
+every fault in them was made here rather than received. They are in the same document because
+the rejection rate does not depend on who made the file, and because three of them are invisible
+to every number §§1–13 already ask for.
 
 The destination is a browser game board. Each **stem** you deliver becomes one independently
 playable, independently level-adjustable ambient bed. They are started together, mixed in the
@@ -161,6 +170,23 @@ zeros butts together with no discontinuity whatever — nothing a waveform view 
 still drops two and a half seconds of near-nothing into the bed every lap if the material thins
 out at both ends. The two failure modes are independent and both numbers are required.
 
+- **A third number, and the two above do not imply it: the two ends must match in LEVEL.**
+  *(2026-10-20)* Report the mean level of the first 0.5 s against the mean level of the last
+  0.5 s. **They must be within 1 dB.** A continuous bed built here passed both numbers above —
+  its join step was 1.7× the median, comfortably inside the 3× limit — and its head measured
+  **3.09 dB quieter than its tail**. There is no click and there is no hole; there is a 3 dB
+  step once per lap, which is heard as the bed breathing. The join-step number is a measure of
+  *continuity at one sample* and the percentile number is a measure of *a dip*, and a clean ramp
+  from loud to quiet across 25 seconds is neither.
+
+- **A gain ramp is not the repair, and it makes things worse.** *(2026-10-20)* The obvious fix
+  for the above is to ramp the level back so the ends meet. It does not work: **a ramp's own
+  endpoints do not meet**, so correcting a 3 dB step introduced a wrap step of **5.7× the
+  median** where the limit is 3×. An audible level step was traded for an audible click. **Pick
+  a different window instead** — choose the body for continuity across the seam, which is the
+  slower answer and the only one that holds. If no window in the master has matched ends, the
+  recording is not a continuous bed and §5's "what not to send" applies.
+
 **3. Metrical** — a stem with a regular pulse: footfalls at a tempo, a tool being swung, a bell.
 These close on arithmetic rather than on a crossfade. **The loop length must be a whole number
 of cells**; report the cell length and how many fit. A fold that lands mid-cell delivers the next
@@ -291,6 +317,39 @@ A bed whose 1 kHz octave was −5.9 dB wide passed at one placement and failed a
 one sample changed, because the move took the requirement from −5.87 to −7.22. **Neither figure
 is visible in a broadband width number**, which is why the band table in §10.5 is required rather
 than optional.
+
+### Leave margin, because the encode widens *(2026-10-20)*
+
+You deliver WAV and §1 keeps it that way. What ships is **Ogg Vorbis q6**, encoded at my end, and
+**the encode is measured rather than assumed** — it is what the game plays. Vorbis quantisation
+noise is uncorrelated between channels, so it lands in the side signal and every bed comes out of
+the encoder slightly wider than it went in.
+
+Measured across one nine-bed action: the broadband fold moved by 0.01 to 0.06 dB, which is
+nothing, and **the worst octave moved by up to 0.3 dB**, which is not. Three beds that measured
+−0.75 to −0.87 dB in their worst band on the 24-bit master came back at **−1.07 to −1.24 dB**
+after encoding and had to be corrected and re-encoded.
+
+**So treat 1 dB as the figure the `.ogg` has to meet, and deliver inside about −0.85 dB in every
+band carrying 1% or more.** A stem that measures 0.95 dB on the master is not passing; it is
+failing with the evidence not yet collected. *A fourth bed in that action measured −1.86 dB at
+16 kHz on its own master and was never the encoder's fault at all — it arrived over the limit,
+and the per-band table in §10.5 is what found it.*
+
+### The mix folds too, and so does any 400 ms of it *(2026-10-20)*
+
+§10.5 asks for the fold of each stem. **Run it on the reference mix as well, and run it on a
+window around the loudest event in the action.** Stems that each pass can still sum to a mix that
+does not, and a 450 ms window can fail inside a lap that passes.
+
+In the action this was found in, every stem passed, the whole mix passed at −0.354 dB, and a
+**450 ms window around the heaviest event folded −1.259 dB at 500 Hz**. Nothing could be done
+about it — halving the side signal moved it 0.4 dB and shifting the pan 1.8 dB moved it 0.14 dB,
+because the side energy in that band is intrinsic to the recording — but it is a declared
+exception rather than a surprise, which is the difference §10's last line is about.
+
+**Report: the mix's per-band fold, and the per-band fold of a 400–500 ms window centred on the
+action's loudest event.**
 
 ---
 
@@ -423,6 +482,18 @@ Do not update one stem and patch the hash list by hand.
 - [ ] **No band carrying 1% or more is wider than the ceiling for that stem's balance** (§7)
 - [ ] **Multi-event stems report balance and de-panned width per event**, not only per stem
 - [ ] Mono fold within 1 dB on every band carrying 1% or more of the stem, energy shares shown
+- [ ] **Every band carrying 1% or more folds inside −0.85 dB**, leaving the encode its margin (§7)
+- [ ] **The reference mix's per-band fold reported**, and that of a 400–500 ms window centred on
+      the action's loudest event (§7)
+- [ ] **Head and tail of every continuous stem within 1 dB of each other** (§5)
+- [ ] **Every licence read before the source was measured**; nothing NonCommercial or ShareAlike
+      anywhere in the package (§14)
+- [ ] **Every element's in-point stated to the millisecond** beside its source filename (§14)
+- [ ] **Each source scanned for anti-phase regions** before the cut window was chosen (§14)
+- [ ] **Any event within 250 ms of a louder one declares the gap and the band-level difference**
+      (§15)
+- [ ] **Any stem repaired after first measurement has every number re-reported**, not just the
+      one that was fixed (§16)
 - [ ] Any replaced event keeps its shape in time, stated as peak timing, decay and tail energy
 - [ ] No stem peak more than ~4 dB above its own body unless declared
 - [ ] No DC offset, no sub-20 Hz energy unless declared
@@ -470,6 +541,117 @@ you are hearing is not the level it was delivered at.
 
 ---
 
+## 14. Sources, and the order the checks go in *(2026-10-20)*
+
+### The licence is read before anything is measured
+
+**Not after it is chosen, not after it is built, not at filing.** This project has twice taken a
+source a long way on measurement alone and then found it unusable:
+
+- a wooden-chair recording was measured in full, ranked against four alternatives and written
+  into a build prompt before its page was opened. **CC BY-NC 3.0.**
+- a grain recording was cut, placed, mixed into a delivered lap and auditioned. It was caught
+  only by a provenance audit, days later. **CC BY-NC 4.0.**
+
+Both were thrown away along with the work resting on them. **Open the licence page first. If it
+is not CC0, public domain, or a bundle this project already holds, it does not get measured.**
+NonCommercial and ShareAlike are both disqualifying — this is a commercial game.
+
+### Name the in-point, not just the file
+
+§9 asks for the original filename and licence. **Also give the timestamp you cut from**, to the
+millisecond, for every element: `264757__kessir__…wav @ 32.290 s`.
+
+This costs you one line and it is the difference between provenance that can be checked and
+provenance that has to be believed. Three records in this tree named a recording that was not in
+the stem, each with a **sha256 that still matched its own file**, so every integrity test passed
+for weeks. They were caught by cross-correlating the stem against the claimed source — which
+works, and reads r = +1.0000 on a straight excerpt, but only tells you *which* file, not *where*.
+With an in-point stated, the check is arithmetic.
+
+### Check the source for anti-phase regions before you cut
+
+A recording can be fine in one place and unusable 400 ms later. **Scan the whole source for mono
+fold before choosing a window**, not just the window you like.
+
+One recording used here folds **−3.4 to −5.8 dB in mono between 12.0 and 13.8 s** and is clean
+elsewhere. An element was cut from 12.380 s, inside it, and the bed folded −4.46 dB whole and
+−5.94 dB at 500 Hz. Worse: **re-cutting did not fix it** — seven alternative windows were
+measured and 250 and 500 Hz fail across the entire file, so the repair had to be a side-scale
+that cost 2 dB of width. All of that was visible in the source before a single cut was made.
+
+### A filename is not a description, and neither is your memory of it
+
+An element labelled `longer_stone_notch` was carried through three rounds as the third notch in a
+tally. Measured, it is a **1.34 s low drag carrying 0.7% of its energy above 4 kHz**, where a real
+knife cut in the same bed carries 12.6 to 14.5%. It is a good sound and it was the wrong name,
+and the label survived because nothing anyone measured was the thing the label claimed.
+
+**State what each element is in terms of what it measures**, not in terms of what the file it came
+from was called.
+
+### If it sounds broken rather than like the material, measure below 125 Hz
+
+Five candidate cloth recordings were auditioned here; two cloth beds were built and rejected by
+ear before the third worked. The difference turned out to be one number. **A recording that reads
+as the material has almost nothing below 125 Hz. One that reads as a broken clip is dominated
+there** — the rejected candidate carried **77.9% of its energy below 125 Hz**, which is
+microphone handling noise, not fabric, and an LF thump firing in time with every movement is
+exactly what "that doesn't sound like cloth" means. The one that worked has **1.6%**.
+
+This generalises to any close-mic'd soft material: cloth, leather, paper, rope. **Run the check on
+the audition pile, before building.** It is cheap and it sorts the pile.
+
+---
+
+## 15. Audibility is not level *(2026-10-20)*
+
+**A quiet event placed just after a loud one is not heard, and no peak measurement will tell you
+so.** Forward masking after a loud transient covers **100–200 ms**. Inside that window a sound
+20 dB down is not quiet, it is absent.
+
+This project built the same fault three times before naming it. A stone landing, with grain and
+coins meant to jump in sympathy 30 ms later:
+
+| | placed at +30 ms | placed at +210 / +250 ms |
+|---|---|---|
+| grain scatter, below 125 Hz | 31.2 dB under the landing | clears the mask, audible |
+| coin pile shift, below 125 Hz | 60.7 dB under the landing | clears the mask, audible |
+
+Each time, the check applied was **peak of the new thing against peak of everything else**, a
+margin of a few decibels was called clear, and the result was reported as audible when nobody
+could hear it.
+
+**A peak-vs-peak margin is not a measure of audibility** and on this kind of event it is not even
+weak evidence. The questions that matter are *how long after the masker* and *in which bands*.
+
+**So: when an event is placed within 250 ms of a louder one, state the gap in milliseconds and the
+level difference in the bands they share.** If the gap is under 100 ms, move it or say why it is
+meant to be subliminal.
+
+---
+
+## 16. A repair aimed at one number can break another *(2026-10-20)*
+
+Three beds here were too wide at 16 kHz after encoding. The fix is standard and correct: **sum the
+two channels above 10 kHz.** It worked — every band came inside the limit.
+
+It also destroyed each file's digital silence. **An FFT taken over the whole buffer is not
+time-limited**, so energy from the loud moments leaked into every silent sample, and one bed went
+from **91.7% exact digital silence to 0.0%**. Nothing in the width measurement could see it,
+because width was the number being fixed.
+
+The silence mattered: these are intermittent beds whose §5 loop verdict is computed from their
+silent gaps, and a bed with no silence has no gaps to measure. The mask was restored — zero
+everything below −90 dB of peak — and all three re-encoded and re-verified.
+
+**The general rule: after any spectral or channel-domain repair, re-run every number the stem had
+already passed, not only the one you were fixing.** In practice that means re-reporting §10.4
+through §10.9 for any stem you touch after first measuring it, and §11's ordering rule exists for
+the same reason one level up.
+
+---
+
 ## Appendix — failures seen in previous packages
 
 Listed so they can be avoided rather than rediscovered:
@@ -508,3 +690,32 @@ Listed so they can be avoided rather than rediscovered:
   because an interquartile spread cannot see it. See §10.9.
 - A continuous bed carrying a **6.4-second cell repeated five times** inside a 35-second loop, so
   the texture itself pulsed.
+
+### Added 2026-10-20, from a soundscape built in-house rather than received
+
+- **A continuous bed that passed both loop numbers and pumped once a lap.** Join step 1.7× the
+  median, wrap window well above the 5th percentile, and a head **3.09 dB quieter than its tail**.
+  Neither number can see a ramp. See §5.
+- **The repair for it made it worse**: a gain ramp to bring the ends together introduced a wrap
+  step of 5.7× the median, trading an audible step for an audible click.
+- **Three beds that passed the fold limit on the master and failed it on the `.ogg`**, by up to
+  0.3 dB in their worst octave, because Vorbis quantisation noise is uncorrelated between
+  channels. A fourth was **−1.86 dB at 16 kHz on its own master** and had never been the
+  encoder's fault.
+- **The fix for those three destroyed their digital silence** — a 10 kHz channel sum via an FFT
+  over the whole buffer is not time-limited, and one bed went from 91.7% silence to 0.0%. The
+  number being fixed was the only one being watched.
+- **Two CC BY-NC sources taken deep into the work on measurement alone**, one of them built,
+  mixed, delivered and auditioned before anyone opened its licence page.
+- **An element cut from the one anti-phase region of an otherwise clean recording**, folding
+  −5.94 dB at 500 Hz, where the region had been measured and written down days earlier for a
+  different purpose.
+- **A sympathetic event placed 30 ms after a loud transient and reported as audible**, three
+  separate times, on a peak-vs-peak margin that cannot see forward masking. It was 31 dB under
+  the masker in the bands they shared.
+- **An element carried through three rounds under a name taken from its filename**, which
+  measurement showed it was not: 0.7% of its energy above 4 kHz where the thing it was called
+  carries 12.6 to 14.5%.
+- **Three `attribution.json` records naming a recording that was not in the stem**, each with a
+  sha256 that still matched its own file, so every integrity test passed throughout. A hash
+  proves the file has not changed; it says nothing about whether the record describes it.

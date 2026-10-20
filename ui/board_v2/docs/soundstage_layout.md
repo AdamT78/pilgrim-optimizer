@@ -293,6 +293,24 @@ background right and shifts once; a torch burns on the left wall; a mouse crosse
 left. Nothing in the first fifteen stems recorded any of this, because nobody had written it
 down.
 
+**THE ARTWORK WAS REGENERATED ON 2026-10-20 AND NOTHING IN THIS TABLE MOVES.**
+`allocation_relocate_acolytes_left_v02.png` replaces v01 to fix the keys — the old ring carried
+five or six tangled across two interlocking rings, several of them malformed, where the new one
+carries three cleanly drawn. Measured against a grid the composition is v01's to within about a
+percent, and every element a bed depends on sits where it sat. The one real move is the torch:
+its flame is larger and its centre is **2.1% further left**, which is 0.34 dB through the layout
+formula, against `torch_base` and `torch_gust` that already sat about 0.7 dB right of it in v01.
+*This table is descriptive and that is why none of this needs acting on* — the figures were
+measured off the shipped `.ogg` files after the rebuild by journey, not read off the picture, so
+the artwork moving does not make any of them wrong.
+
+**The new ring agrees with the five journeys better than the old one did, by accident.** The
+scene above says five monks each receive a key, and `key_handoffs_sfx_v02` is five keys changing
+hands. Count what is in the picture now: three on the ring, one in the almoner's hand mid-pass,
+one already held by the monk at the right edge. Five. v01 showed seven or eight, and nobody
+noticed — this file describes what the beds do rather than auditing what the picture shows, and
+the two had quietly disagreed since the day the scene was written down.
+
 | bed | balance | width | motion | construction | what it is |
 |---|---:|---:|---|---|---|
 | `mouse_scurry_out_sfx_v02` | 7.5 dB L | -7.2 dB | static | placed | the mouse leaving |
@@ -853,6 +871,12 @@ The action's picture was replaced the same day: the balance scales came out of t
 three tithe resources — grain, silver, stone — left to right. The layout below is read off the new
 image.
 
+**THE PICTURE WAS REPLACED A SECOND TIME ON 2026-10-20, AFTER THE BEDS WERE FILED**, by
+`taxation_action_a_left_v02.png` — a further generation of the same scene rather than a new scene.
+Everything below was written against the 19 October image and is left as written; the
+re-measurement against what actually shipped is the subsection after the table, and the one note
+it voids is marked where it stands.
+
 **The lap is 25 s, not 30.** It was built at 30 and shortened without cutting an event: the
 approach to the stone was compressed and the head and tail trimmed. 30 s was never a tree
 standard — of 137 ambient beds, 99 are 35 s and 16 are 25 s, and the only four at 30 s were this
@@ -889,6 +913,42 @@ his cloaked body fills **90–100%**, centred **93%**.
 had the narrowest soundstage in the tree at 2.4 dB when it held five beds clustered on a table;
 the new artwork fixes that by putting a person at each edge, which no amount of careful panning
 could have done.
+
+### What the shipped picture puts where, measured against a grid
+
+The artwork changed again on 2026-10-20, after the nine beds were filed. These are the positions
+in `taxation_action_a_left_v02.png`, taken off a percentage grid rather than estimated — the
+layout formula turns each of them into a stereo placement, so a guess here becomes a number in a
+bed's record.
+
+| feature | read on the 19 Oct image | measured on v02 |
+|---|---:|---:|
+| hooded peasant, cloak mass | 7% | **~5%** |
+| his upper hand on the sack | 12–19% | 10–16% |
+| sacks, straw and crates | 10–32% | 9–32% |
+| **unlit hanging lantern** | **31–35%** | **gone** |
+| the barred window | 35–39% | 33.5–38% |
+| grain spills from / mass at | 33% / 42% | 33% / 41% |
+| tally stick, centred | 55% | 55% |
+| chain and cross pendant | 63.5% | 63.5% |
+| coin stacks, centred | 52–66%, 57% | 50–65%, 57% |
+| the ledger | 60–76% | 57–78% |
+| stone block, lit top face | 76–89%, 83% | 76.5–89.5%, **83%** |
+| stone-bearer's hands | 82–92% | 81–93% |
+| stone-bearer's body, centred | 90–100%, 93% | 90–100%, **~95%** |
+
+**Nothing in the lap had to be re-cut.** The stone block, which carries the loudest event by
+9.5 dB, is where it was to within half a percent. The largest move is the two peasants, each about
+2% further out, which through the formula takes the cloth beds from 6.9 dB to about **7.2 dB** —
+and both are delivered narrower than their targets already, so the change moves them further
+inside rather than out. At 7.2 dB the per-band fold ceiling is about −9.4 dB de-panned, where
+those beds sit at −16.40 and −15.55. Everything else moves by 0.2 dB or less.
+
+*The check that mattered was not of the picture but of the file.* The first one offered for this
+slot carried a hand-drawn red review circle at 58–61% across — 386 pixels of marker red in a
+palette with nothing saturated in it — and was RGBA with Adobe XMP where every other card here is
+RGB with none. An annotated copy and an export are indistinguishable by filename and obvious by
+measurement.
 
 ### What was delivered, measured on the 24-bit master
 
@@ -1093,6 +1153,10 @@ masker in time and in band, which is what the numbers above answer.
 
 ### Three things with no sound, recorded as decisions
 
+> **The lantern is gone too, as of the 2026-10-20 artwork.** The note below is void on the same
+> terms as the candle note under it. **Two of the three survive** — the ledger is still there at
+> 57–78% and still has no page turns, and nobody still breathes.
+
 **The lantern at 31–35%** is unlit and silent. **The ledger at 60–76%** has no page turns, left out
 because another action already has a page-turn bed and two actions sharing a sound is worse than a
 silent book. **And nobody breathes** — three men at a table in total silence, where Devotion's own
@@ -1104,6 +1168,14 @@ shoulder, and it was never counted against the picture before being written down
 
 *The candle is gone.* The previous artwork had one at 78.5% and this file recorded its silence as
 a decision; the new picture has no candle and the note is void. Light now comes from the window.
+
+*And so is the lantern, one artwork later.* **Two of the three light sources this file has filed
+as deliberate silences have now been painted out from under it**, each time by a regeneration
+nobody expected to move them. The window has been left as the only light in the frame twice
+running, which is the one thing about this scene that has held. A silence recorded against a
+thing in the picture is only as durable as the picture, and this section now carries two dead
+notes out of five — which is an argument for writing them against the *scene* rather than against
+a percentage, not an argument for stopping.
 
 ### Not one sample of the previous version survives, and the audit is why
 

@@ -11,6 +11,17 @@ Fourteen briefs for fourteen cards, one to one. The mapping was derived from `at
 HTML comments are stripped — was asserted byte-identical to the author's section before it was
 written.
 
+**IT IS NO LONGER ONE TO ONE, AS OF 2026-10-20, AND FOUR OF THE FOURTEEN NOW DESCRIBE A RETIRED
+PICTURE.** Taxation, Allocation, Ordination's Mission and Clerical's Silversmith were all
+regenerated that day, and none of the four replacements came from a brief: each came from a
+series of successive edit prompts in ChatGPT, which the project owner decided not to document.
+Their `produces:` lines are still correct about what they made — v01, v01, v03 and v04
+respectively, every one of them now at `state: absent` — and the four new records say plainly
+that no recipe for them exists. **That is a decision and not a gap**, so nothing here is waiting
+to be filled in, and the files below are still exactly what they claim to be: what was sent, for
+the picture it made. What has changed is that this folder no longer accounts for every card on
+the board.
+
 ## They are here rather than in `../` on purpose
 
 The briefs in `../` are ONE text with `{{LEFT_SUBJECT}}` and friends substituted in, run against a
