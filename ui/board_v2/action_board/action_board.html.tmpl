@@ -841,13 +841,27 @@ var SFX = __SFX__;
 // picker. Normalising one-shots that were recorded together throws away the thing you were
 // listening to -- how loud they are RELATIVE to each other.
 //
-// 0.7 is the picker's own volume slider, so confirm comes out of the board at the level it came
-// out of the picker.
+// THE PICKER'S SLIDER WAS THE OLD ANSWER AND IT WAS THE WRONG QUESTION. 0.7 was the volume the
+// confirm was auditioned at in the picker, carried over so the board matched it. The picker plays
+// one cue against silence; the board plays it over a looping soundscape. Against the beds the
+// confirm stood 7.8 dB over the loudest moment of a mix that twelve stems were levelled into. A
+// cue is feedback that a click registered, not the loudest thing in the room.
+//
+// AND IT WAS HALF THE BOARD'S HEADROOM. ambientMaster gates the beds and the cues bypass it --
+// group -> fade -> bedMaster -> destination for one, source -> gain -> destination for the other
+// -- so at 0.7 the confirm alone reached -4.48 dBFS and held 49% of the peak budget while eleven
+// ambient actions shared the other 51%. The provable worst case, two actions crossfading with a
+// confirm on top, came to +1.71 dBFS. At 0.32 it is -0.97. ambientMaster did not move: buying the
+// same margin there would have cost -8.5, four decibels off every soundscape in the game.
+//
+// THE RATIO BETWEEN THEM IS KEPT. Both came down about 6.8 dB, so confirm still sits 3.1 dB over
+// select, exactly as it did at 0.7 and 0.5. The two clips are nearly the same peak -- -1.4 and
+// -1.6 dBFS -- so that difference was always the gain and never the recording.
 // NO HOVER. There were three cues and the first fired on the pointer merely crossing a tile,
 // which is not something a player did -- the ribbon answers a hover with light already, and a
 // noise on top of it makes a slow sweep across eight duties into a stutter. Selecting and
 // confirming are the two moments that are an act, and those are the two that sound.
-var SFX_GAIN = {select: 0.5, confirm: 0.7};
+var SFX_GAIN = {select: 0.23, confirm: 0.32};
 var SFX_ON = true, actx = null, BUF = {};
 
 // THE AMBIENT BEDS. A duty action is a place, and choosing it should put you in that place --
