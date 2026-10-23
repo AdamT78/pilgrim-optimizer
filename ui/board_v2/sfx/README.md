@@ -948,7 +948,7 @@ here as the files being clipped. They are not known to be. Measure the **shipped
 
 ### `ambient/`, the first sounds here that are not events
 
-Ninety files under eleven duty actions, and they are a different kind of thing from
+A hundred and one files under eleven duty actions, and they are a different kind of thing from
 everything above.
 
 **They live one folder per duty action** — `ambient/<duty>_<slot>/`, which is the same string
@@ -962,8 +962,10 @@ Produce and Taxation already do. **The folder owns which action, the filename ow
 and neither repeats the other.** A folder naming no real duty action is reported rather than
 guessed at, where the old prefix match quietly produced a bed belonging to nothing.
 
-*Older filenames still carry their duty's name — `clerical_actionB/silversmith_sfx_v01.ogg`
-says it twice — because moving a file is cheap and renaming one costs a record's continuity.
+*Older filenames still carried their duty's name — `clerical_actionB/silversmith_sfx_v01.ogg`
+said it twice — because moving a file is cheap and renaming one costs a record's continuity.
+That one is retired as of 2026-10-23 and the twelve beds that replaced it are named for what
+they are, so the pattern no longer has a live example.
 New tracks are named for what they are: `footsteps`, `keys`, `wheat`, `coins`, `barn_creaks`,
 `candle`, `room`, `rosary`, `wool_robe`, `rammers`, `far_work`, `ox_breathing`, `wind`,
 `oil_lamp_flame`, `horse_snorts`, `staff`, `distant_dogs`, `night_city`, `rat_squeaks`,
@@ -974,8 +976,9 @@ fires, it is 70 ms to 1.6 s long, and it is over. A bed runs underneath a select
 for as long as the player leaves it selected, so it loops, and almost every rule in this file
 had to be asked again for it.
 
-`ambient/clerical_actionB/silversmith_sfx_v01.ogg` is a fire in a metal stove, a 25 s loop cut from 15.50 s of
-Coll Anderson's *Gentle Wind* master (Sonniss GDC 2020). `ambient/clerical_actionA/devotion_sfx_v01.ogg` is a
+`ambient/clerical_actionB/` is twelve beds at 35 s, a moneyer striking coins while a guard
+watches; its fire and its coals are still cut from Coll Anderson's *Gentle Wind* master
+(Sonniss GDC 2020), which is all the bed they replaced was made of. `ambient/clerical_actionA/devotion_sfx_v01.ogg` is a
 cathedral between responses, a 35 s loop from 81.50 s of Alexander Kopeikin's *St Petersburg*
 master (GDC 2016) — taken from the quiet passage rather than the choir, because the master
 alternates full choir at −22 to −25 dB with long stretches at −31 to −36 and only the quiet ones
@@ -1323,6 +1326,51 @@ disturb it.
 
 **Eight sources CC0, one under Sonniss bundle terms.** The cloth is the only bed in the action
 that is not public domain, and the only item in the whole duty action besides the tile cue.
+
+#### Clerical actionB, twelve beds at 35.000 s
+
+Twelve beds, **35.000 s**, 48 kHz stereo, and the whole lap is one mix rather than twelve
+independent stems: the twelve sum to the reference mix at **maximum absolute sample difference
+0, 0 differing samples of 3,360,000**. Every bed carries `gainDb` 0.0 because the balance between
+them is baked into the stems, so an action-level move scales all twelve together and cannot
+disturb it. They replace `silversmith_sfx_v01.ogg`, a 25 s loop of one fire recording, which is
+retired.
+
+| file | what it is | from |
+|---|---|---|
+| `fireplace_sfx_v01.ogg` | the forge at the left edge, the only continuous bed | Coll Anderson *Gentle Wind*, Sonniss GDC 2020 |
+| `forge_embers_sfx_v01.ogg` | four clusters of coals settling | Coll Anderson *Gentle Wind*, Sonniss GDC 2020 |
+| `die_work_sfx_v01.ogg` | six coins struck and one corrected, one gesture each | 262000 olliehahn12 + 197214 Yuval + 528555 paudamiariera, **CC0** |
+| `blank_handling_sfx_v01.ogg` | six blank contacts at the bowl | 197214 Yuval, **CC0** |
+| `bench_response_sfx_v01.ogg` | what the bench and its vessels do after each strike | 528555 paudamiariera, **CC0** |
+| `coin_tick_sfx_v01.ogg` | finished coins onto the stacks, and the stacks answering | 699534 Valenspire + CB Sound Design *COINS*, GDC |
+| `coin_transfer_sfx_v01.ogg` | the handful gathered and tipped into the box | 187143 jankisjes, **CC0** |
+| `smith_footsteps_sfx_v01.ogg` | nine contacts, five at the bench and four to the box | 784301 SecureSubset, **CC0** |
+| `smith_body_sfx_v01.ogg` | sleeve and apron on each downswing | 188208 Yuval, **CC0** |
+| `guard_leather_sfx_v01.ogg` | belt and fittings, twice | 234863 mlsulli, **CC0** |
+| `guard_sword_sfx_v01.ogg` | the sword tip on stone | 519413 Iridiuss, **CC0** |
+| `guard_helmet_sfx_v01.ogg` | the head turning | 511503 fabian13cz, **CC0** |
+
+**Ten sources CC0, two under Sonniss bundle terms**, and the two are the same master: the fire
+and the coals are both cut from Coll Anderson's *Gentle Wind*, which is also the only thing the
+retired bed was made of. `coin_tick` and `coin_transfer` each carry one GDC coin recording
+alongside their CC0 material, so their records name the stricter licence.
+
+**It took five rounds and every one was decided by a measurement.** The first build read as
+mechanical: six coin cycles repeating the same gesture to within 20 ms, six strikes spanning
+1.20 dB, and the loudest sample in the action being a fire crackle rather than a hammer. Re-timing
+the cycles to 280/750/230/300 ms of spread, spreading the strikes across 4.35 dB and letting the
+hammer lead the fire by 3.1 dB took the mix's 1 s RMS range from 7.64 to 12.24 dB and dropped the
+fireplace from 67.7% of total energy to 51.3%. `bench_response` exists because a strike fell 30 dB
+within 200 ms with nothing answering it.
+
+**Three beds sit on the fold ceiling and one exception is declared.** `fireplace` holds 0.0007 dB
+of margin against the −0.85 working target, `blank_handling` 0.0024 and `guard_sword` 0.0044; all
+three are inside the 1 dB per-band limit after encoding, which is what the margin buys, and none
+can absorb a change of level, EQ, pan or cut. `forge_embers` has a wrap gap of 0.489 s, below this
+tree's intermittent criterion, because its first cluster deliberately follows its last across the
+loop join — the seam previously held 1.16 s of nothing but fire. Filed as an exception, not as
+conformity.
 
 **Twenty-five seconds, and nothing was cut to get there.** The lap was built at 30 and shortened
 by compressing the approach to the stone and trimming the head and tail. *30 s was never a tree
@@ -3414,7 +3462,7 @@ than pessimistic.
 | `build_roads_actionA` | 11 | −5.31 |
 | `produce_actionB` | 17 | −5.75 |
 | `allocation_actionA` | 14 | −7.06 |
-| `clerical_actionB` | 1 | −11.97 |
+| `clerical_actionB` | 12 | −8.85 |
 | `build_roads_actionB` | 7 | −12.03 |
 | `produce_actionA` | 13 | −13.36 |
 | `clerical_actionA` | 6 | −16.38 |

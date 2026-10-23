@@ -1728,7 +1728,8 @@
       "sha256": "094f12e286e501b42404d83c6ab6645596c677525379b882ce190759a6503b55"
     },
     "duty_actions/clerical/gain_coins/clerical_gain_coins_right_v05.png": {
-      "state": "present",
+      "state": "absent",
+      "retiredNote": "RETIRED 2026-10-22, replaced by clerical_gain_coins_right_v06.png -- the same scene pulled in tighter and lit hotter, with the forge opening the left edge rather than sitting inside the frame. IT LASTED TWO DAYS, WHICH IS THE SHORTEST LIFE ANY CARD IN THIS TREE HAS HAD, and that is checked rather than assumed: `git log --diff-filter=A` puts this file in on 2026-10-20, and the four cards retired that same day -- Taxation's v01, Allocation's v01, Mission's v03 and this slot's own v04 -- were every one of them added on 2026-10-04 and lived sixteen days. WHAT IT LEARNED IS WORTH MORE THAN THE PICTURE WAS. A first v05 was offered at 1672 x 941, ratio 1.7768, and refused; measuring what would have happened to it found that this tree's records had been wrong about off-ratio cards for as long as they had mentioned them. They said cropping. `bundled_art()` calls `_inline()` with an explicit size and `_inline()` does `im.resize((ART_W * 2, ART_H * 2))` -- no crop, no aspect preservation -- so the card would have been SQUASHED 11% vertically and `object-fit: cover` would then have seen a 2:1 image in a 2:1 box and done nothing. Nothing in the tree compares a card against `geometry.ART_RATIO`, which is already computed as 2.0 exactly. That is still true.",
       "title": "Clerical silversmith, fifth generation",
       "creator": "Generated with ChatGPT (OpenAI)",
       "collection": "Pilgrim board_v2 duty action art",
@@ -1740,6 +1741,20 @@
       "reproducibleBy": "THERE IS NO BRIEF FOR THIS PICTURE AND THERE WILL NOT BE ONE. It did not come from one prompt sent once; it came from a series of successive edit prompts in ChatGPT, and the project owner's decision on 2026-10-20 was not to document them. That is filed as a fact about this file rather than as a gap waiting to close, which is the difference between this and a `provenance-pending` key -- nothing here is outstanding. `duty_art_lab/prompts/panels/04-clerical-silversmith.md` is the brief that produced v04 and its `produces:` line still says so. It describes an earlier picture and is not this one's recipe. SO THE STANDING LINE BECOMES LOAD-BEARING. Every card record in this tree says the brief is the intent and the file is the artefact, and that the picture is committed rather than just the recipe because the same prompt does not produce the same picture twice. On the earlier cards that was an argument about fidelity. Here there is no recipe at all: these pixels cannot be made again by anyone, including the person who made them, and the committed PNG is the whole of what exists. The licence is unaffected -- ChatGPT is confirmed as the generator, which is what `openai-generated` asserts.",
       "notes": "A WIDER FRAMING OF THE SAME TRADE, and the striking surface changed under it. v04 was a tight close-up of the smith striking a die on an ANVIL, sparks flying, against a wall of hung tongs and tools; this is a wooden workbench in a vaulted room, no sparks, with the forge much larger in frame and the minted coins multiplied into stacks and two boxes. The mail-clad guard who was half cropped at v04's right edge now stands fully in frame. NOTHING FILED UNDER THIS ACTION CONTRADICTS THE CHANGE, which was worth checking rather than assuming: an anvil and a bench do not sound alike. Clerical actionB carries one bed and one cue. The bed, `silversmith_sfx_v01`, is `Fire in a Metal Stove` -- the forge, which this picture makes MORE prominent, not less. The cue is a struck bell, not a hammer on iron. So the one sound that would have cared about an anvil is not in the tree, and the one that is cares about a fire that got bigger.",
       "sha256": "ab36594a613cae220eca5caccc974a360b73ba92d0ab0792bb386056ef1e4fab"
+    },
+    "duty_actions/clerical/gain_coins/clerical_gain_coins_right_v06.png": {
+      "state": "present",
+      "title": "Clerical silversmith, sixth generation",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim board_v2 duty action art",
+      "source": "generated directly at the card's own 2:1, one image per action -- NOT cut from a shared master. Supplied as `clerical_gain_coins_right_v06.png`.",
+      "licence": "openai-generated",
+      "slot": "right",
+      "role": "the RIGHT action image, 1774 x 887, showing Silversmith: a smith at a workbench striking a coin die with a hammer, the die lit at the point of the strike, beside a blazing forge. Ratio 2.0000 against the slot's 2.0000, at 3.59 times the 494 x 247 slot. MEASURED AGAINST A GRID: the forge mouth burns at 0-16% with its coals at 0-13% -- it now opens the frame rather than sitting inside it. A bowl of blanks is at 4-23% and a stone bench with vessels behind it at 14-33%. The smith fills 30-76% with his head at 48-66%; the hammer is at 40-50% and the die at 41-50%, its lit face at 46-47%, with his far hand steadying it at 48-60%. Minted stacks lie at 55-70% and two coin boxes at 68-95%. A mail-clad guard stands at 82-97% with a sword, and a heavy cloth lies on the bench at 90-100%, beside the coin boxes.",
+      "modifications": "NONE. Generated at the card's own 2:1 and used whole. No crop, no resample, no colour grade. RGB, with no EXIF and no XMP; it carries the single `caBX` provenance chunk all fourteen cards in this tree carry and nothing else. THE RATIO WAS CHECKED ON THE FILE IN THE TREE, not on the file that was offered -- a v05 for this same slot arrived at 1672 x 941 two days ago and was refused, and the copy and the original are only known to agree because both were hashed.",
+      "reproducibleBy": "THERE IS NO BRIEF FOR THIS PICTURE AND THERE WILL NOT BE ONE. It did not come from one prompt sent once; it came from a series of successive edit prompts in ChatGPT, and the project owner's decision on 2026-10-20 was not to document them. That is filed as a fact about this file rather than as a gap waiting to close, which is the difference between this and a `provenance-pending` key -- nothing here is outstanding. `duty_art_lab/prompts/panels/04-clerical-silversmith.md` is the brief that produced v04 and its `produces:` line still says so. It describes a picture two generations back and is not this one's recipe. SO THE STANDING LINE BECOMES LOAD-BEARING. Every card record in this tree says the brief is the intent and the file is the artefact, and that the picture is committed rather than just the recipe because the same prompt does not produce the same picture twice. On the earlier cards that was an argument about fidelity. Here there is no recipe at all: these pixels cannot be made again by anyone, including the person who made them, and the committed PNG is the whole of what exists. The licence is unaffected -- ChatGPT is confirmed as the generator, which is what `openai-generated` asserts.",
+      "notes": "THE SAME SCENE, PULLED IN AND LIT HOTTER. v05 framed the trade inside a vaulted chamber with the forge one element among several; this crops to the smith and lets the forge open the left edge. Measured, the change is mostly fire: strongly saturated red goes from 37,355 pixels in 42 clusters to **82,778 in 87**, and the largest single cluster now spans 0-21% of the width where v05's spanned 7-34%. Whole-frame mean absolute difference against v05 is 37.6, the largest step between two generations of any card here. NOTHING FILED UNDER THIS ACTION CONTRADICTS IT, and the check is the same one v05 passed rather than an assumption carried forward. Clerical actionB has one bed and one cue. The bed, `silversmith_sfx_v01`, is `Fire in a Metal Stove` -- and the fire is now the loudest thing in the picture as well as the only thing in the bed, which is the closest this action's art and audio have been. The cue is a struck bell, not a hammer on iron, so the striking surface still does not matter to anything filed. The workbench is unchanged from v05; the anvil went at v04.",
+      "sha256": "71f8e2150f03afa08a2f5f7886907bde3fdb57fd77597b006a653e5fedc2fc7d"
     },
     "duty_actions/taxation/action_a/taxation_action_a_left_v01.png": {
       "state": "absent",
@@ -3117,7 +3132,8 @@
       "sha256": "aaeccd12c85a50f19c1a1adf76a4f11034d20c8c55b579dba3c1197b2b5206d5"
     },
     "sfx/ambient/clerical_actionB/silversmith_sfx_v01.ogg": {
-      "state": "present",
+      "state": "absent",
+      "retiredNote": "RETIRED 2026-10-23, replaced by the twelve beds now in this folder. It was a 25.000 s loop of one fire recording and nothing else: the action had a bed and a cue and no third axis. WHAT REPLACED IT IS NOT A BIGGER VERSION OF IT. This bed measured -25.91 dB de-panned at +0.05 balance with an L/R correlation of +0.9949 -- a mono point at dead centre, filed under a picture that puts a forge at the left edge, a man at the bench, coin boxes on the right and a guard beyond them. `fireplace_sfx_v01.ogg` is built from the same Coll Anderson master and measures -8.88 de-panned at 5.000 dB left, and the other eleven put the work, the man and the guard where the card says they are. The action moves from 25.000 s to 35.000 s with them. ITS OWN SOURCE SURVIVES IT. The master is still in the tree twice over, in `fireplace_sfx_v01.ogg` and in `forge_embers_sfx_v01.ogg`, so nothing about the licence or the provenance chain changes -- only the arrangement.",
       "kind": "bed",
       "creator": "Coll Anderson",
       "licence": "sonniss-gameaudiogdc",
@@ -3132,6 +3148,423 @@
       "measured": "25000 ms, peak -9.47 dB, integrated -32.81 LUFS, true peak -9.47 dBTP, stereo 48 kHz, L/R correlation +0.9949",
       "gainDb": -2.5,
       "sha256": "842dc26f3493032eedb9d1f48ac0077bd56c545e9b9727407469a473fb3b7add"
+    },
+    "sfx/ambient/clerical_actionB/bench_response_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "paudamiariera",
+      "licence": "cc0",
+      "design": "BUILT WITH CHATGPT, AND THE WHOLE 35 s LAP WAS AUTHORED AS ONE MIX rather than as twelve independent stems. The twelve sum against the delivery's own reference mix at maximum absolute sample difference 0, 0 differing samples of 3,360,000, reassembled here rather than read off the supplied verification file, as were the two bit-exact passes of its 70 s preview. That is why every bed in this action carries gainDb 0.0: the balance between them is baked into the stems, so an action-level move scales all twelve together and cannot disturb it. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample traces to the uploads named in `sources`. IT TOOK FIVE ROUNDS AND EACH ONE WAS A MEASUREMENT RATHER THAN A PREFERENCE. v1 was nine stems and read as mechanical: the six coin cycles repeated the same gesture to within 20 ms, the six strikes spanned 1.20 dB, the loudest sample in the whole action was a fire crackle rather than a hammer, and a strike fell 30 dB within 200 ms because nothing it hit answered it. v2 re-timed the cycles to spreads of 280/750/230/300 ms, spread the strikes across 4.35 dB, let the hammer lead the fire by 3.1 dB, and added `bench_response` and `forge_embers`. That raised the mix's 1 s RMS range from 7.64 to 12.24 dB and dropped the fireplace from 67.7% of total energy to 51.3%. v3 added `smith_body`. v4 added two more ember clusters and v5 corrected them -- see `forge_embers_sfx_v01.ogg`, which is the only record here with an interesting story. THE PICTURE IS THE PLACEMENT BRIEF. Every position in this action was read off `duty_actions/clerical/gain_coins/clerical_gain_coins_right_v06.png` against a percentage grid and converted by the project formula, balance = (50 - x%) / 50 * 8. Where a bed does not sit where the picture says, its own record says why.",
+      "generatedContent": "none",
+      "source": "One CC0 Freesound upload, six short contacts.",
+      "sources": [
+        {
+          "role": "the whole of it",
+          "title": "pdr metal tiny impact tea cup resonant rhythmic",
+          "uploader": "paudamiariera",
+          "url": "https://freesound.org/people/paudamiariera/sounds/528555/",
+          "licence": "cc0",
+          "originalFilename": "528555__paudamiariera__pdr-metal-tiny-impact-tea-cup-resonant-rhythmic-h1-clippy-em184-b-c.wav",
+          "measured": "96 kHz, 24-bit stereo",
+          "note": "ANTI-PHASE IN THE RAW MASTER: a 0.5 s survey of the whole file found all 464 windows below -1 dB in at least one qualifying octave. Not usable as a wide stereo bed; only short channel-controlled contacts were taken."
+        }
+      ],
+      "originalFilename": "528555__paudamiariera__pdr-metal-tiny-impact-tea-cup-resonant-rhythmic-h1-clippy-em184-b-c.wav",
+      "originalPath": "freesound.org -- see `sources`",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Silversmith bench -- what the strike shakes",
+      "role": "The vessels and tools on the stone bench answering each hammer blow, six times, 135 to 178 ms after the strike. ADDED IN v2 BECAUSE THE STRIKE HAD NO ROOM: measured in 50 ms steps from onset, a hammer blow fell 30 dB within 200 ms and 38 dB within 250 ms, which is a dry sample in a vacuum. With this bed and `coin_tick`'s sympathetic ticks in place the same window now sits at -38 to -41 dB where the strike alone was at -44 to -61. The bench is at 14-33% of the frame, centre 23.5%, which is 4.24 dB left; filed at 4.221 as measured on the encode.",
+      "modifications": "Six short metallic reactions cut 0.250 s each from one CC0 96 kHz upload at 56.696, 60.616, 74.216, 91.706, 115.996 and 112.496 s, resampled to 48 kHz, high- and low-passed to drop rumble and overtone, and levelled individually 12 to 18 dB under their strikes. THE SOURCE IS NOT USABLE RAW: a 0.5 s survey of the whole 96 kHz master found every one of 464 windows below -1 dB in at least one qualifying octave, so only these channel-controlled short contacts were taken. Vorbis q6 at 48 kHz.",
+      "measured": "35000 ms, peak -24.3 dB, integrated -52.20 LUFS, true peak -24.27 dBTP, stereo 48 kHz, L/R correlation +0.9076. ON THE 24-BIT MASTER: balance +4.240 dB, de-panned width -13.300, fold -0.429 whole, worst octave -0.599 at 8000 Hz on 39.76% of its energy, 95.72% exact digital silence. ON THE SHIPPED ENCODE: balance +4.221, de-panned -13.148, fold -0.433, worst -0.612 at 4000 Hz. Intermittent: first audible 2.381 s, last 28.076 s, wrap gap 9.305 s. ENCODE MEASURED RATHER THAN ASSUMED, because the encode is what the game plays and Vorbis widens: its quantisation noise is uncorrelated between channels and lands in the side signal. Beds over this tree's 1 dB per-band fold limit after encoding: 0, across all twelve. Granulepos 1680000 at 48000 Hz is 35.000 s exactly.",
+      "loop": true,
+      "gainDb": 0.0,
+      "sha256": "6ac8e9c64e8540a6fc44ed034171c8aaa71c3531aa1c9ffb974c60f72a2cb1dd"
+    },
+    "sfx/ambient/clerical_actionB/blank_handling_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "Yuval",
+      "licence": "cc0",
+      "design": "BUILT WITH CHATGPT, AND THE WHOLE 35 s LAP WAS AUTHORED AS ONE MIX rather than as twelve independent stems. The twelve sum against the delivery's own reference mix at maximum absolute sample difference 0, 0 differing samples of 3,360,000, reassembled here rather than read off the supplied verification file, as were the two bit-exact passes of its 70 s preview. That is why every bed in this action carries gainDb 0.0: the balance between them is baked into the stems, so an action-level move scales all twelve together and cannot disturb it. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample traces to the uploads named in `sources`. IT TOOK FIVE ROUNDS AND EACH ONE WAS A MEASUREMENT RATHER THAN A PREFERENCE. v1 was nine stems and read as mechanical: the six coin cycles repeated the same gesture to within 20 ms, the six strikes spanned 1.20 dB, the loudest sample in the whole action was a fire crackle rather than a hammer, and a strike fell 30 dB within 200 ms because nothing it hit answered it. v2 re-timed the cycles to spreads of 280/750/230/300 ms, spread the strikes across 4.35 dB, let the hammer lead the fire by 3.1 dB, and added `bench_response` and `forge_embers`. That raised the mix's 1 s RMS range from 7.64 to 12.24 dB and dropped the fireplace from 67.7% of total energy to 51.3%. v3 added `smith_body`. v4 added two more ember clusters and v5 corrected them -- see `forge_embers_sfx_v01.ogg`, which is the only record here with an interesting story. THE PICTURE IS THE PLACEMENT BRIEF. Every position in this action was read off `duty_actions/clerical/gain_coins/clerical_gain_coins_right_v06.png` against a percentage grid and converted by the project formula, balance = (50 - x%) / 50 * 8. Where a bed does not sit where the picture says, its own record says why.",
+      "generatedContent": "none",
+      "source": "One CC0 Freesound upload, six contacts.",
+      "sources": [
+        {
+          "role": "the whole of it",
+          "title": "coins spin drop",
+          "uploader": "Yuval",
+          "url": "https://freesound.org/people/Yuval/sounds/197214/",
+          "licence": "cc0",
+          "originalFilename": "197214__yuval__coins-spin-drop.wav",
+          "measured": "48 kHz stereo"
+        }
+      ],
+      "originalFilename": "197214__yuval__coins-spin-drop.wav",
+      "originalPath": "freesound.org -- see `sources`",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Silversmith blanks -- the bowl at his left hand",
+      "role": "Six small silver-blank contacts between minting cycles, at the bowl. The bowl of blanks is at 4-23% of the frame, centre 13.5%, which is 5.84 dB left. FILED AT 5.200, WHICH IS AS FAR AS IT GOES: at its delivered width 5.220 is where its fold reaches the -0.85 working target, so the last 0.64 dB was not available without narrowing a bed already at -13.74 de-panned. It was at 0.700 until the v2 revision, sitting on top of the die and leaving the whole stage between the fire and the die empty.",
+      "modifications": "Six contacts cut from one CC0 upload and placed at 4.750, 9.680, 14.150, 19.780, 24.750 and 30.630 s. Re-panned in v2 from 0.700 to 5.200 dB left by attenuating the opposing channel only; the PCM was not otherwise touched. Vorbis q6 at 48 kHz.",
+      "measured": "35000 ms, peak -29.1 dB, integrated -61.31 LUFS, true peak -29.05 dBTP, stereo 48 kHz, L/R correlation +0.9121. ON THE 24-BIT MASTER: balance +5.200 dB, de-panned width -13.740, fold -0.517 whole, worst octave -0.848 at 4000 Hz on 15.31% of its energy, 95.69% exact digital silence. ON THE SHIPPED ENCODE: balance +5.181, de-panned -13.374, fold -0.528, worst -0.873 at 4000 Hz. Intermittent: first audible 4.785 s, last 30.857 s, wrap gap 8.928 s. ENCODE MEASURED RATHER THAN ASSUMED, because the encode is what the game plays and Vorbis widens: its quantisation noise is uncorrelated between channels and lands in the side signal. Beds over this tree's 1 dB per-band fold limit after encoding: 0, across all twelve. Granulepos 1680000 at 48000 Hz is 35.000 s exactly.",
+      "loop": true,
+      "gainDb": 0.0,
+      "sha256": "955851818a590e2a08ca56cc5ef8a9be1b39c84c60ef2d89f12b972a1c0c5616"
+    },
+    "sfx/ambient/clerical_actionB/coin_tick_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "Valenspire",
+      "licence": "cc0",
+      "licenceNote": "Two licences in one bed and the stricter one governs redistribution. The Freesound uploads named in `sources` are CC0. `many_coins_12.wav` is CB Sound Design, Essential Sounds Vol.01 COINS, from the Sonniss GDC 2021-2023 bundle: royalty-free for commercial game use, but NOT CC0 and not redistributable as a sound effect. The bed may ship in the game; the material inside it may not be handed on as a library file.",
+      "design": "BUILT WITH CHATGPT, AND THE WHOLE 35 s LAP WAS AUTHORED AS ONE MIX rather than as twelve independent stems. The twelve sum against the delivery's own reference mix at maximum absolute sample difference 0, 0 differing samples of 3,360,000, reassembled here rather than read off the supplied verification file, as were the two bit-exact passes of its 70 s preview. That is why every bed in this action carries gainDb 0.0: the balance between them is baked into the stems, so an action-level move scales all twelve together and cannot disturb it. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample traces to the uploads named in `sources`. IT TOOK FIVE ROUNDS AND EACH ONE WAS A MEASUREMENT RATHER THAN A PREFERENCE. v1 was nine stems and read as mechanical: the six coin cycles repeated the same gesture to within 20 ms, the six strikes spanned 1.20 dB, the loudest sample in the whole action was a fire crackle rather than a hammer, and a strike fell 30 dB within 200 ms because nothing it hit answered it. v2 re-timed the cycles to spreads of 280/750/230/300 ms, spread the strikes across 4.35 dB, let the hammer lead the fire by 3.1 dB, and added `bench_response` and `forge_embers`. That raised the mix's 1 s RMS range from 7.64 to 12.24 dB and dropped the fireplace from 67.7% of total energy to 51.3%. v3 added `smith_body`. v4 added two more ember clusters and v5 corrected them -- see `forge_embers_sfx_v01.ogg`, which is the only record here with an interesting story. THE PICTURE IS THE PLACEMENT BRIEF. Every position in this action was read off `duty_actions/clerical/gain_coins/clerical_gain_coins_right_v06.png` against a percentage grid and converted by the project formula, balance = (50 - x%) / 50 * 8. Where a bed does not sit where the picture says, its own record says why.",
+      "generatedContent": "none",
+      "source": "One CC0 Freesound upload and one Sonniss GDC coin recording.",
+      "sources": [
+        {
+          "role": "the coin placements",
+          "title": "coin_misc_05",
+          "uploader": "Valenspire",
+          "url": "https://freesound.org/people/Valenspire/sounds/699534/",
+          "licence": "cc0",
+          "originalFilename": "699534__valenspire__coin_misc_05.wav",
+          "measured": "44.1 kHz, 16-bit mono, resampled to 48"
+        },
+        {
+          "role": "supporting coin contacts",
+          "title": "Essential Sounds Vol.01 COINS",
+          "uploader": "CB Sound Design",
+          "url": "https://sonniss.com/gameaudiogdc",
+          "licence": "sonniss-gameaudiogdc",
+          "originalFilename": "many_coins_12.wav",
+          "measured": "48 kHz stereo",
+          "note": "Sonniss GDC 2021-2023 bundle. NOT CC0 and not redistributable as a sound effect, which is the stricter of the two licences in this bed."
+        }
+      ],
+      "originalFilename": "699534__valenspire__coin_misc_05.wav",
+      "originalPath": "freesound.org -- see `sources`",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Silversmith coins -- finished pieces onto the stacks",
+      "role": "Six finished coins set aside on the minted stacks, plus four sympathetic stack ticks after the stronger strikes. The stacks are at 55-70% of the frame, centre 62.5%, which is 2.00 dB right; filed at 2.029 as measured on the encode. The four sympathetic ticks are half of the strike-aftermath pair added in v2 -- the other half is `bench_response` on the opposite side -- and together they spread one impact across the stage over about 400 ms instead of letting it happen at a point and stop.",
+      "modifications": "Six coin placements from two sources, plus four sympathetic stack ticks added in v2 at 2.455, 12.438, 22.225 and 27.942 s, taken from this stem's own already accepted material at 8.730, 17.550, 3.720 and 13.580 s. Vorbis q6 at 48 kHz.",
+      "measured": "35000 ms, peak -25.9 dB, integrated -57.21 LUFS, true peak -25.92 dBTP, stereo 48 kHz, L/R correlation +0.8711. ON THE 24-BIT MASTER: balance -1.997 dB, de-panned width -13.230, fold -0.256 whole, worst octave -0.524 at 8000 Hz on 6.47% of its energy, 92.75% exact digital silence. ON THE SHIPPED ENCODE: balance -2.029, de-panned -11.617, fold -0.344, worst -0.586 at 8000 Hz. Intermittent: first audible 2.462 s, last 29.336 s, wrap gap 8.126 s. ENCODE MEASURED RATHER THAN ASSUMED, because the encode is what the game plays and Vorbis widens: its quantisation noise is uncorrelated between channels and lands in the side signal. Beds over this tree's 1 dB per-band fold limit after encoding: 0, across all twelve. Granulepos 1680000 at 48000 Hz is 35.000 s exactly.",
+      "loop": true,
+      "gainDb": 0.0,
+      "sha256": "23c91b66ab219bf6207463226fb352511766700ad1c0bca666e14254baa91962"
+    },
+    "sfx/ambient/clerical_actionB/coin_transfer_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "jankisjes",
+      "licence": "cc0",
+      "licenceNote": "Two licences in one bed and the stricter one governs redistribution. The Freesound uploads named in `sources` are CC0. `many_coins_12.wav` is CB Sound Design, Essential Sounds Vol.01 COINS, from the Sonniss GDC 2021-2023 bundle: royalty-free for commercial game use, but NOT CC0 and not redistributable as a sound effect. The bed may ship in the game; the material inside it may not be handed on as a library file.",
+      "design": "BUILT WITH CHATGPT, AND THE WHOLE 35 s LAP WAS AUTHORED AS ONE MIX rather than as twelve independent stems. The twelve sum against the delivery's own reference mix at maximum absolute sample difference 0, 0 differing samples of 3,360,000, reassembled here rather than read off the supplied verification file, as were the two bit-exact passes of its 70 s preview. That is why every bed in this action carries gainDb 0.0: the balance between them is baked into the stems, so an action-level move scales all twelve together and cannot disturb it. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample traces to the uploads named in `sources`. IT TOOK FIVE ROUNDS AND EACH ONE WAS A MEASUREMENT RATHER THAN A PREFERENCE. v1 was nine stems and read as mechanical: the six coin cycles repeated the same gesture to within 20 ms, the six strikes spanned 1.20 dB, the loudest sample in the whole action was a fire crackle rather than a hammer, and a strike fell 30 dB within 200 ms because nothing it hit answered it. v2 re-timed the cycles to spreads of 280/750/230/300 ms, spread the strikes across 4.35 dB, let the hammer lead the fire by 3.1 dB, and added `bench_response` and `forge_embers`. That raised the mix's 1 s RMS range from 7.64 to 12.24 dB and dropped the fireplace from 67.7% of total energy to 51.3%. v3 added `smith_body`. v4 added two more ember clusters and v5 corrected them -- see `forge_embers_sfx_v01.ogg`, which is the only record here with an interesting story. THE PICTURE IS THE PLACEMENT BRIEF. Every position in this action was read off `duty_actions/clerical/gain_coins/clerical_gain_coins_right_v06.png` against a percentage grid and converted by the project formula, balance = (50 - x%) / 50 * 8. Where a bed does not sit where the picture says, its own record says why.",
+      "generatedContent": "none",
+      "source": "One CC0 Freesound upload for the box deposit, two more for the gather.",
+      "sources": [
+        {
+          "role": "the wooden-box deposit",
+          "title": "coins from oak table into wooden box",
+          "uploader": "jankisjes",
+          "url": "https://freesound.org/people/jankisjes/sounds/187143/",
+          "licence": "cc0",
+          "originalFilename": "187143__jankisjes__coins-from-oak-table-into-wooden-box.wav",
+          "measured": "48 kHz float32 stereo"
+        },
+        {
+          "role": "part of the gather",
+          "title": "coin_misc_05",
+          "uploader": "Valenspire",
+          "url": "https://freesound.org/people/Valenspire/sounds/699534/",
+          "licence": "cc0",
+          "originalFilename": "699534__valenspire__coin_misc_05.wav",
+          "measured": "44.1 kHz, 16-bit mono"
+        },
+        {
+          "role": "part of the gather",
+          "title": "Essential Sounds Vol.01 COINS",
+          "uploader": "CB Sound Design",
+          "url": "https://sonniss.com/gameaudiogdc",
+          "licence": "sonniss-gameaudiogdc",
+          "originalFilename": "many_coins_12.wav",
+          "measured": "48 kHz stereo",
+          "note": "Sonniss GDC 2021-2023 bundle. NOT CC0 and not redistributable as a sound effect, which is the stricter of the two licences in this bed."
+        }
+      ],
+      "originalFilename": "187143__jankisjes__coins-from-oak-table-into-wooden-box.wav",
+      "originalPath": "freesound.org -- see `sources`",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Silversmith transfer -- the handful into the box",
+      "role": "The end of the lap: the finished coins gathered at 31.590 s and tipped into the wooden box from 32.275 to 33.045 s. TWO POSITIONS IN ONE BED, which is the gesture's own shape rather than an economy -- the gather is at the stacks, 2.00 dB right, and the deposit at the boxes, which the picture puts at 68-95% of the frame, centre 81.5%, or 5.04 dB right. Filed at 2.00 and 5.00. The box clatter is the loudest single event in the action after the hammer.",
+      "modifications": "The box deposit is 0.770 s from 8.770 s of the jankisjes upload, unchanged PCM, placed at 32.275 s. The gather at 31.590 s is from the GDC coins and the Valenspire upload. Panned 2.00 and 5.00 dB right by attenuation. Vorbis q6 at 48 kHz.",
+      "measured": "35000 ms, peak -21.5 dB, integrated -52.71 LUFS, true peak -21.22 dBTP, stereo 48 kHz, L/R correlation +0.8404. ON THE 24-BIT MASTER: balance -4.684 dB, de-panned width -11.338, fold -0.577 whole, worst octave -0.748 at 500 Hz on 5.36% of its energy, 97.08% exact digital silence. ON THE SHIPPED ENCODE: balance -4.710, de-panned -10.619, fold -0.629, worst -0.751 at 500 Hz. Intermittent: first audible 31.591 s, last 33.015 s, wrap gap 33.576 s. ENCODE MEASURED RATHER THAN ASSUMED, because the encode is what the game plays and Vorbis widens: its quantisation noise is uncorrelated between channels and lands in the side signal. Beds over this tree's 1 dB per-band fold limit after encoding: 0, across all twelve. Granulepos 1680000 at 48000 Hz is 35.000 s exactly.",
+      "loop": true,
+      "gainDb": 0.0,
+      "sha256": "6335f5862fca882b190c400778291fa08d1bf7371ff61cd404c84b19e3052a92"
+    },
+    "sfx/ambient/clerical_actionB/die_work_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "olliehahn12",
+      "licence": "cc0",
+      "design": "BUILT WITH CHATGPT, AND THE WHOLE 35 s LAP WAS AUTHORED AS ONE MIX rather than as twelve independent stems. The twelve sum against the delivery's own reference mix at maximum absolute sample difference 0, 0 differing samples of 3,360,000, reassembled here rather than read off the supplied verification file, as were the two bit-exact passes of its 70 s preview. That is why every bed in this action carries gainDb 0.0: the balance between them is baked into the stems, so an action-level move scales all twelve together and cannot disturb it. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample traces to the uploads named in `sources`. IT TOOK FIVE ROUNDS AND EACH ONE WAS A MEASUREMENT RATHER THAN A PREFERENCE. v1 was nine stems and read as mechanical: the six coin cycles repeated the same gesture to within 20 ms, the six strikes spanned 1.20 dB, the loudest sample in the whole action was a fire crackle rather than a hammer, and a strike fell 30 dB within 200 ms because nothing it hit answered it. v2 re-timed the cycles to spreads of 280/750/230/300 ms, spread the strikes across 4.35 dB, let the hammer lead the fire by 3.1 dB, and added `bench_response` and `forge_embers`. That raised the mix's 1 s RMS range from 7.64 to 12.24 dB and dropped the fireplace from 67.7% of total energy to 51.3%. v3 added `smith_body`. v4 added two more ember clusters and v5 corrected them -- see `forge_embers_sfx_v01.ogg`, which is the only record here with an interesting story. THE PICTURE IS THE PLACEMENT BRIEF. Every position in this action was read off `duty_actions/clerical/gain_coins/clerical_gain_coins_right_v06.png` against a percentage grid and converted by the project formula, balance = (50 - x%) / 50 * 8. Where a bed does not sit where the picture says, its own record says why.",
+      "generatedContent": "none",
+      "source": "Three CC0 Freesound uploads, assembled into six composite gestures.",
+      "sources": [
+        {
+          "role": "the hammer strikes",
+          "title": "hammer",
+          "uploader": "olliehahn12",
+          "url": "https://freesound.org/people/olliehahn12/sounds/262000/",
+          "licence": "cc0",
+          "originalFilename": "262000__olliehahn12__hammer.aiff",
+          "measured": "44.1 kHz, resampled to 48 on encode"
+        },
+        {
+          "role": "the blank placements",
+          "title": "coins spin drop",
+          "uploader": "Yuval",
+          "url": "https://freesound.org/people/Yuval/sounds/197214/",
+          "licence": "cc0",
+          "originalFilename": "197214__yuval__coins-spin-drop.wav",
+          "measured": "48 kHz stereo"
+        },
+        {
+          "role": "the die contacts",
+          "title": "pdr metal tiny impact tea cup resonant rhythmic",
+          "uploader": "paudamiariera",
+          "url": "https://freesound.org/people/paudamiariera/sounds/528555/",
+          "licence": "cc0",
+          "originalFilename": "528555__paudamiariera__pdr-metal-tiny-impact-tea-cup-resonant-rhythmic-h1-clippy-em184-b-c.wav",
+          "measured": "96 kHz, 24-bit stereo",
+          "note": "ANTI-PHASE IN THE RAW MASTER: a 0.5 s survey of the whole file found all 464 windows below -1 dB in at least one qualifying octave. Not usable as a wide stereo bed; only short channel-controlled contacts were taken."
+        }
+      ],
+      "originalFilename": "262000__olliehahn12__hammer.aiff",
+      "originalPath": "freesound.org -- see `sources`",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Silversmith die work -- six coins struck and one corrected",
+      "role": "The whole minting gesture -- blank placed, upper die seated, hammer struck, die lifted -- six times, plus one soft corrective strike at 22.405 s. ONE STEM, NOT FOUR. Place-align-strike-lift is a single physical gesture at a single position, which is the stated exception to one-sound-one-stem and the same reason Taxation's `stone_block` carries its table creak, its landing and its shove in one file. The coin die is at 41-50% of the frame, centre 45.5%, which is 0.72 dB left; filed at 0.700. It is the loudest bed in the action and the loudest sample in the whole mix is its fifth strike.",
+      "modifications": "Six composite gestures assembled from three CC0 uploads, re-timed in v2 so no two cycles share a rhythm, plus a corrective strike at 22.405 s cut 0.370 s from the stem's own 7.350 s material and dropped 9.40 dB. The olliehahn12 hammer is 44.1 kHz resampled to 48. Vorbis q6 at 48 kHz. No compression, no limiting, no pitch processing.",
+      "measured": "35000 ms, peak -9.1 dB, integrated -37.16 LUFS, true peak -8.83 dBTP, stereo 48 kHz, L/R correlation +0.8387. ON THE 24-BIT MASTER: balance +0.700 dB, de-panned width -11.091, fold -0.332 whole, worst octave -0.525 at 500 Hz on 2.20% of its energy, 79.04% exact digital silence. ON THE SHIPPED ENCODE: balance +0.734, de-panned -10.568, fold -0.372, worst -0.526 at 500 Hz. Intermittent: first audible 1.001 s, last 28.467 s, wrap gap 7.534 s. ENCODE MEASURED RATHER THAN ASSUMED, because the encode is what the game plays and Vorbis widens: its quantisation noise is uncorrelated between channels and lands in the side signal. Beds over this tree's 1 dB per-band fold limit after encoding: 0, across all twelve. Granulepos 1680000 at 48000 Hz is 35.000 s exactly.",
+      "loop": true,
+      "gainDb": 0.0,
+      "sha256": "1ac1231210723e20bfe3ea698f5c22b6486d83707b8fe797af3296d878d4873a"
+    },
+    "sfx/ambient/clerical_actionB/fireplace_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "Coll Anderson",
+      "licence": "sonniss-gameaudiogdc",
+      "licenceNote": "Sonniss GameAudioGDC 2020 bundle. Taken as an individual file from the your.org mirror rather than out of one of the 14 numbered archives, so no archive number applies. Royalty-free: personal and commercial game use, modification and unlimited projects permitted, no attribution required. The files may not be resold or redistributed as sound effects, including edited versions, and may not be used to train AI or ML models.",
+      "design": "BUILT WITH CHATGPT, AND THE WHOLE 35 s LAP WAS AUTHORED AS ONE MIX rather than as twelve independent stems. The twelve sum against the delivery's own reference mix at maximum absolute sample difference 0, 0 differing samples of 3,360,000, reassembled here rather than read off the supplied verification file, as were the two bit-exact passes of its 70 s preview. That is why every bed in this action carries gainDb 0.0: the balance between them is baked into the stems, so an action-level move scales all twelve together and cannot disturb it. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample traces to the uploads named in `sources`. IT TOOK FIVE ROUNDS AND EACH ONE WAS A MEASUREMENT RATHER THAN A PREFERENCE. v1 was nine stems and read as mechanical: the six coin cycles repeated the same gesture to within 20 ms, the six strikes spanned 1.20 dB, the loudest sample in the whole action was a fire crackle rather than a hammer, and a strike fell 30 dB within 200 ms because nothing it hit answered it. v2 re-timed the cycles to spreads of 280/750/230/300 ms, spread the strikes across 4.35 dB, let the hammer lead the fire by 3.1 dB, and added `bench_response` and `forge_embers`. That raised the mix's 1 s RMS range from 7.64 to 12.24 dB and dropped the fireplace from 67.7% of total energy to 51.3%. v3 added `smith_body`. v4 added two more ember clusters and v5 corrected them -- see `forge_embers_sfx_v01.ogg`, which is the only record here with an interesting story. THE PICTURE IS THE PLACEMENT BRIEF. Every position in this action was read off `duty_actions/clerical/gain_coins/clerical_gain_coins_right_v06.png` against a percentage grid and converted by the project formula, balance = (50 - x%) / 50 * 8. Where a bed does not sit where the picture says, its own record says why.",
+      "generatedContent": "none",
+      "source": "Two stretches of one Sonniss master, A at 4.000 s and B at 44.000 s.",
+      "sources": [
+        {
+          "role": "the whole of it",
+          "title": "EFX SD Fire in Metal Stove 03.wav",
+          "uploader": "Coll Anderson",
+          "url": "https://sonniss.com/gameaudiogdc",
+          "licence": "sonniss-gameaudiogdc",
+          "originalFilename": "EFX SD Fire in Metal Stove 03.wav",
+          "measured": "96 kHz, 24-bit stereo",
+          "note": "Coll Anderson, pack `Gentle Wind`, Sonniss GDC 2020. The master's own metadata names C. A. Sound, Inc., which is Coll Anderson's company -- Sonniss lists him under the vendor slug casoundinc."
+        }
+      ],
+      "originalFilename": "EFX SD Fire in Metal Stove 03.wav",
+      "originalPath": "ftpmirror.your.org/pub/misc/sonniss2020/individual/Coll Anderson - Gentle Wind",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Silversmith forge -- the fire at the left of the frame",
+      "role": "The forge at the left of the picture, continuous, 0.20% silence -- the only bed in the action that never stops. The picture puts the forge mouth at 0-16% of the frame, centre 8.0%, which is 6.72 dB left. THIS BED IS AT 5.000 AND THAT IS DELIBERATE. At its delivered width it reaches only 3.84 dB before its mono fold crosses the -0.85 working target; 5.000 was bought with a side scale of 0.90, taking it from -7.97 de-panned to -8.90. Going the rest of the way to 6.72 would have cost a scale of 0.68 and a de-panned width of -11.35, at which point a room full of heat starts sounding like a fire noise over on the left. The precedent is Build Roads' `oil_lamp_flame`, a located continuous flame at 5.09 dB off centre narrowed to -9.17 to afford it.",
+      "modifications": "A SEAMLESS 35.000 s LOOP from two stretches of the master, A at 4.000 s and B at 44.000 s. Panned 5.000 dB left by attenuating the opposing channel, with the side signal scaled 0.90 to afford the position -- see `role`. Vorbis q6 at the source's own 48 kHz. No trim, no reverb, no compression, no pitch or time processing. FOLD MARGIN 0.0007 dB. Its worst qualifying octave is -0.8493 dB at 250 Hz against a -0.85 working target, and its furthest placement at that target is 5.007 dB against the 5.000 it uses. It cannot absorb a change of level, EQ, pan or cut without going over. `blank_handling` at +0.0024 and `guard_sword` at +0.0044 are in the same position. All three are inside the 1 dB per-band limit after encoding, which is what the working target exists to buy.",
+      "measured": "35000 ms, peak -12.7 dB, integrated -40.30 LUFS, true peak -12.69 dBTP, stereo 48 kHz, L/R correlation +0.7709. ON THE 24-BIT MASTER: balance +5.000 dB, de-panned width -8.903, fold -0.810 whole, worst octave -0.849 at 250 Hz on 1.40% of its energy, 0.00% exact digital silence. ON THE SHIPPED ENCODE: balance +5.000, de-panned -8.881, fold -0.813, worst -0.852 at 250 Hz. VERIFIED AS A LOOP: the step across the wrap is 1.210 times the median adjacent step against a limit of 3, the wrap window sits at the 72.46th percentile across three passes against a floor of 5, and the first and last 0.5 s match within +0.531 dB against a limit of 1. ENCODE MEASURED RATHER THAN ASSUMED, because the encode is what the game plays and Vorbis widens: its quantisation noise is uncorrelated between channels and lands in the side signal. Beds over this tree's 1 dB per-band fold limit after encoding: 0, across all twelve. Granulepos 1680000 at 48000 Hz is 35.000 s exactly.",
+      "loop": true,
+      "gainDb": 0.0,
+      "sha256": "d1c3741c267816f5662dbb84cab1a5b51acae056fc0e0a21f4842253ff55ee7d"
+    },
+    "sfx/ambient/clerical_actionB/forge_embers_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "Coll Anderson",
+      "licence": "sonniss-gameaudiogdc",
+      "licenceNote": "Sonniss GameAudioGDC 2020 bundle. Taken as an individual file from the your.org mirror rather than out of one of the 14 numbered archives, so no archive number applies. Royalty-free: personal and commercial game use, modification and unlimited projects permitted, no attribution required. The files may not be resold or redistributed as sound effects, including edited versions, and may not be used to train AI or ML models.",
+      "design": "BUILT WITH CHATGPT, AND THE WHOLE 35 s LAP WAS AUTHORED AS ONE MIX rather than as twelve independent stems. The twelve sum against the delivery's own reference mix at maximum absolute sample difference 0, 0 differing samples of 3,360,000, reassembled here rather than read off the supplied verification file, as were the two bit-exact passes of its 70 s preview. That is why every bed in this action carries gainDb 0.0: the balance between them is baked into the stems, so an action-level move scales all twelve together and cannot disturb it. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample traces to the uploads named in `sources`. IT TOOK FIVE ROUNDS AND EACH ONE WAS A MEASUREMENT RATHER THAN A PREFERENCE. v1 was nine stems and read as mechanical: the six coin cycles repeated the same gesture to within 20 ms, the six strikes spanned 1.20 dB, the loudest sample in the whole action was a fire crackle rather than a hammer, and a strike fell 30 dB within 200 ms because nothing it hit answered it. v2 re-timed the cycles to spreads of 280/750/230/300 ms, spread the strikes across 4.35 dB, let the hammer lead the fire by 3.1 dB, and added `bench_response` and `forge_embers`. That raised the mix's 1 s RMS range from 7.64 to 12.24 dB and dropped the fireplace from 67.7% of total energy to 51.3%. v3 added `smith_body`. v4 added two more ember clusters and v5 corrected them -- see `forge_embers_sfx_v01.ogg`, which is the only record here with an interesting story. THE PICTURE IS THE PLACEMENT BRIEF. Every position in this action was read off `duty_actions/clerical/gain_coins/clerical_gain_coins_right_v06.png` against a percentage grid and converted by the project formula, balance = (50 - x%) / 50 * 8. Where a bed does not sit where the picture says, its own record says why.",
+      "generatedContent": "none",
+      "source": "The same Sonniss master as `fireplace`, six further in-points.",
+      "sources": [
+        {
+          "role": "the whole of it",
+          "title": "EFX SD Fire in Metal Stove 03.wav",
+          "uploader": "Coll Anderson",
+          "url": "https://sonniss.com/gameaudiogdc",
+          "licence": "sonniss-gameaudiogdc",
+          "originalFilename": "EFX SD Fire in Metal Stove 03.wav",
+          "measured": "96 kHz, 24-bit stereo",
+          "note": "Coll Anderson, pack `Gentle Wind`, Sonniss GDC 2020. The master's own metadata names C. A. Sound, Inc., which is Coll Anderson's company -- Sonniss lists him under the vendor slug casoundinc."
+        }
+      ],
+      "originalFilename": "EFX SD Fire in Metal Stove 03.wav",
+      "originalPath": "ftpmirror.your.org/pub/misc/sonniss2020/individual/Coll Anderson - Gentle Wind",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Silversmith coals -- the forge settling",
+      "role": "Four short clusters of coals settling in the forge, at 0.300, 10.200, 25.370 and 34.280 s. A SECOND BED AT THE FIRE, NOT A SECOND FIRE. `fireplace` is 51.3% of this action's energy and moves 2.74 dB across two-second windows, which is a wall of texture the ear stops hearing; what reads as a living fire is discrete transients with decay tails, and those could not go in `fireplace`, which holds 0.0007 dB of fold margin. The coals are at 0-13% of the frame, centre 6.5%, or 6.96 dB left; filed at 6.698.",
+      "modifications": "Four clusters from the same Coll Anderson master as `fireplace`. The two at 25.370 and 34.280 s are from in-points 85.465 and 56.325 with supports at 79.904, 30.684, 9.724 and 72.304 s. The two at 0.300 and 10.200 s were re-cut in v5 from 12.605, 61.645, 25.660, 2.995, 39.602 and 48.213 s, high-passed at 320 Hz and low-passed at 16 kHz, with the side signal of the new material scaled 0.56 before panning. Anti-aliased 96 to 48 kHz. Panned by attenuation only. Vorbis q6 at 48 kHz. THE v4 CLUSTERS WERE INAUDIBLE AND THE BRIEF IS WHY. They were specified by peak level -- 'around -27 dBFS, matching the stem's current -27.100' -- and they hit it exactly, both peaking at -28.00. Peak is the wrong control for a cluster of crackles: it is set by one transient and says nothing about how much material stands behind it. The stem's RMS rose 0.708 dB when its material doubled, where equal-energy clusters would have given 3 dB, and measured directly the two new clusters carried 7.5 dB less energy than the two accepted ones. In the 2-16 kHz band where crackle lives and the fire barely does, they sat 1.1 and 1.5 dB UNDER the fireplace while the accepted pair sat 1.4 and 9.8 dB over it. The project owner listened and could not hear the change; the measurements agreed with him. THE CORRECTION RESTATED THE TARGET AS A RATIO, not a level: each cluster's 2-16 kHz RMS measured against the fireplace's own in the same window. The two new ones now sit +4.3 and +5.6 dB over it, inside their asked ranges, and the four clusters span +1.4, +4.3, +5.6 and +9.8 with no matched pair. They were re-cut rather than re-gained, because the 16 kHz share had jumped from 2.710% to 6.776% and that is thin material rather than quiet material. A DECLARED EXCEPTION, NOT AN UNMEASURED CLAIM. The 0.300 s cluster follows the 34.280 s one across the loop join, which leaves a wrap gap of 0.489 s -- below this tree's intermittent wrap-gap criterion. That is the whole point of it: the join previously held 1.16 continuous seconds of nothing but fire, which is where a loop announces itself. There is exact digital silence at the boundary and no click. Filed as an exception rather than as conformity.",
+      "measured": "35000 ms, peak -23.8 dB, integrated -60.46 LUFS, true peak -23.74 dBTP, stereo 48 kHz, L/R correlation +0.8897. ON THE 24-BIT MASTER: balance +6.701 dB, de-panned width -13.641, fold -0.709 whole, worst octave -0.761 at 2000 Hz on 13.10% of its energy, 93.78% exact digital silence. ON THE SHIPPED ENCODE: balance +6.698, de-panned -12.339, fold -0.762, worst -0.837 at 8000 Hz. Intermittent: first audible 0.301 s, last 34.812 s, wrap gap 0.489 s. ENCODE MEASURED RATHER THAN ASSUMED, because the encode is what the game plays and Vorbis widens: its quantisation noise is uncorrelated between channels and lands in the side signal. Beds over this tree's 1 dB per-band fold limit after encoding: 0, across all twelve. Granulepos 1680000 at 48000 Hz is 35.000 s exactly.",
+      "loop": true,
+      "gainDb": 0.0,
+      "sha256": "d0b3bef07782c2fa9052ca697a48987ea7e6411e8eb6f992b2d86ef632ffcc9b"
+    },
+    "sfx/ambient/clerical_actionB/guard_helmet_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "fabian13cz",
+      "licence": "cc0",
+      "design": "BUILT WITH CHATGPT, AND THE WHOLE 35 s LAP WAS AUTHORED AS ONE MIX rather than as twelve independent stems. The twelve sum against the delivery's own reference mix at maximum absolute sample difference 0, 0 differing samples of 3,360,000, reassembled here rather than read off the supplied verification file, as were the two bit-exact passes of its 70 s preview. That is why every bed in this action carries gainDb 0.0: the balance between them is baked into the stems, so an action-level move scales all twelve together and cannot disturb it. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample traces to the uploads named in `sources`. IT TOOK FIVE ROUNDS AND EACH ONE WAS A MEASUREMENT RATHER THAN A PREFERENCE. v1 was nine stems and read as mechanical: the six coin cycles repeated the same gesture to within 20 ms, the six strikes spanned 1.20 dB, the loudest sample in the whole action was a fire crackle rather than a hammer, and a strike fell 30 dB within 200 ms because nothing it hit answered it. v2 re-timed the cycles to spreads of 280/750/230/300 ms, spread the strikes across 4.35 dB, let the hammer lead the fire by 3.1 dB, and added `bench_response` and `forge_embers`. That raised the mix's 1 s RMS range from 7.64 to 12.24 dB and dropped the fireplace from 67.7% of total energy to 51.3%. v3 added `smith_body`. v4 added two more ember clusters and v5 corrected them -- see `forge_embers_sfx_v01.ogg`, which is the only record here with an interesting story. THE PICTURE IS THE PLACEMENT BRIEF. Every position in this action was read off `duty_actions/clerical/gain_coins/clerical_gain_coins_right_v06.png` against a percentage grid and converted by the project formula, balance = (50 - x%) / 50 * 8. Where a bed does not sit where the picture says, its own record says why.",
+      "generatedContent": "none",
+      "source": "One CC0 Freesound upload, one event.",
+      "sources": [
+        {
+          "role": "the whole of it",
+          "title": "knight walking on hard ground",
+          "uploader": "fabian13cz",
+          "url": "https://freesound.org/people/fabian13cz/sounds/511503/",
+          "licence": "cc0",
+          "originalFilename": "511503__fabian13cz__knight-walking-on-hard-ground.wav",
+          "measured": "48 kHz, 16-bit dual-mono"
+        }
+      ],
+      "originalFilename": "511503__fabian13cz__knight-walking-on-hard-ground.wav",
+      "originalPath": "freesound.org -- see `sources`",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Silversmith guard -- the head turning",
+      "role": "The guard turning his head, 19.550 to 20.223 s, the last of his three movements. Filed at 5.600 with the other two. It is the quietest guard bed by integrated loudness and the widest margin of the three -- 6.515 dB of placement available against the 5.600 it uses -- but it shares the sword's position because the three are one body.",
+      "modifications": "One movement from source in-points 37.380 and 40.900 s of a 48 kHz dual-mono CC0 upload. Unchanged since first delivery. Vorbis q6 at 48 kHz.",
+      "measured": "35000 ms, peak -25.6 dB, integrated -64.75 LUFS, true peak -25.54 dBTP, stereo 48 kHz, L/R correlation +0.9075. ON THE 24-BIT MASTER: balance -5.600 dB, de-panned width -13.415, fold -0.577 whole, worst octave -0.731 at 4000 Hz on 22.54% of its energy, 97.89% exact digital silence. ON THE SHIPPED ENCODE: balance -5.591, de-panned -13.143, fold -0.587, worst -0.749 at 4000 Hz. Intermittent: first audible 19.564 s, last 20.223 s, wrap gap 34.341 s. ENCODE MEASURED RATHER THAN ASSUMED, because the encode is what the game plays and Vorbis widens: its quantisation noise is uncorrelated between channels and lands in the side signal. Beds over this tree's 1 dB per-band fold limit after encoding: 0, across all twelve. Granulepos 1680000 at 48000 Hz is 35.000 s exactly.",
+      "loop": true,
+      "gainDb": 0.0,
+      "sha256": "a403c969d5d72cf6982a6aec3f7dd3f38ef20aadf78613ce7d3cac177465b500"
+    },
+    "sfx/ambient/clerical_actionB/guard_leather_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "mlsulli",
+      "licence": "cc0",
+      "design": "BUILT WITH CHATGPT, AND THE WHOLE 35 s LAP WAS AUTHORED AS ONE MIX rather than as twelve independent stems. The twelve sum against the delivery's own reference mix at maximum absolute sample difference 0, 0 differing samples of 3,360,000, reassembled here rather than read off the supplied verification file, as were the two bit-exact passes of its 70 s preview. That is why every bed in this action carries gainDb 0.0: the balance between them is baked into the stems, so an action-level move scales all twelve together and cannot disturb it. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample traces to the uploads named in `sources`. IT TOOK FIVE ROUNDS AND EACH ONE WAS A MEASUREMENT RATHER THAN A PREFERENCE. v1 was nine stems and read as mechanical: the six coin cycles repeated the same gesture to within 20 ms, the six strikes spanned 1.20 dB, the loudest sample in the whole action was a fire crackle rather than a hammer, and a strike fell 30 dB within 200 ms because nothing it hit answered it. v2 re-timed the cycles to spreads of 280/750/230/300 ms, spread the strikes across 4.35 dB, let the hammer lead the fire by 3.1 dB, and added `bench_response` and `forge_embers`. That raised the mix's 1 s RMS range from 7.64 to 12.24 dB and dropped the fireplace from 67.7% of total energy to 51.3%. v3 added `smith_body`. v4 added two more ember clusters and v5 corrected them -- see `forge_embers_sfx_v01.ogg`, which is the only record here with an interesting story. THE PICTURE IS THE PLACEMENT BRIEF. Every position in this action was read off `duty_actions/clerical/gain_coins/clerical_gain_coins_right_v06.png` against a percentage grid and converted by the project formula, balance = (50 - x%) / 50 * 8. Where a bed does not sit where the picture says, its own record says why.",
+      "generatedContent": "none",
+      "source": "One CC0 Freesound upload, two events.",
+      "sources": [
+        {
+          "role": "the whole of it",
+          "title": "leather belt",
+          "uploader": "mlsulli",
+          "url": "https://freesound.org/people/mlsulli/sounds/234863/",
+          "licence": "cc0",
+          "originalFilename": "234863__mlsulli__leather-belt.wav",
+          "measured": "48 kHz, 16-bit mono"
+        }
+      ],
+      "originalFilename": "234863__mlsulli__leather-belt.wav",
+      "originalPath": "freesound.org -- see `sources`",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Silversmith guard -- belt and fittings",
+      "role": "The guard's belt and fittings: one very quiet creak at 5.370 s and his posture shift from 17.020 to 18.520 s. The picture puts him at 82-97% of the frame, centre 89.5%, which is 6.32 dB right. ALL THREE GUARD BEDS SHARE 5.600 AND THE REASON IS `guard_sword`: the four stems are one body making one movement and must share a position, so the group is limited by its tightest member, and the sword reaches only 5.641 before its fold crosses the working target. The early creak was added in v2 -- before it he moved once in 35 seconds and was otherwise inert, which reads as an event firing rather than a person standing there.",
+      "modifications": "Two events from one CC0 mono upload, source in-points 7.850 and 1.550 s. The 5.370 s pre-creak added in v2 is 0.310 s of the stem's own accepted material from 17.460 s, re-levelled and panned to match. Vorbis q6 at 48 kHz.",
+      "measured": "35000 ms, peak -29.5 dB, integrated -67.26 LUFS, true peak -29.50 dBTP, stereo 48 kHz, L/R correlation +0.8839. ON THE 24-BIT MASTER: balance -5.600 dB, de-panned width -12.381, fold -0.622 whole, worst octave -0.795 at 500 Hz on 4.28% of its energy, 94.84% exact digital silence. ON THE SHIPPED ENCODE: balance -5.553, de-panned -12.103, fold -0.631, worst -0.803 at 500 Hz. Intermittent: first audible 5.375 s, last 18.459 s, wrap gap 21.916 s. ENCODE MEASURED RATHER THAN ASSUMED, because the encode is what the game plays and Vorbis widens: its quantisation noise is uncorrelated between channels and lands in the side signal. Beds over this tree's 1 dB per-band fold limit after encoding: 0, across all twelve. Granulepos 1680000 at 48000 Hz is 35.000 s exactly.",
+      "loop": true,
+      "gainDb": 0.0,
+      "sha256": "dde499c6cc689dfc882bbfb764a1b706f5d6214c364bf8d6d76f868dfa58b32e"
+    },
+    "sfx/ambient/clerical_actionB/guard_sword_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "Iridiuss",
+      "licence": "cc0",
+      "design": "BUILT WITH CHATGPT, AND THE WHOLE 35 s LAP WAS AUTHORED AS ONE MIX rather than as twelve independent stems. The twelve sum against the delivery's own reference mix at maximum absolute sample difference 0, 0 differing samples of 3,360,000, reassembled here rather than read off the supplied verification file, as were the two bit-exact passes of its 70 s preview. That is why every bed in this action carries gainDb 0.0: the balance between them is baked into the stems, so an action-level move scales all twelve together and cannot disturb it. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample traces to the uploads named in `sources`. IT TOOK FIVE ROUNDS AND EACH ONE WAS A MEASUREMENT RATHER THAN A PREFERENCE. v1 was nine stems and read as mechanical: the six coin cycles repeated the same gesture to within 20 ms, the six strikes spanned 1.20 dB, the loudest sample in the whole action was a fire crackle rather than a hammer, and a strike fell 30 dB within 200 ms because nothing it hit answered it. v2 re-timed the cycles to spreads of 280/750/230/300 ms, spread the strikes across 4.35 dB, let the hammer lead the fire by 3.1 dB, and added `bench_response` and `forge_embers`. That raised the mix's 1 s RMS range from 7.64 to 12.24 dB and dropped the fireplace from 67.7% of total energy to 51.3%. v3 added `smith_body`. v4 added two more ember clusters and v5 corrected them -- see `forge_embers_sfx_v01.ogg`, which is the only record here with an interesting story. THE PICTURE IS THE PLACEMENT BRIEF. Every position in this action was read off `duty_actions/clerical/gain_coins/clerical_gain_coins_right_v06.png` against a percentage grid and converted by the project formula, balance = (50 - x%) / 50 * 8. Where a bed does not sit where the picture says, its own record says why.",
+      "generatedContent": "none",
+      "source": "One CC0 Freesound upload, one event.",
+      "sources": [
+        {
+          "role": "the whole of it",
+          "title": "sword blade ring and scrape",
+          "uploader": "Iridiuss",
+          "url": "https://freesound.org/people/Iridiuss/sounds/519413/",
+          "licence": "cc0",
+          "originalFilename": "519413__iridiuss__sword-blade-ring-and-scrape.m4a",
+          "measured": "44.1 kHz AAC",
+          "note": "AAC is what the uploader put on Freesound; it is not a site preview and there is no lossless original. Foley of a sword tip, not a recording of one on stone."
+        }
+      ],
+      "originalFilename": "519413__iridiuss__sword-blade-ring-and-scrape.m4a",
+      "originalPath": "freesound.org -- see `sources`",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Silversmith guard -- sword tip on stone",
+      "role": "His sword tip moving against the stone floor, 18.620 to 19.180 s. One event, and the bed that sets the guard's position for all three: 5.641 dB is as far right as it goes at its delivered width, which is why the group sits at 5.600 rather than the 6.32 the picture asks for. Reaching 6.32 would have cost side scales on this bed and on `guard_leather`, taking them to -14.36 and -12.92 de-panned, and -14.36 is past the point where this tree stops calling a bed placed and starts calling it a mono source with a pan on it.",
+      "modifications": "One contact from source in-points 44.470 and 5.910 s, unchanged since first delivery. THE SOURCE IS AAC, which is what the uploader put on Freesound -- it is not a preview and there is no lossless original to fetch. The band limit is the material and not the codec: 99.99% rolloff at 15,429 Hz, 76% of the stem's energy in the 8 kHz octave, and the 16 kHz octave still carrying 3.10% and still qualifying for the fold check. Vorbis q6 at 48 kHz.",
+      "measured": "35000 ms, peak -19.5 dB, integrated -54.05 LUFS, true peak -18.99 dBTP, stereo 48 kHz, L/R correlation +0.8912. ON THE 24-BIT MASTER: balance -5.600 dB, de-panned width -13.400, fold -0.577 whole, worst octave -0.846 at 4000 Hz on 16.19% of its energy, 98.40% exact digital silence. ON THE SHIPPED ENCODE: balance -5.555, de-panned -12.402, fold -0.616, worst -0.911 at 4000 Hz. Intermittent: first audible 18.644 s, last 19.157 s, wrap gap 34.486 s. ENCODE MEASURED RATHER THAN ASSUMED, because the encode is what the game plays and Vorbis widens: its quantisation noise is uncorrelated between channels and lands in the side signal. Beds over this tree's 1 dB per-band fold limit after encoding: 0, across all twelve. Granulepos 1680000 at 48000 Hz is 35.000 s exactly.",
+      "loop": true,
+      "gainDb": 0.0,
+      "sha256": "2b857c5d82a3b4e97c4769525f653e8ee5bae5d772c8dd5cc350c01d8cf9b7d1"
+    },
+    "sfx/ambient/clerical_actionB/smith_body_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "Yuval",
+      "licence": "cc0",
+      "design": "BUILT WITH CHATGPT, AND THE WHOLE 35 s LAP WAS AUTHORED AS ONE MIX rather than as twelve independent stems. The twelve sum against the delivery's own reference mix at maximum absolute sample difference 0, 0 differing samples of 3,360,000, reassembled here rather than read off the supplied verification file, as were the two bit-exact passes of its 70 s preview. That is why every bed in this action carries gainDb 0.0: the balance between them is baked into the stems, so an action-level move scales all twelve together and cannot disturb it. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample traces to the uploads named in `sources`. IT TOOK FIVE ROUNDS AND EACH ONE WAS A MEASUREMENT RATHER THAN A PREFERENCE. v1 was nine stems and read as mechanical: the six coin cycles repeated the same gesture to within 20 ms, the six strikes spanned 1.20 dB, the loudest sample in the whole action was a fire crackle rather than a hammer, and a strike fell 30 dB within 200 ms because nothing it hit answered it. v2 re-timed the cycles to spreads of 280/750/230/300 ms, spread the strikes across 4.35 dB, let the hammer lead the fire by 3.1 dB, and added `bench_response` and `forge_embers`. That raised the mix's 1 s RMS range from 7.64 to 12.24 dB and dropped the fireplace from 67.7% of total energy to 51.3%. v3 added `smith_body`. v4 added two more ember clusters and v5 corrected them -- see `forge_embers_sfx_v01.ogg`, which is the only record here with an interesting story. THE PICTURE IS THE PLACEMENT BRIEF. Every position in this action was read off `duty_actions/clerical/gain_coins/clerical_gain_coins_right_v06.png` against a percentage grid and converted by the project formula, balance = (50 - x%) / 50 * 8. Where a bed does not sit where the picture says, its own record says why.",
+      "generatedContent": "none",
+      "source": "One CC0 Freesound upload, eight gestures, no excerpt used twice.",
+      "sources": [
+        {
+          "role": "the whole of it",
+          "title": "fabric movement wool",
+          "uploader": "Yuval",
+          "url": "https://freesound.org/people/Yuval/sounds/188208/",
+          "licence": "cc0",
+          "originalFilename": "188208__yuval__fabric-movement-wool.wav",
+          "measured": "145.262 s, 48 kHz, 24-bit MONO",
+          "note": "The uploader's own description is \"fabric/clothes movement (Foley) -- heavy wool coat\", recorded MKH60 into a ULN-2. The same uploader and the same chain as 188159, which this tree already carries as Clerical actionA's `robe_movement_sfx_v01.ogg`. A heavier garment than that one, which is why it was chosen over it for a man at a forge."
+        }
+      ],
+      "originalFilename": "188208__yuval__fabric-movement-wool.wav",
+      "originalPath": "freesound.org -- see `sources`",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Silversmith body -- sleeve and apron on the downswing",
+      "role": "The man himself -- sleeve and apron on the downswing before each of the six strikes, plus straightening up at 29.350 s and bending over the box at 31.400 s. Eight events, and the restraint is the point: the body sounds when the TORSO moves, not when the hands do, or the bed stops being a man and becomes a rustle floor under the action. His torso spans 30-76% of the frame, centre 53%, which is 0.48 dB right; filed at 0.50, and the bend at the box at 3.80. THE GESTURES END ON THEIR STRIKES RATHER THAN MERELY PRECEDING THEM, which is both physically right and the only thing that works: forward masking after a loud transient covers 100-200 ms, so cloth placed after a hammer blow is inaudible however carefully it is positioned, while backward masking reaches only about 20 ms.",
+      "modifications": "Eight cloth gestures cut from one 48 kHz CC0 upload, three different source passages per event and no excerpt used twice. THE SOURCE IS MONO, so the width is not a processor: left and right carry different excerpts of the same recording, which is how Taxation's cloth beds were built from one take. A gentle high-pass removed sub-60 Hz rumble, leaving 0.37% of the stem below 60 Hz and 3.88% below 125. No widener, no Haas delay, no all-pass. Vorbis q6 at 48 kHz.",
+      "measured": "35000 ms, peak -31.0 dB, integrated -55.20 LUFS, true peak -30.95 dBTP, stereo 48 kHz, L/R correlation +0.8526. ON THE 24-BIT MASTER: balance -1.047 dB, de-panned width -12.083, fold -0.276 whole, worst octave -0.302 at 16000 Hz on 2.70% of its energy, 91.16% exact digital silence. ON THE SHIPPED ENCODE: balance -1.056, de-panned -10.992, fold -0.347, worst -0.638 at 16000 Hz. Intermittent: first audible 1.884 s, last 31.575 s, wrap gap 5.309 s. ENCODE MEASURED RATHER THAN ASSUMED, because the encode is what the game plays and Vorbis widens: its quantisation noise is uncorrelated between channels and lands in the side signal. Beds over this tree's 1 dB per-band fold limit after encoding: 0, across all twelve. Granulepos 1680000 at 48000 Hz is 35.000 s exactly.",
+      "loop": true,
+      "gainDb": 0.0,
+      "sha256": "7e3744cf564cfed1d13108dbf718107c4dcb3bfdd817521683a11e88d0648e04"
+    },
+    "sfx/ambient/clerical_actionB/smith_footsteps_sfx_v01.ogg": {
+      "state": "present",
+      "kind": "bed",
+      "creator": "SecureSubset",
+      "licence": "cc0",
+      "design": "BUILT WITH CHATGPT, AND THE WHOLE 35 s LAP WAS AUTHORED AS ONE MIX rather than as twelve independent stems. The twelve sum against the delivery's own reference mix at maximum absolute sample difference 0, 0 differing samples of 3,360,000, reassembled here rather than read off the supplied verification file, as were the two bit-exact passes of its 70 s preview. That is why every bed in this action carries gainDb 0.0: the balance between them is baked into the stems, so an action-level move scales all twelve together and cannot disturb it. A record of method, not a rights claim. NO AUDIO HERE IS MODEL OUTPUT -- every sample traces to the uploads named in `sources`. IT TOOK FIVE ROUNDS AND EACH ONE WAS A MEASUREMENT RATHER THAN A PREFERENCE. v1 was nine stems and read as mechanical: the six coin cycles repeated the same gesture to within 20 ms, the six strikes spanned 1.20 dB, the loudest sample in the whole action was a fire crackle rather than a hammer, and a strike fell 30 dB within 200 ms because nothing it hit answered it. v2 re-timed the cycles to spreads of 280/750/230/300 ms, spread the strikes across 4.35 dB, let the hammer lead the fire by 3.1 dB, and added `bench_response` and `forge_embers`. That raised the mix's 1 s RMS range from 7.64 to 12.24 dB and dropped the fireplace from 67.7% of total energy to 51.3%. v3 added `smith_body`. v4 added two more ember clusters and v5 corrected them -- see `forge_embers_sfx_v01.ogg`, which is the only record here with an interesting story. THE PICTURE IS THE PLACEMENT BRIEF. Every position in this action was read off `duty_actions/clerical/gain_coins/clerical_gain_coins_right_v06.png` against a percentage grid and converted by the project formula, balance = (50 - x%) / 50 * 8. Where a bed does not sit where the picture says, its own record says why.",
+      "generatedContent": "none",
+      "source": "One CC0 Freesound upload, six in-points, nine contacts.",
+      "sources": [
+        {
+          "role": "the whole of it",
+          "title": "footsteps on stone variations",
+          "uploader": "SecureSubset",
+          "url": "https://freesound.org/people/SecureSubset/sounds/784301/",
+          "licence": "cc0",
+          "originalFilename": "784301__securesubset__footsteps-on-stone-variations.wav",
+          "measured": "48 kHz, 24-bit"
+        }
+      ],
+      "originalFilename": "784301__securesubset__footsteps-on-stone-variations.wav",
+      "originalPath": "freesound.org -- see `sources`",
+      "collection": "Pilgrim board_v2 ambient beds",
+      "title": "Silversmith footing -- stone under the moneyer",
+      "role": "Nine restrained shoe contacts on stone: five stance adjustments at the bench and four that carry him to the coin box. THE BED MOVES ACROSS THE STAGE, so its whole-stem balance of -0.607 describes nothing -- the per-event positions are 0.70 dB left for the first five, then 2.0, 3.2, 4.0 and 4.0 dB right. The last four were re-panned in v2: they ended at 1.80 right while his hands were depositing coins at 5.00, which put the man three decibels to the left of the box he was reaching into. He stands beside the boxes rather than inside them, so 4.0 is where the walk stops.",
+      "modifications": "Nine contacts combined from six in-points of one CC0 upload at 0.000 through 5.000 s. The last four events were re-panned in v2 by attenuation alone -- 2.0, 3.2, 4.0 and 4.0 dB right -- with no excerpt replaced and no PCM otherwise altered. Vorbis q6 at 48 kHz.",
+      "measured": "35000 ms, peak -23.1 dB, integrated -55.84 LUFS, true peak -23.10 dBTP, stereo 48 kHz, L/R correlation +0.8402. ON THE 24-BIT MASTER: balance -0.628 dB, de-panned width -10.629, fold -0.366 whole, worst octave -0.394 at 250 Hz on 42.95% of its energy, 91.11% exact digital silence. ON THE SHIPPED ENCODE: balance -0.607, de-panned -10.614, fold -0.366, worst -0.395 at 250 Hz. Intermittent: first audible 9.009 s, last 33.508 s, wrap gap 10.500 s. ENCODE MEASURED RATHER THAN ASSUMED, because the encode is what the game plays and Vorbis widens: its quantisation noise is uncorrelated between channels and lands in the side signal. Beds over this tree's 1 dB per-band fold limit after encoding: 0, across all twelve. Granulepos 1680000 at 48000 Hz is 35.000 s exactly.",
+      "loop": true,
+      "gainDb": 0.0,
+      "sha256": "6ed6b30e9ba74d8ab50861329d26706a08d2c6bfa8dc2e04672edfed1d307074"
     },
     "sfx/ambient/clerical_actionA/devotion_sfx_v01.ogg": {
       "state": "absent",
@@ -8242,10 +8675,10 @@
     },
     "clerical_actionB": {
       "groupDb": 1.5,
-      "tracks": 1,
-      "summedTruePeakDbtp": -11.97,
-      "summedAtTrims": "d1be912ce9e889d4",
-      "summedLoudnessLufs": -35.31
+      "tracks": 12,
+      "summedTruePeakDbtp": -8.85,
+      "summedAtTrims": "050334a07f42b91c",
+      "summedLoudnessLufs": -35.08
     },
     "give_alms_actionA": {
       "groupDb": 8.5,
