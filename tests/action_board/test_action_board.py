@@ -181,6 +181,64 @@ def test_the_card_is_exactly_two_to_one(geo):
         % geo.ART_W)
 
 
+def test_every_card_on_disk_is_exactly_two_to_one(gen, geo):
+    """The test above says the SLOT is 2:1. This says the pictures put in it are.
+
+    WRITTEN BECAUSE A CARD AT THE WRONG RATIO WAS REFUSED BY HAND AND NOTHING WOULD HAVE
+    STOPPED IT. On 2026-10-20 a Clerical v05 was offered at 1672 x 941, ratio 1.7768, where
+    every card in this tree is 1774 x 887. It was measured and declined by a person; no script
+    looked at it, and the next one might arrive when nobody is measuring.
+
+    AND THE RECORDS WERE WRONG ABOUT WHAT WOULD HAVE HAPPENED TO IT, which is the part worth
+    keeping. They said, for as long as they had mentioned it, that an off-ratio card would begin
+    CROPPING -- the reassuring failure, where you lose an edge and see that you have. It would
+    not crop. `bundled_art()` calls `_inline()` with an explicit size and `_inline()` does
+    `im.resize((ART_W * 2, ART_H * 2))`: a plain resize, no crop, no aspect preservation. That
+    v05 would have been SQUASHED 11.2% vertically at build time, and the template's
+    `object-fit: cover` would then have seen a 2:1 image in a 2:1 box and done nothing at all.
+    A squash has no edge to notice. It just makes everyone slightly too tall.
+
+    THE RULE NEEDS NO TOLERANCE AND SO INVENTS NONE. An integer raster is exactly 2:1 when its
+    width is twice its height and at no other size, so the check is `w == 2 * h` rather than a
+    ratio compared against a threshold somebody would have to justify. ART_RATIO is asserted
+    against 2.0 next door, so the two halves cannot drift apart.
+
+    IT WALKS WHAT THE BOARD DRAWS, NOT A LIST KEPT HERE. The slot folders come from the
+    generator's own `non_slot_folders()`, so seals, icons, cutouts and masters are excluded by
+    the same call that excludes them from the page -- a new kind of square picture filed under a
+    duty folder cannot quietly become a card this test then fails on.
+
+    Falsified by filing a card at any size whose width is not twice its height.
+    """
+    from PIL import Image
+
+    rec = json.loads(gen.ATTRIB_FILE.read_text(encoding="utf-8"))["files"]
+    skip = set(gen.non_slot_folders())
+    wrong, checked = [], 0
+    for path, e in sorted(rec.items()):
+        if not path.startswith("duty_actions/"):
+            continue
+        rel = path[len("duty_actions/"):]
+        parts = rel.split("/")
+        if len(parts) < 3 or set(parts[:-1]) & skip:
+            continue
+        if gen.slot_of(rel, e) not in ("left", "right"):
+            continue
+        if e.get("state", "present") != "present":
+            continue
+        f = gen.ART_DIR / rel
+        if not f.is_file():
+            continue          # a recorded file that is gone is another test's fault to report
+        w, h = Image.open(f).size
+        checked += 1
+        if w != 2 * h:
+            wrong.append("%s is %d x %d, ratio %.4f, so the board would squash it %.1f%% "
+                         "vertically and nothing would look cropped"
+                         % (path, w, h, w / h, 100 * abs((w / h) / geo.ART_RATIO - 1)))
+    assert checked, "no card art was found, so this is not testing anything"
+    assert not wrong, "\n".join(wrong)
+
+
 def test_the_wheel_takes_its_shape_from_the_asset_and_not_from_here(geo):
     """The drawing is borrowed by path; a ratio copied into this tree would stop matching it.
 
