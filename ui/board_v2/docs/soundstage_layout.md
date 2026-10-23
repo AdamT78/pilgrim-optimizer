@@ -17,9 +17,11 @@ contradicts the tree. The status line below is the one place to check, and it mo
 | `build_roads_actionB` — Build Shrine | 7 | **delivered and filed** after two rounds |
 | `clerical_actionA` — Devotion | 6 | **delivered and filed** |
 | `taxation_actionA` — Taxation | 9 | **delivered and filed** 2026-10-20; every placement landed, two widths could not |
-| the other four sounded actions | 13 | no table yet |
+| `clerical_actionB` — Silversmith | 12 | **delivered and filed** 2026-10-23 |
+| `ordination_actionB` — Send on Mission | 10 | **delivered and filed** 2026-10-23; nine re-panned, `night_city`'s fold declared out of limit |
+| the other two sounded actions | 2 | no table yet |
 
-*Ninety beds in eleven folders; seven of the eleven have a table here.*
+*A hundred and one beds in eleven folders; nine of the eleven have a table here.*
 
 ## Why this file
 
@@ -714,6 +716,204 @@ written on, at 3.589 s against a shortest interior pause of 3.648.
 All seven have distinct event peaks, and the loudest-to-second-loudest gaps run 0.39 to 4.29 dB.
 Worth stating because it is the one fault this folder does **not** have, and three of the last
 four actions did.
+
+---
+
+## `ordination_actionB` — Send on Mission
+
+**PRESCRIBED, DELIVERED AND MEASURED, all on 2026-10-23 — and the prescription came eight days
+after the delivery it corrected.** Ten beds were built and filed on 2026-10-15 with nothing read
+off the artwork; a descriptive table written on 2026-10-23 found that **six of the ten sat on the
+opposite side of centre from the thing they answer to**, and the rebuild below was asked for the
+same day. Nine beds were re-panned from the 24-bit masters. `footsteps` was left alone.
+
+This is the first action in the tree whose table was written to describe a fault and then used to
+fix it inside the hour. What the beds measured before is kept at the end, because it is the whole
+argument for having measured them.
+
+### What the picture puts where
+
+Read off `duty_actions/ordination/send_on_mission/ordination_send_on_mission_right_v04.png`.
+
+A lantern burns on the monastery wall at the **far left**, its housing at 3–10% and the flame at
+5–8%. A second hooded figure holds the door open from inside the gateway at 12–22%. The great
+studded timber door fills 20–37% and its stone jamb 36–45%. The subject is a monk at **40–62%**,
+hood at 45–58%, satchel at 40–48% and a pectoral cross at 52%, stepping out onto wet cobbles with
+a staff at 55–63%. The road runs from the bottom at 55% back to a lit city gate at **75–82%**.
+Near houses and a market awning stand at 62–72%, more houses at 82–95%, and a cathedral skyline
+fills 62–95% behind all of it. **Two rats cross the cobbles at 83–93%.** Rubble closes the right
+edge from 90%.
+
+Everything that is not the monk, the door, the porter or the lantern is on the right.
+
+### The method, written once
+
+The nine bed records point here rather than carrying nine copies of this.
+
+1. **De-pan to centre.** Energy-match the channels — scale R by `sqrt(eL/eR)` — so whatever
+   imbalance the source arrived with stops being read as a placement. Six of this folder's ten
+   beds were off centre because a *recording's* imbalance had been left in and treated as a
+   position; `distant_dogs` sat 7.03 dB left purely because its source does.
+2. **Scale the side.** Take mid and side, multiply the side by a per-bed factor, re-sum. Four
+   beds needed this to clear the per-band fold limit; five were left at 1.000.
+3. **Pan by attenuation only.** Divide the far channel down; never raise the near one. Nothing
+   can clip that did not clip before, which matters on `door_close` at −1.70 dBTP.
+4. **Give the level back.** Step 3 costs total energy — 2.86 dB on the worst case here — and
+   that is a side effect of the pan, not a level anyone chose. Each bed carries a scalar makeup
+   gain restoring the integrated (ungated) loudness of the `.ogg` it replaces, converged **on
+   the encode** rather than on the WAV, because Vorbis moves loudness a tenth of a decibel or
+   two. A scalar cannot change balance, side/mid or any band's fold, so this step is provably
+   free of everything the rebuild was for. Eight of nine landed inside **0.02 dB**; `door_close`
+   is the exception and says why below.
+
+No trim, no fade, no edit, no re-cut, no loop change. Granulepos stays 1728000 — 36.000 s exactly.
+
+### What was asked and what landed
+
+`balance_dB = (50 − x%) / 50 × 8`, positive **left**. Every bed is inside **0.07 dB** of its ask.
+
+| bed | answers to | asked | **delivered** | gap | side × | width before → after | fold before → after |
+|---|---|---:|---:|---:|---:|---:|---:|
+| `night_city_sfx_v01` | the whole city, 62–95% | 4.6 R | **4.58 R** | 0.02 | 1.000 | −4.33 → −4.33 | −3.432 → **−3.359** ✗ |
+| `footsteps_sfx_v01` | the monk, 51% | 0.2 R | **0.01 L** | 0.17 | — | −31.60 → −31.60 | −0.009 |
+| `staff_sfx_v02` | his staff, 59% | 1.4 R | **1.40 R** | 0.00 | 0.704 | −10.68 → −13.59 | −1.487 → −0.860 ✓ |
+| `distant_dogs_sfx_v01` | the town beyond the gate | 5.6 R | **5.61 R** | 0.01 | 0.754 | −8.61 → −11.07 | −1.544 → −0.866 ✓ |
+| `distant_cart_sfx_v01` | the gate road, 78% | 4.6 R | **4.61 R** | 0.01 | 1.000 | −22.42 → −22.34 | −0.037 → −0.321 |
+| `two_horses_sfx_v01` | the gate road, 78% | 4.6 R | **4.59 R** | 0.01 | 1.000 | −23.84 → −23.97 | −0.028 → −0.305 |
+| `rats_crossing_sfx_v01` | the rats, 88% | 6.1 R | **6.09 R** | 0.01 | 1.000 | −11.77 → −11.75 | −0.457 → −0.810 |
+| `rat_squeaks_sfx_v01` | the rats, 88% | 6.1 R | **6.03 R** | 0.07 | 0.738 | −14.63 → −17.03 | −0.412 → −0.863 |
+| `bottle_knock_sfx_v01` | the rats, 88% | 6.1 R | **6.13 R** | 0.03 | 1.000 | −27.91 → −27.57 | −0.016 → −0.482 |
+| `door_close_sfx_v01` | the door, 28.5% | 3.4 L | **3.42 L** | 0.02 | 1.000 | −50.57 → −28.31 | −0.000 → −0.191 |
+
+**The six inversions are gone.** `distant_dogs` moved 12.64 dB across centre, `rat_squeaks` 9.97,
+`rats_crossing` 9.08, `bottle_knock` 6.80, `distant_cart` 4.71 and `night_city` 5.27. The stage
+now runs from `door_close` at 3.42 left to `bottle_knock` at 6.13 right — a 9.55 dB spread where
+the ten beds previously occupied 7.03 left to 0.25 right with the city on the wrong side of it.
+
+**Panning a mono point costs fold even with no width added.** `distant_cart` went −0.037 to
+−0.321 dB and `two_horses` −0.028 to −0.305 without a sample of new side content, because L and R
+are no longer equal and the difference signal is no longer zero. That is the floor price of
+placing anything off centre, and at a third of the limit it is cheap.
+
+### `night_city` keeps a failing fold, and that was chosen
+
+It is the one bed in the tree outside the 1 dB per-band limit. Six of its eight qualifying octaves
+are past 1 dB, worst **−3.359 dB at 8 kHz**. Clearing −0.85 would have meant this:
+
+| side × | de-panned width | worst qualifying fold |
+|---:|---:|---:|
+| 1.000 | **−4.33** | **−3.359** |
+| 0.500 | −10.29 | −1.564 |
+| 0.350 | −13.39 | −1.063 |
+| 0.279 | −15.36 | −0.849 |
+
+Eleven decibels of width off the **only continuous bed in the action** — the one that is always
+playing, and the one carrying what little width the action has. The project owner was shown that
+ladder and chose to keep the width.
+
+**The rebuild did not make it worse.** The fold was −3.432 before and is −3.359 after: the
+position was fixed and the fold left exactly as failing as it already was. On a phone speaker the
+city loses about three and a half decibels of its upper bands for as long as the action is
+selected. That is a known, chosen cost, recorded here and in the bed's own record rather than
+carried quietly.
+
+### `bottle_knock` departs from this table, and the timing is why
+
+The descriptive table read this bed off the picture as the market stalls at 67%, which is 2.7 dB
+right. The audio disagrees: it is audible **10.800–11.608 s, entirely inside `rats_crossing` at
+10.299–11.855 s** and overlapping `rat_squeaks` at 10.481–11.631 s. A bottle that sounds only
+while two rats are crossing is a bottle a rat knocked over, so it is placed with them at 6.1 dB
+right rather than 3.4 dB away from the animal doing it. Both readings were put to the project
+owner and he chose the rats.
+
+**That is the same class of error as the retirement note below**: a position argued from a drawing
+and never checked against when the sound actually happens. Two groups in this action share a
+position for the same reason and it is deliberate — `distant_cart` and `two_horses` are one event
+at 14.0–30.2 s, a cart and the horses pulling it; `rats_crossing`, `rat_squeaks` and
+`bottle_knock` are one event at 10.3–11.9 s.
+
+### `door_close` is owed 1.51 dB, and its master is missing
+
+Two things are wrong with this bed and neither was introduced by the rebuild.
+
+**It was re-panned from the shipped `.ogg`, not from a master.** The other eight came from
+`sfx/_masters/ordination_actionB/`; the stem that folder holds under this bed's name correlates
+**0.0003** with the shipped file against its L, its R and its mono sum — not a weak match but no
+relationship at all. Whatever is in `_masters` here is not what the game plays. The recipe in the
+bed's record still reproduces the `.ogg` from the upload, so nothing about provenance turns on it,
+but the gap is real and is recorded rather than resolved.
+
+**Its makeup gain could not be taken in the audio.** The pan cost 1.41 dB; giving it back would
+have put the file at about −0.19 dBTP through Vorbis, past the −1 dBTP line that this bed's own
+2.0 dB of encoder headroom exists to hold. The makeup was therefore clamped by the peak ceiling at
+−0.08 dB, and the bed now plays **1.51 dB under** the loudness of the file it replaced. The remedy
+is one number: `gainDb` −1.5 → about 0.0. **It has deliberately not been typed**, because levels
+in this tree are the project owner's by standing decision.
+
+### Three records said the trim was zero while the field said otherwise
+
+`rat_squeaks` carries `gainDb` −17.0, `rats_crossing` −4.0 and `door_close` −1.5, all set by ear.
+All three records still read *"THE TRIM IS ZERO BECAUSE NOBODY HAS SET IT"* — a sentence that was
+true when written and went stale when the levels were set. Corrected in all three as part of this
+filing. **The re-pan was made level-neutral precisely so those three numbers still mean what they
+meant**; `door_close` is the one that no longer does, and it is flagged above.
+
+### The rats were the clearest case, and a record here was wrong about them
+
+Kept because the correction is the point, not the error.
+
+`rats_crossing` was filed **2.99 dB left** and `rat_squeaks` **3.94 dB left**. The rats are drawn
+at 83–93% of the frame, which is **6.08 dB right**. The two beds were 9.07 and 10.02 dB from the
+animals they are named after, on the wrong side of centre. They are now at 6.09 and 6.03 right.
+
+**And v03's retirement note in `attribution.json` still says the opposite.** It records that v04
+"adds two rats crossing at 83-93%" and that "both changes move the picture TOWARD beds that were
+already filed." The rats were added to the artwork to answer beds that existed — and put on the
+far side of the frame from where those beds played. That sentence was written on 2026-10-20
+without measuring the beds it claimed agreement with. It is wrong, it is mine, and **it is still
+in the file**: the beds have since been moved to where the picture puts them, which makes the
+sentence's conclusion accidentally true and its reasoning no less false. Correcting it is open.
+
+### What the ten measured before, which is the argument for the table
+
+| bed | picture | **filed 2026-10-15** | gap | de-panned width | worst fold |
+|---|---:|---:|---:|---:|---:|
+| `night_city_sfx_v01` | 4.6 R | **0.69 L** | **5.25, opposite side** | −4.33 | **−3.432** ✗ |
+| `footsteps_sfx_v01` | 0.2 R | **0.01 L** | 0.17 | −31.60 | −0.009 |
+| `staff_sfx_v02` | 1.4 R | **0.08 R** | 1.36 | −10.68 | **−1.487** ✗ |
+| `distant_dogs_sfx_v01` | 4.6 R | **7.03 L** | **11.59, opposite side** | −8.61 | **−1.544** ✗ |
+| `distant_cart_sfx_v01` | 4.6 R | **0.10 L** | **4.66, opposite side** | −22.42 | −0.037 |
+| `two_horses_sfx_v01` | 4.6 R | **0.25 R** | 4.31 | −23.84 | −0.028 |
+| `rats_crossing_sfx_v01` | 6.1 R | **2.99 L** | **9.07, opposite side** | −11.77 | −0.457 |
+| `rat_squeaks_sfx_v01` | 6.1 R | **3.94 L** | **10.02, opposite side** | −14.63 | −0.412 |
+| `bottle_knock_sfx_v01` | 2.7 R | **0.67 L** | **3.39, opposite side** | −27.91 | −0.016 |
+| `door_close_sfx_v01` | 3.4 L | **0.00** | 3.44 | **−50.57** | −0.000 |
+
+Three beds failed the fold limit and two of the three now pass. Five of the ten had no width at
+all — `door_close` at −50.57 de-panned and a correlation of 1.0000, exact dual mono for a door
+filling 20–37% of the frame, plus `bottle_knock`, `two_horses`, `distant_cart` and `footsteps`
+within a few decibels of the same. **That has not been fixed and was not asked for.** Four of the
+five are still points; `door_close` now reads −28.31 only because Vorbis quantised its two
+unequal channels independently and the noise landed in the side, which is a codec artefact and
+not width. A width claim has to be made on the master, never on the shipped `.ogg`.
+
+### The group sum is where `door_close`'s missing decibel and a half shows up
+
+At `groupDb` −5.0 this action summed **−2.42 dBTP** before the rebuild and was the hottest in the
+tree. It now sums **−2.81 dBTP at −29.86 LUFS**, which puts it second on peak behind
+`taxation_actionA` at −2.64 and second on loudness behind `allocation_actionA` at −29.03.
+
+**Nine beds are level-neutral, so that 0.39 dB is one bed.** `door_close` is the hottest single
+bed in the tree at −1.70 dBTP and therefore sets the group's peak almost by itself; it is the one
+bed whose makeup gain had to be clamped, and the 1.51 dB it is owed reappears here as 0.39 dB off
+the action. That is the practical argument for giving it back in `gainDb`: the loss is not
+confined to one door, it moves the whole action down the crossfade ladder.
+
+It is still among the two or three actions whose faults are heard most, which is why it was worth
+the rebuild.
+
+*These beds are 36.000 s where the rest of the tree is 35 or 25. Nothing depends on it; it is
+noted because the group-sum tool prints lengths and this is the only action that prints 36.*
 
 ---
 
