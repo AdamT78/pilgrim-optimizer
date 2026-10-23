@@ -13,7 +13,7 @@ contradicts the tree. The status line below is the one place to check, and it mo
 | `produce_actionB` — Produce Stone | 17 | **descriptive** — measured after the fact, never prescribed |
 | `produce_actionA` — Produce Wheat | 13 | **delivered and filed**, all thirteen placements landed |
 | `allocation_actionA` — Allocation | 14 | **descriptive** — measured after the rebuild by journey |
-| `build_roads_actionA` — Build Roads | 11 | **delivered and filed**; `bridge_work` and `river` agreed, not asked for |
+| `build_roads_actionA` — Build Roads | 11 | **delivered and filed**; re-read against v02 artwork 2026-10-23 |
 | `build_roads_actionB` — Build Shrine | 7 | **delivered and filed** after two rounds |
 | `clerical_actionA` — Devotion | 6 | **delivered and filed** |
 | `taxation_actionA` — Taxation | 9 | **delivered and filed** 2026-10-20; every placement landed, two widths could not |
@@ -399,27 +399,35 @@ rebuild, and it is the only measurement in this folder outside the contract. Not
 ## `build_roads_actionA` — Build Roads
 
 **PRESCRIBED, DELIVERED AND MEASURED, all on 2026-10-18.** Read off the action's own artwork,
-`duty_actions/build_roads/build_road/build_roads_build_road_left_v01.png`, asked for, and
-checked against the delivery — the first action whose layout went round that loop inside a day.
-**Nine of the eleven landed at 0.00 dB**; `rammers` at −0.11 and the two cart stems at −0.49,
-declared. What the beds measured before is kept at the end of the section, because it is the
-argument for having done this at all.
+asked for, and checked against the delivery — the first action whose layout went round that loop
+inside a day. **Nine of the eleven landed at 0.00 dB**; `rammers` at −0.11 and the two cart stems
+at −0.49, declared. What the beds measured before is kept at the end of the section, because it is
+the argument for having done this at all.
 
-The two new beds at the right of the table, `bridge_work` and `river`, are **agreed and not yet
-asked for**. They are listed so nothing else gets built to cover that ground.
+**RE-READ AGAINST `build_roads_build_road_left_v02.png` ON 2026-10-23, and the beds survived it.**
+The artwork was remade: one ox where there were two, and the whole background right replaced —
+timber viaducts, a crane and flooded ground became hills, a winding road and a distant castle.
+Every bed was re-read against the new frame and **none moved more than 0.3 dB except the cart**.
+The two beds that had been agreed against the old background, `bridge_work` at 4.2 dB right and
+`river` at 5.6, have nothing left to answer to and are struck from the table. Neither was ever
+built, so nothing is retired with them.
 
 ### What the picture puts where
 
-A loaded ox cart fills the **left edge**: its wheel at 3%, the cart body between 5% and 17%, and
-a team of oxen in the shafts between 10% and 29%. A hooded rider on a horse stands behind them at
-**25%**, under a banner, with a ruined castle on the skyline at 11%. The subject of the picture
-is a monk at **45%** driving an upright timber rammer into a stone block; four or five more
-rammers recede behind him between 51% and 70%, with distant carts and figures among them. The
-new road runs from the bottom at 68% back to a vanishing point at 75%. Timber viaducts and a
-crane fill the background right between 60% and 97%, and flooded ground runs under them from 70%
-to the right edge. A lantern hangs on a post at **82%** — the only warm light in the frame — with
-a cross-carved milestone beside it at 90%. Broken stone fills the lower frame from the left edge
-to about 60%.
+A loaded ox cart fills the **left edge**: its rear wheel at 0–4.5%, the body between 0% and 11%,
+a second wheel at 7.5–10.5%, and the shaft running right to the yoke. **One ox** stands in the
+shafts between 11.5% and 25%, its head and horns from 18%. A hooded rider on a horse is behind at
+22–29.5%, the horse's head at 26–29.5%, with a ruined castle on the skyline at 2–19%. The subject
+of the picture is a monk at **45%** driving an upright timber rammer into a stone block; six more
+recede behind him between 48% and 75%. The new road runs from the bottom at 62% back to a
+vanishing point near 80%, fenced along 72–82%. A lantern hangs on a post at **83%** — the only
+warm light in the frame — with a cross-carved milestone beside it at 86–100% and a second castle
+small on the horizon at 85–92%. Broken stone fills the lower frame from the left edge to about
+60%.
+
+*v01 had two oxen between 10% and 29%, a banner over the rider, timber viaducts and a crane across
+60–97% and flooded ground beneath them. The oxen became one, and the viaducts and the water are
+gone.*
 
 Horizontal position in frame sets the pan: `balance_dB = (50 − x%) / 50 × 8`, positive left.
 Apparent distance sets level and width, never pan. Anything not in the picture is free, and
@@ -431,19 +439,17 @@ past about 4 dB the second figure is mostly placement — see *How the numbers a
 
 | stem | read at | balance asked | **delivered** | width de-panned | width as filed | motion | construction |
 |---|---:|---:|---:|---:|---:|---|---|
-| `ox_cart_mechanics_sfx_v02` | 9% | 6.5 dB L | **6.00 L** | −32.21 | −9.54 | static | placed, a point |
-| `ox_cart_stones_sfx_v02` | 9% | 6.5 dB L | **6.01 L** | −29.98 | −9.52 | static | placed, a point |
-| `ox_breathing_sfx_v02` | 20% | 4.8 dB L | **4.80 L** | −15.69 | −10.02 | static | placed |
-| `horse_snorts_sfx_v02` | 25% | 4.0 dB L | **3.99 L** | −19.82 | −12.13 | static | placed, a point |
+| `ox_cart_mechanics_sfx_v02` | 5.5% | 7.1 dB L | **6.00 L** | −32.21 | −9.54 | static | placed, a point |
+| `ox_cart_stones_sfx_v02` | 5.5% | 7.1 dB L | **6.01 L** | −29.98 | −9.52 | static | placed, a point |
+| `ox_breathing_sfx_v02` | 18.3% | 5.1 dB L | **4.80 L** | −15.69 | −10.02 | static | placed |
+| `horse_snorts_sfx_v02` | 25.8% | 3.9 dB L | **3.99 L** | −19.82 | −12.13 | static | placed, a point |
 | `gravel_sfx_v02` | 32% | 2.9 dB L | **2.91 L** | **−7.52** | −6.92 | static | **field**, 100% decorrelated |
 | `rammers_sfx_v02` | 45% | 0.8 dB L | **0.68 L** | −12.22 | −12.11 | static | placed |
 | `wind_sfx_v02` | — | centre | **0.01 R** | −6.94 | −6.94 | static | field, continuous |
 | `worker_footsteps_sfx_v02` | 55% | 0.8 dB R | **0.79 R** | −11.00 | −10.89 | static | placed |
 | `far_work_sfx_v02` | 65% | 2.4 dB R | **2.42 R** | −7.91 | −7.44 | static | field |
-| `bridge_work` | 76% | 4.2 dB R | *agreed, not yet asked for* | −8 to −10 | | static | field |
-| `oil_lamp_rattle_sfx_v02` | 82% | 5.1 dB R | **5.13 R** | −18.39 | −10.15 | static | placed, a point |
-| `oil_lamp_flame_sfx_v02` | 82% | 5.1 dB R | **5.09 R** | −9.17 | −6.99 | static | field, continuous |
-| `river` | 85% | 5.6 dB R | *agreed, not yet asked for* | −7 | | static | field |
+| `oil_lamp_rattle_sfx_v02` | 83% | 5.3 dB R | **5.13 R** | −18.39 | −10.15 | static | placed, a point |
+| `oil_lamp_flame_sfx_v02` | 83% | 5.3 dB R | **5.09 R** | −9.17 | −6.99 | static | field, continuous |
 
 No placement above costs more than **0.52 dB** of mono fold, and most cost under 0.3 dB. All
 eleven fold within **0.90 dB**, against three that failed the 1 dB limit before — `oil_lamp_flame`
@@ -490,21 +496,28 @@ lamp 1.3 to 2.7 dB right, so the viaducts, the water and the only light source i
 all crowded into the middle. **Delivered at 2.42 dB right for `far_work` and 5.09 / 5.13 for the
 two lamp stems**, which puts the only warm light in the frame where the frame has it.
 
-*Two of the four right-hand positions in the table are still empty.* `bridge_work` at 4.2 dB right
-and `river` at 5.6 are agreed and not yet asked for, so the three positions between 4.2 and 5.6 dB
-right hold two beds out of four. They are deliberately close together, because they are at very
-different depths and separate by level and width rather than by pan. If they muddle in the mix once
-they exist, the river moves out to 6.5 and the bridge work in to 4.0 before anything else is
-touched.
+*The two right-hand positions that were being held open are now closed.* `bridge_work` at 4.2 dB
+right and `river` at 5.6 were agreed on 2026-10-18 against a background of viaducts and flooded
+ground. v02 has neither, so both are struck rather than left standing as ground reserved for
+something the picture no longer contains. The right of the stage is now `far_work` at 2.4 and the
+two lamp stems at 5.1 — three beds, and the frame they answer to is emptier than the one they were
+placed in.
 
-**Ten of the eleven beds sat within 2.7 dB of centre.** Build Roads has the widest subject matter
+**Ten of the eleven beds sat within 2.7 dB of centre.** Build Roads had the widest subject matter
 of any action in the tree — an edge-to-edge work site with a cart at one side and a bridge at the
 other — and had the narrowest stage. That was the finding this table existed to fix, and it is
-fixed: the spread now runs from 6.0 dB left to 5.1 dB right.
+fixed: the spread runs from 6.0 dB left to 5.1 dB right.
 
-**The two new beds are additions the picture argues for, not gaps in the delivery.** Nothing in
-the eleven acknowledges the viaducts or the water, and both occupy large parts of the frame.
-Agreed as additions on 2026-10-18.
+**WHAT THE v02 RE-READ FOUND, 2026-10-23.** The ox and the horse were the stated change and they
+barely moved: the pair became one ox, narrowing from 10–29% to 11.5–25%, but its centre went 19.5%
+to 18.3%, which is **0.19 dB**; the horse went 25% to 25.8%, **0.13 dB**. Against beds delivered at
+4.80 and 3.99 dB left the new frame asks 5.07 and 3.87. Neither is worth re-panning.
+
+**The cart is the one placement the new frame argues with.** Its body ran 5–17% and now runs 0–11%,
+taking the read point from 9% to 5.5% and the ask from 6.56 to 7.12 dB left. Both cart stems were
+delivered at 6.00, so a gap of 0.56 dB is now **1.12 dB**. They are panned mono points — −32.21 and
+−29.98 de-panned — so moving them costs almost nothing in fold and nothing else in the action moves
+with them. Recorded here and not corrected, because the beds were not re-delivered.
 
 ### What the eleven measured before, which is the argument for the table
 
