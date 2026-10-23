@@ -4130,7 +4130,15 @@ _NUMBER_WORDS = {
 # The list ran out at fifty on 2026-10-17, when Produce Stone arrived with thirteen beds in
 # one delivery and took the tree to sixty-three. The guard did the right thing -- it refused
 # a count it could not verify rather than passing it -- but a prose-count guard that stops
-# working at a round number is a guard with an expiry date, so it now reaches ninety-nine.
+# working at a round number is a guard with an expiry date, so it reached ninety-nine.
+#
+# IT EXPIRED AGAIN ON 2026-10-23, and this time the round number was a hundred. Clerical
+# actionB arrived with twelve beds replacing one and took the tree to 101. The failure was
+# not a refusal: "a hundred and one files" put the word `one` immediately before `files`,
+# so the pattern read it as 1 and reported that the README claimed one file where the tree
+# held 101 -- a guard reporting the wrong number rather than declining to guess, which is
+# worse than the behaviour it replaced. So both halves moved: the vocabulary understands a
+# leading hundred, and the pattern reaches back over it instead of matching the last word.
 
 
 def _spelled(word: str):
@@ -4142,7 +4150,15 @@ def _spelled(word: str):
     which is the behaviour wanted, but it failed on a correct document -- so the vocabulary
     grew a compound rule rather than the prose being bent to fit the test.
     """
-    parts = word.lower().split("-")
+    word = " ".join(word.lower().split())
+    for lead in ("a hundred", "one hundred"):
+        if word == lead:
+            return 100
+        for joiner in (" and ", " "):
+            if word.startswith(lead + joiner):
+                tail = _spelled(word[len(lead) + len(joiner):])
+                return None if tail is None or tail >= 100 else 100 + tail
+    parts = word.split("-")
     if not all(p in _NUMBER_WORDS for p in parts):
         return None
     if len(parts) == 1:
@@ -4180,7 +4196,8 @@ def test_the_prose_count_of_beds_is_the_number_of_beds():
 
     # "<word> files under <word> duty actions", wherever either document says it.
     pattern = re.compile(
-        r"\b([A-Za-z]+(?:-[A-Za-z]+)?)\s+(?:ambient\s+)?(?:files|tracks)\s+under\s+"
+        r"\b((?:(?:a|one)\s+hundred(?:\s+and)?\s+)?[A-Za-z]+(?:-[A-Za-z]+)?)"
+        r"\s+(?:ambient\s+)?(?:files|tracks)\s+under\s+"
         r"([A-Za-z]+(?:-[A-Za-z]+)?)\s+duty\s+actions\b",
         re.IGNORECASE)
     checked = 0
@@ -4476,7 +4493,7 @@ def test_every_bed_carries_the_true_length_its_loop_needs():
                 "%s: the container says %.6f s and the record's decoded measurement says %s ms"
                 % (b["url"], got, m.group(1)))
             checked += 1
-    assert checked == 90, "expected 90 beds to check, checked %d" % checked
+    assert checked == 101, "expected 101 beds to check, checked %d" % checked
 
 
 def test_a_last_page_that_ends_no_packet_is_refused_rather_than_read_as_huge(tmp_path):

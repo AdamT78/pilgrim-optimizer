@@ -1,8 +1,9 @@
 # Cutting an ambient bed into a seamless loop
 
-**Status: ninety files under eleven duty actions.** Three actions have one track each —
-`clerical_actionB/silversmith` (25 s, fire), `give_alms_actionA/alms` (25 s, rain) and
-`give_alms_actionB/donate_building` (32.5 s, a sheltered wind). Seven have several.
+**Status: a hundred and one files under eleven duty actions.** Two actions have one track
+each — `give_alms_actionA/alms` (25 s, rain) and `give_alms_actionB/donate_building`
+(32.5 s, a sheltered wind). Nine have several. `clerical_actionB/` is the newest, twelve at
+35 s, which replaced the single 25 s fire that used to be the third one-track action.
 `taxation_actionA/` is the newest, nine at 25 s, rebuilt whole against new artwork and **the
 only folder here where one bed loops and eight do not** — `room` runs continuously and the other
 eight open and close on exact digital silence, 50.4% to 97.1% of their length;

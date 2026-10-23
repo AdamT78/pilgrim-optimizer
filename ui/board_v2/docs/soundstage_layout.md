@@ -704,6 +704,64 @@ four actions did.
 
 ---
 
+## `clerical_actionB` — Silversmith
+
+**DELIVERED AND FILED 2026-10-23**, twelve beds at 35.000 s, replacing a single 25 s fire loop.
+Read off `duty_actions/clerical/gain_coins/clerical_gain_coins_right_v06.png` against a
+percentage grid, balance by the project formula `(50 - x%) / 50 * 8`, positive = left.
+
+### What the picture puts where, and what was filed
+
+| element | spans | centre | picture says | filed at | bed |
+|---|---:|---:|---:|---:|---|
+| forge mouth and coals | 0–16% | 8.0% | 6.72 L | **5.000 L** | `fireplace` |
+| the coals alone | 0–13% | 6.5% | 6.96 L | **6.698 L** | `forge_embers` |
+| bowl of blanks | 4–23% | 13.5% | 5.84 L | **5.181 L** | `blank_handling` |
+| bench and vessels | 14–33% | 23.5% | 4.24 L | **4.221 L** | `bench_response` |
+| coin die | 41–50% | 45.5% | 0.72 L | **0.734 L** | `die_work` |
+| the smith's torso | 30–76% | 53.0% | 0.48 R | **1.056 R** | `smith_body` |
+| minted coin stacks | 55–70% | 62.5% | 2.00 R | **2.029 R** | `coin_tick` |
+| coin boxes | 68–95% | 81.5% | 5.04 R | **5.00 R** (deposit) | `coin_transfer` |
+| the guard | 82–97% | 89.5% | 6.32 R | **5.600 R** | `guard_leather`, `_sword`, `_helmet` |
+| his sword | 90–95% | 92.5% | 6.80 R | **5.600 R** | `guard_sword` |
+
+`smith_footsteps` is not in the table because it moves: 0.70 L for the five contacts at the
+bench, then 2.0, 3.2, 4.0 and 4.0 R as he walks to the box. Its whole-stem balance of −0.607
+describes nothing.
+
+### Three placements fall short of the picture, and each for a different reason
+
+**The forge, 5.000 against 6.72.** At its delivered width it reaches only 3.84 before its fold
+crosses the −0.85 working target. 5.000 was bought with a side scale of 0.90, taking it from
+−7.97 de-panned to −8.90. The rest would have cost a scale of 0.68 and a width of −11.35, at
+which a room full of heat starts sounding like a fire noise over on the left. The precedent is
+Build Roads' `oil_lamp_flame` at 5.09 and −9.17.
+
+**The bowl, 5.181 against 5.84.** 5.220 is where its fold reaches the target at its delivered
+width, and at −13.74 de-panned there was nothing left to narrow. It sat at 0.700 until the
+second revision, on top of the die, leaving the whole stage between the fire and the die empty.
+
+**The guard, 5.600 against 6.32.** Three beds, one body, one position, limited by the tightest
+member: `guard_sword` reaches 5.641. Taking the group to 6.32 would have needed side scales on
+the sword and the leather, putting them at −14.36 and −12.92 de-panned, and −14.36 is past the
+point where this tree stops calling a bed placed.
+
+### What the retired bed measured, which is the argument for the twelve
+
+`silversmith_sfx_v01.ogg` measured **−25.91 de-panned at +0.05 balance, correlation +0.9949** —
+a mono point at dead centre, under a picture with a forge at one edge and a guard at the other.
+`fireplace_sfx_v01.ogg` is built from the same master and measures **−8.88 de-panned at 5.000
+left**, and the other eleven put the work, the man and the guard where the card says they are.
+
+### Three beds sit on the fold ceiling
+
+`fireplace` holds 0.0007 dB of margin against −0.85, `blank_handling` 0.0024 and `guard_sword`
+0.0044. All three clear the 1 dB per-band limit after Vorbis q6 — −0.8522, −0.8728 and −0.9105 —
+which is exactly what the working margin exists to buy, and none of the three can absorb a
+change of level, EQ, pan or cut.
+
+---
+
 ## `clerical_actionA` — Devotion
 
 **DELIVERED AND FILED 2026-10-19** from `Devotion_Clerical_v02`. Read off the action's own
