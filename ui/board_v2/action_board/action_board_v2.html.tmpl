@@ -12,6 +12,12 @@
   showing, whether pictures can be replaced, and save.
 -->
 <style>
+/* THE BANNER FACE, inlined as a data URI by the generator. `PB` is the name the sow page and the
+   concept browser already use for it, kept so the three pages are speaking about one thing.
+   font-display:block, not swap: a title that paints in a serif and then jumps to Pirata One is a
+   visible flicker on every banner at once, and these are nine words on nine parchments rather
+   than a paragraph somebody is waiting to read. */
+@font-face{font-family:"PB";src:url(__BANNERFONT__) format("truetype");font-display:block}
 :root{
   --ink:#e2d7bc; --dim:#968e7c; --line:#c9b27a; --faint:#2c2924;
   --panel:#0e0d0b; --panelline:#46413710;
@@ -383,6 +389,18 @@ body.full{background:#000}
    more present the honest fix is a higher alpha HERE, not a second hard-coded slate. */
 .iplate{position:absolute;border:1px solid #2a2721;pointer-events:none;
   background:color-mix(in srgb, var(--plate) var(--tile-alpha), transparent)}
+/* THE TITLE IS A PARCHMENT NOW, NOT A WORD. The rules are the sow page's, which is where this
+   arrangement already works: the art is a BLANK, and the name is set over the middle of it at
+   render time. So one blank can wear any name, renaming a duty needs no new picture, and the
+   nine parchments differ from each other only as nine pieces of scorched vellum would.
+   THE TEXT IS CENTRED ON A FRACTION OF THE BANNER'S OWN HEIGHT, not on the box, because what it
+   has to sit in the middle of is the parchment -- and the parchment does not fill the frame.
+   0.502 is where its middle falls; the thin band of transparency above and below is the brief's
+   doing and is not symmetrical enough to ignore. */
+.ban{position:absolute;pointer-events:none}
+.ban img{display:block;width:100%;height:100%}
+.ban b{position:absolute;left:50%;transform:translate(-50%,-50%);font-family:"PB",serif;
+  text-transform:uppercase;white-space:nowrap;line-height:1;font-weight:400}
 .fig{position:absolute;pointer-events:none}
 .fig svg{width:100%;height:100%;display:block;overflow:visible}
 
@@ -432,6 +450,8 @@ var BUILD  = __BUILD__;
 // two numbers the sliders start at, so the defaults live in the generator with every other
 // default rather than being typed into the markup.
 var GRID = __GRID__;
+var BANNERS = __BANNERS__, BANMETA = __BANNERMETA__;
+var HOOD = __HOOD__;
 
 var board = document.getElementById("board");
 var S = {
@@ -450,12 +470,41 @@ var S = {
 // stops being null on its own the day that duty has one, instead of opening on a tile whose
 // single action is unchosen.
 S.slot = onlySlot(S.duty);
+
+// WHO STANDS WHERE, AND IT IS v2'S OWN FIXTURE. geometry.py gives counts for all eight duties
+// but names SEATS for exactly one of them -- clerical -- so every other pile fell back to p1 and
+// the board opened with seven columns of the same green. That is a fine state for a board nobody
+// is judging colour on, and a useless one here: the whole reason these are the game view's
+// hooded marks is that four seats have to be told apart at a glance.
+//
+// COUNTS AND SEATS BOTH, because naming seats alone cannot show a pile of p2 three deep when
+// geometry says that duty holds two. These are demo numbers for a layout page and nothing reads
+// them but this file; the moment v2 has a real game state they go.
+var V2_SEATS = {
+  clerical:    ["p1", "p1", "p2", "p3"],
+  allocation:  ["p1", "p2", "p2", "p3"],
+  taxation:    ["p2", "p2", "p2", "p3"],
+  give_alms:   ["p1", "p1", "p1", "p1", "p2", "p3"],
+  produce:     ["p2", "p3"],
+  build_roads: ["p3", "p3", "p3"],
+  ordination:  ["p2", "p2"],
+  construct:   ["p3"]
+};
 GEO.duties.forEach(function(d){
+  if (V2_SEATS[d.slug]){ S.occupancy[d.slug] = V2_SEATS[d.slug].slice(); return; }
   var n = GEO.start.occupancy[d.slug] || 0;
   var seats = GEO.start.seats[d.slug];
   S.occupancy[d.slug] = [];
   for (var i = 0; i < n; i++) S.occupancy[d.slug].push(seats ? seats[i] : "p1");
 });
+// THE CITY IS FOUR OF EACH, which is the fullest this arrangement ever gets: four piles four
+// deep is the case that decides whether the figures still read, so the board opens on it rather
+// than on something comfortable.
+var CITY_SEATS = ["p1", "p2", "p3", "p4"].reduce(function(a, id){
+  for (var i = 0; i < 4; i++) a.push(id);
+  return a;
+}, []);
+S.occupancy.city = CITY_SEATS;
 
 function el(tag, cls, css, parent){
   var e = document.createElement(tag);
@@ -705,19 +754,10 @@ function drawSide(){
   // expected to grow into.
 }
 
-// The acolyte, drawn rather than loaded: in the lab's own saved sessions `acolytes.painted` and
-// `.colored` are null for every seat, so the pawns on that board are procedural too. There is
-// no asset here to go missing.
-function pawnSvg(colour){
-  return '<svg viewBox="0 0 42 100" preserveAspectRatio="xMidYMax meet">' +
-    '<ellipse cx="21" cy="94" rx="14" ry="3.6" fill="#00000050"/>' +
-    '<g fill="' + colour + '" stroke="#00000055" stroke-width="1" stroke-linejoin="round">' +
-    '<path d="M21 20c-4.2 0-6.3 2.6-6.3 6.1 0 4.2-3.6 6.3-5.7 11.4C5.6 46.2 4.2 62 3.8 76.4' +
-    'c-.15 5.2 1.6 7.2 6.2 7.2h22c4.6 0 6.35-2 6.2-7.2C37.8 62 36.4 46.2 33 37.5' +
-    'c-2.1-5.1-5.7-7.2-5.7-11.4 0-3.5-2.1-6.1-6.3-6.1z"/>' +
-    '<ellipse cx="21" cy="12.5" rx="8.6" ry="9"/></g>' +
-    '<path d="M8.6 72h24.8" stroke="#00000026" stroke-width="2" fill="none"/></svg>';
-}
+// THE PROCEDURAL PAWN IS GONE. It was this board's own drawing -- a dome and a body in a flat
+// player colour -- and it has been replaced by the hooded mark the game view draws, which comes
+// with a seat table, an outline and a neck notch the pawn never had. Deleted rather than left
+// uncalled, for the same reason the ribbon's three draw functions were.
 
 // =================================================================================================
 // THE DUTY GRID, WHICH IS WHAT v2 IS FOR.
@@ -821,6 +861,43 @@ function gridCells(){
   return out;
 }
 
+// A PARCHMENT 3.00 TIMES AS WIDE AS IT IS TALL. The brief asked for 3.12 and the art came back
+// at 2172 x 724, so the number that matters is what the files MEASURE, not what was asked for.
+var BANRATIO = 3.0;
+
+// THE TITLE, AS A BANNER OR AS A WORD. Both, because the font and the art are each allowed to be
+// missing -- the generator says so in a note rather than refusing to build -- and a rectangle
+// with no name on it would be the one failure nobody could diagnose from the page.
+function banner(cell, slug, name, mg, w, h, plateH){
+  var uri = BANNERS[slug];
+  if (!uri || w < 8){
+    // NO PARCHMENT: the word, where the word used to be. Kept deliberately rather than left to
+    // fail, and it is also what a rectangle falls back to at the small end of the sliders, where
+    // a banner would be a few pixels tall and illegible.
+    var n = el("div", "dn", {paddingRight: px(2 * mg)}, cell);
+    n.textContent = name;
+    return;
+  }
+  // TOPS ALIGNED, NOT MIDDLES. It was centred on the plate, which put the banner's top 12px
+  // below the plate's and left the two reading as different rows; hanging both from the same
+  // `mg` gives the row one line to start on.
+  // NO CORRECTION FOR THE TRANSPARENT BAND, and that is measured rather than assumed. The brief
+  // asked the parchment to nearly fill its frame, and it does: the clear band above the ink runs
+  // from 0.0000 to 0.0234 of the banner's height across the nine, which at this size is 0 to
+  // 1.2px -- and it differs per banner, so any single correction would be wrong on eight of
+  // them. The ragged edge is uneven by more than that anyway.
+  var b = el("div", "ban", {left: px(mg), top: px(mg),
+                            width: px(w), height: px(h)}, cell);
+  var im = document.createElement("img"); im.src = uri; im.alt = name; b.appendChild(im);
+  var t = document.createElement("b");
+  t.style.top = (BANMETA.top * 100) + "%";
+  t.style.fontSize = px(h * BANMETA.fs);
+  t.style.letterSpacing = px(h * BANMETA.fs * BANMETA.track);
+  t.style.color = BANMETA.ink;
+  t.textContent = name.toUpperCase();
+  b.appendChild(t);
+}
+
 function drawGrid(){
   var old = board.querySelectorAll(".dcell");
   for (var i = 0; i < old.length; i++) old[i].remove();
@@ -835,13 +912,28 @@ function drawGrid(){
     var cell = el("div", "dcell", box(r));
     if (c.centre){
       cell.classList.add("centre");
-      // THE CITY'S TITLE, IN THE DUTIES' OWN HAND. The panel this replaces called itself "The
-      // City" and centred the words, because it was a lone box on the right of the board with
-      // nothing to line up against. Here it has eight neighbours, so it reads from the left in
-      // the same type at the same inset as they do, and the row of nine looks like one object.
-      // NO FIGURES AND NO COUNTS YET. The old panel drew a pawn and a number per player; that
-      // is not carried over, and this is the title alone.
-      el("div", "dn", null, cell).textContent = "City";
+      // THE CITY GETS A PARCHMENT TOO, AND IT IS NOT AN IMPROVISATION. The pairing this board
+      // borrowed covers NINE names and the fifth of them is "The City" -- so the blank that has
+      // worn that name elsewhere for months wears it here. It is sized against the plate the
+      // City does not have, so it matches its eight neighbours rather than the space it sits in.
+      // NO FIGURES AND NO COUNTS YET. The old panel drew a pawn and a number per player; that is
+      // not carried over, and this is the title alone.
+      // SIZED AGAINST THE PLATE THE CITY DOES NOT HAVE, so it matches its eight neighbours
+      // rather than the empty space it sits in: the same icon height they use, centred on the
+      // same plate line.
+      var cip = GEO.ribbon.pad, cmg = GEO.ribbon.sealInset * 2;
+      var cSz = Math.min(GEO.ribbon.seal, r.height - 2 * CELL_BORDER - cmg - 2 * cip);
+      var cFree = r.width - 2 * CELL_BORDER - 2 * cmg;
+      var cH = Math.max(0, Math.min(cSz, cFree / BANRATIO));
+      banner(cell, "city", "City", cmg, cH * BANRATIO, cH, cH);
+      // AND IT GETS A ROW OF ITS OWN. The City holds people like any duty does; it simply has no
+      // icon plate, so its row runs from the banner's left edge to the same margin at the other
+      // end. Registered in GRIDPOS under "city" so one figure pass covers all nine rectangles
+      // rather than the duties here and the City somewhere else.
+      r.band = cmg + cSz + 2 * cip;
+      r.figLeft = r.x + CELL_BORDER + cmg;
+      r.figRight = r.x + CELL_BORDER + r.width - 2 * CELL_BORDER - cmg;
+      GRIDPOS.city = r;
       return;
     }
 
@@ -886,23 +978,54 @@ function drawGrid(){
     var rowW = nAct * sz + (nAct - 1) * igap;
     var plateW = rowW + 2 * ip, plateH = sz + 2 * ip;
     var plateX = innerW - mg - plateW, plateY = mg;
+    // AND BELOW A CERTAIN SIZE THERE IS NO PLATE AT ALL. The padding is a constant 12 a side, so
+    // once the icon itself is down to nothing the plate is still 24 tall and 30 wide and starts
+    // hanging out of the box -- 8px past the bottom at gap 150, edge 150, size 40, taken
+    // silently by `overflow:hidden`. An icon of six pixels says nothing anyway, so under that
+    // the plate and its icons are simply not drawn and the banner takes the whole width.
+    var hasPlate = sz >= 6 && plateX >= mg && plateY + plateH <= innerH - mg;
+    if (!hasPlate){ plateW = 0; plateH = 0; plateX = innerW - mg; }
+    // THE BANNER IS THE ICON'S HEIGHT, NOT THE PLATE'S, AND CAPPED BY THE ROOM BESIDE IT.
+    // It was the plate's for a round, which made it 222 x 74 and the tallest thing in the
+    // rectangle; matching the ICON instead makes it 150 x 50 and lets the plate be the taller of
+    // the two, so the parchment reads as a label beside the marks rather than as a second panel
+    // competing with them.
+    // IT STILL CENTRES ON THE PLATE, which is the same as centring on the icons: an icon sits at
+    // `ip` from the plate's top and is `sz` tall, so the plate's middle IS the icon row's middle.
+    // The banner's middle lands on that line whatever the two heights are.
+    // AND THE WIDTH STILL CAPS IT. The rectangles shrink with two of the three sliders and a 3:1
+    // strip has no way to give, so the height is the smaller of the icon's and what a third of
+    // the free width allows. Squashing it to fit was the alternative and it is the worse one: a
+    // distorted parchment looks like a bad asset rather than a tight layout.
+    var free = plateX - 2 * mg + (hasPlate ? 0 : mg);
+    var banH = Math.max(0, Math.min(hasPlate ? sz : innerH - 2 * mg,
+                                    free / BANRATIO, innerH - 2 * mg));
+    var banW = banH * BANRATIO;
     // HOW MUCH OF THE BOX THE ICONS CLAIM, remembered for drawFigures(). The acolytes stand on
     // the floor of the same rectangle, and on a duty with four of them the outermost pawn's head
     // reached into this row -- 5px of overlap, enough to read as a mistake and not enough to
     // look deliberate. Nothing measures it but the figures, so it travels with the rectangle.
-    r.band = mg + plateH;
+    r.band = hasPlate ? mg + plateH : mg + banH;
+    // WHERE THE FIGURES RUN: the banner's left edge to the plate's. Remembered here because this
+    // is where both are placed, and worked out twice would be two answers.
+    r.figLeft = r.x + CELL_BORDER + mg;
+    r.figRight = r.x + CELL_BORDER + (hasPlate ? plateX : innerW - mg);
 
     // THE NAME MOVES LEFT AND IS KEPT OUT FROM UNDER THEM. It was centred while the corner was
     // empty; with icons in the corner a centred name runs under them on the narrower settings,
     // so it reads from the left and carries a right padding of exactly the row it must clear.
-    var n = el("div", "dn", {paddingRight: px(plateW + mg + 6)}, cell);
-    n.textContent = d.name;
+    // CENTRED ON THE PLATE WHEN THERE IS ONE, ON ITSELF WHEN THERE IS NOT. Passing the plate's
+    // height unconditionally put the banner at a NEGATIVE top the moment the plate was dropped
+    // -- `mg + (0 - h) / 2` -- which hung it 10px off the top of its own rectangle.
+    banner(cell, d.slug, d.name, mg, banW, banH, hasPlate ? plateH : banH);
 
-    var plate = el("div", "iplate", {left: px(plateX), top: px(plateY),
-                                     width: px(plateW), height: px(plateH),
-                                     borderRadius: px(GEO.ribbon.radius)}, cell);
+    var plate = hasPlate
+      ? el("div", "iplate", {left: px(plateX), top: px(plateY),
+                             width: px(plateW), height: px(plateH),
+                             borderRadius: px(GEO.ribbon.radius)}, cell)
+      : cell;
 
-    for (var k = 0; k < nAct; k++){
+    for (var k = 0; hasPlate && k < nAct; k++){
       var kslot = k === 0 ? "actionA" : "actionB";
       // INSIDE THE PLATE, so the two move as one object and the icon cannot drift off its
       // ground. render() still finds these by `#board .seal`, which is why they can change
@@ -944,31 +1067,109 @@ function drawGrid(){
   drawFigures();
 }
 
-// THE ACOLYTES STAND INSIDE THEIR DUTY'S RECTANGLE, along the bottom of it. On the wheel they
-// ringed the faces at a fraction of the box, because a face has no inside to stand in; a
-// rectangle does, so GEO.acolytes.figRx / figRy are not used here and the wheel's centre is no
-// longer a place anybody stands.
+// THE ACOLYTES ARE THE DUTY WHEEL'S HOODED MARK, piled by seat, and the shape and its numbers
+// are board_v2's own copy of ui/render/population_sets.py -- see action_board/hood.py.
+//
+// NOT THE PAWN THIS BOARD DREW BEFORE. That was procedural and had no seat beyond a colour; this
+// is the figure the game view itself draws, which is the point of changing it. A hood is a flat
+// seat colour with a dark outline and a neck notch, so every figure in a pile has an edge the one
+// below it does not -- which is what lets four read as four.
+//
+// ONE PILE PER SEAT, GROWING UPWARD, AND NO NUMERAL. The original's reasoning is worth keeping
+// whole: a count used to be one figure with a number on its robe, and the number was the only
+// part carrying information. What a player asks is "who has the most here", and a pile answers
+// it without being read.
+//
+// THE BOTTOM FIGURE DOES NOT LEAN. Only the ones resting on it. Leaning all of them and centring
+// afterwards also works and moves the figure standing on the line by half a lean whenever the
+// count changes -- so a seat going from one acolyte to two shifts its foot sideways, and the row
+// of feet the eye compares heights against stops being a row.
+//
+// A SEAT WITH NONE IS DRAWN AS NOTHING AND THE OTHERS DO NOT CLOSE UP. Each seat keeps the slot
+// its position gives it, so a gap means a SPECIFIC player is missing rather than merely that
+// somebody is.
+function hoodSvg(seat, w){
+  // ONE UNIT WIDE WITH ITS CROWN AT y = 0, so a viewBox of the INKED box is what the markup
+  // needs: a stroke is centred on its path, so a box set to the path's bare bounds cuts half the
+  // outline off on every edge -- the dome comes out flat and it reads as a figure that does not
+  // fit rather than as one being trimmed.
+  var s = HOOD.stroke / 2;
+  return '<svg viewBox="' + (-0.5 - s) + ' ' + (-s) + ' ' + (1 + 2 * s) + ' '
+       + (HOOD.h + 2 * s) + '" width="100%" height="100%" overflow="visible">'
+       + '<path d="' + HOOD.path + '" fill="' + (HOOD.swatch[seat] || "#8fae6a")
+       + '" stroke="' + HOOD.ink + '" stroke-width="' + HOOD.stroke
+       + '" stroke-linejoin="round"/>'
+       + '<ellipse cx="0" cy="' + HOOD.face.cy + '" rx="' + HOOD.face.rx
+       + '" ry="' + HOOD.face.ry + '" fill="#000" opacity="0.22"/></svg>';
+}
+
 function drawFigures(){
   var old = board.querySelectorAll(".fig");
   for (var i = 0; i < old.length; i++) old[i].remove();
-  GEO.duties.forEach(function(d){
-    var seats = S.occupancy[d.slug] || [];
-    var r = GRIDPOS[d.slug];
-    if (!seats.length || !r) return;
-    // SIZED TO THE ROOM UNDER THE ICONS, not to geometry's figure height. That height was set
-    // against a wheel, where a figure stood OUTSIDE the faces and nothing was above it. Here it
-    // shares a box with the duty's icons, so it takes the smaller of the two: what it wants, and
-    // what is left once the icon row has had its share.
-    var room = r.height - 2 * CELL_BORDER - (r.band || 0) - 8;
-    var h = Math.max(8, Math.min(GEO.acolytes.height, room));
-    var aw = Math.round(h * GEO.acolytes.aspect);
-    var cx = r.x + r.width / 2;
-    var foot = r.y + r.height - 6;
-    var span = (seats.length - 1) * (aw * 0.82);
-    seats.forEach(function(seat, i){
-      var f = el("div", "fig", {left: px(Math.round(cx - span / 2 + i * aw * 0.82 - aw / 2)),
-                                top: px(Math.round(foot - h)), width: px(aw), height: px(h)});
-      f.innerHTML = pawnSvg(colourOf(seat));
+
+  // ONE FIGURE SIZE FOR THE WHOLE BOARD, not one per rectangle. Sizing each cell to its own
+  // tallest pile makes a four-acolyte duty draw smaller people than a one-acolyte duty, and the
+  // row of piles the eye compares stops being comparable -- which is the one thing this drawing
+  // is for. So the tallest pile anywhere sets the size and every cell uses it.
+  // THE SEATS ARE THE BOARD'S PLAYERS, NOT THE HOOD TABLE'S NAMES. S.occupancy holds player ids
+  // -- p1..p4 -- while the figure's own table is keyed sage/pewter/plum/bone. Keying the piles by
+  // the hood's names found nothing and drew nobody, silently, which is what a board with four
+  // empty duties looks like. GEO.players is the order; the swatch is taken by INDEX, so seat one
+  // is sage whatever the board happens to call its first player.
+  function countsFor(slug){
+    var seats = S.occupancy[slug] || [], by = {};
+    seats.forEach(function(s){ by[s] = (by[s] || 0) + 1; });
+    return GEO.players.map(function(pl){ return by[pl.id] || 0; });
+  }
+  // ALL NINE RECTANGLES, NOT THE EIGHT DUTIES. The City is the ninth and it is the fullest, so
+  // leaving it out of the sizing pass would size every figure on the board against a shorter
+  // pile than the board actually draws.
+  var CELLS = GEO.duties.map(function(d){ return d.slug; });
+  if (GRIDPOS.city) CELLS.push("city");
+  var tallest = 1;
+  CELLS.forEach(function(slug){
+    countsFor(slug).forEach(function(n){ tallest = Math.max(tallest, n); });
+  });
+
+  var fw = 0, fh = 0;
+  CELLS.forEach(function(slug){
+    var r = GRIDPOS[slug];
+    if (!r) return;
+    // THE ROW RUNS FROM THE BANNER'S LEFT EDGE TO THE PLATE'S, which is what was asked for, and
+    // the four slots divide that exactly: four figures and three gaps of 0.24 of a figure is
+    // 4.72 figure widths.
+    // THE WIDTH IS WHAT WAS ASKED FOR AND IT WINS. Four figures and three gaps of 0.24 of a
+    // figure is 4.72 figure widths, so the span divides exactly and the four slots run from the
+    // banner's left edge to the plate's.
+    var w = (r.figRight - r.figLeft) / (4 + 3 * HOOD.gap);
+    // ONLY THE CELL ITSELF CAPS IT, not the band above. Capping to clear the banner made the
+    // row 215 wide where the span asks 250 -- the horizontal alignment quietly lost to a
+    // vertical one nobody asked for. A tall pile now rises INTO the band instead, which is a
+    // visible trade rather than a silent one; `figOver` below reports it.
+    var cap = (r.height - 2 * CELL_BORDER - 12) / (HOOD.h * (1 + HOOD.step * (tallest - 1)));
+    w = Math.min(w, cap);
+    fw = (fw === 0) ? w : Math.min(fw, w);
+  });
+  fh = fw * HOOD.h;
+  if (fw < 3) return;                       // below this a hood is a smudge; draw nobody
+
+  var step = fh * HOOD.step, lean = fw * HOOD.lean, gap = fw * HOOD.gap;
+  CELLS.forEach(function(slug){
+    var r = GRIDPOS[slug];
+    if (!r) return;
+    var counts = countsFor(slug);
+    var foot = r.y + r.height - CELL_BORDER - 6;
+    HOOD.order.forEach(function(seat, j){
+      var n = counts[j] || 0;
+      if (n <= 0) return;                   // drawn as nothing, and the others do not close up
+      var x = r.figLeft + j * (fw + gap);
+      for (var i = 0; i < n; i++){
+        var up = n - 1 - i;                 // 0 is the one standing on the line
+        var side = up === 0 ? 0 : (up % 2 ? lean : -lean);
+        var f = el("div", "fig", {left: px(x + side), top: px(foot - fh - up * step),
+                                  width: px(fw), height: px(fh)});
+        f.innerHTML = hoodSvg(seat, fw);
+      }
     });
   });
 }

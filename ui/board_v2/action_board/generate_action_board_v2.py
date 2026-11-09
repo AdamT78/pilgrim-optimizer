@@ -56,6 +56,7 @@ action_board.html.tmpl explicitly, 4,400 lines of them, and none of it reaches t
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import pathlib
 import re
@@ -66,15 +67,88 @@ HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 import generate_action_board as v1          # noqa: E402  (after the path insert, deliberately)
+import hood                                 # noqa: E402  board_v2's own copy of the figure
 import geometry as G                        # noqa: E402
 
 TMPL = HERE / "action_board_v2.html.tmpl"
 OUT = HERE / "generated" / "action_board_v2.html"
+BANNER_DIR = HERE.parent / "duty_actions" / "banners"
+# THE FONT IS NOT IN duty_actions/ AND THE TESTS ARE WHY, which is worth writing down because
+# the obvious place to put it was beside the banners it letters. Two guards refuse that. A .ttf
+# is not in `imageSuffixes`, so the asset walk cannot see it and a record for it reads as a
+# record naming a file that is not in the tree; and `test_the_stated_default_is_written_down`
+# holds that EVERY recorded entry under duty_actions/ and tokens/ carries `openai-generated`,
+# which an OFL face from Google Fonts plainly does not. Between them they say duty_actions/ is
+# for this project's generated artwork, so a third-party font lives next door and carries its
+# licence text with it, which is what the OFL asks.
+BANNER_FONT = HERE.parent / "fonts" / "PirataOne-Regular.ttf"
+
+# HOW A TITLE SITS ON ITS PARCHMENT. Carried over whole from
+# tools/ui_debug/generate_duty_board_check.py, which is where the sow page gets them and where
+# they were found by looking: the blanks are BLANK, so every one of these four numbers is about
+# where the lettering goes rather than about the art.
+BANNER_TOP = 0.502           # of the banner's own height: where the parchment's middle sits
+BANNER_FS = 29.0 / 64.0      # font size as a fraction of banner height
+BANNER_TRACK = 0.025         # letter-spacing, em
+BANNER_INK = "#201b17"
 
 # WHERE THE SLIDERS START, AND THE ONLY PLACE THEY ARE WRITTEN DOWN. The template reads them out
 # of __GRID__ rather than carrying them in the markup, so changing a default is changing this
 # dict and nothing else. They are in BOARD pixels, like every other number this tool passes.
 GRID_DEFAULTS = {"gap": 20, "disp": 40, "size": 100, "centre": True}
+
+
+def bundled_banners() -> tuple[dict, str, list]:
+    """The nine parchments and the face that letters them, inlined, from board_v2's own copies.
+
+    NOT READ OUT OF ui/assets-gothic/, WHICH IS THE POINT OF THE COPY. The sow page reads the
+    2172 px PNGs and the font straight from the older trees; this build reads neither, so a
+    change there cannot alter this board and the guards on each tree stay on their own side of
+    the fence. What each file came from is in attribution.json, which is where provenance goes.
+
+    THE RECORD GATES THESE TOO, by the rule every other picture on this board follows: a file
+    with no entry is left out and NAMED rather than inlined. The art is already at its shipped
+    size, so unlike bundled_art() there is nothing to resample here -- it is base64 and nothing
+    else.
+
+    A MISSING FONT IS A NOTE, NOT A FAILURE. The sow page returns empty and says which, because
+    a page with no banners is still worth looking at; the same choice here, and the titles fall
+    back to the serif the stylesheet names after `PB`.
+    """
+    notes: list = []
+    out: dict = {}
+    if not BANNER_DIR.is_dir():
+        return out, "", ["no duty_actions/banners/, so the rectangles carry no titles"]
+
+    recorded = set()
+    if v1.ATTRIB_FILE.is_file():
+        rec = json.loads(v1.ATTRIB_FILE.read_text(encoding="utf-8")).get("files", {})
+        recorded = {k for k, e in rec.items() if e.get("state", "present") == "present"}
+
+    for slug, _name, _deg in G.DUTIES:
+        out[slug] = None
+    out["city"] = None
+    for slug in list(out):
+        f = BANNER_DIR / ("%s_banner_v01.webp" % slug)
+        key = "duty_actions/banners/%s_banner_v01.webp" % slug
+        if not f.is_file():
+            notes.append("no banner for %s, so its rectangle keeps a plain title" % slug)
+            continue
+        if key not in recorded:
+            notes.append("%s has no attribution entry, so it is left out" % key)
+            continue
+        out[slug] = "data:image/webp;base64," + base64.b64encode(f.read_bytes()).decode("ascii")
+
+    # THE FONT IS NOT GATED ON THE RECORD, unlike every picture here, because it cannot be in
+    # the record -- see BANNER_FONT above. Its provenance is ui/board_v2/fonts/OFL.txt beside it
+    # and the full entry in ui/assets/attribution.json, which names the same sha256.
+    font = ""
+    if BANNER_FONT.is_file():
+        font = ("data:font/ttf;base64,"
+                + base64.b64encode(BANNER_FONT.read_bytes()).decode("ascii"))
+    else:
+        notes.append("%s is missing, so banner titles fall back to a serif" % BANNER_FONT.name)
+    return out, font, notes
 
 
 def build() -> tuple[str, list]:
@@ -91,7 +165,8 @@ def build() -> tuple[str, list]:
     sfx, xnotes = v1.bundled_sfx()
     beds, dnotes = v1.bundled_beds()
     controls, cnotes = v1.bundled_controls()
-    notes += snotes + xnotes + dnotes + cnotes
+    banners, banner_font, bnotes = bundled_banners()
+    notes += snotes + xnotes + dnotes + cnotes + bnotes
 
     # THE BACKDROP IS NOT BUNDLED, because v2 does not draw it. It was the valley the ribbon of
     # eight tiles stood on, and the ribbon is gone. Carrying the picture anyway would leave 22 KB
@@ -128,6 +203,11 @@ def build() -> tuple[str, list]:
         # the asset could go missing without this build noticing -- which is correct here and
         # would not be in v1.
         "__GRID__": json.dumps(GRID_DEFAULTS),
+        "__BANNERS__": json.dumps(banners),
+        "__HOOD__": json.dumps(hood.as_dict()),
+        "__BANNERFONT__": json.dumps(banner_font),
+        "__BANNERMETA__": json.dumps({"top": BANNER_TOP, "fs": BANNER_FS,
+                                      "track": BANNER_TRACK, "ink": BANNER_INK}),
         "__SAVEKEYS__": json.dumps(v1.SAVE_KEYS),
         "__BUILD__": json.dumps({"version": v1.BUILD_VERSION + "+v2", "notes": notes}),
     }
