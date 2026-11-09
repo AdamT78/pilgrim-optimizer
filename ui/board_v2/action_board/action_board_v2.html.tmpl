@@ -1,0 +1,1700 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Pilgrim · action board v2 · duty grid</title>
+<!--
+  THE BOARD AT ITS FINISHED SIZE. Everything is positioned from GEO, which generate_action_board.py
+  fills in from geometry.py. There is not a number in this file that decides anything: if a value
+  is not in GEO it cannot be used here, which is what stops the geometry being written twice.
+
+  NO CONTROLS, ON PURPOSE. See the long note at the top of the generator. The toolbar is not part
+  of the board -- it sits above the canvas and holds only what is not the game: which phase is
+  showing, whether pictures can be replaced, and save.
+-->
+<style>
+:root{
+  --ink:#e2d7bc; --dim:#968e7c; --line:#c9b27a; --faint:#2c2924;
+  --panel:#0e0d0b; --panelline:#46413710;
+  /* THE PLATE, AND NOW THE TILE'S. It was written once, in .seal.plate, while the tile under it
+     was near-black -- so a cut-out icon sat on a visible coloured square. The tile carries the
+     same colour now and the square stops being a square: the mark simply sits on the tile. Two
+     things using one colour is exactly when it stops being a literal and becomes a name. The road
+     took it as a third, which is the test of whether that was true.
+
+     SLATE, CHOSEN IN THE ICON LAB. These three numbers are one entry of PALETTE in
+     icon_lab/tile_column.html.tmpl, copied across whole -- the lab is where a plate is looked at
+     against the real marks, and this is where the choice is written down. The pair has to move
+     together: --plate-lit is the SELECTED tile, so taking one number and leaving the other gives
+     seven slate tiles and one that is still the old hue. There is a guard for that now. */
+  --plate:#151E25; --plate-lit:#2B3A46; --guide:#6a5f48;
+  /* NO --lift. A hovered tile used to rise 6px and a selected one stayed up, and both are gone:
+     the tiles sit still now and say everything they have to say in colour. The variable went
+     with the rule, along with the ::after that refilled the strip a rising tile vacated and the
+     reduced-motion rule that existed for its transition -- three pieces of machinery whose only
+     job was to make the movement safe, which is the shape a removed feature should leave. */
+  /* HOW MUCH VALLEY COMES THROUGH A TILE. One number; the marks keep their own opaque ground, so
+     this moves the card and not what is drawn on it. */
+  --tile-alpha:55%;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:#07070a;color:var(--ink);
+  font:13px/1.4 ui-sans-serif,system-ui,sans-serif}
+
+/* ---- the toolbar. NOT the board. ------------------------------------------------------- */
+#bar{display:flex;align-items:center;gap:8px;padding:7px 10px;background:#111013;
+  border-bottom:1px solid #26231e;position:sticky;top:0;z-index:30;flex-wrap:wrap}
+#bar button{background:#1b1915;color:var(--ink);border:1px solid #3c372e;border-radius:3px;
+  padding:4px 10px;font:600 11px/1.4 ui-sans-serif,sans-serif;letter-spacing:.09em;
+  text-transform:uppercase;cursor:pointer}
+#bar button:hover{border-color:#6a6050}
+#bar button[aria-pressed="true"]{background:#2e2718;border-color:var(--line);color:#f0e6cd}
+#bar .tag{color:#6f6758;font-size:11px;letter-spacing:.06em}
+/* THE CONTROLS LIVE IN THE BAR, WHICH IS OUTSIDE THE BOARD, and that is the whole reason they
+   are allowed to exist here at all. The canvas stays 1400 x 1200 with nothing in it that is not
+   the board, `body.full` already hides the bar, so a full-screen look at the result has no
+   sliders in it. v1's docstring is right that a board whose geometry can be nudged is a board
+   nobody can write a game against -- this is a fork for finding two numbers, not the board. */
+#bar input[type=range]{width:96px;accent-color:var(--line);background:transparent;cursor:pointer;
+  height:18px;margin:0}
+#bar .val{color:var(--ink);font-size:11px;min-width:20px;text-align:right;
+  font-variant-numeric:tabular-nums}
+#bar .chk{display:flex;align-items:center;gap:5px;color:#6f6758;font-size:11px;
+  letter-spacing:.06em;cursor:pointer}
+#bar .chk input{accent-color:var(--line);width:13px;height:13px;margin:0;cursor:pointer}
+#bar .sp{flex:1}
+#note{padding:6px 12px;color:#9a8f77;font-size:11px;background:#15130f;
+  border-bottom:1px solid #26231e}
+#note:empty{display:none}
+
+/* ---- the stage ------------------------------------------------------------------------- */
+#wrap{display:flex;justify-content:center;padding:14px}
+/* FULL SCREEN takes the chrome away and gives the padding back. Nothing here tells fit() what
+   changed: it reads the toolbar's height and the stage's padding off the page every time, so
+   hiding one and zeroing the other is enough and the scale follows. */
+body.full #bar,body.full #note{display:none}
+body.full #wrap{padding:0;align-items:center;min-height:100vh}
+body.full{background:#000}
+#fit{transform-origin:top left}
+#board{position:relative;background:#000;overflow:hidden}
+/* DIRECT CHILDREN ONLY. `#board *` made every descendant absolute, which quietly killed the
+   text flow inside the placeholders -- a card with no picture drew its action name and "no
+   picture yet" on top of each other. Anything nested that needs placing says so itself. */
+#board > *{position:absolute}
+
+/* Upper text box. One line, centred in its own box, so nothing is clipped at any size.
+
+   BLACK, AND IT IS THE ONLY BLACK TYPE ON THE BOARD. Everything else here is cream on dark,
+   because everything else sits on the board's own ground. This line does not: the backdrop
+   reaches the top of the canvas, so these words are on painted SKY -- a flat mist at luminance
+   144, the lightest surface on the board by a long way. Cream on it was 2.2:1 against the 4.5
+   ordinary text is held to; black is 6.6:1.
+
+   AND THE SHADOW WENT WITH THE CREAM. It was two dark rings holding light type off a light sky,
+   which is a correction for a contrast that no longer exists -- a dark glow behind dark letters
+   buys nothing and softens the edge it sits on. What has NOT come back is a plate: a dark box
+   behind the words would be the black strip across the top of the picture that extending the
+   picture removed, put back in the one place it was removed from.
+
+   THE PAIRING IS MEASURED, NOT ASSUMED. The guard reads this colour out of the stylesheet and
+   the sky out of the shipped backdrop file, so a darker picture arriving under black type fails
+   rather than quietly disappearing. */
+/* BOLD, AND THE WEIGHT LIVES HERE WHILE THE SIZE LIVES IN geometry.py. That split is not
+   arbitrary: the SIZE has to fit the box, and check() holds it against STATUS["height"], so it
+   is a number with a constraint on it. The weight has no constraint -- a line box comes from the
+   family's ascent and descent, which bold does not change -- so it is a style fact and belongs
+   in the stylesheet with the colour and the family. */
+/* WHITE, AND THAT IS NOT A PREFERENCE. The black was right for as long as this line sat on the
+   backdrop -- a pale misty valley, which black reads on and white does not. v2 draws no
+   backdrop, so the line is on the canvas's own near-black and the old colour would have been
+   invisible rather than merely wrong. The two changes travel together. */
+#status{display:grid;place-items:center;text-align:center;
+  font-family:Georgia,serif;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden}
+
+
+/* The cross-highlight: hovering a wheel face lights its tile and the other way round. One class,
+   set from one place, so the two directions cannot drift apart.
+
+   IT CARRIES THE PLATE, AND THAT IS NOW ALL IT CARRIES. lightFace() already answers "which duty
+   is the pointer on" from either end, so hovering a wheel face lights its tile without a second
+   listener -- which would be the two-places-one-fact fault this class was made to avoid.
+
+   THE LIFT IS GONE, and with it three pieces of machinery that existed only to make it safe.
+   A hovered tile rose 6px, a selected tile stayed up at the same height, an ::after refilled
+   the strip the rising tile vacated so a pointer resting on its bottom edge did not set off an
+   un-hover / drop / re-hover shudder, and a reduced-motion rule turned the transition off. All
+   four were correct, and all four were answers to a question the board no longer asks.
+
+   WHICH LEAVES COLOUR DOING THE WHOLE JOB. Hover is the plate, selection is the plate and the
+   gold rim, and nothing on the ribbon moves at any time. That is a weaker hover than movement
+   was -- motion is the loudest signal there is and it is the one thing that cannot be mistaken
+   for a state -- but it is the quieter board, and the eight tiles now hold a fixed line. There
+   is also a real gain hidden in it: a tile that never moves cannot slide out from under the
+   pointer, so the hit-testing problem the ::after was patching cannot occur at all.
+
+   NOTHING BELOW CARED EITHER WAY. The lift was a transform, so the road, the cards and the
+   wheel never felt it; removing it frees no space and closes none. The 16 above the ribbon that
+   the tile used to rise into is simply air again. */
+
+/* THE PLACEHOLDER IS A DISC; THE REAL SEAL IS NOT. The wax seals are drawn with a scalloped,
+   irregular rim, so the container's own circle would show through at every bay of it and the
+   round crop would shear the peaks off. Once a picture lands the container stops drawing -- the
+   same correction the Tithe's three resources needed before they left the board, and the one
+   tokens/README.md warns about. */
+.seal{position:absolute;border-radius:50%;background:radial-gradient(70% 70% at 36% 30%,#6e2d26,#3d1512);
+  border:1px solid #1f0b09;display:grid;place-items:center;cursor:pointer}
+/* THE EMPTY SLOT IS DRAWN THE SIZE THE SEAL WILL BE, not the size of its box. Every disc on this
+   board fills 0.906 of its own square -- geometry.py owns that figure and a test holds the files
+   to it -- so a placeholder filling the whole box promises a seal bigger than any that can land
+   in it, on twelve slots at once. The scale comes from GEO; it is not typed here. */
+.seal.empty{background:#141210;border:1px dashed #3a352c;transform:scale(var(--solid))}
+/* THE MARK'S EDGE, chosen in the icon lab: dashed, in the guides' own colour, 2 px. It sits
+   inside the mark's box -- everything here is border-box -- so the drawing gives up 2 px each
+   side rather than growing past where geometry.py placed it. */
+/* NO FRAME, AND NO GROUND. These are cut-outs now -- the emblem with its painted black field
+   knocked out -- so the dashed edge that used to draw the SLOT has nothing to enclose, and a
+   plate behind a cut-out would be the only square left on a tile that is otherwise glass over a
+   landscape. Both are gone, and the mark is the drawing and nothing else. */
+.seal.filled{background:none;border:0}
+/* AND SOLID UNDER THE POINTER. The dashes close up and NOTHING else changes -- same colour, same
+   2 px, same box -- so the mark does not move or recolour, it just firms up. That restraint is
+   the point: the border is already carrying the resting state, and a hover that also changed the
+   width would shift the artwork inside it by a pixel, because this is a border-box.
+
+   THE ICON LAB DOES NOT GET ONE: its marks are a sizing preview and are not clickable, so a
+   hover state there would be an interaction that page does not have. (It said "nor the Tithe's
+   three resources" too, until those left the board.) */
+/* AND THE CHOSEN MARK STAYS SOLID, by the same rule rather than a second one -- the pattern the
+   tiles use for hover and selection, for the same reason: one declaration cannot drift from
+   itself. The pointer and the choice say the same thing here, which is right, because a mark
+   under the pointer is what the chosen one would look like if you pressed it.
+
+   An EMPTY slot is unaffected, as it is by the hover: there is no icon to firm up. */
+/* LIT RATHER THAN FRAMED, by the same rule the controls column uses. The frame used to carry
+   both states -- dashed at rest, solid under the pointer and when chosen -- and with it gone the
+   mark needs another way to answer. Brightness is what the three controls already do, so the
+   board has one way of saying "this one", not two.
+
+   SAME NUMBERS AS .mark, deliberately: .88 at rest and 1.12 lit. A mark and a control are the
+   same size and the same artwork now, and they should respond the same amount.
+
+   HOVER AND CHOSEN LOOK ALIKE, which is right here and was right before: a mark under the
+   pointer is what the chosen one would look like if you pressed it. The tile's own plate and
+   gold rim are what say which duty is selected; this says which action within it. (It read
+   "lift and gradient" until the lift was taken off the ribbon.) */
+.seal.filled{filter:brightness(.88);transition:filter .12s ease}
+.seal.filled:hover, .seal.filled.on{filter:brightness(1.12)}
+@media (prefers-reduced-motion:reduce){.seal.filled{transition:none}}
+.seal img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
+.seal.filled img{border-radius:0;object-fit:contain}
+/* A CUT-OUT BRINGS NO GROUND, so the board gives it one. A wax disc is a thing you could pick up
+   and it carries its own; an emblem drawn on transparency does not, and on the tile's black it
+   floats with nothing behind it. Which a seal is, is recorded in attribution.json and arrives
+   here as one word -- the page does not look at the picture. The corner is square on purpose:
+   these are plates, not discs, and the 4px is only to stop the colour cutting a hard rectangle
+   out of the tile. THE TILE NOW CARRIES THE SAME PURPLE, so this rule draws nothing you can see
+   on today's board -- it is kept because it is what makes the mark right if the tile's colour
+   ever moves away from the plate's. */
+/* THE PLATE PAINTS NOTHING NOW. attribution.json still records which marks are cut-outs and
+   which carry their own ground, and the page still carries the word through -- that is a fact
+   about the artwork and worth keeping. What changed is what the board does with it: a ground
+   behind a cut-out was right when the mark sat in a framed slot on a flat tile, and is wrong now
+   that the tile is glass over a valley and the mark has no frame. The rule is kept, emptied, so
+   that the day a mark needs a ground again there is one place to put it. */
+.seal.plate{background:none}
+
+
+
+
+/* ---- the two action cards -------------------------------------------------------------- */
+/* ISOLATED, AND THAT IS A FIX RATHER THAN A TIDY-UP. The `lift` overlay below is
+   mix-blend-mode:screen, and a blended element blends with its nearest STACKING CONTEXT's
+   backdrop -- not with its parent. `.art` is position:absolute with z-index:auto, which does not
+   make one, so each card's overlay was blending against everything painted beneath it across the
+   whole board: the backdrop picture, the road, the ribbon.
+   TWO CONSEQUENCES, one of them visible. The effect is meant to lift the flames in THIS card's
+   own picture, and it was reaching outside the card to do it. And a blending group that spans the
+   board has to be rasterised together, so anything that changes compositing elsewhere -- a tile
+   taking its hover transform, a mark animating its filter -- invalidates it, and the two cards
+   flash while it is rebuilt. Two cards, side by side: a black rectangle on each side of the row.
+   `isolation:isolate` makes each card its own stacking context, so the blend sees its own picture
+   and nothing else, and the group cannot be disturbed by anything outside the card. */
+.art{overflow:hidden;background:#000;cursor:pointer;isolation:isolate}
+.art img{width:100%;height:100%;object-fit:cover;display:block}
+/* THE NAME ONLY, AND NO SCRIM BEHIND IT.
+   The effect line used to live along the bottom of the picture and moved into the upper text box,
+   which halved the scrim count and handed the bottom of every card back -- the corner the briefs
+   reserve for the close dark foreground element. The second scrim has now gone the same way: the
+   briefs reserve the TOP of every action image for quiet dark ground too, so a gradient there was
+   darkening a corner that is already dark and flattening the top of fourteen pictures to buy one
+   word its contrast. The halo below buys it on the glyphs instead. If a picture ever fights the
+   name, fix the picture. */
+.art .nm{position:absolute;left:0;right:0;top:0;font-family:Georgia,serif;font-weight:600;
+  letter-spacing:.11em;text-transform:uppercase;color:var(--ink);
+  /* THE DARK IS ON THE LETTERS, NOT OVER THE PICTURE. Three stacked shadows: a tight one that
+     separates the stroke from whatever it lands on, a wider soft one that carries the separation
+     past the serifs, and a short drop that keeps the word sitting on the image rather than
+     floating above it. Measured over the lit window on the Devotion card, which is the worst
+     ground the board has: against a glyph mask taken from the page itself, the ring of pixels
+     within 3px of a letter goes from a mean luminance of 0.264 to 0.124, which is 2.85:1 against
+     the ink becoming 5.15:1. A wider, heavier stack reaches 5.69:1 and starts to read as a smudge
+     behind the word, which is the scrim coming back by another route. */
+  text-shadow:0 0 3px #000, 0 0 3px #000, 0 1px 2px #000}
+.art .ph{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:14px;color:#5d5648;
+  font:400 12px/1.6 Georgia,serif;letter-spacing:.07em;
+  background:radial-gradient(70% 70% at 50% 45%,#141210,#000 82%)}
+.art .ph span{display:block}
+.art .ph b{display:block;font:600 15px/1.4 Georgia,serif;color:#857c67;letter-spacing:.1em;
+  text-transform:uppercase;margin-bottom:4px}
+/* THE HOVER LIFT IS A SCREEN OVERLAY, NOT filter: brightness(). Measured on these cards,
+   brightness(1.08) moves the shadows -- where 85% of the picture and all the hatching live --
+   by 0.4 L*, which nobody can see, while moving the flames by 4.6 and taking the blown-out area
+   from 0.119% to 1.090% of the card. Screen at 4% does the opposite: +3.2 L* in the shadows,
+   +0.5 in the flames, and it cannot clip, because screen only reaches white where the pixel
+   already is. It also leaves the flames alone for the animation to have later. */
+.art .lift{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .14s ease;
+  background:#ffd696;mix-blend-mode:screen}
+.art:hover .lift{opacity:.04}
+.art.sel{outline:2px solid var(--line);outline-offset:-1px}
+
+/* ---- buttons and the right-hand column -------------------------------------------------- */
+.btn{display:grid;place-items:center;border-radius:4px;cursor:pointer;
+  font-family:Georgia,serif;font-weight:600;letter-spacing:.16em;text-transform:uppercase;
+  text-align:center;line-height:1.35}
+.btn.primary{background:#2e2718;border:1px solid var(--line);color:#ecdfc0}
+.btn.primary:hover{background:#3a301d}
+/* THE CONTROLS COLUMN. Three marks at the working edge -- Map, Hire Building, commit -- and no
+   frame around any of them, which is what was asked for and is also the one thing that keeps them
+   from being misread. A mark on a duty tile wears a dashed border because it is a thing you CHOOSE,
+   and the border is the slot it would sit in; these are things you PRESS. Giving them the same
+   edge would say they were the same kind of object and put three more selectable-looking squares
+   on a board whose whole grammar is select-then-confirm.
+   So the artwork is the control. Under the pointer it brightens and nothing moves -- the same
+   restraint as the tile marks' hover, for the same reason: these are border-box squares at
+   geometry's own rect, and a hover that changed the box would shift the drawing inside it. */
+.mark{position:absolute;display:grid;place-items:center;cursor:pointer;
+  color:var(--ink);font:700 15px/1 ui-monospace,monospace;
+  filter:brightness(.88);transition:filter .12s ease}
+.mark:hover{filter:brightness(1.12)}
+/* THE GROUND UNDER A CONTROL, and it is .panel's -- the same border, radius and colour the Take
+   Tithe box and the City wear. The three marks used to stand on nothing: every other object in
+   this row has a ground, and the canvas here is black because the backdrop ends at the foot of
+   the ribbon, well above it.
+
+   NOT THE DUTY TILE'S PLATE, which was the other candidate and fails twice. A tile is GLASS --
+   55% of --plate over the picture behind it -- and there is no picture behind this row, so the
+   same treatment carried down is a dark colour at 55% over black and very nearly invisible.
+   And a tile means "selectable, takes the gold rim when chosen"; Show Map and Hire Building are
+   never chosen, so it would promise a state they cannot enter.
+
+   DRAWN AS ::before AT A NEGATIVE INSET rather than as a box of its own, because the mark's rect
+   is geometry's and the artwork fills it. The pad is handed in from GEO.marks.pad -- it is
+   CONTROL_PAD there, and geometry had to learn about it: two 6s round two marks is 12 of box
+   where the column has 6 of air, so the column is spaced as three BOXES now and the marks sit
+   inside them.
+
+   z-index UNDER THE ARTWORK AND SAFE THERE. `.mark` carries a filter, which makes it a stacking
+   context, so the -1 cannot escape behind the board -- it lands between the mark's own (absent)
+   background and its img. The filter also means the ground dims and brightens WITH the emblem on
+   hover, which is right: the control is one object and responds as one.
+
+   AND IT COMES AND GOES WITH THE COMMIT. `.mark.off{display:none}` takes the element, and the
+   ground is part of the element, so the commit's box appears at the moment the commit does --
+   which is the whole point of its sitting apart from the other two. */
+.mark::before{content:"";position:absolute;z-index:-1;
+  inset:calc(-1 * var(--control-pad));
+  border:1px solid #46413a;border-radius:5px;background:#0e0d0b}
+/* A STAND-IN LOOKS LIKE ONE. A control with no cut filed yet borrows Allocation's mark, and the
+   whole reason that is better than drawing nothing is that a wrong emblem is visibly wrong --
+   which only holds if it does not look as settled as the two beside it. Half-lit says provisional
+   without inventing a second treatment, and it goes away by itself the moment a cut is filed. */
+.mark.stand-in{filter:brightness(.55)}
+.mark.stand-in:hover{filter:brightness(.75)}
+/* NOTHING CHOSEN, NOTHING TO COMMIT. The three Confirm buttons this column replaced were drawn
+   `display:none` until their own slot was selected, and the commit mark inherits that rule: it is
+   the same control, so it appears at the same moment. Map and Hire are standing offers and are
+   always there.
+   display, NOT visibility: the mark should not be a dark square the pointer can find. The column
+   is absolutely positioned at geometry's own slots, so the two above it do not move to fill the
+   gap -- which is right, since they would otherwise shift under the pointer every time a duty was
+   chosen. */
+.mark.off{display:none}
+.mark img{width:100%;height:100%;object-fit:contain;display:block}
+@media (prefers-reduced-motion:reduce){.mark{transition:none}}
+.panel{border:1px solid #46413a;border-radius:5px;background:#0e0d0b}
+.panel .lb{position:absolute;left:0;right:0;text-align:center;font-family:Georgia,serif;font-weight:600;
+  letter-spacing:.16em;text-transform:uppercase;color:var(--ink)}
+/* Take Tithe stands in a row with the two action names, so it is tracked like them rather than
+   like the City's label below it. The City keeps the panel tracking above. */
+#tithe .lb{letter-spacing:.11em}
+/* THE .tok RULES ARE GONE WITH THE THREE RESOURCES. They described a grey disc with a rim, a
+   letter fallback inside it, and a `.filled` override that took both off the moment a picture
+   landed -- a correction tokens/README.md warns about, because each PNG paints its own rim and a
+   container with a second one gives every token two. None of that has anything to draw: the
+   Tithe holds a label. Kept out rather than left behind, so that `tok` cannot come back meaning
+   something else. */
+.pawn{position:absolute;display:grid;place-items:center}
+.pawn svg{width:100%;height:100%;display:block;overflow:visible}
+.pawn .n{position:absolute;font:700 17px/1 Georgia,serif;color:#1b1a16;text-shadow:0 1px 0 #ffffff40}
+
+/* ---- the duty grid ---------------------------------------------------------------------- */
+/* NINE RECTANGLES WHERE THE WHEEL WAS, carrying the wheel's own three states.
+   A face was a filled shape and could be brightened; a cell is an OUTLINE, and there is nothing
+   inside it to brighten. So hover and selection are carried by the border and the ground
+   instead -- the same two states, said in the only language this object has. */
+.dcell{position:absolute;border:2px solid #6a6252;border-radius:3px;background:#14120f;
+  cursor:pointer;display:grid;place-items:start stretch;overflow:hidden;
+  transition:border-color .12s ease,background .12s ease}
+/* THE NAME SITS AT THE TOP, NOT IN THE MIDDLE, and the acolytes are why. They stand along the
+   bottom of the rectangle they occupy, and a centred name put four pawns straight through the
+   middle of the word -- ALLOCATION unreadable behind three figures on the first build. The
+   wheel never had this problem because its labels were in the drawing and the figures ringed
+   the outside of it. A rectangle has an inside, and now two things want to be in it. */
+.dcell .dn{font-family:Georgia,serif;font-weight:600;letter-spacing:.11em;text-transform:uppercase;
+  font-size:15px;color:var(--dim);text-align:left;padding:9px 10px 0;pointer-events:none;
+  transition:color .12s ease}
+.dcell.lit{border-color:#9d9079;background:#1b1813}
+.dcell.lit .dn{color:var(--ink)}
+/* SELECTION IS A SECOND STATE, NOT THE SAME ONE. The tile has carried `sel` since there was a
+   board, and the wheel's faces were given it for the same reason: without a second state,
+   hovering one duty while another is selected shows two identical highlights and no way to tell
+   which is which. Lit is the hover; selected is lit plus the gold this board uses everywhere
+   else to say "this one is chosen". */
+.dcell.sel{border-color:var(--line);background:#231d12}
+.dcell.sel .dn{color:#f0e6cd}
+/* THE CENTRE IS THE CITY, AND IT IS NOT A DUTY. It stood dashed and nameless while it stood for
+   nothing; it is where the City panel went when the bottom right of the board was cleared, so it
+   is solid now -- a dashed box under a title that says City would be the drawing contradicting
+   the word.
+   STILL NOT A NINTH CHOICE, THOUGH. It takes no pointer, carries no icons and never takes `lit`
+   or `sel`, so the eight things you can pick stay eight. What separates it from its neighbours
+   is the ground and the missing plate rather than a broken rule. The border colour is the City
+   panel's own #46413a, carried over from the box this replaces. */
+.dcell.centre{cursor:default;border-color:#46413a;background:#100f0d}
+/* THE ICONS GET THEIR TILE BACK. On the ribbon each duty's marks stood on a rounded plate --
+   .tile, one pixel of #2a2721 round --plate at --tile-alpha -- and losing the ribbon lost that
+   ground, leaving cut-out emblems floating on the rectangle. This is the same declaration, not
+   a colour matched by eye. The .tile rules it was copied from have gone with the ribbon, so
+   this is now the only place on this board that says what a plate looks like.
+
+   IT WILL READ DARKER THAN IT DID, AND THAT IS NOT A MISTAKE. --tile-alpha is 55%, because a
+   tile was GLASS over the backdrop valley and the valley came through it. v2 draws no backdrop,
+   so the same 55% now sits over the cell's own near-black and settles about four levels above
+   it rather than catching a lit sky. Same colour, different thing behind it. If it wants to be
+   more present the honest fix is a higher alpha HERE, not a second hard-coded slate. */
+.iplate{position:absolute;border:1px solid #2a2721;pointer-events:none;
+  background:color-mix(in srgb, var(--plate) var(--tile-alpha), transparent)}
+.fig{position:absolute;pointer-events:none}
+.fig svg{width:100%;height:100%;display:block;overflow:visible}
+
+/* EDIT MODE is a mode, and it says so. In play the board must not look editable; while images
+   are being replaced every slot that can take one is outlined, so there is no guessing. */
+body.editing .art,body.editing .seal{outline:1px dashed #6f6350;cursor:copy}
+body.editing .art.drop,body.editing .seal.drop{outline:2px solid var(--line)}
+</style>
+
+<div id=bar>
+  <span class=tag>phase</span>
+  <span id=phases></span>
+  <span class=sp></span>
+  <button id=bSound aria-pressed="true" title="interface sounds">sound</button>
+  <button id=bEdit aria-pressed="false" title="click a slot to replace its picture; drop a file on one at any time">images</button>
+  <button id=bSave>save</button>
+  <span class=tag>gap</span>
+  <input type=range id=rGap min=0 max=150 step=1 title="the gap between rectangles, both ways">
+  <span class=val id=vGap></span>
+  <span class=tag>edge</span>
+  <input type=range id=rDisp min=0 max=150 step=1
+         title="top up, bottom down, left left, right right -- all by the same amount">
+  <span class=val id=vDisp></span>
+  <span class=tag>size</span>
+  <input type=range id=rSize min=40 max=160 step=1
+         title="the size of the nine rectangles, as a percentage of what fits">
+  <span class=val id=vSize></span>
+  <label class=chk><input type=checkbox id=cCentre> centre</label>
+  <span class=tag id=gridTag title="what the two sliders cost: the size of each rectangle"></span>
+  <span class=tag>f &nbsp;full screen</span>
+  <span class=tag id=buildTag></span>
+</div>
+<div id=note></div>
+<div id=wrap><div id=fit><div id=board></div></div></div>
+
+<script>
+// =================================================================================================
+// THE NUMBERS COME FROM geometry.py AND ARE NOT RESTATED HERE.
+var GEO    = __GEOMETRY__;
+var DUTIES = __DUTIES__;
+var CONTROLS = __CONTROLS__;
+var IMAGES = __IMAGES__;
+var SAVE   = __SAVEKEYS__;
+var BUILD  = __BUILD__;
+// NO WHEEL DRAWING IN v2. Nine rectangles stand where it stood, so the 59 KB of borrowed
+// markup is not inlined and geometry.WHEEL_ASSET is never read. What arrives instead is the
+// two numbers the sliders start at, so the defaults live in the generator with every other
+// default rather than being typed into the markup.
+var GRID = __GRID__;
+
+var board = document.getElementById("board");
+var S = {
+  phase: GEO.livePhase,
+  duty: GEO.duties[0].slug,
+  slot: null,                       // the chosen action, or "tithe"; set below, not here
+  editing: false,
+  // WHO STANDS WHERE. Seeded from geometry so a fresh page opens on the crowded state the lab
+  // opens on, which is the one worth looking at -- an empty wheel tells you nothing about
+  // whether the acolytes crowd.
+  occupancy: {},
+  city: Object.assign({}, GEO.start.city)
+};
+// AND THE BOARD OPENS BY THE RULE A CLICK USES, rather than on a typed null that happens to be
+// right. The first duty on the ribbon has two actions today, so this is null today -- and it
+// stops being null on its own the day that duty has one, instead of opening on a tile whose
+// single action is unchosen.
+S.slot = onlySlot(S.duty);
+GEO.duties.forEach(function(d){
+  var n = GEO.start.occupancy[d.slug] || 0;
+  var seats = GEO.start.seats[d.slug];
+  S.occupancy[d.slug] = [];
+  for (var i = 0; i < n; i++) S.occupancy[d.slug].push(seats ? seats[i] : "p1");
+});
+
+function el(tag, cls, css, parent){
+  var e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (css) for (var k in css) e.style[k] = css[k];
+  (parent || board).appendChild(e);
+  return e;
+}
+function box(o){ return {left:o.x+"px", top:o.y+"px", width:o.width+"px", height:o.height+"px"}; }
+function px(n){ return n + "px"; }
+function colourOf(id){
+  for (var i = 0; i < GEO.players.length; i++) if (GEO.players[i].id === id) return GEO.players[i].colour;
+  return "#8fae6a";
+}
+function dutyOf(slug){ return DUTIES[slug]; }
+
+// THE LINE IN THE UPPER BOX, and the one place that decides it. A hover shows what the hovered
+// thing does; nothing hovered shows the phase's own line. Two functions would be two answers.
+var hovered = null;
+function phaseLine(){
+  for (var i = 0; i < GEO.phases.length; i++) if (GEO.phases[i].key === S.phase) return GEO.phases[i].line;
+  return "";
+}
+function lineFor(slug, slot){
+  var d = dutyOf(slug);
+  if (!d) return phaseLine();
+  if (slot) return (d[slot] && d[slot].shortLabel) || "";
+  // A whole tile covers both of its actions, so it says both. A one-action duty says one.
+  var out = [];
+  ["actionA","actionB"].forEach(function(k){
+    if (d[k] && d[k].shortLabel) out.push(d[k].shortLabel);
+  });
+  return out.join("   ·   ");
+}
+function setStatus(){
+  var t = hovered ? lineFor(hovered.duty, hovered.slot) : phaseLine();
+  document.getElementById("statusText").textContent = t;
+}
+function hover(duty, slot){
+  // ON THE CHANGE, NOT ON THE CROSSING. mouseover bubbles and fires every time the pointer moves
+  // between a tile and the mark inside it, which is the same duty twice -- so a cue fired here
+  // without this test would rattle while you sat still over one tile. The duty under the pointer
+  // changing is the thing that happened.
+  var was = hovered ? hovered.duty : null;
+  hovered = duty ? {duty: duty, slot: slot || null} : null;
+  // FETCHED WHILE THE POINTER IS STILL MOVING. An action with eleven beds is 2.85 MB and takes a
+  // noticeable moment to decode; asked for only on the click, the fade would start into silence.
+  // Hovering a duty is the warning that a selection may be coming.
+  //
+  // ON THE CHANGE, NOT ON THE CROSSING -- the rule the hover CUE used to need and the prefetch
+  // needs for the same reason. mouseover bubbles and fires again every time the pointer moves
+  // between a tile and the mark inside it, which is the same duty twice; unguarded, a slow sweep
+  // would re-ask for the same eleven buffers on every one of those.
+  if (duty && duty !== was) {
+    var info = dutyOf(duty);
+    bedPrefetch(duty + "_" + (slot || (info && info.actions === 1 ? "actionA" : "actionB")));
+  }
+  setStatus();
+  lightFace(duty);
+}
+// ONE FUNCTION FOR BOTH DIRECTIONS. Hovering a tile lights its rectangle in the grid and
+// hovering a rectangle lights its tile; written twice they would disagree the first time one
+// was changed. The name is the wheel's and is kept: it is the same job on a new object.
+function lightFace(slug){
+  GEO.duties.forEach(function(d){
+    var tile = document.getElementById("tile-" + d.slug);
+    var face = document.getElementById("dcell-" + d.slug);
+    var on = (slug === d.slug);
+    if (tile) tile.classList.toggle("lit", on);
+    if (face) face.classList.toggle("lit", on);
+  });
+}
+
+// =================================================================================================
+// DRAWING. Every element is placed once, from GEO, and then only its contents change.
+function drawStatus(){
+  var s = GEO.status;
+  // THE LINE HEIGHT IS SET, NOT INHERITED. body's `font:13px/1.4` passes down a RATIO, so this
+  // box was laying out at 1.4 x its own font size -- 25.2 at 18 -- while geometry held it to the
+  // 22 the face needs. One of the two had to give, and it is the inherited one: geometry owns
+  // the number check() measures against the box, so the page is told it rather than guessing.
+  var e = el("div", null, Object.assign(box(s), {fontSize: px(s.size), lineHeight: px(s.line)}));
+  e.id = "status";
+  var t = el("span", null, null, e); t.id = "statusText"; t.style.position = "static";
+}
+
+// THE VALLEY, DRAWN FIRST SO EVERYTHING ELSE STANDS IN FRONT OF IT. It is the only thing on this
+// board placed where other objects will cover it, so it goes in before the tiles rather than
+// being pushed back with a z-index nobody can see the other end of.
+//
+// STRETCHED TO THE RECT, NOT COVERED INTO IT. The crop was anchored so its painted ground falls
+// where the road strip falls; `cover` keeps the aspect and slides that alignment off.
+// =================================================================================================
+// HOVER IS DELEGATED, AND THAT IS THE WHOLE POINT.
+//
+// It was an enter/leave pair on each element, and it had a hole that showed on exactly one path:
+// tile -> seal -> back to the same tile left the board with nothing hovered. The seals sit INSIDE
+// their tiles, and those two events deliberately do not fire between a parent and its own child --
+// so moving into the seal never left the tile, and moving back out of the seal fired the seal's
+// leave with no matching enter on the tile behind it. The line went blank while the pointer was
+// still sitting on the tile.
+//
+// Patching that one path would have left the same hole in every other nesting. So the pairs are
+// gone. mouseover BUBBLES and fires on every crossing, parent to child included, so the state is
+// recomputed from where the pointer IS rather than from a history of arrivals and departures.
+//
+// An element opts in with data-hover-duty, data-hover-slot or both, and the nearest ancestor
+// carrying either one wins -- so a seal speaks for its action and the tile around it for its duty.
+function hoverDataOf(node){
+  while (node && node !== board){
+    var d = node.dataset;
+    if (d && (d.hoverDuty || d.hoverSlot)) return d;
+    node = node.parentNode;
+  }
+  return null;
+}
+board.addEventListener("mouseover", function(ev){
+  var d = hoverDataOf(ev.target);
+  if (!d) return hover(null);
+  // A card carries only its slot: which duty it shows is state, not markup.
+  hover(d.hoverDuty || S.duty, d.hoverSlot || null);
+});
+board.addEventListener("mouseleave", function(){ hover(null); });
+
+// HOW FAR EVERYTHING UNDER THE TITLE COMES UP, AND WHY IT IS WORKED OUT RATHER THAN TYPED.
+//
+// geometry.py still opens the action row at y 241, because v1 draws a backdrop and eight tiles
+// above it and needs that room. v2 draws neither, so the top two hundred pixels are empty and
+// the cards, the Tithe and the controls would be floating in the middle of nothing.
+//
+// The lift closes it HERE, in the drawing, for exactly the reason the City panel is dropped
+// here: geometry.py is shared with v1, and moving the row in it would move the row on a board
+// that still has a ribbon over it. So v2 keeps geometry's numbers and places them differently,
+// which is the only kind of divergence a shared geometry file can take.
+//
+// IT IS MEASURED OFF THE TITLE, NOT SET TO 186. Change the status line's size or its box and
+// the row follows; the one number here is the gap under the text, which is a judgement and has
+// nowhere better to live.
+var TOP_GAP = 16;
+var LIFT = GEO.art.y - (GEO.status.y + GEO.status.height + TOP_GAP);
+function lifted(o){
+  return {x: o.x, y: o.y - LIFT, width: o.width, height: o.height};
+}
+
+// THE THREE CONTROL MARKS, MOVED OUT TO THE BOARD'S OWN RIGHT MARGIN.
+//
+// geometry puts them at x 1270, which left 74 of canvas to the right of their ground while the
+// cards keep 28 on the left -- a column that looked indented rather than aligned. They go to the
+// margin the cards use, measured the same way at the other end.
+//
+// IT IS THE GROUND THAT IS ALIGNED, NOT THE ICON. A mark draws a .panel ground at a negative
+// inset of GEO.marks.pad, so the thing an eye lines up on is `pad` wider than the rect geometry
+// publishes. Aligning the rect would leave the visible square six pixels past the margin --
+// right by arithmetic and visibly wrong, which is the worse of the two.
+function marked(at){
+  var m = GEO.slots.actionA.x;
+  var dx = (GEO.canvas.width - m - GEO.marks.pad) - (at.x + at.width);
+  return {x: at.x + dx, y: at.y - LIFT, width: at.width, height: at.height};
+}
+
+function drawArt(){
+  ["actionA","actionB"].forEach(function(slot){
+    var a = GEO.slots[slot];
+    var art = el("div", "art", box(lifted(a)));
+    art.id = "art-" + slot;
+    art.dataset.slot = slot; art.dataset.kind = "art";
+    art.dataset.hoverSlot = slot;
+    art.addEventListener("click", function(){ slotOrSelect(slot); });
+    wireDrop(art);
+  });
+}
+
+// =================================================================================================
+// THE CONTROLS COLUMN, which replaces three confirm buttons and two standing ones with three marks.
+//
+// WHY ONE COLUMN AND NOT A BUTTON UNDER EACH CARD. The three confirms said the same word and did
+// the same thing, and there was only ever one of them on screen -- the row under the cards was 64px
+// of board reserved for whichever one was showing. Collapsing them into a single commit at the end
+// of the row gives that height back (it is the road's now) and says the true thing about the turn:
+// you choose one action anywhere in the row and confirm it once.
+//
+// THE PLACEHOLDER IS THE SAME PICTURE THREE TIMES, on purpose. Adam is drawing a Map, a Hire
+// Building and an OK; until they land, three different borrowed emblems would read as three
+// meanings and invite judgements about an arrangement that has none yet. One repeated emblem reads
+// as what it is -- the column's size and rhythm, with the artwork still to come. The title is what
+// says which is which in the meantime.
+// WHICH MARK COMMITS, named once. Two rules turn on it -- the cue it plays and whether it is
+// shown at all -- and the second was added long after the first, which is exactly when a second
+// copy of a string gets typed. geometry.py's MARKS_ORDER owns the three names and a guard holds
+// this to it, so a rename fails the build rather than quietly leaving a mark that makes the
+// confirm sound and never appears.
+var COMMIT = "commit";
+
+function drawMarks(){
+  var M = GEO.marks;
+  // THE WORDING COMES FROM duty_text.json, like every other string the board prints. It was a
+  // `labels` object typed here while the marks were placeholders, which is one file restating
+  // another -- and the icon lab needs the same three strings for its card titles, so the two
+  // would have disagreed the first time a mark was renamed.
+  // ALLOCATION'S MARK IS STILL THE FALLBACK, for a control with no cut filed yet. A column that
+  // refused to draw would look finished and be empty; a column wearing the wrong emblem is
+  // visibly wrong, which is the failure you want.
+  var placeholder = IMAGES["seal:allocation:actionA"];
+  M.order.forEach(function(name){
+    var at = M[name];
+    var said = CONTROLS[name] || {};
+    var label = said.name || name;
+    var src = IMAGES["control:" + name] || placeholder;
+    var e = el("div", "mark", box(marked(at)));
+    // THE PAD IS GEOMETRY'S, handed to the stylesheet rather than typed in it. The ground is
+    // drawn at a negative inset of exactly the distance geometry left round the mark, so a
+    // number in the CSS would be the second place that distance was stated.
+    e.style.setProperty("--control-pad", px(M.pad));
+    e.id = "mark-" + name;
+    e.dataset.kind = "mark"; e.dataset.mark = name;
+    e.title = said.shortLabel ? label + " \u2014 " + said.shortLabel : label;
+    e.classList.toggle("stand-in", !IMAGES["control:" + name]);
+    if (src){ var im = document.createElement("img"); im.src = src;
+              im.alt = label; e.appendChild(im); }
+    else e.textContent = label.slice(0, 1).toUpperCase();
+    // THE ONLY THING THE COMMIT DOES TODAY. There is no turn to commit yet, so this is a cue on a
+    // placeholder -- it should come off when the mark is given its real job rather than be wired
+    // around. Map and Hire are silent for the same reason the standing buttons were: they are not
+    // the confirm, and a board where every mark clicks the same way teaches nothing.
+    if (name === COMMIT) e.addEventListener("click", function(){ sfxWake(); sfx("confirm"); });
+  });
+}
+
+function drawSide(){
+  var t = GEO.tithe;
+  var p = el("div", "panel", box(lifted(t)));
+  p.id = "tithe";
+  p.addEventListener("click", function(){ if (!S.editing) select("tithe"); });
+  // THE THREE RESOURCES ARE GONE AND SO IS THE LOOP THAT DREW THEM. It read wheat, stone and
+  // silver out of GEO.tithe.order and placed each at GEO.tithe.slots[i] -- geometry no longer
+  // publishes either, so this cannot quietly half-work: the page would throw on `t.order` rather
+  // than draw three empty discs. The box is its label, and what goes in it is open.
+  var lb = el("div", "lb", {top: px(t.labelTop), fontSize: px(t.labelSize),
+                            lineHeight: String(t.lh)}, p);
+  lb.textContent = "Take Tithe";
+
+  // THE CITY PANEL IS NOT DRAWN IN v2, AND GEO.city IS LEFT ALONE. geometry.py still publishes
+  // the box, its label and its four figure slots, because v1 draws all of it and the two builds
+  // share one geometry file -- deleting the rect to stop drawing it here would take the panel
+  // out of the board that still wants it. So this is a drawing decision and it is made in the
+  // drawing: the bottom right of the canvas is empty, and that room is what the duty grid is
+  // expected to grow into.
+}
+
+// The acolyte, drawn rather than loaded: in the lab's own saved sessions `acolytes.painted` and
+// `.colored` are null for every seat, so the pawns on that board are procedural too. There is
+// no asset here to go missing.
+function pawnSvg(colour){
+  return '<svg viewBox="0 0 42 100" preserveAspectRatio="xMidYMax meet">' +
+    '<ellipse cx="21" cy="94" rx="14" ry="3.6" fill="#00000050"/>' +
+    '<g fill="' + colour + '" stroke="#00000055" stroke-width="1" stroke-linejoin="round">' +
+    '<path d="M21 20c-4.2 0-6.3 2.6-6.3 6.1 0 4.2-3.6 6.3-5.7 11.4C5.6 46.2 4.2 62 3.8 76.4' +
+    'c-.15 5.2 1.6 7.2 6.2 7.2h22c4.6 0 6.35-2 6.2-7.2C37.8 62 36.4 46.2 33 37.5' +
+    'c-2.1-5.1-5.7-7.2-5.7-11.4 0-3.5-2.1-6.1-6.3-6.1z"/>' +
+    '<ellipse cx="21" cy="12.5" rx="8.6" ry="9"/></g>' +
+    '<path d="M8.6 72h24.8" stroke="#00000026" stroke-width="2" fill="none"/></svg>';
+}
+
+// =================================================================================================
+// THE DUTY GRID, WHICH IS WHAT v2 IS FOR.
+//
+// Nine rectangles at a strict 2:1 stand where the wheel stood: eight of them are the eight
+// duties and the ninth, the centre, is not a duty and stands for nothing yet.
+//
+// IT READS GEO.wheel EVERY TIME AND KEEPS NO COPY OF IT. That box is expected to GROW -- the
+// City panel is gone in v2 and the room it freed is next door -- so nothing below may be written
+// in terms of today's 1174 x 622. Change the wheel's rect in geometry.py, rebuild, and the nine
+// rectangles follow it without a line changing here. That is the whole reason the arithmetic is
+// general rather than a table of positions.
+//
+// WHY THE BLOCK IS INSCRIBED AND NOT STRETCHED. Three 2:1 rectangles with an equal gap make an
+// arrangement that is itself 2:1 when the gap is zero, and the wheel's box is not 2:1. So one
+// dimension binds, the other keeps the slack, and the block is centred in what it is given.
+// Stretching to fill both would mean giving up either the 2:1 or the equal gap, and the point of
+// this page is to look at exactly those two things.
+// =================================================================================================
+
+// Where each duty's rectangle ended up, so the acolytes can be put in it without measuring the
+// DOM. Rebuilt by drawGrid(); read by drawFigures().
+var GRIDPOS = {};
+
+// THE CELL'S BORDER, NAMED BECAUSE THE ICON ARITHMETIC DEPENDS ON IT. An absolutely positioned
+// child sits against the PADDING box, not the border box, so placing an icon at the cell's own
+// width would put it two pixels past the right edge on each side. Must match .dcell's border.
+var CELL_BORDER = 2;
+
+// CLOCKWISE FROM THE TOP, which is the order geometry.py's COMPASS is in. A duty knows its face
+// and the ring knows its cells, so the two are indexed against each other and there is no table
+// here to fall out of step with the one over there.
+var RING_ORDER = [[1,0],[2,0],[2,1],[2,2],[1,2],[0,2],[0,1],[0,0]];
+var RING_FACES = ["north", "north_east", "east", "south_east",
+                  "south", "south_west", "west", "north_west"];
+
+// THE AREA THE NINE RECTANGLES ARE CENTRED IN, WHICH IS NO LONGER GEO.wheel.
+//
+// geometry.py puts the wheel at x 28 with a width of 1174, so it keeps a 28 margin on the left
+// and a 198 margin on the right -- it was never centred, because the drawing it held was not
+// symmetrical and the controls column used to sit in that right-hand slack. v2 has neither, and
+// the control marks have moved in to the same 28 the cards keep, so the slack is nothing but an
+// off-centre grid.
+//
+// THE MARGIN IS READ OFF THE CARDS, NOT TYPED. GEO.slots.actionA.x IS the board's left margin --
+// every other object on this board lines up with it -- so taking it from there means a board
+// whose margin changes moves the grid, the icons and the cards together instead of two of three.
+//
+// VERTICALLY IT TAKES EVERYTHING UNDER THE CARDS. The card row was lifted to the top, so the
+// room it left is the room the grid has: from the cards' own bottom plus one margin, down to one
+// margin above the canvas. That is 842 tall against the wheel's 622, and it is the room the size
+// slider grows into.
+function gridArea(){
+  var m = GEO.slots.actionA.x;
+  var top = (GEO.slots.actionA.y - LIFT) + GEO.slots.actionA.height + m;
+  return {x: m, y: top,
+          width: GEO.canvas.width - 2 * m,
+          height: GEO.canvas.height - top - m};
+}
+
+function gridCells(){
+  var w = gridArea(), g = GRID.gap, d = GRID.disp;
+  // THE DISPLACEMENT IS PAID FOR BEFORE THE RECTANGLES ARE SIZED, and that is a deliberate
+  // difference from the standalone lab this came out of. There, the four edge rectangles were
+  // allowed to push outside the box and the overflow was drawn, because there was margin around
+  // the stage to draw it in. Here there is not: #board is `overflow:hidden` and the wheel sits
+  // 28px from the canvas edge, so at the opening defaults Ordination landed at x -12 and
+  // Construct ran 17px past the bottom -- both quietly cut in half, with nothing saying so.
+  // Insetting first means the whole arrangement, displacement included, is always inside the
+  // box it was given. The cost is that the edge slider shrinks the rectangles as well as moving
+  // them; the alternative was a slider that silently clips two of the nine.
+  var avW = w.width - 2 * d, avH = w.height - 2 * d;
+  // WHAT FITS, AND THEN WHAT WAS ASKED FOR. The fit is still the inscribe: three 2:1 rectangles
+  // with an equal gap, the binding dimension deciding. 100 on the size slider IS that fit, so
+  // the slider reads as a percentage of the largest the arrangement can be rather than as a
+  // number of pixels -- which means it keeps its meaning when the area changes, and the area is
+  // expected to change. Above 100 the block is deliberately allowed to pass the margins: asking
+  // for bigger and silently being refused is worse than asking for bigger and seeing it.
+  var fit = Math.max(0, Math.min((avW - 2 * g) / 3,      // the width binding
+                                 (avH - 2 * g) / 1.5));  // the height: 3 * rw/2 + 2g = avH
+  var rw = fit * (GRID.size / 100);
+  var rh = rw / 2;
+  var bw = 3 * rw + 2 * g, bh = 3 * rh + 2 * g;
+  // CENTRED ON THE WHOLE ARRANGEMENT, displacement included, so the four edge rectangles reach
+  // equally far past the block on every side and the picture is symmetrical in the area whatever
+  // the three sliders say.
+  var ox = w.x + (w.width - (bw + 2 * d)) / 2 + d;
+  var oy = w.y + (w.height - (bh + 2 * d)) / 2 + d;
+  var out = [];
+  for (var row = 0; row < 3; row++){
+    for (var col = 0; col < 3; col++){
+      var x = ox + col * (rw + g), y = oy + row * (rh + g);
+      if (col === 1 && row === 0) y -= d;         // top, up
+      if (col === 1 && row === 2) y += d;         // bottom, down
+      if (col === 0 && row === 1) x -= d;         // left, left
+      if (col === 2 && row === 1) x += d;         // right, right
+      out.push({x: x, y: y, width: rw, height: rh, col: col, row: row,
+                centre: (col === 1 && row === 1)});
+    }
+  }
+  return out;
+}
+
+function drawGrid(){
+  var old = board.querySelectorAll(".dcell");
+  for (var i = 0; i < old.length; i++) old[i].remove();
+  GRIDPOS = {};
+  var byFace = {};
+  GEO.duties.forEach(function(d){ byFace[d.face] = d; });
+
+  gridCells().forEach(function(c){
+    if (c.centre && !GRID.centre) return;
+    var r = {x: Math.round(c.x), y: Math.round(c.y),
+             width: Math.round(c.width), height: Math.round(c.height)};
+    var cell = el("div", "dcell", box(r));
+    if (c.centre){
+      cell.classList.add("centre");
+      // THE CITY'S TITLE, IN THE DUTIES' OWN HAND. The panel this replaces called itself "The
+      // City" and centred the words, because it was a lone box on the right of the board with
+      // nothing to line up against. Here it has eight neighbours, so it reads from the left in
+      // the same type at the same inset as they do, and the row of nine looks like one object.
+      // NO FIGURES AND NO COUNTS YET. The old panel drew a pawn and a number per player; that
+      // is not carried over, and this is the title alone.
+      el("div", "dn", null, cell).textContent = "City";
+      return;
+    }
+
+    var ring = -1;
+    for (var i = 0; i < RING_ORDER.length; i++)
+      if (RING_ORDER[i][0] === c.col && RING_ORDER[i][1] === c.row) ring = i;
+    var d = byFace[RING_FACES[ring]];
+    if (!d) return;
+
+    GRIDPOS[d.slug] = r;
+    cell.id = "dcell-" + d.slug;
+    cell.setAttribute("data-face", d.face);
+    cell.dataset.hoverDuty = d.slug;
+
+    // THE DUTY'S ICONS, IN THE TOP RIGHT AND IN A ROW.
+    //
+    // On the ribbon they were stacked down a 74-wide tile, which is why geometry.py hands over
+    // `sealSlots` as a diagonal: in a box taller than it is wide, two 50px discs can only go one
+    // above the other. A rectangle is twice as wide as it is tall and has a corner going spare,
+    // so they run across it instead and that arrangement is NOT used here. geometry still
+    // publishes it, because v1 still stacks them.
+    //
+    // THEY SHRINK WITH THE RECTANGLE. Both sliders make these boxes smaller -- at gap 150 and
+    // edge 150 a cell is 215 x 107 -- and a 50px disc that was right at full size would hang
+    // out of a small one and be cut off by `overflow:hidden` with nothing saying so. So the
+    // size is the smallest of geometry's 50, what the row can take across, and what the box can
+    // take down.
+    var info = dutyOf(d.slug);
+    var nAct = info ? info.actions : 1;
+    // THE MARGIN IS DOUBLE THE INSET A SEAL USED TO KEEP, and it is written as that rather than
+    // as a 12, so it still follows geometry if the inset ever moves. The plate's own padding is
+    // the ribbon's `pad` -- what a tile kept around its marks -- so the icon sits in the same
+    // amount of ground it sat in before.
+    var mg = GEO.ribbon.sealInset * 2, ip = GEO.ribbon.pad, igap = 6;
+    var innerW = r.width - 2 * CELL_BORDER, innerH = r.height - 2 * CELL_BORDER;
+    // THE PLATE IS PAID FOR BEFORE THE ICON IS SIZED. Margin and padding both eat the corner, so
+    // an icon sized against the bare cell would push the plate past the edge and `overflow:hidden`
+    // would take the difference quietly.
+    var sz = Math.max(0, Math.min(GEO.ribbon.seal,
+                                  Math.floor((innerW - mg - 2 * ip - (nAct - 1) * igap) / nAct),
+                                  innerH - mg - 2 * ip));
+    var rowW = nAct * sz + (nAct - 1) * igap;
+    var plateW = rowW + 2 * ip, plateH = sz + 2 * ip;
+    var plateX = innerW - mg - plateW, plateY = mg;
+    // HOW MUCH OF THE BOX THE ICONS CLAIM, remembered for drawFigures(). The acolytes stand on
+    // the floor of the same rectangle, and on a duty with four of them the outermost pawn's head
+    // reached into this row -- 5px of overlap, enough to read as a mistake and not enough to
+    // look deliberate. Nothing measures it but the figures, so it travels with the rectangle.
+    r.band = mg + plateH;
+
+    // THE NAME MOVES LEFT AND IS KEPT OUT FROM UNDER THEM. It was centred while the corner was
+    // empty; with icons in the corner a centred name runs under them on the narrower settings,
+    // so it reads from the left and carries a right padding of exactly the row it must clear.
+    var n = el("div", "dn", {paddingRight: px(plateW + mg + 6)}, cell);
+    n.textContent = d.name;
+
+    var plate = el("div", "iplate", {left: px(plateX), top: px(plateY),
+                                     width: px(plateW), height: px(plateH),
+                                     borderRadius: px(GEO.ribbon.radius)}, cell);
+
+    for (var k = 0; k < nAct; k++){
+      var kslot = k === 0 ? "actionA" : "actionB";
+      // INSIDE THE PLATE, so the two move as one object and the icon cannot drift off its
+      // ground. render() still finds these by `#board .seal`, which is why they can change
+      // parent without changing anything else.
+      var seal = el("div", "seal",
+                    {left: px(ip + k * (sz + igap)), top: px(ip),
+                     width: px(sz), height: px(sz), zIndex: String(k + 1)}, plate);
+      seal.style.pointerEvents = "auto";
+      // EVERY HANDLE THE RIBBON'S SEALS CARRIED, CARRIED OVER. The picker, the drop target and
+      // render()'s `on` class all find these by dataset and by `#board .seal`, so a seal that
+      // moved house but changed its labels would break three things at once and none of them
+      // here.
+      seal.dataset.duty = d.slug; seal.dataset.slot = kslot; seal.dataset.kind = "seal";
+      seal.dataset.hoverDuty = d.slug; seal.dataset.hoverSlot = kslot;
+      var key = info && info[kslot] && info[kslot].seal;
+      if (key && IMAGES[key]){
+        var im = document.createElement("img"); im.src = IMAGES[key];
+        seal.appendChild(im); seal.classList.add("filled");
+        if (info[kslot].sealGround === "board") seal.classList.add("plate");
+      } else seal.classList.add("empty");
+      seal.addEventListener("click", slotClick);
+      wireDrop(seal);
+    }
+    // THE SAME ENTRY POINT THE TILE USES. A cell and its tile are two handles on one duty, so
+    // both go through pickDuty and the selection, the action cards and the grid all follow from
+    // the one piece of state rather than from whichever was clicked.
+    cell.addEventListener("click", function(slug){
+      return function(){ pickDuty(slug); };
+    }(d.slug));
+  });
+
+  // DRAWN IN THE RIGHT STATE RATHER THAN DRAWN AND THEN CORRECTED. The sliders rebuild these
+  // nine elements on every input event, and a rebuild that dropped the selection until the next
+  // render() would flicker the gold off and on under the pointer.
+  GEO.duties.forEach(function(d){
+    var cell = document.getElementById("dcell-" + d.slug);
+    if (cell) cell.classList.toggle("sel", d.slug === S.duty);
+  });
+  drawFigures();
+}
+
+// THE ACOLYTES STAND INSIDE THEIR DUTY'S RECTANGLE, along the bottom of it. On the wheel they
+// ringed the faces at a fraction of the box, because a face has no inside to stand in; a
+// rectangle does, so GEO.acolytes.figRx / figRy are not used here and the wheel's centre is no
+// longer a place anybody stands.
+function drawFigures(){
+  var old = board.querySelectorAll(".fig");
+  for (var i = 0; i < old.length; i++) old[i].remove();
+  GEO.duties.forEach(function(d){
+    var seats = S.occupancy[d.slug] || [];
+    var r = GRIDPOS[d.slug];
+    if (!seats.length || !r) return;
+    // SIZED TO THE ROOM UNDER THE ICONS, not to geometry's figure height. That height was set
+    // against a wheel, where a figure stood OUTSIDE the faces and nothing was above it. Here it
+    // shares a box with the duty's icons, so it takes the smaller of the two: what it wants, and
+    // what is left once the icon row has had its share.
+    var room = r.height - 2 * CELL_BORDER - (r.band || 0) - 8;
+    var h = Math.max(8, Math.min(GEO.acolytes.height, room));
+    var aw = Math.round(h * GEO.acolytes.aspect);
+    var cx = r.x + r.width / 2;
+    var foot = r.y + r.height - 6;
+    var span = (seats.length - 1) * (aw * 0.82);
+    seats.forEach(function(seat, i){
+      var f = el("div", "fig", {left: px(Math.round(cx - span / 2 + i * aw * 0.82 - aw / 2)),
+                                top: px(Math.round(foot - h)), width: px(aw), height: px(h)});
+      f.innerHTML = pawnSvg(colourOf(seat));
+    });
+  });
+}
+
+// THE SLIDERS, AND THE ONLY THING ON THIS PAGE THAT MOVES THE BOARD. They rebuild the nine
+// rectangles and nothing else: render() is not called, because none of the art, the marks or the
+// status line depends on where these sit, and calling it on every input event would redraw
+// fourteen pictures to move nine outlines.
+function wireGrid(){
+  var rg = document.getElementById("rGap");
+  var rd = document.getElementById("rDisp");
+  var rs = document.getElementById("rSize");
+  var cc = document.getElementById("cCentre");
+  rg.value = GRID.gap; rd.value = GRID.disp; rs.value = GRID.size;
+  cc.checked = !!GRID.centre;
+  function apply(){
+    GRID.gap = +rg.value; GRID.disp = +rd.value; GRID.size = +rs.value;
+    GRID.centre = cc.checked;
+    document.getElementById("vGap").textContent = GRID.gap;
+    document.getElementById("vDisp").textContent = GRID.disp;
+    document.getElementById("vSize").textContent = GRID.size;
+    drawGrid();
+    // WHAT THE TWO NUMBERS COST, SAID OUT LOUD. Both sliders shrink the rectangles -- the gap
+    // because it eats the row, the edge because the arrangement is inset to stay inside the
+    // wheel -- so the size is the thing to watch while dragging, and it is the one number the
+    // board itself cannot show.
+    var cs = gridCells(), a = gridArea(), c = cs[0];
+    // AND WHETHER IT STILL FITS. Over 100 on the size slider the block passes the margins and
+    // #board clips it, so the readout says so rather than letting two rectangles quietly lose a
+    // corner -- the same failure the edge slider was changed to avoid.
+    var l = Math.min.apply(null, cs.map(function(k){ return k.x; }));
+    var r = Math.max.apply(null, cs.map(function(k){ return k.x + k.width; }));
+    var tp = Math.min.apply(null, cs.map(function(k){ return k.y; }));
+    var bt = Math.max.apply(null, cs.map(function(k){ return k.y + k.height; }));
+    var over = Math.max(a.x - l, r - (a.x + a.width), a.y - tp, bt - (a.y + a.height));
+    var tag = document.getElementById("gridTag");
+    tag.textContent = Math.round(c.width) + " × " + Math.round(c.height)
+                    + (over > 0.5 ? "  past the margin by " + Math.round(over) : "");
+    tag.style.color = over > 0.5 ? "#d08c6a" : "";
+  }
+  rg.addEventListener("input", apply);
+  rd.addEventListener("input", apply);
+  rs.addEventListener("input", apply);
+  cc.addEventListener("change", apply);
+  apply();
+}
+
+// =================================================================================================
+// WHAT CLICKING DOES. In play a click chooses; while images are being replaced a click on a slot
+// opens the picker instead. One mode switch rather than two gestures to remember.
+// =================================================================================================
+// THE INTERFACE SOUNDS
+//
+// WEB AUDIO, NOT <audio> ELEMENTS, and the reason is the hover. Eight tiles on a ribbon means a
+// pointer crossing them fires eight cues inside a second; one <audio> element restarts and cuts
+// itself off, and eight of them is a pool to manage. A decoded buffer can be fired as many times
+// as you like, overlapping, from one copy in memory.
+//
+// DECODED AT LOAD, RESUMED ON THE FIRST GESTURE, and those are two different rules that are easy
+// to collapse into one and get wrong. A browser will not let audio SOUND before a gesture, so a
+// context built now is born suspended -- but building it now is exactly what we want, because
+// decoding is asynchronous. Waiting for the first click to start decoding makes that first click
+// silent and the second one work, which reads as a broken cue rather than as a policy.
+//
+// So: the context and the buffers are made at load, and the first click resumes a context that
+// already has everything it needs. The first hover of a fresh page is still silent, and nothing
+// can change that.
+//
+// ONE CLIP SERVES HOVER AND SELECTION, at two gains. They are the same event at two strengths --
+// the pointer passing over a duty, and the duty being taken -- so the same mark of sound at a
+// quarter of the level reads as a quieter version of the same thing rather than a second idea.
+var SFX = __SFX__;
+// THE CLIPS ARE AT THEIR NATURAL LEVEL, so these gains mean what they say. An earlier cut was
+// peak-normalised to -1 dBFS, which lifted the confirm 3.1 dB above the level it has in the
+// montage and made the board's version of it plainly louder than the one that was chosen in the
+// picker. Normalising one-shots that were recorded together throws away the thing you were
+// listening to -- how loud they are RELATIVE to each other.
+//
+// THE PICKER'S SLIDER WAS THE OLD ANSWER AND IT WAS THE WRONG QUESTION. 0.7 was the volume the
+// confirm was auditioned at in the picker, carried over so the board matched it. The picker plays
+// one cue against silence; the board plays it over a looping soundscape. Against the beds the
+// confirm stood 7.8 dB over the loudest moment of a mix that twelve stems were levelled into. A
+// cue is feedback that a click registered, not the loudest thing in the room.
+//
+// AND IT WAS HALF THE BOARD'S HEADROOM. ambientMaster gates the beds and the cues bypass it --
+// group -> fade -> bedMaster -> destination for one, source -> gain -> destination for the other
+// -- so at 0.7 the confirm alone reached -4.48 dBFS and held 49% of the peak budget while eleven
+// ambient actions shared the other 51%. The provable worst case, two actions crossfading with a
+// confirm on top, came to +1.71 dBFS. At 0.32 it is -0.97. ambientMaster did not move: buying the
+// same margin there would have cost -8.5, four decibels off every soundscape in the game.
+//
+// THE RATIO BETWEEN THEM IS KEPT. Both came down about 6.8 dB, so confirm still sits 3.1 dB over
+// select, exactly as it did at 0.7 and 0.5. The two clips are nearly the same peak -- -1.4 and
+// -1.6 dBFS -- so that difference was always the gain and never the recording.
+// NO HOVER. There were three cues and the first fired on the pointer merely crossing a tile,
+// which is not something a player did -- the ribbon answers a hover with light already, and a
+// noise on top of it makes a slow sweep across eight duties into a stutter. Selecting and
+// confirming are the two moments that are an act, and those are the two that sound.
+var SFX_GAIN = {select: 0.23, confirm: 0.32};
+var SFX_ON = true, actx = null, BUF = {};
+
+// THE AMBIENT BEDS. A duty action is a place, and choosing it should put you in that place --
+// which is a different kind of sound from a cue and is built differently all the way down.
+//
+// THEY ARE FETCHED, NOT CARRIED. generate_action_board.py's bundled_beds() explains the size
+// arithmetic; what matters here is the consequence: a page opened from disk has its cues and no
+// beds, and bedNote() says so in the note line rather than leaving the quarry mysteriously quiet.
+var BEDS = __BEDS__;
+var BED_SILENT = BEDS.__silent__ || [];
+var BED_MASTER_DB = BEDS.__master__ || 0;
+// "start" or "random" -- where a LOOPING bed enters its clip. The generator's BED_START says
+// which, and why the answer used to be the other one.
+var BED_START = BEDS.__start__ || "start";
+// 1.5 SECONDS, AND IT IS ONE TRANSITION RATHER THAN TWO. The outgoing action fades out while the
+// incoming fades in over the same second and a half, so the change takes 1.5 s end to end and not
+// 3. EQUAL POWER, NOT LINEAR: two beds that are not the same recording do not cancel, so their
+// POWERS add, and a linear pair sums to 0.5 of the power at the midpoint -- an audible 3 dB dip
+// in the middle of every switch. sin and cos hold the sum at 1.
+var BED_FADE_S = 1.5;
+var BED_KEEP = 3;               // actions whose buffers stay decoded; see bedEvict()
+
+var bedBuf = {}, bedWant = {}, bedVoice = {}, bedUse = [], bedOn = null, bedMaster = null;
+
+function bedDb(db){ return Math.pow(10, db / 20); }
+
+// AN EQUAL-POWER CURVE, HANDED OVER WHOLE. setValueCurveAtTime takes the shape as samples, which
+// is the only way to get a cosine out of a parameter that otherwise ramps linearly or
+// exponentially -- and exponentialRamp cannot reach zero at all, so it cannot fade anything out.
+function bedCurve(up){
+  var n = 65, c = new Float32Array(n);
+  for (var i = 0; i < n; i++) {
+    var t = (i / (n - 1)) * Math.PI / 2;
+    c[i] = up ? Math.sin(t) : Math.cos(t);
+  }
+  return c;
+}
+
+function bedReady(){
+  if (!actx) return false;
+  if (!bedMaster) {
+    bedMaster = actx.createGain();
+    bedMaster.gain.value = bedDb(BED_MASTER_DB);
+    bedMaster.connect(actx.destination);
+  }
+  return true;
+}
+
+// ONE FETCH PER FILE, HOWEVER MANY TIMES IT IS ASKED FOR. Hover prefetches and selection asks
+// again a moment later; without this the second ask would start a second download of the same
+// 2 MB and decode it twice.
+function bedLoad(url){
+  if (bedBuf[url]) return Promise.resolve(bedBuf[url]);
+  if (bedWant[url]) return bedWant[url];
+  bedWant[url] = fetch(url).then(function(r){
+    if (!r.ok) throw new Error(r.status + " on " + url);
+    return r.arrayBuffer();
+  }).then(function(b){
+    return new Promise(function(res, rej){ actx.decodeAudioData(b, res, rej); });
+  }).then(function(buf){
+    bedBuf[url] = buf; delete bedWant[url]; return buf;
+  })["catch"](function(e){ delete bedWant[url]; throw e; });
+  return bedWant[url];
+}
+
+function bedPrefetch(key){
+  if (!bedReady() || !BEDS[key]) return;
+  BEDS[key].beds.forEach(function(b){ bedLoad(b.url)["catch"](function(){}); });
+}
+
+// 35 SECONDS OF STEREO AT 48 kHz IS 13.4 MB DECODED, and the eleven sounded actions come to 847
+// MB between them. Nothing keeps them all; the three most recently used stay, which covers the
+// one playing, the one fading out, and the one you are about to go back to.
+function bedEvict(){
+  while (bedUse.length > BED_KEEP) {
+    var gone = bedUse.shift();
+    if (gone === bedOn || !BEDS[gone]) continue;
+    BEDS[gone].beds.forEach(function(b){ delete bedBuf[b.url]; });
+  }
+}
+
+function bedStop(key, at){
+  var v = bedVoice[key];
+  if (!v) return;
+  delete bedVoice[key];
+  v.fade.gain.cancelScheduledValues(at);
+  v.fade.gain.setValueCurveAtTime(bedCurve(false), at, BED_FADE_S);
+  v.sources.forEach(function(s){ try { s.stop(at + BED_FADE_S + 0.05); } catch (e) {} });
+  setTimeout(function(){ try { v.fade.disconnect(); } catch (e) {} }, (BED_FADE_S + 0.5) * 1000);
+}
+
+// THE FADE IS ITS OWN NODE AND IT SITS ABOVE THE GROUP. The group gain is the duty action's own
+// level, the thing that gets set by ear, and a fade written onto it would be fighting whatever
+// that level is at the moment the switch happens -- set it mid-crossfade and the ramp would snap.
+// Two nodes keep them independent: the group says how loud this place is, the fade says how far
+// in you are. And because the group is ONE node above every bed in the action, moving it cannot
+// change the balance between them.
+function bedStart(key, at){
+  var spec = BEDS[key];
+  var fade = actx.createGain(), group = actx.createGain();
+  fade.gain.setValueAtTime(0, at);
+  fade.gain.setValueCurveAtTime(bedCurve(true), at, BED_FADE_S);
+  group.gain.value = bedDb(spec.groupDb || 0);
+  group.connect(fade); fade.connect(bedMaster);
+  var v = {fade: fade, group: group, sources: []};
+  bedVoice[key] = v;
+  spec.beds.forEach(function(b){
+    var buf = bedBuf[b.url];
+    if (!buf) return;
+    var s = actx.createBufferSource(), g = actx.createGain();
+    s.buffer = buf;
+    // A BED IS NOT ALWAYS A LOOP, AND attribution.json HAS SAID SO ALL ALONG. `loop: false` is on
+    // door_close and distant_rooster, the ambient bench reads it and comes up with those boxes
+    // unticked, and this player set every source to loop regardless -- so Mission's door, which
+    // is one door shutting in 36 seconds of silence, shut again every 36 seconds for as long as
+    // you stood there. Absent means looping; only a record that says otherwise does otherwise.
+    s.loop = b.loop !== false;
+    // PINNED TO THE FILE'S OWN LENGTH, NOT THE BUFFER'S. decodeAudioData returns 4 to 17 ms of
+    // Vorbis padding past the true end, and looping on buf.duration wraps through it every time:
+    // a hole at -64.7 dB under a bed sitting at -33, once per loop, on every bed. The real length
+    // is read out of the container at build time -- see ogg_seconds() -- because the decoder is
+    // the one thing that cannot tell you. Set on every source; a non-looping one ignores them.
+    s.loopStart = 0;
+    s.loopEnd = b.seconds || buf.duration;
+    g.gain.value = bedDb(b.gainDb || 0);
+    s.connect(g); g.connect(group);
+    // WHERE TO ENTER THE CLIP, AND A ONE-SHOT HAS NO SAY IN IT. BED_START is the board's choice
+    // for LOOPING beds: "random" keeps the scene from being a recording you have heard -- started
+    // at 0 every time, Produce Stone's owl calls exactly 20.4 s after every selection -- and
+    // "start" puts every bed at its own beginning.
+    //
+    // THE GUARD IS HERE AND NOT IN THE SETTING. A clip that does not loop has one pass, so an
+    // entry point partway in does not vary it, it truncates it: door_close is one door at 2.997 s
+    // of 36, distant_rooster a rooster at 1.975 s of 35, and a uniform random entry missed them
+    // 92% and 94% of the time. The two tracks whose whole job was to sound at the start of a
+    // scene were the two least likely to sound at all. So `s.loop` decides, not the constant.
+    s.start(at, (s.loop && BED_START === "random") ? Math.random() * s.loopEnd : 0);
+    v.sources.push(s);
+  });
+}
+
+// WHAT IS SELECTED IS WHAT PLAYS, asked from render() rather than from the three click handlers.
+// pickDuty, pickAction and select all reach the same two fields and all call render(), so one
+// test here covers every route in -- including the one that sets no action at all, where the
+// right answer is silence.
+function bedsFollow(){
+  if (!SFX_ON || !bedReady()) return;
+  var key = (S.duty && S.slot) ? (S.duty + "_" + S.slot) : null;
+  if (key && !BEDS[key]) key = null;          // a slot with no folder; BED_SILENT names them
+  if (key === bedOn) return;
+  var at = actx.currentTime;
+  if (bedOn) bedStop(bedOn, at);
+  bedOn = key;
+  if (!key) return;
+  var urls = BEDS[key].beds.map(function(b){ return b.url; });
+  bedUse = bedUse.filter(function(k){ return k !== key; }); bedUse.push(key); bedEvict();
+  Promise.all(urls.map(bedLoad)).then(function(){
+    // STILL THE ONE SELECTED? A decode can take a second on an action with eleven beds, and in
+    // that second the player may have moved on. Starting it then would fade in a place nobody is
+    // standing in any more.
+    if (bedOn !== key || bedVoice[key]) return;
+    bedStart(key, actx.currentTime);
+  })["catch"](function(e){ bedNote(String(e && e.message || e)); });
+}
+
+// SAYING SO IS PART OF THE FEATURE. A board opened by double-clicking fetches nothing, so the
+// cues work and the ambience does not, and the difference between that and a bug is this line.
+function bedNote(why){
+  var n = document.getElementById("note");
+  if (!n || n.textContent.indexOf("click anywhere once") >= 0) return;
+  n.textContent = (location.protocol === "file:")
+    ? "the duty action ambience needs the page served — run the generator with --serve; the interface sounds work either way"
+    : ("the ambience could not load — " + why);
+}
+
+function sfxWake(){
+  if (actx) return;
+  var C = window.AudioContext || window.webkitAudioContext;
+  if (!C) return;
+  actx = new C();
+  Object.keys(SFX).forEach(function(k){
+    var raw = atob(SFX[k].split(",")[1]);
+    var b = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) b[i] = raw.charCodeAt(i);
+    actx.decodeAudioData(b.buffer, function(buf){ BUF[k] = buf; }, function(){});
+  });
+}
+// THE CUE IS NAMED, THE CLIP IS LOOKED UP. `tile` is one file today and the page asks for
+// "hover" and "select"; swapping either to its own file is a line in the generator, not here.
+// ONE GESTURE ANYWHERE UNLOCKS IT, AND THERE MUST BE ONE. A browser keeps a page silent until it
+// has been clicked or typed into, and MOVING a pointer is not a gesture -- so the first hover of a
+// freshly loaded board cannot make a sound, whatever this file does. That is not a bug to fix, it
+// is a rule to be honest about.
+//
+// What IS fixable is the surprise. Any pointerdown or keydown anywhere on the document unlocks it,
+// so the bar, the background and the f key all count and you do not have to find a tile; and until
+// it happens the board says so in its own note line rather than in a tooltip nobody hovers.
+function sfxUnlock(){
+  removeEventListener("pointerdown", sfxUnlock, true);
+  removeEventListener("keydown", sfxUnlock, true);
+  sfxWake();
+  // AND THE BED THE BOARD IS ALREADY SITTING ON. The page restores its last selection before any
+  // gesture has happened, so by the time sound is allowed the render that would have started the
+  // ambience is long past. Without this the board opens on Produce Stone in silence and stays
+  // there until you pick something else.
+  if (actx && actx.state === "suspended") actx.resume().then(function(){ sfxBadge(); bedsFollow(); },
+                                                             sfxBadge);
+  else { sfxBadge(); bedsFollow(); }
+}
+addEventListener("pointerdown", sfxUnlock, true);
+addEventListener("keydown", sfxUnlock, true);
+
+function sfxBadge(){
+  var b = document.getElementById("bSound");
+  if (!b) return;
+  var live = !!actx && actx.state === "running";
+  b.setAttribute("aria-pressed", String(SFX_ON));
+  b.title = !SFX_ON ? "interface sounds are off"
+          : live ? "interface sounds"
+          : "click or press a key anywhere first — a browser keeps a page silent until you do";
+  b.textContent = (SFX_ON && !live) ? "sound ·" : "sound";
+  // IN THE NOTE LINE, WHERE IT WILL BE READ. A tooltip explains this only to somebody who already
+  // suspects the button, and the person it needs to reach is the one who just hovered the ribbon
+  // and heard nothing. The line clears itself the moment the first gesture lands.
+  var n = document.getElementById("note");
+  if (!n) return;
+  if (SFX_ON && !live) n.textContent = "sound is ready — click anywhere once to let the browser play it";
+  else if (n.textContent.indexOf("click anywhere once") >= 0) n.textContent = "";
+}
+
+function sfx(cue){
+  if (!SFX_ON || !actx) return;
+  // THE CUE IS THE KEY NOW. This used to read `cue === "confirm" ? "confirm" : "tile"` -- a
+  // ternary that quietly answered every cue that was not confirm with the tile clip, so a
+  // misspelled cue made a sound instead of nothing and `hover` and `select` shared a file by
+  // arrangement rather than by lookup. The generator decides what is behind a name; this asks.
+  var buf = BUF[cue];
+  if (!buf) return;
+  if (actx.state === "suspended") actx.resume();
+  var s = actx.createBufferSource(), g = actx.createGain();
+  s.buffer = buf; g.gain.value = SFX_GAIN[cue] || 0.5;
+  s.connect(g); g.connect(actx.destination); s.start();
+}
+
+// A DUTY WITH ONE ACTION HAS NOTHING TO CHOOSE, so choosing the duty chooses it. Taxation and
+// Allocation have one each -- duty_text.json is what says so, and this asks it rather than
+// naming them, so a duty gaining or losing a second action needs no edit here.
+//
+// WITHOUT THIS the board could sit on Taxation with Taxation's only action unchosen -- an unlit
+// card and a dashed mark, which is a question with exactly one answer.
+function onlySlot(slug){
+  var info = dutyOf(slug);
+  return (info && info.actions === 1) ? "actionA" : null;
+}
+function pickDuty(slug){
+  if (S.editing) return;
+  sfxWake(); sfx("select");
+  S.duty = slug; S.slot = onlySlot(slug);
+  render();
+}
+function slotOrSelect(slot){
+  if (S.editing) return pickFile({kind: "art", duty: S.duty, slot: slot});
+  select(slot);
+}
+function slotClick(ev){
+  ev.stopPropagation();
+  var d = ev.currentTarget.dataset;
+  if (S.editing) return pickFile({kind: d.kind, duty: d.duty || S.duty, slot: d.slot});
+  // IN PLAY A MARK IS ITS ACTION -- ONCE YOU ARE ALREADY ON ITS DUTY. Clicking one used to call
+  // pickDuty, which sets the duty and CLEARS the slot, so the mark for an action could not select
+  // that action and the only way in was the card. Making the mark select its action fixed that
+  // and overshot: ON A DUTY WITH TWO ACTIONS THE TWO MARKS COVER 52% OF THE TILE, 39x39 each
+  // inside 57x101, stacked top and bottom, so only a narrow middle band and the side margins ever
+  // reached pickDuty. Aiming at a tile and hitting an action was the usual case rather than the
+  // odd one, and which action you got depended on whether you had clicked high or low.
+  //
+  // SO THE MARK ANSWERS A DIFFERENT QUESTION DEPENDING ON WHERE YOU ALREADY ARE. On a duty that
+  // is not selected, the question the click asks is "which duty", and the answer is the duty with
+  // no action chosen -- the same answer the bare tile gives, which is the point: the whole tile
+  // now behaves as one target for choosing a duty. On the duty already selected, the question is
+  // "which action", and the mark answers it. A duty with one action is unaffected either way,
+  // because pickDuty chooses that action itself.
+  //
+  // IT COSTS A SECOND CLICK to reach an action on a duty you are not standing on, and that is the
+  // trade: the card below is the one-click route to an action and is what the cards are for.
+  if (!d.duty) return;
+  if (d.duty !== S.duty) return pickDuty(d.duty);
+  pickAction(d.duty, d.slot);
+}
+// A CLICK CHOOSES; IT DOES NOT UN-CHOOSE. Both of these used to toggle, so pressing the same
+// mark or the same card twice put the action back down. That was invisible while nothing marked
+// the choice and obvious the moment the chosen mark started holding a solid edge: the second
+// press read as a misfire rather than as an undo.
+//
+// BOTH, NOT JUST THE MARK. The mark and the card below it set the same fact by different routes,
+// and one that toggles beside one that does not is the same click behaving two ways depending on
+// where you aimed it. The Tithe comes through select() too and is included for that reason.
+//
+// Nothing is lost: "no action chosen" is still reached, by picking another duty, which is the
+// only time it means anything -- you have been asked which of the two.
+function select(slot){ S.slot = slot; render(); }
+// ONE RENDER, NOT TWO. pickDuty followed by select() would do the same work -- pickDuty sets the
+// duty and answers the slot for it, then select overwrites that answer -- and draw the whole
+// board twice on the way, once on a slot nobody asked for.
+function pickAction(duty, slot){
+  if (S.editing) return;
+  sfxWake(); sfx("select");
+  S.duty = duty;
+  S.slot = slot;
+  render();
+}
+
+function render(){
+  GEO.duties.forEach(function(d){
+    var tile = document.getElementById("tile-" + d.slug);
+    if (tile) tile.classList.toggle("sel", d.slug === S.duty);
+    // AND THE GRID, FROM THE SAME LINE. Two loops would be two answers the first time one of
+    // them was edited; this is the rule lightFace() already states for the hover pair.
+    var face = document.getElementById("dcell-" + d.slug);
+    if (face) face.classList.toggle("sel", d.slug === S.duty);
+  });
+  // THE CHOSEN ACTION'S MARK, ASKED HERE AND NOT IN THE CLICK HANDLER. S.slot is reached three
+  // ways -- the mark, the card below it, and picking a duty, which either clears it or, for a
+  // duty with one action, chooses that one -- and a class set where it is CLICKED would be right
+  // on one of them. Set from the state, like everything else in render(), and all three are
+  // answered at once.
+  //
+  // BOTH HALVES OF THE QUESTION. Matching the slot alone would leave the same-named mark solid in
+  // every other duty's tile, which looks like eight choices rather than one.
+  Array.prototype.forEach.call(document.querySelectorAll("#board .seal"), function(s){
+    s.classList.toggle("on", s.dataset.duty === S.duty && s.dataset.slot === S.slot);
+  });
+  var info = dutyOf(S.duty);
+  ["actionA","actionB"].forEach(function(slot){
+    var art = document.getElementById("art-" + slot);
+    var a = info && info[slot];
+    var has = a && a.art && IMAGES[a.art];
+    art.innerHTML = "";
+    art.style.display = (info && info.actions === 1 && slot === "actionB") ? "none" : "";
+    if (has){
+      var im = document.createElement("img"); im.src = IMAGES[a.art]; art.appendChild(im);
+    } else {
+      var ph = document.createElement("div"); ph.className = "ph";
+      ph.innerHTML = "<b>" + ((a && a.name) || "no second action") + "</b>" +
+                     (a && a.name ? "<span>no picture yet &mdash; drop one here</span>" : "");
+      art.appendChild(ph);
+    }
+    if (a && a.name){
+      var nm = document.createElement("div"); nm.className = "nm";
+      nm.style.fontSize = px(GEO.art.capSize);
+      // capLh was exported and never applied, so the caption took the body's 1.4 and CAP_H was
+      // computed from a line height the page did not use. It is applied now because Take Tithe
+      // shares this line, and two line heights would put the row half a pixel out.
+      nm.style.lineHeight = String(GEO.art.capLh);
+      nm.style.padding = GEO.art.capPadY + "px " + GEO.art.capPadX + "px";
+      nm.textContent = a.name;
+      art.appendChild(nm);
+    }
+    var lift = document.createElement("div"); lift.className = "lift"; art.appendChild(lift);
+    art.classList.toggle("sel", S.slot === slot);
+  });
+  // THE COMMIT APPEARS WHEN THERE IS SOMETHING TO COMMIT, which is what the confirm buttons it
+  // replaced did -- one per card and one under the Tithe, each drawn only while its own slot was
+  // chosen. One mark serves all three now, so the condition is simply that a slot is chosen at
+  // all. S.slot is null until a duty with one action selects its own, so the board can open with
+  // the column showing two marks rather than three.
+  document.getElementById("mark-" + COMMIT).classList.toggle("off", !S.slot);
+  setStatus();
+  bedsFollow();
+}
+
+// =================================================================================================
+// REPLACING A PICTURE. The page keeps the ORIGINAL bytes, never the copy it is displaying: the
+// board draws at 590 x 295 and a save that posted what it was showing would quietly put a small
+// JPEG over a 1120 x 560 master. The downscaling is the generator's job and happens once, at
+// build time, on the way in.
+var PENDING = [];
+function pickFile(target){
+  var inp = document.createElement("input");
+  inp.type = "file"; inp.accept = "image/png,image/jpeg,image/webp";
+  inp.addEventListener("change", function(){ if (inp.files[0]) takeFile(inp.files[0], target); });
+  inp.click();
+}
+function wireDrop(e){
+  e.addEventListener("dragover", function(ev){ ev.preventDefault(); e.classList.add("drop"); });
+  e.addEventListener("dragleave", function(){ e.classList.remove("drop"); });
+  e.addEventListener("drop", function(ev){
+    ev.preventDefault(); ev.stopPropagation(); e.classList.remove("drop");
+    var f = ev.dataTransfer.files[0]; if (!f) return;
+    var d = e.dataset;
+    takeFile(f, {kind: d.kind, duty: d.duty || S.duty, slot: d.slot});
+  });
+}
+function takeFile(file, target){
+  var r = new FileReader();
+  r.onload = function(){
+    var rec = {kind: target.kind, duty: target.duty, slot: target.slot,
+               filename: file.name, bytes: r.result};
+    PENDING = PENDING.filter(function(p){
+      return !(p.kind === rec.kind && p.duty === rec.duty && p.slot === rec.slot);
+    });
+    PENDING.push(rec);
+    // Shown at once from the original; the browser scales it to the box. The bytes kept for the
+    // save are untouched.
+    // NO "token" KIND ANY MORE. The Tithe's three resources were the only droppable thing that
+    // was not a duty's art or seal, and nothing on the board carries that kind now.
+    var key = rec.kind === "seal" ? ("seal:" + rec.duty + ":" + rec.slot)
+                                  : ("art:" + rec.duty + ":" + rec.slot);
+    IMAGES[key] = r.result;
+    var info = dutyOf(rec.duty);
+    if (info && info[rec.slot]) info[rec.slot][rec.kind === "seal" ? "seal" : "art"] = key;
+    note(PENDING.length + " picture(s) waiting to be saved");
+    board.innerHTML = ""; draw();
+  };
+  r.readAsDataURL(file);
+}
+
+function manifest(){
+  var art = {}, seals = {};
+  Object.keys(DUTIES).forEach(function(slug){
+    ["actionA","actionB"].forEach(function(slot){
+      var a = DUTIES[slug][slot];
+      if (a && a.artFile) art[slug + "/" + slot] = a.artFile;
+      if (a && a.sealFile) seals[slug + "/" + slot] = a.sealFile;
+    });
+  });
+  return {art: art, seals: seals,
+          acolytes: S.occupancy, city: S.city,
+          selected: {duty: S.duty, slot: S.slot}};
+}
+
+// TWO PATHS, ONE KEY LIST. Served, this POSTs and the generator writes the files and the record.
+// Opened as a file it can only download, and it says so -- but it writes the SAME keys, because
+// both read them from SAVE, which the generator filled in from its own constants.
+function doSave(){
+  var payload = {manifest: pick(manifest(), SAVE.manifest),
+                 images: PENDING.map(function(p){ return pick(p, SAVE.image); })};
+  if (location.protocol === "http:" || location.protocol === "https:"){
+    fetch("/save", {method: "POST", headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify(payload)})
+      .then(function(r){ return r.json(); })
+      .then(function(j){
+        if (j.ok){ PENDING = []; note("saved: " + j.files.join(", ")); }
+        else note("the save was refused: " + (j.error || "no reason given"));
+      })
+      .catch(function(e){ note("the save could not be sent: " + e); });
+  } else {
+    download(SAVE.manifestFile.split("/").pop(), JSON.stringify(payload.manifest, null, 1));
+    note("downloaded the manifest only -- run with --serve to write into the repository, "
+         + "and to have the " + PENDING.length + " new picture(s) filed and recorded.");
+  }
+}
+function pick(o, keys){
+  var out = {};
+  keys.forEach(function(k){ if (o[k] !== undefined) out[k] = o[k]; });
+  return out;
+}
+function download(name, text){
+  var a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], {type: "application/json"}));
+  a.download = name; a.click(); URL.revokeObjectURL(a.href);
+}
+function note(t){ document.getElementById("note").textContent = t || ""; }
+
+// =================================================================================================
+function drawPhases(){
+  var holder = document.getElementById("phases");
+  // REBUILT, NOT ADDED TO. This function is its own click handler, so without this line every
+  // click appended a second set of phase buttons and the row grew by three each time. The loop
+  // that used to sit at the end then walked holder.children against GEO.phases[i], which is
+  // shorter, threw on the undefined, and took note() and setStatus() down with it -- so the
+  // phase line silently stopped updating as well. One clear fixes both.
+  holder.textContent = "";
+  GEO.phases.forEach(function(p){
+    var b = document.createElement("button");
+    b.textContent = p.label;
+    b.setAttribute("aria-pressed", String(p.key === S.phase));
+    b.addEventListener("click", function(){
+      S.phase = p.key;
+      drawPhases();
+      note(p.key === GEO.livePhase ? "" :
+           "“" + p.label + "” is a placeholder — nothing is built behind it yet.");
+      setStatus();
+    });
+    holder.appendChild(b);
+  });
+}
+
+// THE VALLEY GOES IN FIRST, FULL STOP. These are `#board > *` with no z-index, so the order
+// they are appended in IS the order they stack -- and the backdrop is the one thing here that is
+// meant to be covered by everything else.
+//
+// drawStatus() USED TO COME BEFORE IT, and got away with it for as long as the picture started
+// at the top of the TILES: the status line sits at y 10 and the backdrop began at 55, so the two
+// never met and the order was invisible. Extending the picture to the top of the canvas made
+// them overlap and the backdrop painted straight over the line -- a caption that simply was not
+// there any more, with nothing in the console to say why.
+function draw(){
+  // THREE OF v1'S SEVEN ARE GONE. drawBackdrop(), drawTiles() and drawRoad() drew the band
+  // across the top -- the picture, the eight tiles standing on it and the road under them --
+  // and that whole band is what v2 removes. The duty icons it held are drawn inside the
+  // rectangles now, by drawGrid(). The functions are deleted rather than left uncalled, so
+  // nothing can quietly start drawing a ribbon again.
+  drawStatus(); drawArt(); drawMarks(); drawSide();
+  drawGrid(); render(); wireGrid();
+}
+
+// SCALED ON BOTH AXES, and the chrome above the stage is MEASURED rather than allowed for.
+//
+// This used to read `Math.min(1, (window.innerWidth - 36) / GEO.canvas.width)` -- width only, and
+// a 36 nobody could derive. On a wide, short window, which is every laptop, the board is 1400
+// across and fits, so the scale came back 1 and the bottom 200-odd rows of a 1200-tall board were
+// simply off the screen: the wheel cut in half with no sign that anything was missing. The canvas
+// check next door has always scaled on min(width, height) -- which is exactly why that page looked
+// right on the same screen where this one did not.
+//
+// The toolbar and the note bar sit OUTSIDE the stage and the note bar collapses when it is empty,
+// so their height is read from the page each time rather than carried as a constant that would be
+// wrong whenever the note appears.
+function fit(){
+  var f = document.getElementById("fit");
+  var wrap = document.getElementById("wrap");
+  var cs = getComputedStyle(wrap);
+  var padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+  var padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+  var chrome = document.getElementById("bar").offsetHeight
+             + document.getElementById("note").offsetHeight;
+  var availW = window.innerWidth - padX;
+  var availH = window.innerHeight - chrome - padY;
+  var s = Math.min(1, availW / GEO.canvas.width, availH / GEO.canvas.height);
+  f.style.transform = "scale(" + s + ")";
+  f.style.width = (GEO.canvas.width * s) + "px";
+  f.style.height = (GEO.canvas.height * s) + "px";
+}
+
+board.style.width = px(GEO.canvas.width);
+board.style.height = px(GEO.canvas.height);
+board.style.setProperty("--solid", String(GEO.ribbon.solidFraction));
+
+document.getElementById("buildTag").textContent = "build " + BUILD.version;
+document.getElementById("bEdit").addEventListener("click", function(){
+  S.editing = !S.editing;
+  this.setAttribute("aria-pressed", String(S.editing));
+  document.body.classList.toggle("editing", S.editing);
+  note(S.editing ? "click a picture slot to replace it, or drop a file on one" : "");
+});
+document.getElementById("bSave").addEventListener("click", doSave);
+document.getElementById("bSound").addEventListener("click", function(){
+  SFX_ON = !SFX_ON;
+  sfxBadge();
+  if (SFX_ON) sfx("select");
+  // THE BUTTON MEANS SOUND, AND THE AMBIENCE IS SOUND. Turning it off has to take the bed with
+  // it or the board goes on murmuring under a control that says it is silent -- and it leaves on
+  // the same 1.5 s fade, because a scene cut dead is a worse answer than a scene walked out of.
+  if (!SFX_ON && bedOn && actx) { bedStop(bedOn, actx.currentTime); bedOn = null; }
+  else if (SFX_ON) bedsFollow();
+});
+
+// ---- FULL SCREEN, ON F --------------------------------------------------------------------
+//
+// The board is a settled 1400 x 1200 composition and fit() already scales it into whatever room
+// there is, so the only thing between it and the whole display is the toolbar -- which is not part
+// of the board. F therefore does two things that belong together: it takes the chrome off, and it
+// asks the browser for the screen.
+//
+// THE TWO ARE KEPT SEPARATE ON PURPOSE. requestFullscreen can be refused -- a file:// page in some
+// browsers, a policy, a window that is already somebody else's full screen -- and a refusal must
+// not leave F doing nothing. The class is ours and always applies; the screen is the browser's and
+// is asked for politely. So the worst case is a board that fills the window rather than the
+// display, which is still the thing that was wanted.
+//
+// Esc leaves full screen WITHOUT passing through the key handler, so the chrome is put back by
+// fullscreenchange rather than by the keystroke. Driving it from the key alone would strand the
+// page with no toolbar and no way back to it.
+var FULL = false;
+
+function screenEl(){
+  return document.fullscreenElement || document.webkitFullscreenElement || null;
+}
+
+function setFull(on){
+  FULL = on;
+  document.body.classList.toggle("full", on);
+  fit();
+}
+
+function toggleFull(){
+  if (FULL){
+    setFull(false);
+    var exit = document.exitFullscreen || document.webkitExitFullscreen;
+    if (screenEl() && exit) exit.call(document);
+    return;
+  }
+  setFull(true);
+  var d = document.documentElement;
+  var ask = d.requestFullscreen || d.webkitRequestFullscreen;
+  if (!ask) return;                       // no API: the chrome is off and that is most of it
+  var p = ask.call(d);
+  if (p && p.catch) p.catch(function(){}); // refused: keep the chrome off, say nothing
+}
+
+document.addEventListener("keydown", function(e){
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  var t = e.target;
+  // Not while somebody is typing. There is no text field on the board today and there will be one
+  // the day a slot gets a name, and a page that swallowed the f would be a horrible way to find out.
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+  if (e.key === "f" || e.key === "F"){ e.preventDefault(); toggleFull(); }
+  else if (e.key === "Escape" && FULL && !screenEl()) setFull(false);
+});
+
+["fullscreenchange", "webkitfullscreenchange"].forEach(function(t){
+  document.addEventListener(t, function(){
+    // Left the screen by any route other than F -- Esc, the window chrome, another tab taking it.
+    if (!screenEl() && FULL) setFull(false);
+    else fit();
+  });
+});
+
+window.addEventListener("resize", fit);
+drawPhases();
+draw();
+fit();
+// DECODE NOW SO THE FIRST CLICK CAN SOUND. The context is born suspended and the first gesture
+// resumes it; what cannot be hurried is the decoding, so it happens here rather than on a click.
+sfxWake();
+sfxBadge();
+if (BUILD.notes && BUILD.notes.length) note(BUILD.notes.join("  ·  "));
+</script>
+</html>
