@@ -56,7 +56,6 @@ action_board.html.tmpl explicitly, 4,400 lines of them, and none of it reaches t
 from __future__ import annotations
 
 import argparse
-import base64
 import json
 import pathlib
 import re
@@ -72,83 +71,27 @@ import geometry as G                        # noqa: E402
 
 TMPL = HERE / "action_board_v2.html.tmpl"
 OUT = HERE / "generated" / "action_board_v2.html"
-BANNER_DIR = HERE.parent / "duty_actions" / "banners"
-# THE FONT IS NOT IN duty_actions/ AND THE TESTS ARE WHY, which is worth writing down because
-# the obvious place to put it was beside the banners it letters. Two guards refuse that. A .ttf
-# is not in `imageSuffixes`, so the asset walk cannot see it and a record for it reads as a
-# record naming a file that is not in the tree; and `test_the_stated_default_is_written_down`
-# holds that EVERY recorded entry under duty_actions/ and tokens/ carries `openai-generated`,
-# which an OFL face from Google Fonts plainly does not. Between them they say duty_actions/ is
-# for this project's generated artwork, so a third-party font lives next door and carries its
-# licence text with it, which is what the OFL asks.
-BANNER_FONT = HERE.parent / "fonts" / "PirataOne-Regular.ttf"
-
-# HOW A TITLE SITS ON ITS PARCHMENT. Carried over whole from
-# tools/ui_debug/generate_duty_board_check.py, which is where the sow page gets them and where
-# they were found by looking: the blanks are BLANK, so every one of these four numbers is about
-# where the lettering goes rather than about the art.
-BANNER_TOP = 0.502           # of the banner's own height: where the parchment's middle sits
-BANNER_FS = 29.0 / 64.0      # font size as a fraction of banner height
-BANNER_TRACK = 0.025         # letter-spacing, em
-BANNER_INK = "#201b17"
+# NO BANNER CONSTANTS. The nine parchments and the face that lettered them are off this
+# board: a rectangle carries no name at all now. THE FILES STAY WHERE THEY ARE --
+# duty_actions/banners/*.webp and fonts/PirataOne-Regular.ttf, still recorded in
+# attribution.json and still held by tests/action_board/test_action_board_v2_banners.py --
+# because they may come back, and a resource that is deleted and re-fetched comes back as a
+# different file with a different provenance. Nothing in this build reads them.
 
 # WHERE THE SLIDERS START, AND THE ONLY PLACE THEY ARE WRITTEN DOWN. The template reads them out
 # of __GRID__ rather than carrying them in the markup, so changing a default is changing this
 # dict and nothing else. They are in BOARD pixels, like every other number this tool passes.
-GRID_DEFAULTS = {"gap": 20, "disp": 40, "size": 100, "centre": True}
-
-
-def bundled_banners() -> tuple[dict, str, list]:
-    """The nine parchments and the face that letters them, inlined, from board_v2's own copies.
-
-    NOT READ OUT OF ui/assets-gothic/, WHICH IS THE POINT OF THE COPY. The sow page reads the
-    2172 px PNGs and the font straight from the older trees; this build reads neither, so a
-    change there cannot alter this board and the guards on each tree stay on their own side of
-    the fence. What each file came from is in attribution.json, which is where provenance goes.
-
-    THE RECORD GATES THESE TOO, by the rule every other picture on this board follows: a file
-    with no entry is left out and NAMED rather than inlined. The art is already at its shipped
-    size, so unlike bundled_art() there is nothing to resample here -- it is base64 and nothing
-    else.
-
-    A MISSING FONT IS A NOTE, NOT A FAILURE. The sow page returns empty and says which, because
-    a page with no banners is still worth looking at; the same choice here, and the titles fall
-    back to the serif the stylesheet names after `PB`.
-    """
-    notes: list = []
-    out: dict = {}
-    if not BANNER_DIR.is_dir():
-        return out, "", ["no duty_actions/banners/, so the rectangles carry no titles"]
-
-    recorded = set()
-    if v1.ATTRIB_FILE.is_file():
-        rec = json.loads(v1.ATTRIB_FILE.read_text(encoding="utf-8")).get("files", {})
-        recorded = {k for k, e in rec.items() if e.get("state", "present") == "present"}
-
-    for slug, _name, _deg in G.DUTIES:
-        out[slug] = None
-    out["city"] = None
-    for slug in list(out):
-        f = BANNER_DIR / ("%s_banner_v01.webp" % slug)
-        key = "duty_actions/banners/%s_banner_v01.webp" % slug
-        if not f.is_file():
-            notes.append("no banner for %s, so its rectangle keeps a plain title" % slug)
-            continue
-        if key not in recorded:
-            notes.append("%s has no attribution entry, so it is left out" % key)
-            continue
-        out[slug] = "data:image/webp;base64," + base64.b64encode(f.read_bytes()).decode("ascii")
-
-    # THE FONT IS NOT GATED ON THE RECORD, unlike every picture here, because it cannot be in
-    # the record -- see BANNER_FONT above. Its provenance is ui/board_v2/fonts/OFL.txt beside it
-    # and the full entry in ui/assets/attribution.json, which names the same sha256.
-    font = ""
-    if BANNER_FONT.is_file():
-        font = ("data:font/ttf;base64,"
-                + base64.b64encode(BANNER_FONT.read_bytes()).decode("ascii"))
-    else:
-        notes.append("%s is missing, so banner titles fall back to a serif" % BANNER_FONT.name)
-    return out, font, notes
+# `height` OPENS JUST OFF 100. 100 is the 2:1 rectangle this fork exists to look at and the
+# slider only goes up from there; it grows the boxes UPWARD, so the line the acolytes stand on
+# does not move when it is dragged.
+# `bare` OPENS ON. It hides three edges of every rectangle and their ground, leaving the bottom
+# line the acolytes stand on. It opened OFF while it was a way of LOOKING at a framed board;
+# the frameless arrangement is now the one being judged, so that is what the page opens on and
+# the frame is what you switch back to.
+# NO `centre`. The City was a ninth rectangle you could switch off while it stood for nothing;
+# it is where the City panel went and it holds people, so it is part of the wheel now and there
+# is nothing to switch.
+GRID_DEFAULTS = {"gap": 115, "disp": 60, "size": 90, "height": 130, "bare": True}
 
 
 def build() -> tuple[str, list]:
@@ -165,8 +108,7 @@ def build() -> tuple[str, list]:
     sfx, xnotes = v1.bundled_sfx()
     beds, dnotes = v1.bundled_beds()
     controls, cnotes = v1.bundled_controls()
-    banners, banner_font, bnotes = bundled_banners()
-    notes += snotes + xnotes + dnotes + cnotes + bnotes
+    notes += snotes + xnotes + dnotes + cnotes
 
     # THE BACKDROP IS NOT BUNDLED, because v2 does not draw it. It was the valley the ribbon of
     # eight tiles stood on, and the ribbon is gone. Carrying the picture anyway would leave 22 KB
@@ -203,11 +145,7 @@ def build() -> tuple[str, list]:
         # the asset could go missing without this build noticing -- which is correct here and
         # would not be in v1.
         "__GRID__": json.dumps(GRID_DEFAULTS),
-        "__BANNERS__": json.dumps(banners),
         "__HOOD__": json.dumps(hood.as_dict()),
-        "__BANNERFONT__": json.dumps(banner_font),
-        "__BANNERMETA__": json.dumps({"top": BANNER_TOP, "fs": BANNER_FS,
-                                      "track": BANNER_TRACK, "ink": BANNER_INK}),
         "__SAVEKEYS__": json.dumps(v1.SAVE_KEYS),
         "__BUILD__": json.dumps({"version": v1.BUILD_VERSION + "+v2", "notes": notes}),
     }
@@ -254,18 +192,26 @@ def main() -> None:
     OUT.write_text(page, encoding="utf-8")
     print("  wrote %s  (%d KB)" % (OUT, len(page.encode("utf-8")) // 1024))
     # WHAT THE PAGE WILL ACTUALLY DO, worked out the same way the template works it out. The
-    # grid is no longer laid into GEO.wheel: v2 centres it in the room left once the card row
-    # is lifted, bounded by the board's own margin on all four sides. Printing the wheel's rect
-    # here would be printing a number the page does not use.
+    # grid is no longer laid into GEO.wheel: v2 centres it in the room the lifted card row
+    # leaves, spanning the two ACTION CARDS end to end rather than margin to margin. Printing
+    # the wheel's rect here would be printing a number the page does not use.
+    #
+    # THIS IS A SECOND COPY OF gridArea() AND IT HAS ALREADY DRIFTED ONCE. The template's version
+    # is the one that draws; this one only prints. When the span stopped being margin-to-margin
+    # the template was changed and this was not, so the build cheerfully announced 1344 while the
+    # page drew 1174 -- a wrong number in the one place somebody checks instead of measuring.
+    # `test_the_build_summary_agrees_with_the_page` now runs both and compares them.
     d = G.as_dict()
-    m = d["slots"]["actionA"]["x"]
+    card, far = d["slots"]["actionA"], d["slots"]["actionB"]
+    m = card["x"]
     lift = d["art"]["y"] - (d["status"]["y"] + d["status"]["height"] + 16)
-    top = (d["slots"]["actionA"]["y"] - lift) + d["slots"]["actionA"]["height"] + m
+    top = (card["y"] - lift) + card["height"] + m
     print("  the duty grid is centred in %d x %d at (%d, %d), margin %d, read at draw time"
-          % (d["canvas"]["width"] - 2 * m, d["canvas"]["height"] - top - m, m, top, m))
-    print("  sliders open at gap %d, edge %d, size %d%%, centre %s"
+          % ((far["x"] + far["width"]) - card["x"], d["canvas"]["height"] - top - m,
+             card["x"], top, m))
+    print("  sliders open at gap %d, edge %d, size %d%%, height %d%%, bare %s"
           % (GRID_DEFAULTS["gap"], GRID_DEFAULTS["disp"], GRID_DEFAULTS["size"],
-             "on" if GRID_DEFAULTS["centre"] else "off"))
+             GRID_DEFAULTS["height"], "on" if GRID_DEFAULTS["bare"] else "off"))
     for n in notes:
         print("  note: %s" % n)
 
