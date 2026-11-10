@@ -12,12 +12,9 @@
   showing, whether pictures can be replaced, and save.
 -->
 <style>
-/* THE BANNER FACE, inlined as a data URI by the generator. `PB` is the name the sow page and the
-   concept browser already use for it, kept so the three pages are speaking about one thing.
-   font-display:block, not swap: a title that paints in a serif and then jumps to Pirata One is a
-   visible flicker on every banner at once, and these are nine words on nine parchments rather
-   than a paragraph somebody is waiting to read. */
-@font-face{font-family:"PB";src:url(__BANNERFONT__) format("truetype");font-display:block}
+/* NO @font-face HERE ANY MORE. The parchments and the face that lettered them have gone off this
+   board; the files are still in the tree under duty_actions/banners/ and fonts/, still recorded,
+   and still guarded, because they may come back. Nothing on this page loads them. */
 :root{
   --ink:#e2d7bc; --dim:#968e7c; --line:#c9b27a; --faint:#2c2924;
   --panel:#0e0d0b; --panelline:#46413710;
@@ -355,18 +352,13 @@ body.full{background:#000}
    middle of the word -- ALLOCATION unreadable behind three figures on the first build. The
    wheel never had this problem because its labels were in the drawing and the figures ringed
    the outside of it. A rectangle has an inside, and now two things want to be in it. */
-.dcell .dn{font-family:Georgia,serif;font-weight:600;letter-spacing:.11em;text-transform:uppercase;
-  font-size:15px;color:var(--dim);text-align:left;padding:9px 10px 0;pointer-events:none;
-  transition:color .12s ease}
 .dcell.lit{border-color:#9d9079;background:#1b1813}
-.dcell.lit .dn{color:var(--ink)}
 /* SELECTION IS A SECOND STATE, NOT THE SAME ONE. The tile has carried `sel` since there was a
    board, and the wheel's faces were given it for the same reason: without a second state,
    hovering one duty while another is selected shows two identical highlights and no way to tell
    which is which. Lit is the hover; selected is lit plus the gold this board uses everywhere
    else to say "this one is chosen". */
 .dcell.sel{border-color:var(--line);background:#231d12}
-.dcell.sel .dn{color:#f0e6cd}
 /* THE CENTRE IS THE CITY, AND IT IS NOT A DUTY. It stood dashed and nameless while it stood for
    nothing; it is where the City panel went when the bottom right of the board was cleared, so it
    is solid now -- a dashed box under a title that says City would be the drawing contradicting
@@ -376,6 +368,18 @@ body.full{background:#000}
    is the ground and the missing plate rather than a broken rule. The border colour is the City
    panel's own #46413a, carried over from the box this replaces. */
 .dcell.centre{cursor:default;border-color:#46413a;background:#100f0d}
+/* THE FRAME OFF, TO SEE WHAT THE BOARD LOOKS LIKE WITHOUT IT. Three edges and the ground go; the
+   BOTTOM EDGE STAYS, because the acolytes stand on it -- their feet are 6px above the inner
+   bottom edge, so that line is the floor of the drawing and not part of the frame around it.
+   TRANSPARENT, NOT ABSENT. `border:none` would give the cell back 4px of width and 4px of
+   height, and everything inside is placed against the PADDING box -- so the plate, the parchment
+   and the whole figure row would shift two pixels and the one thing this checkbox must not do is
+   change the arrangement it was added to look at. Colour is the only thing that moves.
+   AND IT COMES LAST ON PURPOSE. `.lit` and `.sel` set `border-color` as a shorthand, so this
+   rule overriding three of the four leaves the BOTTOM edge carrying the state -- hover and
+   selection still read, in the only language a bare cell has left. */
+.dcell.bare{background:transparent;border-top-color:transparent;
+  border-left-color:transparent;border-right-color:transparent}
 /* THE ICONS GET THEIR TILE BACK. On the ribbon each duty's marks stood on a rounded plate --
    .tile, one pixel of #2a2721 round --plate at --tile-alpha -- and losing the ribbon lost that
    ground, leaving cut-out emblems floating on the rectangle. This is the same declaration, not
@@ -389,18 +393,8 @@ body.full{background:#000}
    more present the honest fix is a higher alpha HERE, not a second hard-coded slate. */
 .iplate{position:absolute;border:1px solid #2a2721;pointer-events:none;
   background:color-mix(in srgb, var(--plate) var(--tile-alpha), transparent)}
-/* THE TITLE IS A PARCHMENT NOW, NOT A WORD. The rules are the sow page's, which is where this
-   arrangement already works: the art is a BLANK, and the name is set over the middle of it at
-   render time. So one blank can wear any name, renaming a duty needs no new picture, and the
-   nine parchments differ from each other only as nine pieces of scorched vellum would.
-   THE TEXT IS CENTRED ON A FRACTION OF THE BANNER'S OWN HEIGHT, not on the box, because what it
-   has to sit in the middle of is the parchment -- and the parchment does not fill the frame.
-   0.502 is where its middle falls; the thin band of transparency above and below is the brief's
-   doing and is not symmetrical enough to ignore. */
-.ban{position:absolute;pointer-events:none}
-.ban img{display:block;width:100%;height:100%}
-.ban b{position:absolute;left:50%;transform:translate(-50%,-50%);font-family:"PB",serif;
-  text-transform:uppercase;white-space:nowrap;line-height:1;font-weight:400}
+/* NO TITLE RULES. A rectangle carries no name at all now -- not a parchment and not a word -- so
+   the only thing inside it is its people, and the only thing beside it is its icons. */
 .fig{position:absolute;pointer-events:none}
 .fig svg{width:100%;height:100%;display:block;overflow:visible}
 
@@ -428,8 +422,14 @@ body.editing .art.drop,body.editing .seal.drop{outline:2px solid var(--line)}
   <input type=range id=rSize min=40 max=160 step=1
          title="the size of the nine rectangles, as a percentage of what fits">
   <span class=val id=vSize></span>
-  <label class=chk><input type=checkbox id=cCentre> centre</label>
-  <span class=tag id=gridTag title="what the two sliders cost: the size of each rectangle"></span>
+  <span class=tag>height</span>
+  <input type=range id=rHeight min=100 max=250 step=1
+         title="taller rectangles, as a percentage of the 2:1 height; they grow UPWARD, so the line the acolytes stand on does not move">
+  <span class=val id=vHeight></span>
+  <label class=chk><input type=checkbox id=cBare
+         title="hide the rectangles' top, left and right edges and their ground; the bottom edge the acolytes stand on stays"> bare</label>
+  <span class=tag id=gridTag
+        title="one rectangle, then the nine together -- what the sliders cost and what they come to"></span>
   <span class=tag>f &nbsp;full screen</span>
   <span class=tag id=buildTag></span>
 </div>
@@ -450,7 +450,6 @@ var BUILD  = __BUILD__;
 // two numbers the sliders start at, so the defaults live in the generator with every other
 // default rather than being typed into the markup.
 var GRID = __GRID__;
-var BANNERS = __BANNERS__, BANMETA = __BANNERMETA__;
 var HOOD = __HOOD__;
 
 var board = document.getElementById("board");
@@ -782,10 +781,47 @@ function drawSide(){
 // DOM. Rebuilt by drawGrid(); read by drawFigures().
 var GRIDPOS = {};
 
+// HOW MANY DUTIES WENT WITHOUT THEIR ICONS, and it is counted rather than inferred. A plate that
+// will not fit is not drawn -- which is right, because the alternative is `overflow:hidden`
+// cropping it -- but a duty whose icons are simply absent looks like a duty that has none. The
+// readout says the number, so the trade is stated on the page the way the margin overflow is.
+var PLATES_DROPPED = 0;
+
+// HOW TALL AN ICON PLATE CAME OUT, because the acolytes are drawn to match it and the two are
+// worked out in different passes. drawGrid() sizes the plates; drawFigures() runs after it and
+// needs the answer, and re-deriving it there would be the same arithmetic in two places --
+// which is how a figure ends up ALMOST the height of the plate beside it.
+// THE TALLEST, not the last one assigned. All eight come out equal today, because the icon size
+// is set by the rectangle's height and every rectangle is the same size -- but "they happen to
+// be equal" is not a thing to depend on, and one figure size for the whole board is. Taking the
+// largest makes the choice deterministic if they ever differ.
+// AND IT IS THE HEIGHT THE PLATE WOULD HAVE, recorded before a plate that will not fit is
+// zeroed. Otherwise a board whose bottom row lost its icons would draw its people to match a
+// plate of nothing.
+var PLATE_H = 0;
+
 // THE CELL'S BORDER, NAMED BECAUSE THE ICON ARITHMETIC DEPENDS ON IT. An absolutely positioned
 // child sits against the PADDING box, not the border box, so placing an icon at the cell's own
 // width would put it two pixels past the right edge on each side. Must match .dcell's border.
 var CELL_BORDER = 2;
+
+// HOW FAR THE ICON PLATE HANGS BELOW THE BOTTOM LINE.
+//
+// IT WAS THE CLEARANCE EITHER SIDE OF THAT LINE and was one number for both, so the acolytes
+// standing above it and the plate hanging below it read as the same gap around the same rule.
+// The acolytes now stand ON the line with no gap at all, so there is nothing left to mirror and
+// the number belongs to the plate alone -- which is why it is no longer called FOOT_GAP. A
+// constant that still carried the feet in its name would be describing an arrangement the board
+// stopped drawing.
+var PLATE_DROP = 6;
+
+// THE PLATE'S OWN BORDER, NAMED FOR THE SAME REASON CELL_BORDER IS. `*{box-sizing:border-box}`
+// means a plate declared 130 wide has a 128 padding box, and the marks are placed against THAT
+// -- so a row set at `pad` from the left ended up with `pad` on one side and `pad - 2` on the
+// other. Two pixels, invisible on a pair of marks and exactly the thing that stops a single
+// centred mark from being centred. The width is declared with the border included so the ground
+// around the marks is `pad` on all four sides, which is what it has always claimed to be.
+var PLATE_BORDER = 1;
 
 // CLOCKWISE FROM THE TOP, which is the order geometry.py's COMPASS is in. A duty knows its face
 // and the ring knows its cells, so the two are indexed against each other and there is no table
@@ -811,10 +847,23 @@ var RING_FACES = ["north", "north_east", "east", "south_east",
 // margin above the canvas. That is 842 tall against the wheel's 622, and it is the room the size
 // slider grows into.
 function gridArea(){
-  var m = GEO.slots.actionA.x;
-  var top = (GEO.slots.actionA.y - LIFT) + GEO.slots.actionA.height + m;
-  return {x: m, y: top,
-          width: GEO.canvas.width - 2 * m,
+  // THE ROW ABOVE IS WHAT THE GRID LINES UP WITH, END TO END. It ran margin to margin -- the
+  // card's left edge to the same distance off the right of the canvas -- which lined it up with
+  // the board rather than with the things on the board. The card row does not reach that far:
+  // it stops at the Tithe's right edge, 198 short of the mirror margin, so a grid spanning the
+  // full width was wider than every object above it by most of a Tithe box.
+  // SO BOTH ENDS ARE READ OFF THE ACTION CARDS. The left is the leftmost card's own left edge
+  // and the right is where the second one ends -- the two pictures the grid is a choice
+  // between. It reached the Tithe's right edge for a round, which lined the wheel up with the
+  // whole row including a box that is not a duty; the cards are what the nine rectangles answer
+  // to. Nothing here is a margin, so the grid follows the pair if either ever moves.
+  var a = GEO.slots.actionA, b = GEO.slots.actionB;
+  // The vertical still uses the card's left margin as its gap, above and below: it is the one
+  // spacing this board repeats everywhere, and the row gives no vertical number to read.
+  var m = a.x;
+  var top = (a.y - LIFT) + a.height + m;
+  return {x: a.x, y: top,
+          width: (b.x + b.width) - a.x,
           height: GEO.canvas.height - top - m};
 }
 
@@ -845,7 +894,26 @@ function gridCells(){
   // equally far past the block on every side and the picture is symmetrical in the area whatever
   // the three sliders say.
   var ox = w.x + (w.width - (bw + 2 * d)) / 2 + d;
-  var oy = w.y + (w.height - (bh + 2 * d)) / 2 + d;
+  // AND THE PLATES COUNT, VERTICALLY. They hang under the bottom row, so the ink this
+  // arrangement puts on the board reaches further DOWN than the rectangles do -- 62px further
+  // at the opening settings. Centring the rectangles alone left that overhang outside the
+  // balance: equal slack above and below the OUTLINES, and visibly more above than below the
+  // drawing. So the hang is paid for here, the same way the displacement is, and what ends up
+  // centred is everything that gets drawn.
+  // HORIZONTALLY THERE IS NOTHING TO ADD, because a plate is centred under its own rectangle
+  // and is never wider than it -- the arrangement's left and right edges are the rectangles'.
+  // ONLY AS MUCH AS THERE IS ROOM FOR. The rectangles are sized before the hang is known --
+  // `fit` cannot account for it without solving for its own output -- so on an arrangement that
+  // already fills the area vertically there is nothing left to reserve. Taking it anyway pushed
+  // the top row 24px ABOVE the area and within 4px of the card row above it. Where the room runs
+  // out the plates go back to hanging past the bottom, and `hasPlate` refuses the ones that run
+  // off the board, which the readout already reports.
+  var hang = Math.max(0, Math.min(plateHang(), w.height - (bh + 2 * d)));
+  // HOW MUCH TALLER THAN 2:1 THE RECTANGLES ARE ASKED TO BE. Measured off `rh` rather than
+  // typed, so the slider reads as a percentage of the shape the fork is about and keeps that
+  // meaning when the other three sliders change the shape's size.
+  var extra = rh * (GRID.height / 100 - 1);
+  var oy = w.y + (w.height - (bh + 2 * d + hang)) / 2 + d;
   var out = [];
   for (var row = 0; row < 3; row++){
     for (var col = 0; col < 3; col++){
@@ -854,83 +922,175 @@ function gridCells(){
       if (col === 1 && row === 2) y += d;         // bottom, down
       if (col === 0 && row === 1) x -= d;         // left, left
       if (col === 2 && row === 1) x += d;         // right, right
-      out.push({x: x, y: y, width: rw, height: rh, col: col, row: row,
-                centre: (col === 1 && row === 1)});
+      // `hang` TRAVELS WITH THE CELLS because it is what the arrangement was centred on, and
+      // it is capped -- so it is not something a reader can re-derive from rw and rh. Anything
+      // asking "is this balanced?" has to ask the number that was actually used.
+      // TALLER, AND UPWARD ONLY. The height slider is applied AFTER the arrangement is laid
+      // out and centred, which is what makes the bottom edge stay put: `y + rh` is untouched,
+      // so the line the acolytes stand on, the plate hanging under it and the vertical balance
+      // of the whole wheel are all exactly where they were before the slider moved.
+      // WHICH ALSO MEANS THE TOP CAN LEAVE THE AREA. Growing upward has to come from somewhere
+      // and nothing else is allowed to move, so past a certain height the top row rises past
+      // the area and, eventually, into the card row. That is reported rather than prevented --
+      // the readout already says when the arrangement passes its margins -- because a slider
+      // that silently refuses to grow is worse than one you can see has gone too far.
+      // THE BLOCK IS NOT RE-INSCRIBED EITHER. `fit` sizes the rectangles at 2:1 and the extra
+      // height is added on top of that, so the width does not shrink to pay for the height.
+      // Inscribing the taller shape would have kept everything inside the area and moved every
+      // bottom edge to do it, which is the one thing this slider must not do.
+      // `bottom` IS CARRIED, NOT DERIVED, and it is carried because of one pixel. The extended
+      // cell stores `y - extra` and `rh + extra`; adding those back together is not bit-for-bit
+      // `y + rh`, and when the true bottom lands exactly on a half pixel that 1e-13 of noise is
+      // enough to flip `Math.round` the other way. The bottom edge then moved by a pixel when
+      // the height slider was dragged -- the one thing it promises not to do. So the exact
+      // bottom is worked out BEFORE the extension and travels with the cell.
+      out.push({x: x, y: y - extra, width: rw, height: rh + extra, bottom: y + rh,
+                col: col, row: row, hang: hang, centre: (col === 1 && row === 1)});
     }
   }
   return out;
 }
 
-// A PARCHMENT 3.00 TIMES AS WIDE AS IT IS TALL. The brief asked for 3.12 and the art came back
-// at 2172 x 724, so the number that matters is what the files MEASURE, not what was asked for.
-var BANRATIO = 3.0;
+// HOW BIG THE PLATE OF ICONS UNDER A RECTANGLE COMES OUT.
+//
+// IT IS A FUNCTION BECAUSE TWO PASSES NEED IT AND NEITHER MAY GUESS. drawGrid() needs the whole
+// answer to place the plate; gridCells() needs only its HEIGHT, because the arrangement is
+// centred on everything it draws and the plates hang below the bottom row. Worked out in both
+// places it would be the same arithmetic twice, and the drift that produces is a wheel centred
+// on a plate height that is not the one drawn -- a few pixels off, consistently, with nothing
+// to compare it against.
+//
+// THE ICON IS GEOMETRY'S OWN SIZE AND IS NEVER SHRUNK. It used to be the smallest of that size,
+// what the row could take across the rectangle and what the rectangle's height allowed -- so a
+// duty's marks came out at 32px at the settings this board opens on, against the 50 the same
+// mark is drawn at everywhere else in the game. An icon that changes size with a layout slider
+// is an icon you cannot compare across boards, and these are the one object on the rectangle
+// that carries meaning rather than arrangement. So the size is a constant now and the ROOM is
+// what gives: a plate that will not fit where it has to go is not drawn, and is counted.
+//
+// WHICH MAKES THE HEIGHT A CONSTANT TOO -- one icon plus its padding, whatever rectangle it
+// belongs to -- so `plateHeight` stands alone and `plateHang` can ask for it without inventing
+// a rectangle to ask about.
+//
+// THE MARGIN IS DOUBLE THE INSET A SEAL USED TO KEEP, written as that rather than as a 12 so it
+// still follows geometry if the inset ever moves. The plate's own padding is the ribbon's `pad`
+// -- what a tile kept around its marks -- so the icon sits in the same ground it sat in before.
+function plateHeight(){
+  return GEO.ribbon.seal + 2 * GEO.ribbon.pad + 2 * PLATE_BORDER;
+}
 
-// THE TITLE, AS A BANNER OR AS A WORD. Both, because the font and the art are each allowed to be
-// missing -- the generator says so in a note rather than refusing to build -- and a rectangle
-// with no name on it would be the one failure nobody could diagnose from the page.
-function banner(cell, slug, name, mg, w, h, plateH){
-  var uri = BANNERS[slug];
-  if (!uri || w < 8){
-    // NO PARCHMENT: the word, where the word used to be. Kept deliberately rather than left to
-    // fail, and it is also what a rectangle falls back to at the small end of the sliders, where
-    // a banner would be a few pixels tall and illegible.
-    var n = el("div", "dn", {paddingRight: px(2 * mg)}, cell);
-    n.textContent = name;
-    return;
-  }
-  // TOPS ALIGNED, NOT MIDDLES. It was centred on the plate, which put the banner's top 12px
-  // below the plate's and left the two reading as different rows; hanging both from the same
-  // `mg` gives the row one line to start on.
-  // NO CORRECTION FOR THE TRANSPARENT BAND, and that is measured rather than assumed. The brief
-  // asked the parchment to nearly fill its frame, and it does: the clear band above the ink runs
-  // from 0.0000 to 0.0234 of the banner's height across the nine, which at this size is 0 to
-  // 1.2px -- and it differs per banner, so any single correction would be wrong on eight of
-  // them. The ragged edge is uneven by more than that anyway.
-  var b = el("div", "ban", {left: px(mg), top: px(mg),
-                            width: px(w), height: px(h)}, cell);
-  var im = document.createElement("img"); im.src = uri; im.alt = name; b.appendChild(im);
-  var t = document.createElement("b");
-  t.style.top = (BANMETA.top * 100) + "%";
-  t.style.fontSize = px(h * BANMETA.fs);
-  t.style.letterSpacing = px(h * BANMETA.fs * BANMETA.track);
-  t.style.color = BANMETA.ink;
-  t.textContent = name.toUpperCase();
-  b.appendChild(t);
+// THE WIDEST ROW OF MARKS ANY DUTY NEEDS, counted rather than typed. Every plate is built to
+// this, so a duty with fewer marks gets the same frame with its marks centred in it -- and the
+// day a duty gains a third action, every plate widens to match without anything here changing.
+function mostActions(){
+  var n = 1;
+  for (var k in DUTIES) n = Math.max(n, (DUTIES[k] && DUTIES[k].actions) || 1);
+  return n;
+}
+
+function plateFor(rw, rh, nAct){
+  var mg = GEO.ribbon.sealInset * 2, ip = GEO.ribbon.pad, igap = 6;
+  var sz = GEO.ribbon.seal;
+  // ONE FRAME FOR EVERY DUTY, WHATEVER IT HOLDS. Allocation and Taxation have a single mark
+  // each and used to get a plate 74 wide against the other six's 130 -- two sizes of the same
+  // object in one row, which reads as two kinds of thing rather than as one kind holding
+  // different amounts. The frame is now the widest row any duty needs and a short row is
+  // CENTRED in it, so what differs between duties is the marks and not the ground they sit on.
+  var rowW = nAct * sz + (nAct - 1) * igap;
+  var most = mostActions();
+  var fullRow = most * sz + (most - 1) * igap;
+  return {mg: mg, ip: ip, igap: igap,
+          innerW: rw - 2 * CELL_BORDER, innerH: rh - 2 * CELL_BORDER,
+          // WHERE THE ROW STARTS INSIDE THE PADDING, which is what centres a short one. It is
+          // zero for a duty holding the full row, so the two cases are one expression.
+          sz: sz, rowW: rowW, inset: (fullRow - rowW) / 2,
+          width: fullRow + 2 * ip + 2 * PLATE_BORDER, height: plateHeight()};
+}
+
+// WHAT THE PLATES ADD BELOW THE BOTTOM ROW, which is what the arrangement has to be centred on.
+// No longer a function of the rectangle, because the plate is not: one number for the board.
+function plateHang(){ return PLATE_DROP + plateHeight(); }
+
+// WHERE A RECTANGLE'S PLATE GOES, AND WHETHER IT GOES AT ALL.
+//
+// SEPARATED FROM drawGrid FOR THE SAME REASON plateFor WAS. drawGrid places a DOM element with
+// these numbers and nothing else can see them, so the only way to check them was to work them
+// out a second time -- and a guard that recomputes what it is checking agrees with a mistake for
+// the same reason the mistake happened. Two of these were being re-derived in the test suite and
+// two mutations went unnoticed because of it.
+//
+// TWO WAYS A FULL-SIZE PLATE CAN HAVE NOWHERE TO GO, now that it cannot shrink to fit. DOWN: it
+// hangs into the margin below the bottom row and #board is `overflow:hidden`, so a tall
+// arrangement would crop it. ACROSS: it is centred under its rectangle and at 130 wide it can be
+// wider than the rectangle once the sliders make these small -- at which point it reaches under
+// its neighbours and stops saying which duty it belongs to. Both are refused rather than drawn.
+//
+// THE WIDTH TEST WAS DEAD CODE UNTIL NOW. It was in `hasPlate` for a round, a mutation proved no
+// slider setting could fail it -- the icon shrank first -- and it was removed. The icon no longer
+// shrinks, so it is live, and it is the condition that does the most work.
+// THE INTEGER RECTANGLE A CELL IS ACTUALLY DRAWN AS.
+//
+// THE BOTTOM EDGE IS ROUNDED, NOT THE HEIGHT, and it is rounded from the cell's own `bottom`
+// rather than from `y + height`. Rounding `y` and `height` separately gives `round(y) +
+// round(h)`, which differs from `round(y + h)` by a pixel often enough; and adding the extended
+// pair back together is not bit-for-bit the un-extended sum either, which flips `Math.round` on
+// a half pixel. Both ways the bottom edge moved when the height slider was dragged. That edge
+// is the floor the acolytes stand on and the line the icon plate hangs from, and it is the one
+// thing the height slider promises not to move -- so it is the number that gets rounded, from
+// the value gridCells worked out before it extended anything, and the height follows from it.
+//
+// A FUNCTION FOR THE SAME REASON THE OTHERS ARE. It was two lines inside drawGrid and the guard
+// that checks the bottom edge had to round the cell itself to have anything to check -- a third
+// copy of the same arithmetic, which is how the pixel got through in the first place.
+function cellRect(c){
+  var y0 = Math.round(c.y), y1 = Math.round(c.bottom);
+  return {x: Math.round(c.x), y: y0, width: Math.round(c.width), height: y1 - y0};
+}
+
+function placeFor(r, nAct){
+  var P = plateFor(r.width, r.height, nAct);
+  var x = r.x + CELL_BORDER + Math.round((P.innerW - P.width) / 2);
+  var y = r.y + r.height + PLATE_DROP;
+  return {p: P, x: x, y: y,
+          has: P.width <= P.innerW && y + P.height <= GEO.canvas.height,
+          // THE ROW RUNS THE WHOLE RECTANGLE, less one margin at each end. It ran from the
+          // banner's left edge to the plate's while both were inside; neither is any more.
+          figLeft: r.x + CELL_BORDER + P.mg,
+          figRight: r.x + CELL_BORDER + P.innerW - P.mg};
 }
 
 function drawGrid(){
-  var old = board.querySelectorAll(".dcell");
+  // THE PLATES ARE SWEPT TOO, AND THEY HAVE TO BE SWEPT HERE. They used to be children of the
+  // rectangle, so removing the rectangle took them with it. They hang BELOW it now, which means
+  // they are children of #board -- and a rebuild that cleared only `.dcell` would leave nine
+  // orphaned plates behind on every slider event.
+  var old = board.querySelectorAll(".dcell, .iplate");
   for (var i = 0; i < old.length; i++) old[i].remove();
   GRIDPOS = {};
+  PLATES_DROPPED = 0;
+  PLATE_H = 0;
   var byFace = {};
   GEO.duties.forEach(function(d){ byFace[d.face] = d; });
 
   gridCells().forEach(function(c){
-    if (c.centre && !GRID.centre) return;
-    var r = {x: Math.round(c.x), y: Math.round(c.y),
-             width: Math.round(c.width), height: Math.round(c.height)};
+    var r = cellRect(c);
     var cell = el("div", "dcell", box(r));
+    // SET WHERE THE CELL IS MADE, not toggled on a parent afterwards. The sliders rebuild these
+    // on every input event anyway, so there is no redraw to save -- and a class on #board would
+    // need a second selector for every state the cell already has.
+    if (GRID.bare) cell.classList.add("bare");
     if (c.centre){
       cell.classList.add("centre");
-      // THE CITY GETS A PARCHMENT TOO, AND IT IS NOT AN IMPROVISATION. The pairing this board
-      // borrowed covers NINE names and the fifth of them is "The City" -- so the blank that has
-      // worn that name elsewhere for months wears it here. It is sized against the plate the
-      // City does not have, so it matches its eight neighbours rather than the space it sits in.
-      // NO FIGURES AND NO COUNTS YET. The old panel drew a pawn and a number per player; that is
-      // not carried over, and this is the title alone.
-      // SIZED AGAINST THE PLATE THE CITY DOES NOT HAVE, so it matches its eight neighbours
-      // rather than the empty space it sits in: the same icon height they use, centred on the
-      // same plate line.
-      var cip = GEO.ribbon.pad, cmg = GEO.ribbon.sealInset * 2;
-      var cSz = Math.min(GEO.ribbon.seal, r.height - 2 * CELL_BORDER - cmg - 2 * cip);
-      var cFree = r.width - 2 * CELL_BORDER - 2 * cmg;
-      var cH = Math.max(0, Math.min(cSz, cFree / BANRATIO));
-      banner(cell, "city", "City", cmg, cH * BANRATIO, cH, cH);
-      // AND IT GETS A ROW OF ITS OWN. The City holds people like any duty does; it simply has no
-      // icon plate, so its row runs from the banner's left edge to the same margin at the other
-      // end. Registered in GRIDPOS under "city" so one figure pass covers all nine rectangles
-      // rather than the duties here and the City somewhere else.
-      r.band = cmg + cSz + 2 * cip;
+      // THE CITY IS NOW A RECTANGLE WITH PEOPLE IN IT AND NOTHING ELSE. It carried a parchment
+      // reading "City" while the eight duties carried theirs; the parchments have gone, and a
+      // ninth name on a nameless board would be the drawing contradicting itself. What still
+      // separates it from its neighbours is the ground, the missing plate and the pointer it
+      // does not take.
+      // ITS ROW IS THE SAME ROW THE DUTIES GET, worked out the same way, because with no plate
+      // inside any rectangle there is no longer anything for the City's row to differ about.
+      // Registered in GRIDPOS under "city" so one figure pass covers all nine rather than the
+      // duties here and the City somewhere else.
+      var cmg = GEO.ribbon.sealInset * 2;
       r.figLeft = r.x + CELL_BORDER + cmg;
       r.figRight = r.x + CELL_BORDER + r.width - 2 * CELL_BORDER - cmg;
       GRIDPOS.city = r;
@@ -948,81 +1108,44 @@ function drawGrid(){
     cell.setAttribute("data-face", d.face);
     cell.dataset.hoverDuty = d.slug;
 
-    // THE DUTY'S ICONS, IN THE TOP RIGHT AND IN A ROW.
+    // THE DUTY'S ICONS, BELOW THE RECTANGLE AND CENTRED UNDER IT.
     //
     // On the ribbon they were stacked down a 74-wide tile, which is why geometry.py hands over
     // `sealSlots` as a diagonal: in a box taller than it is wide, two 50px discs can only go one
-    // above the other. A rectangle is twice as wide as it is tall and has a corner going spare,
-    // so they run across it instead and that arrangement is NOT used here. geometry still
-    // publishes it, because v1 still stacks them.
+    // above the other. geometry still publishes it, because v1 still stacks them. They ran
+    // across the rectangle's top right corner for several rounds, and now they are out of the
+    // rectangle altogether.
     //
-    // THEY SHRINK WITH THE RECTANGLE. Both sliders make these boxes smaller -- at gap 150 and
-    // edge 150 a cell is 215 x 107 -- and a 50px disc that was right at full size would hang
-    // out of a small one and be cut off by `overflow:hidden` with nothing saying so. So the
-    // size is the smallest of geometry's 50, what the row can take across, and what the box can
-    // take down.
+    // OUT OF THE RECTANGLE MEANS OUT OF THE ELEMENT. `.dcell` is `overflow:hidden`, so a plate
+    // placed below the cell's own bottom edge would be clipped to nothing -- the one failure
+    // that looks like "the icons stopped being drawn". So the plate is a child of #board and
+    // carries BOARD coordinates, not cell-relative ones. render() finds the seals inside it by
+    // `#board .seal`, which is why they can change parent without anything else changing; what
+    // does change is drawGrid()'s sweep, which now has to clear `.iplate` itself.
+    //
+    // THEY SHRINK WITH THE RECTANGLE, still. Both sliders make these boxes smaller -- at gap 150
+    // and edge 150 a cell is 215 x 107 -- and a 50px disc that was right at full size would be
+    // wider than the box it is captioning. So the size is the smallest of geometry's 50, what
+    // the row can take across the cell's width, and what the cell's own height allows. The
+    // height term no longer has to be true -- nothing clips the plate now but the board edge --
+    // and it is kept because it is what makes the icons read as belonging to a small tile.
     var info = dutyOf(d.slug);
     var nAct = info ? info.actions : 1;
-    // THE MARGIN IS DOUBLE THE INSET A SEAL USED TO KEEP, and it is written as that rather than
-    // as a 12, so it still follows geometry if the inset ever moves. The plate's own padding is
-    // the ribbon's `pad` -- what a tile kept around its marks -- so the icon sits in the same
-    // amount of ground it sat in before.
-    var mg = GEO.ribbon.sealInset * 2, ip = GEO.ribbon.pad, igap = 6;
-    var innerW = r.width - 2 * CELL_BORDER, innerH = r.height - 2 * CELL_BORDER;
-    // THE PLATE IS PAID FOR BEFORE THE ICON IS SIZED. Margin and padding both eat the corner, so
-    // an icon sized against the bare cell would push the plate past the edge and `overflow:hidden`
-    // would take the difference quietly.
-    var sz = Math.max(0, Math.min(GEO.ribbon.seal,
-                                  Math.floor((innerW - mg - 2 * ip - (nAct - 1) * igap) / nAct),
-                                  innerH - mg - 2 * ip));
-    var rowW = nAct * sz + (nAct - 1) * igap;
-    var plateW = rowW + 2 * ip, plateH = sz + 2 * ip;
-    var plateX = innerW - mg - plateW, plateY = mg;
-    // AND BELOW A CERTAIN SIZE THERE IS NO PLATE AT ALL. The padding is a constant 12 a side, so
-    // once the icon itself is down to nothing the plate is still 24 tall and 30 wide and starts
-    // hanging out of the box -- 8px past the bottom at gap 150, edge 150, size 40, taken
-    // silently by `overflow:hidden`. An icon of six pixels says nothing anyway, so under that
-    // the plate and its icons are simply not drawn and the banner takes the whole width.
-    var hasPlate = sz >= 6 && plateX >= mg && plateY + plateH <= innerH - mg;
-    if (!hasPlate){ plateW = 0; plateH = 0; plateX = innerW - mg; }
-    // THE BANNER IS THE ICON'S HEIGHT, NOT THE PLATE'S, AND CAPPED BY THE ROOM BESIDE IT.
-    // It was the plate's for a round, which made it 222 x 74 and the tallest thing in the
-    // rectangle; matching the ICON instead makes it 150 x 50 and lets the plate be the taller of
-    // the two, so the parchment reads as a label beside the marks rather than as a second panel
-    // competing with them.
-    // IT STILL CENTRES ON THE PLATE, which is the same as centring on the icons: an icon sits at
-    // `ip` from the plate's top and is `sz` tall, so the plate's middle IS the icon row's middle.
-    // The banner's middle lands on that line whatever the two heights are.
-    // AND THE WIDTH STILL CAPS IT. The rectangles shrink with two of the three sliders and a 3:1
-    // strip has no way to give, so the height is the smaller of the icon's and what a third of
-    // the free width allows. Squashing it to fit was the alternative and it is the worse one: a
-    // distorted parchment looks like a bad asset rather than a tight layout.
-    var free = plateX - 2 * mg + (hasPlate ? 0 : mg);
-    var banH = Math.max(0, Math.min(hasPlate ? sz : innerH - 2 * mg,
-                                    free / BANRATIO, innerH - 2 * mg));
-    var banW = banH * BANRATIO;
-    // HOW MUCH OF THE BOX THE ICONS CLAIM, remembered for drawFigures(). The acolytes stand on
-    // the floor of the same rectangle, and on a duty with four of them the outermost pawn's head
-    // reached into this row -- 5px of overlap, enough to read as a mistake and not enough to
-    // look deliberate. Nothing measures it but the figures, so it travels with the rectangle.
-    r.band = hasPlate ? mg + plateH : mg + banH;
-    // WHERE THE FIGURES RUN: the banner's left edge to the plate's. Remembered here because this
-    // is where both are placed, and worked out twice would be two answers.
-    r.figLeft = r.x + CELL_BORDER + mg;
-    r.figRight = r.x + CELL_BORDER + (hasPlate ? plateX : innerW - mg);
-
-    // THE NAME MOVES LEFT AND IS KEPT OUT FROM UNDER THEM. It was centred while the corner was
-    // empty; with icons in the corner a centred name runs under them on the narrower settings,
-    // so it reads from the left and carries a right padding of exactly the row it must clear.
-    // CENTRED ON THE PLATE WHEN THERE IS ONE, ON ITSELF WHEN THERE IS NOT. Passing the plate's
-    // height unconditionally put the banner at a NEGATIVE top the moment the plate was dropped
-    // -- `mg + (0 - h) / 2` -- which hung it 10px off the top of its own rectangle.
-    banner(cell, d.slug, d.name, mg, banW, banH, hasPlate ? plateH : banH);
+    var L = placeFor(r, nAct);
+    var P = L.p, ip = P.ip, igap = P.igap, sz = P.sz;
+    var plateW = P.width, plateH = P.height;
+    var plateX = L.x, plateY = L.y;
+    // TAKEN HERE, BEFORE ANYTHING CAN ZERO IT. The acolytes are drawn to this height.
+    PLATE_H = Math.max(PLATE_H, plateH);
+    var hasPlate = L.has;
+    if (!hasPlate){ plateW = 0; plateH = 0; PLATES_DROPPED++; }
+    r.figLeft = L.figLeft;
+    r.figRight = L.figRight;
 
     var plate = hasPlate
       ? el("div", "iplate", {left: px(plateX), top: px(plateY),
                              width: px(plateW), height: px(plateH),
-                             borderRadius: px(GEO.ribbon.radius)}, cell)
+                             borderRadius: px(GEO.ribbon.radius)})
       : cell;
 
     for (var k = 0; hasPlate && k < nAct; k++){
@@ -1031,7 +1154,7 @@ function drawGrid(){
       // ground. render() still finds these by `#board .seal`, which is why they can change
       // parent without changing anything else.
       var seal = el("div", "seal",
-                    {left: px(ip + k * (sz + igap)), top: px(ip),
+                    {left: px(ip + P.inset + k * (sz + igap)), top: px(ip),
                      width: px(sz), height: px(sz), zIndex: String(k + 1)}, plate);
       seal.style.pointerEvents = "auto";
       // EVERY HANDLE THE RIBBON'S SEALS CARRIED, CARRIED OVER. The picker, the drop target and
@@ -1131,24 +1254,30 @@ function drawFigures(){
     countsFor(slug).forEach(function(n){ tallest = Math.max(tallest, n); });
   });
 
-  var fw = 0, fh = 0;
+  // AN ACOLYTE IS AS TALL AS THE PLATE OF ICONS BELOW HIS RECTANGLE, and that is the size the
+  // figures are ASKED for rather than the size they are allowed. A figure and an icon plate are
+  // the two objects a duty is read by, so giving them one height makes them read as one row of
+  // things rather than as two sizes that nearly agree. The width follows from the height,
+  // because the hood scales on one number.
+  var fw = PLATE_H / HOOD.h, fh = 0;
   CELLS.forEach(function(slug){
     var r = GRIDPOS[slug];
     if (!r) return;
-    // THE ROW RUNS FROM THE BANNER'S LEFT EDGE TO THE PLATE'S, which is what was asked for, and
-    // the four slots divide that exactly: four figures and three gaps of 0.24 of a figure is
-    // 4.72 figure widths.
-    // THE WIDTH IS WHAT WAS ASKED FOR AND IT WINS. Four figures and three gaps of 0.24 of a
-    // figure is 4.72 figure widths, so the span divides exactly and the four slots run from the
-    // banner's left edge to the plate's.
+    // AND THE TWO OLD CAPS STAY, as caps. They were what SET the size until the plate started
+    // asking for one, and they are still the two things that make a figure impossible: four of
+    // them have to fit across the row, and the deepest pile has to fit down the rectangle. The
+    // plate's height wins whenever it is the smallest of the three, which at the opening
+    // settings it is -- but a narrow rectangle must still be allowed to shrink its people.
+    // Four figures and three gaps of 0.24 of a figure is 4.72 figure widths, so the span divides
+    // without a remainder.
     var w = (r.figRight - r.figLeft) / (4 + 3 * HOOD.gap);
-    // ONLY THE CELL ITSELF CAPS IT, not the band above. Capping to clear the banner made the
-    // row 215 wide where the span asks 250 -- the horizontal alignment quietly lost to a
-    // vertical one nobody asked for. A tall pile now rises INTO the band instead, which is a
-    // visible trade rather than a silent one; `figOver` below reports it.
-    var cap = (r.height - 2 * CELL_BORDER - 12) / (HOOD.h * (1 + HOOD.step * (tallest - 1)));
-    w = Math.min(w, cap);
-    fw = (fw === 0) ? w : Math.min(fw, w);
+    // THE WHOLE INNER HEIGHT, now that the feet are on the line. It used to take a clearance
+    // off each end -- the gap the figures kept at the bottom, and the same again at the top for
+    // symmetry -- and with the bottom gap gone there is nothing to subtract: the pile stands on
+    // the inner bottom edge and has until the inner top edge.
+    var cap = (r.height - 2 * CELL_BORDER)
+              / (HOOD.h * (1 + HOOD.step * (tallest - 1)));
+    fw = Math.min(fw, w, cap);
   });
   fh = fw * HOOD.h;
   if (fw < 3) return;                       // below this a hood is a smudge; draw nobody
@@ -1158,11 +1287,24 @@ function drawFigures(){
     var r = GRIDPOS[slug];
     if (!r) return;
     var counts = countsFor(slug);
-    var foot = r.y + r.height - CELL_BORDER - 6;
+    // STANDING ON THE LINE, NOT ABOVE IT. They kept a 6px clearance and the icon plate kept the
+    // same below, which read as one gap around one rule; the feet are now flush to the inner
+    // bottom edge and the plate keeps its drop. So there is no term here at all -- a zero would
+    // be a number somebody could change, and there is nothing to change.
+    var foot = r.y + r.height - CELL_BORDER;
     HOOD.order.forEach(function(seat, j){
       var n = counts[j] || 0;
       if (n <= 0) return;                   // drawn as nothing, and the others do not close up
-      var x = r.figLeft + j * (fw + gap);
+      // CENTRED IN THE RECTANGLE, NOT ANCHORED TO ITS LEFT MARGIN. While the figures were sized
+      // BY the row they filled it exactly and there was nothing to centre; sized by the plate
+      // instead they come out narrower than the room -- 291 of 380 at the opening settings --
+      // and the 89 left over has to be somewhere. Split, so the group sits over the middle of
+      // its rectangle the way the icon plate sits under it. Anchored left it would have read as
+      // people pushed against an edge, with the icons centred underneath disagreeing.
+      // THE SAME 4.72 AS THE CAP ABOVE, deliberately written the same way: the row's width and
+      // the width that would fill the row are one expression, so they cannot come apart.
+      var slack = (r.figRight - r.figLeft) - fw * (4 + 3 * HOOD.gap);
+      var x = r.figLeft + slack / 2 + j * (fw + gap);
       for (var i = 0; i < n; i++){
         var up = n - 1 - i;                 // 0 is the one standing on the line
         var side = up === 0 ? 0 : (up % 2 ? lean : -lean);
@@ -1182,15 +1324,19 @@ function wireGrid(){
   var rg = document.getElementById("rGap");
   var rd = document.getElementById("rDisp");
   var rs = document.getElementById("rSize");
-  var cc = document.getElementById("cCentre");
+  var rt = document.getElementById("rHeight");
+  var cb = document.getElementById("cBare");
   rg.value = GRID.gap; rd.value = GRID.disp; rs.value = GRID.size;
-  cc.checked = !!GRID.centre;
+  rt.value = GRID.height;
+  cb.checked = !!GRID.bare;
   function apply(){
     GRID.gap = +rg.value; GRID.disp = +rd.value; GRID.size = +rs.value;
-    GRID.centre = cc.checked;
+    GRID.height = +rt.value;
+    GRID.bare = cb.checked;
     document.getElementById("vGap").textContent = GRID.gap;
     document.getElementById("vDisp").textContent = GRID.disp;
     document.getElementById("vSize").textContent = GRID.size;
+    document.getElementById("vHeight").textContent = GRID.height;
     drawGrid();
     // WHAT THE TWO NUMBERS COST, SAID OUT LOUD. Both sliders shrink the rectangles -- the gap
     // because it eats the row, the edge because the arrangement is inset to stay inside the
@@ -1205,15 +1351,34 @@ function wireGrid(){
     var tp = Math.min.apply(null, cs.map(function(k){ return k.y; }));
     var bt = Math.max.apply(null, cs.map(function(k){ return k.y + k.height; }));
     var over = Math.max(a.x - l, r - (a.x + a.width), a.y - tp, bt - (a.y + a.height));
+    // AND WHAT THE NINE COME TO, which is the number the eye cannot get off the page. The size
+    // of one rectangle says what the sliders cost; the arrangement's own width and height say
+    // whether the thing is the shape the board wants, and the two are not a fixed multiple of
+    // each other -- the gap and the edge each change the second without changing the first in
+    // the same proportion.
+    // THE RECTANGLES' OWN EXTENT, NOT THE AREA THEY SIT IN, and the difference is easy to miss
+    // in the worst way. gridArea() is the room; this is what was put in it, displacement and
+    // all. At the opening defaults the room is 1344 x 842 and the arrangement is 1344 x 732 --
+    // the SAME width, because width is the binding dimension and the block fills it exactly, and
+    // 110 short on height. So a tag that reported the area would be indistinguishable from this
+    // one on the number anybody would check first.
     var tag = document.getElementById("gridTag");
+    // AND HOW MANY DUTIES LOST THEIR ICONS TO IT. The plates hang below the rectangles, so a
+    // tall arrangement pushes the bottom row's plates off the board and they are refused rather
+    // than cropped. Refusing is right and it is still a loss, so it is said here: three duties
+    // quietly without icons is indistinguishable from three duties that have none.
     tag.textContent = Math.round(c.width) + " × " + Math.round(c.height)
-                    + (over > 0.5 ? "  past the margin by " + Math.round(over) : "");
-    tag.style.color = over > 0.5 ? "#d08c6a" : "";
+                    + "  ·  wheel " + Math.round(r - l) + " × " + Math.round(bt - tp)
+                    + (over > 0.5 ? "  past the margin by " + Math.round(over) : "")
+                    + (PLATES_DROPPED ? "  ·  " + PLATES_DROPPED + " without room for icons"
+                                      : "");
+    tag.style.color = (over > 0.5 || PLATES_DROPPED) ? "#d08c6a" : "";
   }
   rg.addEventListener("input", apply);
   rd.addEventListener("input", apply);
   rs.addEventListener("input", apply);
-  cc.addEventListener("change", apply);
+  rt.addEventListener("input", apply);
+  cb.addEventListener("change", apply);
   apply();
 }
 
@@ -1537,25 +1702,25 @@ function slotClick(ev){
   ev.stopPropagation();
   var d = ev.currentTarget.dataset;
   if (S.editing) return pickFile({kind: d.kind, duty: d.duty || S.duty, slot: d.slot});
-  // IN PLAY A MARK IS ITS ACTION -- ONCE YOU ARE ALREADY ON ITS DUTY. Clicking one used to call
-  // pickDuty, which sets the duty and CLEARS the slot, so the mark for an action could not select
-  // that action and the only way in was the card. Making the mark select its action fixed that
-  // and overshot: ON A DUTY WITH TWO ACTIONS THE TWO MARKS COVER 52% OF THE TILE, 39x39 each
-  // inside 57x101, stacked top and bottom, so only a narrow middle band and the side margins ever
-  // reached pickDuty. Aiming at a tile and hitting an action was the usual case rather than the
-  // odd one, and which action you got depended on whether you had clicked high or low.
+  // A MARK IS ITS ACTION, IN ONE CLICK, WHEREVER YOU WERE STANDING.
   //
-  // SO THE MARK ANSWERS A DIFFERENT QUESTION DEPENDING ON WHERE YOU ALREADY ARE. On a duty that
-  // is not selected, the question the click asks is "which duty", and the answer is the duty with
-  // no action chosen -- the same answer the bare tile gives, which is the point: the whole tile
-  // now behaves as one target for choosing a duty. On the duty already selected, the question is
-  // "which action", and the mark answers it. A duty with one action is unaffected either way,
-  // because pickDuty chooses that action itself.
+  // It used to depend on where you already were: on a duty you were not on, the click chose the
+  // DUTY and left the action unanswered, so a second click was needed to reach the action. That
+  // was a trade against the ribbon's geometry, and the ribbon is gone. The reasoning was that
+  // two marks covered 52% of a tile -- 39x39 each inside 57x101, stacked top and bottom -- so
+  // aiming at a tile and hitting an action was the usual case rather than the odd one, and
+  // which action you got depended on whether you had clicked high or low.
   //
-  // IT COSTS A SECOND CLICK to reach an action on a duty you are not standing on, and that is the
-  // trade: the card below is the one-click route to an action and is what the cards are for.
+  // THE MARKS ARE NOT ON THE TILE ANY MORE. They sit on a plate BELOW the rectangle, outside
+  // the element, and the rectangle is its own clean target for "which duty". The two questions
+  // now have two separate places to be asked, so the mark can answer its own without ever
+  // being hit by somebody aiming at the tile.
+  //
+  // AND THE OLD RULE WAS VISIBLY INCONSISTENT. `pickDuty` answers the slot itself when a duty
+  // has ONE action, so Allocation and Taxation lit their picture on the first click while the
+  // other six did not -- the same gesture doing two different things depending on a property of
+  // the duty you cannot see from the mark you are clicking.
   if (!d.duty) return;
-  if (d.duty !== S.duty) return pickDuty(d.duty);
   pickAction(d.duty, d.slot);
 }
 // A CLICK CHOOSES; IT DOES NOT UN-CHOOSE. Both of these used to toggle, so pressing the same
@@ -1569,7 +1734,12 @@ function slotClick(ev){
 //
 // Nothing is lost: "no action chosen" is still reached, by picking another duty, which is the
 // only time it means anything -- you have been asked which of the two.
-function select(slot){ S.slot = slot; render(); }
+// AND IT SAYS SO. The cue belonged to pickAction alone -- the route the duty-action ICONS take
+// -- so clicking the picture of an action chose it in silence while clicking its mark did not.
+// Two ways to make the same choice, one of them audible, which reads as the sound being broken
+// rather than as a route that skips it. The Tithe comes through here too and gets it for the
+// same reason: it is a choice of what to do this turn, like the other two.
+function select(slot){ sfxWake(); sfx("select"); S.slot = slot; render(); }
 // ONE RENDER, NOT TWO. pickDuty followed by select() would do the same work -- pickDuty sets the
 // duty and answers the slot for it, then select overwrites that answer -- and draw the whole
 // board twice on the way, once on a slot nobody asked for.

@@ -18,6 +18,13 @@ reads nothing from those trees -- which is right, and which means a drift betwee
 the original now has nothing watching it. These tests are that watch: the coupling belongs in a
 guard, not in the build.
 
+THE BOARD NO LONGER DRAWS ANY OF THIS. The parchments came off on 2026-11-09 and the
+rectangles carry no name at all. The files stayed, and so did these guards, because the
+cheapest way to keep the option of putting them back is to keep them correct while they are
+unused -- art that is deleted and re-fetched comes back as a different file. The last test
+here is the one that changed: it used to hold that the generator inlines all nine, and it
+now holds that the removal is complete rather than half-done.
+
 Each test names the failure it exists to catch and how to falsify it.
 """
 import hashlib
@@ -303,22 +310,42 @@ def test_the_font_is_not_recorded_as_an_asset(record):
 # WHAT THE GENERATOR DOES WITH THEM
 # =================================================================================================
 
-def test_the_generator_inlines_all_nine_and_the_face():
-    """End to end: the one call the page's banners actually depend on.
+def test_the_resources_are_kept_although_nothing_draws_them_any_more():
+    """THE BANNERS CAME OFF THE BOARD ON 2026-11-09 AND THE FILES DELIBERATELY STAYED.
 
-    Everything above checks files on disk. This checks the thing that reads them -- a banner can
-    be present, recorded and correctly paired and still not reach the page if the gate it passes
-    through disagrees about where to look.
+    Everything above checks files on disk, and all of it still earns its keep: a resource that is
+    deleted and later re-fetched comes back as a DIFFERENT file with a different provenance, so
+    the cheapest way to keep the option of putting the parchments back is to leave them where they
+    are, recorded, paired and measured. That is what this file now guards.
 
-    Falsified by pointing BANNER_DIR somewhere else, or by tightening the record gate so a
-    present entry is rejected.
+    What it stops guarding is the one thing that is no longer true: the generator used to inline
+    all nine and the face, and it no longer has a `bundled_banners()` at all. So the end-to-end
+    test is inverted -- it holds that the removal is COMPLETE rather than half-done. A half-done
+    removal is the real risk here: delete the images and keep the code and every rectangle grows
+    a serif caption from `banner()`'s own fallback; keep the code and the token and the page
+    carries 287 KB of data URI for an element nobody draws.
+
+    Falsified by putting `bundled_banners()` back without putting the drawing back, or the other
+    way round.
     """
-    v2 = _load("generate_action_board_v2")
-    art, font, notes = v2.bundled_banners()
-    missing = sorted(k for k in PAIRING if not art.get(k))
-    assert not missing, "bundled_banners() returned nothing for: %s\nnotes: %s" % (missing, notes)
-    assert set(art) == set(PAIRING), (
-        "bundled_banners() covers %s; PAIRING has %s" % (sorted(art), sorted(PAIRING)))
-    for k, uri in art.items():
-        assert uri.startswith("data:image/webp;base64,"), "%s is not an inlined webp" % k
-    assert font.startswith("data:font/ttf;base64,"), "the face was not inlined: %s" % notes
+    gen = (TOOL / "generate_action_board_v2.py").read_text(encoding="utf-8")
+    tmpl = (TOOL / "action_board_v2.html.tmpl").read_text(encoding="utf-8")
+
+    assert "def bundled_banners" not in gen, (
+        "the generator bundles the banners again; if that is wanted, the page has to draw them "
+        "too, and this test and the one in test_action_board_v2_grid.py both have to change")
+    assert "base64" not in gen, (
+        "the generator inlines something as base64 again -- v2 bundles art through v1's helpers, "
+        "so a base64 call here is the banner path coming back")
+    for token in ("__BANNERS__", "__BANNERMETA__", "__BANNERFONT__"):
+        assert token not in gen and token not in tmpl, (
+            "%s is back in the build, so the page carries banner data again" % token)
+
+    # And the files are still here, which is the whole point of the rest of this file.
+    assert BANNERS.is_dir(), "duty_actions/banners/ has been deleted"
+    assert len(list(BANNERS.glob("*.webp"))) == len(PAIRING), (
+        "duty_actions/banners/ holds %d files and the pairing names %d"
+        % (len(list(BANNERS.glob("*.webp"))), len(PAIRING)))
+    assert (FONTS / "PirataOne-Regular.ttf").is_file(), "the face has been deleted"
+    assert (FONTS / "OFL.txt").is_file(), (
+        "the licence text has been deleted, and the OFL requires it to travel with the font")
