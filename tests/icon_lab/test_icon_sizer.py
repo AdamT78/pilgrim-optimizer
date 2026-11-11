@@ -107,7 +107,7 @@ def test_a_file_says_which_action_it_is_for(gen):
     assert gen.slot_in_name("clerical_master_v04.png") is None
 
 
-def test_the_next_cut_never_lands_on_a_file_that_exists(gen):
+def test_the_next_cut_never_lands_on_a_file_that_exists(gen, rec):
     """Falsified by returning the highest version rather than the one above it.
 
     The lab offers a name to save under, and the one thing that name must not be is the name of a
@@ -138,6 +138,64 @@ def test_the_next_cut_never_lands_on_a_file_that_exists(gen):
     # A slot with nothing cut starts at v01 rather than at v00 or at its master's number.
     assert gen.next_cut("nobody", "actionA", "icons") == "nobody_actionA_icon_v01" + suffix
 
+    # AND THE OTHER TWO ROOTS, WHICH THIS TEST DID NOT REACH. next_cut, next_control_cut and
+    # next_resource_cut answer one question in three name shapes and only the duties' answer was
+    # ever checked -- so a control or a resource could have been offered a name already on the
+    # record, which is the one thing these functions exist to prevent. Found by a mutation that
+    # pointed next_resource_cut at the wrong folder and broke nothing.
+    #
+    # THE KEYS ARE READ OFF THE RECORD, not listed, for this file's usual reason: a list here is
+    # a second place to say which marks exist.
+    roots = (("control", gen.CONTROL_DIR / "icons", gen.next_control_cut, "controls/"),
+             ("resource", gen.RESOURCE_DIR / "icons", gen.next_resource_cut, "tokens/resources/"))
+    seen = 0
+    for word, folder, nxt, prefix in roots:
+        pat = re.compile(r"%s_([a-z0-9]+)_icon_master_v\d+$" % word)
+        keys = sorted({m.group(1) for path in rec
+                       if path.startswith(prefix) and "/icons/masters/" in path
+                       for m in [pat.match(pathlib.PurePosixPath(path).stem)] if m})
+        assert keys, "no %s master is recorded, so this half of the test checks nothing" % word
+        for key in keys:
+            seen += 1
+            base = "%s_%s_icon" % (word, key)
+            offered = nxt(key)
+            assert not (folder / offered).exists(), (
+                "%s would be written over" % (folder / offered).name)
+            have = [int(f.stem[len(base) + 2:]) for f in folder.glob(base + "_v*" + suffix)] \
+                if folder.is_dir() else []
+            assert offered == "%s_v%02d%s" % (base, (max(have) if have else 0) + 1, suffix), (
+                "%s was offered %s with %s already filed" % (word, offered, sorted(have)))
+        # A key with nothing cut starts at v01, by the same rule the duties follow.
+        assert nxt("nobody") == "%s_nobody_icon_v01%s" % (word, suffix)
+    assert seen >= 6, "expected at least the three controls and the three resources, saw %d" % seen
+
+
+def test_a_next_cut_counts_in_the_folder_the_cuts_are_filed_in(gen, tmp_path, monkeypatch):
+    """EACH OF THE THREE LOOKS IN ITS OWN FOLDER, and a root with nothing cut yet cannot say so.
+
+    The resources arrived with no cut taken from any of them, so `next_resource_cut` answered v01
+    whichever folder it counted in -- right and wrong gave the same answer and a mutation that
+    pointed it at the parent broke nothing. The duties and the controls have cuts on disk, which
+    is the only reason the same mistake would have been caught there.
+
+    So the count is asked a question it can only answer from the right folder: a cut is filed in
+    `icons/`, a decoy with the same name one level up, and the next name has to step over the
+    first and ignore the second.
+
+    Falsified by counting in RESOURCE_DIR rather than RESOURCE_DIR / "icons".
+    """
+    root = tmp_path / "tokens" / "resources"
+    (root / "icons").mkdir(parents=True)
+    suffix = gen.PRINT_SUFFIX
+    (root / "icons" / ("resource_wheat_icon_v03" + suffix)).write_bytes(b"x")
+    # ONE LEVEL UP, where the seal_ and token_ treatments live. A count that looked here would
+    # find a v07 and offer v08 for a folder whose highest cut is v03.
+    (root / ("resource_wheat_icon_v07" + suffix)).write_bytes(b"x")
+    monkeypatch.setattr(gen, "RESOURCE_DIR", root)
+
+    assert gen.next_resource_cut("wheat") == "resource_wheat_icon_v04" + suffix
+    assert gen.next_resource_cut("stone") == "resource_stone_icon_v01" + suffix
+
 
 def test_the_lab_puts_every_icon_master_on_the_page(gen, rec):
     """A master with no cut yet is the normal case, not an edge one.
@@ -162,15 +220,26 @@ def test_the_lab_puts_every_icon_master_on_the_page(gen, rec):
                    and "/icons/masters/" in p
                    and (re.match(r"control_([a-z0-9]+)_icon_master_v\d+$",
                                  pathlib.PurePosixPath(p).stem) or [None, None])[1] in said)
+    # AND THE RESOURCES, which are a third kind again and filed under tokens/ for the reason in
+    # _resource_seeds' own docstring. Read off the record by the same rule as the two above --
+    # whatever has a record and a name the lab can resolve -- rather than listed here.
+    want += sorted(pathlib.PurePosixPath(p).name for p in rec
+                   if p.startswith("tokens/resources/")
+                   and "/icons/masters/" in p
+                   and re.match(r"resource_([a-z0-9]+)_icon_master_v\d+$",
+                                pathlib.PurePosixPath(p).stem))
     want = sorted(want)
     seed, notes = gen.seeds()
     assert sorted(s["file"] for s in seed) == want, notes
     assert want, "this tree has no icon masters in it at all"
-    # BOTH ROOTS ARE ON THE PAGE. The duty icons alone would pass everything above the moment the
-    # control walk was dropped, because the controls would simply stop being in `want` too.
+    # EVERY ROOT IS ON THE PAGE. The duty icons alone would pass everything above the moment
+    # another walk was dropped, because those marks would simply stop being in `want` too -- so
+    # each kind is asked for by name.
     assert any(s["file"].startswith("control_") for s in seed), (
-        "no control mark reached the page, so the lab is walking duty_actions only")
-    assert any(not s["file"].startswith("control_") for s in seed), (
+        "no control mark reached the page, so the lab is not walking controls/")
+    assert any(s["file"].startswith("resource_") for s in seed), (
+        "no resource mark reached the page, so the lab is not walking tokens/resources/")
+    assert any(not s["file"].startswith(("control_", "resource_")) for s in seed), (
         "no duty icon reached the page")
     # Every card knows what to call itself and what a cut of it would be called.
     for s in seed:
@@ -181,6 +250,14 @@ def test_the_lab_puts_every_icon_master_on_the_page(gen, rec):
         assert s["out"].endswith(gen.PRINT_SUFFIX), s
         assert not s["out"].endswith(".png"), "a cut is being offered in the archive's format"
         assert "_master_" not in s["out"], s
+        # AND THE CUT IS THIS MASTER'S CUT. Everything above would pass a card that offered a
+        # name belonging to a different mark entirely -- right shape, right suffix, wrong file --
+        # and saving it would file the cut under another mark's name. Found by a mutation that
+        # handed the resources a duty-shaped name and broke nothing. The two are tied by the
+        # convention master_of() relies on: one stem, with `_master` in it or not.
+        stem_of = lambda n: re.sub(r"_v\d+$", "", pathlib.PurePosixPath(n).stem)
+        assert stem_of(s["out"]) == stem_of(s["file"]).replace("_master", ""), (
+            "%s would be cut to %s, which is another mark's name" % (s["file"], s["out"]))
         assert s["file"].endswith(".png"), "a master is being read from a lossy file"
         assert s["src"].startswith("data:image/png;base64,"), s["file"]
 
@@ -206,6 +283,7 @@ def test_a_master_with_no_record_is_left_out_and_named(gen, tmp_path, monkeypatc
     # icons as though tmp_path had produced them. Both of the walks in this file failed exactly
     # that way the hour the controls root was added, which is how it was noticed.
     monkeypatch.setattr(gen, "CONTROL_DIR", tmp_path / "controls")
+    monkeypatch.setattr(gen, "RESOURCE_DIR", tmp_path / "tokens" / "resources")
     monkeypatch.setattr(gen, "ATTRIB_FILE", attrib)
 
     seed, notes = gen.seeds()
@@ -238,6 +316,10 @@ def test_the_walk_only_looks_at_images(gen, tmp_path, monkeypatch):
         "controls/icons/masters/control_lantern_icon_master_v01.png": {"slot": "master"},
         "controls/icons/control_map_icon_v01.png": {"slot": "master",
                                                     "master": "control_map_icon_master_v01.png"},
+        "tokens/resources/icons/masters/resource_wheat_icon_master_v01.png": {"slot": "master"},
+        "tokens/resources/icons/masters/notaresource_v01.png": {"slot": "master"},
+        "tokens/resources/icons/resource_wheat_icon_v01.png":
+            {"slot": "master", "master": "resource_wheat_icon_master_v01.png"},
     }}), encoding="utf-8")
     # THE CONTROL ROOT GETS THE SAME TREATMENT, in the same sandbox, because it is the same walk
     # written twice and the second copy is where a rule gets forgotten. A .DS_Store beside a
@@ -250,18 +332,36 @@ def test_the_walk_only_looks_at_images(gen, tmp_path, monkeypatch):
     (ctrl / "masters" / ".DS_Store").write_bytes(b"x")
     (ctrl / "control_map_icon_v01.png").write_bytes(b"x")
     (ctrl / ".DS_Store").write_bytes(b"x")
+    # AND THE RESOURCE ROOT, for the third time and the same reason. This walk is the same walk
+    # written three times now, and the third copy is where the next rule gets forgotten.
+    res = tmp_path / "tokens" / "resources" / "icons"
+    (res / "masters").mkdir(parents=True)
+    (res / "masters" / "resource_wheat_icon_master_v01.png").write_bytes(b"x")
+    (res / "masters" / "resource_stone_icon_master_v01.png").write_bytes(b"x")
+    (res / "masters" / "notaresource_v01.png").write_bytes(b"x")
+    (res / "masters" / ".DS_Store").write_bytes(b"x")
+    (res / "resource_wheat_icon_v01.png").write_bytes(b"x")
+    (res / ".DS_Store").write_bytes(b"x")
 
     monkeypatch.setattr(gen, "ART_DIR", art)
     monkeypatch.setattr(gen, "CONTROL_DIR", tmp_path / "controls")
+    # THE THIRD ROOT HAS TO BE REDIRECTED TOO. Left pointing at the repository it reads the real
+    # tree from inside a sandbox, which is how this test failed the hour the resources root was
+    # added -- the same way it failed the hour the controls root was.
+    monkeypatch.setattr(gen, "RESOURCE_DIR", tmp_path / "tokens" / "resources")
     monkeypatch.setattr(gen, "ATTRIB_FILE", attrib)
 
     seed, notes = gen.seeds()
     assert [s["file"] for s in seed] == ["clerical_actionA_icon_master_v01.png",
-                                         "control_map_icon_master_v01.png"], seed
+                                         "control_map_icon_master_v01.png",
+                                         "resource_wheat_icon_master_v01.png"], seed
     # hire: recorded nowhere. lantern: recorded, but not a control duty_text.json knows about.
-    assert len(notes) == 2, notes
+    # stone: recorded nowhere. notaresource: not named like a resource at all.
+    assert len(notes) == 4, notes
     assert any("control_hire" in n and "no attribution entry" in n for n in notes), notes
     assert any("control_lantern" in n and "does not say which control" in n for n in notes), notes
+    assert any("resource_stone" in n and "no attribution entry" in n for n in notes), notes
+    assert any("notaresource" in n and "does not say which resource" in n for n in notes), notes
     assert not any(".DS_Store" in n or "notes.txt" in n for n in notes), notes
 
 

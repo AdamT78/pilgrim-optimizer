@@ -65,6 +65,16 @@ SIZES = (40, 62, 90, 100, 160)
 # The height slider only goes UP from the 2:1 rectangle, so 100 is its floor and
 # every claim about 2:1 is a claim about that one value.
 HEIGHTS = (100, 130, 175, 250)
+# THE DIVIDER SLIDER, AND IT COSTS THE SWEEP NOTHING. `divide` moves one line and touches neither
+# the grid nor the frame nor the marks, so it is not a sixth dimension multiplying 9,000
+# rectangles by five -- every rectangle is simply asked for its divider at each of these, inside
+# the row it already produced. Both ends are covered, because both ends are where this board's
+# overflows have always been.
+DIVIDES = (0, 1, 12, 24, 48)
+# What `GRID.divide` is set to for the row's own `L` -- the one every test that is NOT about the
+# divider reads. It is the generator's opening value, so those tests measure the board as it
+# opens; the divider's own guards walk `divs` and ignore this.
+GRID_DIVIDE_FOR_SWEEP = 12
 NACTS = (1, 2)
 
 
@@ -83,6 +93,33 @@ def _grid_defaults() -> dict:
         if isinstance(out[k], str):
             out[k] = int(out[k])
     return out
+
+
+def _v2_tithe() -> tuple:
+    """The ring of resources the generator deals, read out of it as text.
+
+    Read the way _grid_defaults is and for the same reason: importing the generator pulls v1 and
+    everything v1 imports in behind it, for one tuple. `None` is kept as None rather than turned
+    into a string, because the whole of what this constant says about Taxation is that its entry
+    is not a key.
+    """
+    src = (TOOL / "generate_action_board_v2.py").read_text(encoding="utf-8")
+    m = re.search(r"^V2_TITHE\s*=\s*\((.*?)\)\s*$", src, re.M | re.S)
+    assert m, "the generator no longer declares V2_TITHE on one line"
+    out = []
+    for part in m.group(1).split(","):
+        part = part.strip()
+        if not part:
+            continue
+        out.append(None if part == "None" else part.strip('"'))
+    return tuple(out)
+
+
+def _tithe_keys() -> tuple:
+    src = (TOOL / "generate_action_board_v2.py").read_text(encoding="utf-8")
+    m = re.search(r"^TITHE_KEYS\s*=\s*\((.*?)\)\s*$", src, re.M)
+    assert m, "the generator no longer declares TITHE_KEYS on one line"
+    return tuple(p.strip().strip('"') for p in m.group(1).split(",") if p.strip())
 
 
 def _load(name: str, where: pathlib.Path = TOOL):
@@ -185,7 +222,7 @@ def sweep(tmpl, geo):
         "var LIFT = %s;" % _decl(tmpl, "LIFT"),
         "var CELL_BORDER = %s;" % _decl(tmpl, "CELL_BORDER"),
         "var PLATE_DROP = %s;" % _decl(tmpl, "PLATE_DROP"),
-        "var GRID = {gap: 0, disp: 0, size: 100, height: 100};",
+        "var GRID = {gap: 0, disp: 0, size: 100, height: 100, divide: 12};",
         "var PLATES_DROPPED = 0;",
         "var PLATE_H = 0;",
         _function(tmpl, "gridArea"),
@@ -198,24 +235,61 @@ def sweep(tmpl, geo):
         _function(tmpl, "plateFor"),
         _function(tmpl, "plateHang"),
         _function(tmpl, "cellRect"),
+        _function(tmpl, "plateInset"),
+        _function(tmpl, "markAt"),
+        _function(tmpl, "titheMarkAt"),
+        _function(tmpl, "dividerAt"),
         _function(tmpl, "placeFor"),
         # Flattened, so the tests below read one dict per rectangle rather than a nest.
+        #
+        # BOTH ANSWERS TO THE TITHE QUESTION, FROM ONE ROW. placeFor is asked twice -- once as a
+        # duty that takes a resource and once as Taxation, which does not -- so the guards can
+        # hold the geometry of the frame and the fact that Taxation never gets one without the
+        # sweep growing a sixth dimension and doubling to 18,000 rectangles.
         "function placed(r, nAct){",
-        "  var L = placeFor(r, nAct), P = L.p;",
+        "  var L = placeFor(r, nAct, true), P = L.p;",
+        "  var N = placeFor(r, nAct, false);",
         "  return {sz: P.sz, rowW: P.rowW, plateX: L.x, plateY: L.y,",
-        "          plateW: L.has ? P.width : 0, plateH: L.has ? P.height : 0,",
-        "          fullH: P.height, fullW: P.width, hasPlate: L.has,",
+        # `plateW` is what is DRAWN and `rowBox` is what the marks NEED -- two questions since the
+        # frame started spanning its rectangle, and the tests below are careful about which one
+        # they are asking.
+        "          plateW: L.has ? L.width : 0, plateH: L.has ? P.height : 0,",
+        "          fullH: P.height, fullW: L.width, hasPlate: L.has,",
+        "          rowBox: P.rowBox, fullRow: P.fullRow,",
         "          igap: P.igap, ip: P.ip, mg: P.mg, inset: P.inset,",
+        "          marks: (function(){ var a = []; for (var k = 0; k < nAct; k++)",
+        "                              a.push(markAt(P, k)); return a; })(),",
+        "          hasTithe: L.hasTithe, titheWhenNoneIsDealt: N.hasTithe,",
+        "          titheMark: L.titheMark,",
+        # THE DIVIDER AT EVERY SETTING OF ITS OWN SLIDER, from inside one rectangle. placeFor is
+        # pure given GRID, so the slider is swept by setting it and asking again -- and GRID is
+        # put back afterwards, because everything below this line in the same row reads it.
+        "          divs: (function(){ var was = GRID.divide, a = [];",
+        "            DIVIDES.forEach(function(d){ GRID.divide = d;",
+        "              var L2 = placeFor(r, nAct, true);",
+        "              a.push({divide: d, left: L2.divider.left, top: L2.divider.top,",
+        "                      width: L2.divider.width, height: L2.divider.height,",
+        "                      has: L2.hasDivider, hasTithe: L2.hasTithe}); });",
+        "            GRID.divide = was; return a; })(),",
+        # AND THE SAME QUESTION ASKED AS TAXATION. `divs` above is placeFor answering as a duty
+        # that takes a resource, every time -- so "a divider is never drawn without a resource to
+        # divide it from" could not be exercised there at all, and the guard holding it would
+        # have passed on a board that drew a line down the middle of Taxation's empty frame.
+        "          divsNone: (function(){ var was = GRID.divide, a = [];",
+        "            DIVIDES.forEach(function(d){ GRID.divide = d;",
+        "              a.push({divide: d, has: placeFor(r, nAct, false).hasDivider}); });",
+        "            GRID.divide = was; return a; })(),",
         "          innerW: P.innerW, innerH: P.innerH, hang: plateHang(),",
         "          figLeft: L.figLeft, figRight: L.figRight};",
         "}",
-        "var GAPS = %s, DISPS = %s, SIZES = %s, HEIGHTS = %s, NACTS = %s;" % (
+        "var GAPS = %s, DISPS = %s, SIZES = %s, HEIGHTS = %s, NACTS = %s, DIVIDES = %s;" % (
             json.dumps(list(GAPS)), json.dumps(list(DISPS)), json.dumps(list(SIZES)),
-            json.dumps(list(HEIGHTS)), json.dumps(list(NACTS))),
+            json.dumps(list(HEIGHTS)), json.dumps(list(NACTS)), json.dumps(list(DIVIDES))),
         "var out = [];",
         "GAPS.forEach(function(gap){ DISPS.forEach(function(disp){",
         "  SIZES.forEach(function(size){ HEIGHTS.forEach(function(height){",
-        "    GRID = {gap: gap, disp: disp, size: size, height: height};",
+        "    GRID = {gap: gap, disp: disp, size: size, height: height, divide: %d};" % (
+            GRID_DIVIDE_FOR_SWEEP,),
         "    var area = gridArea(), cells = gridCells();",
         "    NACTS.forEach(function(n){",
         "      cells.forEach(function(c){",
@@ -388,7 +462,7 @@ def test_the_sweep_covers_the_sliders_the_page_actually_offers(tmpl):
     Falsify: change any slider's `max` in the template.
     """
     for ident, values in (("rGap", GAPS), ("rDisp", DISPS), ("rSize", SIZES),
-                          ("rHeight", HEIGHTS)):
+                          ("rHeight", HEIGHTS), ("rDivide", DIVIDES)):
         m = re.search(r"<input type=range id=%s min=(-?\d+) max=(-?\d+)" % ident, tmpl)
         assert m, "the template has no `<input type=range id=%s min=.. max=..>`" % ident
         lo, hi = int(m.group(1)), int(m.group(2))
@@ -834,11 +908,19 @@ def test_the_city_is_always_drawn(tmpl):
 def _rule(text: str, selector: str) -> dict:
     """One CSS rule's declarations, as {property: value}.
 
-    Comment lines are stripped first, because the prose around these rules names properties and
+    Comments are stripped first, because the prose around these rules names properties and
     selectors freely and a guard that reads a comment as a declaration is a guard that fails on
     an explanation. That has happened three times on this board.
+
+    STRIPPED AS COMMENTS, NOT AS LINES THAT LOOK LIKE ONE. This dropped every line beginning `/*`,
+    `*` or `*/`, which is most of a comment and not all of it: the continuation lines in this
+    file's comments begin with ordinary words, so a comment sitting BETWEEN two declarations left
+    its middle behind, and that text ran on into the declaration below it. The next declaration
+    then came back under a key made of a paragraph of prose. Nothing failed -- the property was
+    simply absent, and a guard asking whether it was there said no. `--plate-edge` was added
+    between two comments and was invisible to this for exactly that reason.
     """
-    body = "\n".join(ln for ln in text.split("\n") if not ln.strip().startswith(("/*", "*", "*/")))
+    body = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
     m = re.search(r"%s\s*\{([^}]*)\}" % re.escape(selector), body)
     assert m, "the template has no `%s` rule" % selector
     out = {}
@@ -1148,17 +1230,26 @@ def test_one_click_on_a_mark_chooses_its_action_whatever_duty_you_were_on(tmpl, 
 
 
 @needs_node
-def test_the_plate_hangs_below_the_line_and_is_centred_under_it(sweep, tmpl):
-    """CENTRED AND SIX BELOW, which is the whole of what was asked for.
+def test_the_plate_hangs_below_the_line_and_is_flush_with_its_left_edge(sweep, tmpl):
+    """FLUSH LEFT AND SIX BELOW, which is the whole of what was asked for.
 
-    The plate used to sit in the rectangle's top right corner and was bounded by it. It hangs
-    under the bottom line now, which takes away every bound the cell used to give it -- so the
-    two claims that replace them are held here: its middle is the rectangle's middle, and its top
-    is PLATE_DROP under the line.
+    The plate used to sit in the rectangle's top right corner and was bounded by it. Then it hung
+    under the bottom line, CENTRED, which this test held for several rounds -- and it is centred no
+    longer: there are two frames under the line now and they are pushed to opposite edges, so the
+    claim that replaces centring is that the plate's left edge IS the rectangle's inner left edge,
+    exactly, with no term between them.
 
-    Falsify: drop the `/ 2` from the centring, or replace PLATE_DROP with a literal.
+    EXACT, NOT WITHIN HALF A PIXEL. The centring claim had to be held to a tolerance because it
+    went through a `/ 2` and a `Math.round`; flush does not, and a tolerance on an equality that
+    can be exact is a tolerance that hides a one-pixel bug of the kind this file has already had
+    three of.
+
+    Falsify: put the centring term back, pay CELL_BORDER twice, or replace PLATE_DROP with a
+    literal.
     """
     drew = 0
+    border = float(_decl(tmpl, "CELL_BORDER"))
+    drop = float(_decl(tmpl, "PLATE_DROP"))
     for row in sweep:
         if row["centre"]:
             continue
@@ -1169,18 +1260,680 @@ def test_the_plate_hangs_below_the_line_and_is_centred_under_it(sweep, tmpl):
                 % (_tag(row), p["plateW"], p["plateH"]))
             continue
         drew += 1
-        border = float(_decl(tmpl, "CELL_BORDER"))
-        drop = float(_decl(tmpl, "PLATE_DROP"))
-        mid_cell = r["x"] + border + (r["width"] - 2 * border) / 2.0
-        mid_plate = p["plateX"] + p["plateW"] / 2.0
-        assert abs(mid_cell - mid_plate) <= 0.5, (
-            "%s: the rectangle's middle is %g and the plate's is %g"
-            % (_tag(row), mid_cell, mid_plate))
+        assert p["plateX"] == r["x"] + border, (
+            "%s: the rectangle's inner left edge is at %g and the plate starts at %g"
+            % (_tag(row), r["x"] + border, p["plateX"]))
         assert p["plateY"] == r["y"] + r["height"] + drop, (
             "%s: the line's outer edge is at %g and the plate starts at %g, which is %g below "
             "instead of %g" % (_tag(row), r["y"] + r["height"], p["plateY"],
                                p["plateY"] - (r["y"] + r["height"]), drop))
     assert drew, "no arrangement in the sweep drew a plate at all, so nothing was checked"
+
+
+# ---------------------------------------------------------------- the tithe resource
+
+
+@needs_node
+def test_the_one_frame_spans_its_rectangle_edge_to_edge(sweep, tmpl):
+    """ONE FRAME, AS WIDE AS THE THING IT HANGS FROM.
+
+    There were two for a round -- the duty's marks flush left in theirs, the resource flush right
+    in its own, and a gap between them that was whatever the width happened to leave. The frame
+    was widened to the rectangle and the resource moved into the end of it, which puts the
+    resource exactly where it already was and turns the gap into clear ground inside one object.
+
+    SO THE FRAME HAS NO SIZE OF ITS OWN ANY MORE, and that is the claim: its width is the
+    rectangle's inner width, both edges, not a number worked out from what it holds.
+
+    Falsify: build the frame from `rowBox` again, or inset it from either edge.
+    """
+    border = float(_decl(tmpl, "CELL_BORDER"))
+    drew = 0
+    for row in sweep:
+        if row["centre"] or not row["plate"]["hasPlate"]:
+            continue
+        p, r = row["plate"], row["r"]
+        drew += 1
+        assert p["plateX"] == r["x"] + border, (
+            "%s: the rectangle's inner left edge is at %g and the frame starts at %g"
+            % (_tag(row), r["x"] + border, p["plateX"]))
+        assert p["plateX"] + p["plateW"] == r["x"] + r["width"] - border, (
+            "%s: the rectangle's inner right edge is at %g and the frame ends at %g"
+            % (_tag(row), r["x"] + r["width"] - border, p["plateX"] + p["plateW"]))
+    assert drew, "no arrangement in the sweep drew a frame, so nothing was checked"
+
+
+@needs_node
+def test_the_resource_keeps_the_margin_at_its_end_that_the_marks_keep_at_theirs(sweep, tmpl):
+    """THE TWO ENDS OF ONE FRAME HAVE TO BE EQUAL, and nothing but a shared expression makes them.
+
+    The duty's marks keep `GEO.marks.pad` from the frame's outer left edge and the resource keeps
+    the same from its outer right. Written as two margins they would be a pair that merely matches
+    today: the day the controls retighten and `GEO.marks.pad` moves, one end would follow and the
+    other would not, and the frame would be visibly lopsided in a way no single number explains.
+    So `titheMarkAt` is `plateInset` measured from the other end, and this holds the result.
+
+    Falsify: write the right-hand margin out as its own arithmetic, or drop the `2 * PLATE_BORDER`
+    that pays for the frame's border at both ends.
+    """
+    src = _code(_function(tmpl, "titheMarkAt"))
+    assert "plateInset(P)" in src, (
+        "the resource's margin is no longer the mirror of the marks':\n%s" % src)
+    assert not re.search(r"GEO\.(ribbon|marks)\.", src), (
+        "the resource has started working its margin out from geometry a second time:\n%s" % src)
+    border = float(_decl(tmpl, "PLATE_BORDER"))
+    drew = 0
+    for row in sweep:
+        if row["centre"] or not row["plate"]["hasTithe"]:
+            continue
+        p = row["plate"]
+        drew += 1
+        # Both measured from the frame's own outer edges, which is the frame anybody can see.
+        left = border + p["marks"][0]["left"] - p["inset"]
+        right = p["plateW"] - (border + p["titheMark"]["left"] + p["titheMark"]["size"])
+        assert left == right, (
+            "%s: the marks start %g from the frame's left edge and the resource ends %g from its "
+            "right" % (_tag(row), left, right))
+        assert p["titheMark"]["top"] == p["marks"][0]["top"], (
+            "%s: the resource and the duty marks sit at different heights in one frame"
+            % _tag(row))
+        assert p["titheMark"]["size"] == p["sz"], (
+            "%s: the resource is drawn at %g and a duty mark at %g"
+            % (_tag(row), p["titheMark"]["size"], p["sz"]))
+    assert drew, "no arrangement in the sweep drew a resource, so nothing was checked"
+
+
+@needs_node
+def test_the_divider_stands_in_front_of_the_resource_by_what_the_slider_says(sweep):
+    """MEASURED LEFTWARD FROM THE RESOURCE, WHICH IS THE ONLY ANCHOR THAT HOLDS STILL.
+
+    The resource is pinned to the frame's right-hand end and never moves. The duty's marks do: a
+    one-action duty centres its single mark in the span a two-action duty fills, so Allocation's
+    row ends 28px before Clerical's. Anchor the divider to the marks and one slider setting puts
+    the line in two different places on two rectangles side by side, which reads as the board
+    being wrong rather than as the duties differing.
+
+    So the claim is the slider's own arithmetic: at `divide`, the line stands exactly `divide` in
+    front of the resource, on every rectangle, at every setting of every other slider.
+
+    Falsify: measure the divider from `rowEnd`, from the frame's left edge, or add the slider
+    instead of subtracting it.
+    """
+    checked = 0
+    for row in sweep:
+        if row["centre"]:
+            continue
+        p = row["plate"]
+        for d in p["divs"]:
+            checked += 1
+            assert p["titheMark"]["left"] - d["left"] == d["divide"], (
+                "%s, divide %d: the resource starts at %g and the line at %g, which is %g in "
+                "front of it" % (_tag(row), d["divide"], p["titheMark"]["left"], d["left"],
+                                 p["titheMark"]["left"] - d["left"]))
+    assert checked, "the sweep never placed a divider, so nothing was checked"
+
+
+@needs_node
+def test_the_divider_is_the_frames_own_edge_stood_up_inside_it(sweep, tmpl):
+    """SAME COLOUR AND SAME THICKNESS BECAUSE IT IS THE SAME LINE, not because it matches today.
+
+    The frame's edge was a literal -- `1px solid #2a2721` -- while the frame was the only thing
+    drawn in it. A second dark hairline matched by eye is how a board ends up with two
+    near-identical colours and no way to tell which one moved when one of them does. So the
+    colour is a token both read, and the thickness is PLATE_BORDER rather than a 1 typed into
+    dividerAt.
+
+    AND IT IS SHORTER THAN THE FRAME AT BOTH ENDS, which is the part that was asked for and the
+    part that keeps it from reading as a wall between two frames -- the thing the merged frame
+    exists to stop being. The space it leaves is the marks' own: the line is exactly as tall as
+    the icons either side of it and starts and ends where they do.
+
+    Falsify: write the colour into .tdiv, type a width into dividerAt, or run the line to the
+    frame's full height.
+    """
+    root = _rule(tmpl, ":root")
+    assert root.get("--plate-edge"), "there is no --plate-edge token for the two to share"
+    plate = _rule(tmpl, ".iplate")
+    assert "var(--plate-edge)" in plate.get("border", ""), (
+        "the frame's border is no longer drawn from the shared token: %s" % plate.get("border"))
+    div = _rule(tmpl, ".tdiv")
+    assert div.get("background") == "var(--plate-edge)", (
+        "the divider is no longer drawn in the frame's own edge colour: %s" % div)
+
+    src = _code(_function(tmpl, "dividerAt"))
+    assert "PLATE_BORDER" in src, (
+        "the divider's thickness is no longer the frame's own:\n%s" % src)
+    assert "plateInset(P)" in src and "P.sz" in src, (
+        "the divider no longer takes its top and height from the marks:\n%s" % src)
+
+    border = float(_decl(tmpl, "PLATE_BORDER"))
+    for row in sweep:
+        if row["centre"]:
+            continue
+        p = row["plate"]
+        for d in p["divs"]:
+            assert d["width"] == border, (
+                "%s: the divider is %g thick and the frame's edge is %g"
+                % (_tag(row), d["width"], border))
+            assert d["top"] == p["marks"][0]["top"], (
+                "%s: the divider starts at %g and the marks at %g"
+                % (_tag(row), d["top"], p["marks"][0]["top"]))
+            assert d["height"] == p["sz"], (
+                "%s: the divider is %g tall and a mark is %g"
+                % (_tag(row), d["height"], p["sz"]))
+            # AND THE SPACE IT LEAVES IS REAL SPACE, measured against the frame it sits in rather
+            # than taken on trust from the two asserts above.
+            gap_top = border + d["top"]
+            gap_bottom = p["fullH"] - (border + d["top"] + d["height"])
+            assert gap_top > 0 and gap_bottom > 0, (
+                "%s: the divider runs to the frame's edge -- %g above, %g below"
+                % (_tag(row), gap_top, gap_bottom))
+            assert gap_top == gap_bottom, (
+                "%s: the divider leaves %g above and %g below" % (_tag(row), gap_top, gap_bottom))
+
+
+@needs_node
+def test_a_divider_that_would_land_on_the_marks_is_refused_and_counted(sweep, tmpl):
+    """THE SLIDER REACHES FURTHER THAN THE GAP DOES, WHICH IS THE POINT AND ALSO THE PROBLEM.
+
+    `divide` runs to 48 and the clear ground at the opening settings is 24. Past that the line
+    would be drawn ON the duty's marks -- not a divider but a stripe through an icon -- so it is
+    refused, and about a third of the slider's travel draws nothing at those settings. It is
+    counted and said, the same bargain the frame and the resource already strike.
+
+    ALL SEVEN GO TOGETHER, AND THAT IS WHY THE CLEARANCE IS MEASURED AGAINST `fullRow`. The span
+    reserved for the widest row any duty needs is the same on every rectangle; where a SHORT row
+    actually ends is not, because a one-action duty centres its mark in that span and so ends
+    28px earlier. Measure against the real end and Allocation would keep its line for another 28
+    steps of the slider after the other six lost theirs -- one rectangle out of eight behaving
+    differently, which reads as a fault rather than as a limit. Measured against the reserved
+    span the slider has one threshold for the whole board.
+
+    AND THE REFUSAL IS NOT VACUOUS: the sweep is asked to show both a setting where the line is
+    drawn and one where it is refused, because a condition that never binds is one this file has
+    carried twice before.
+
+    Falsify: draw the divider whatever the slider says, drop the counter, or let it sit exactly
+    on `rowEnd`.
+    """
+    drawn = refused = 0
+    for row in sweep:
+        if row["centre"]:
+            continue
+        p = row["plate"]
+        row_end = p["marks"][0]["left"] - p["inset"] + p["fullRow"]
+        for d in p["divsNone"]:
+            assert not d["has"], (
+                "%s, divide %d: a duty dealt no resource was given a divider, so its empty frame "
+                "has a line down the middle of it" % (_tag(row), d["divide"]))
+        for d in p["divs"]:
+            # ONLY WHERE THERE IS A RESOURCE TO DIVIDE FROM. A divider is refused for two quite
+            # different reasons -- the slider pushed it into the marks, or the rectangle had no
+            # room for the resource in the first place -- and this guard is about the first. The
+            # second is `test_the_resource_is_given_up_before_the_dutys_own_marks_are`'s, and
+            # lumping them together had this asserting that a line refused at x 474 under a
+            # rectangle whose frame fell off the canvas "had somewhere to go".
+            if not d["hasTithe"]:
+                continue
+            if d["has"]:
+                drawn += 1
+                assert d["left"] > row_end, (
+                    "%s, divide %d: the duty's marks end at %g and the line was drawn at %g"
+                    % (_tag(row), d["divide"], row_end, d["left"]))
+            else:
+                refused += 1
+                assert d["left"] <= row_end, (
+                    "%s, divide %d: the line was refused at %g with the marks ending at %g, so "
+                    "it had somewhere to go" % (_tag(row), d["divide"], d["left"], row_end))
+    assert drawn, "no divider was drawn anywhere in the sweep"
+    assert refused, (
+        "no divider was refused anywhere in the sweep, so the condition that refuses one cannot "
+        "be doing anything -- which is what this file has removed two conditions for")
+
+    grid = _code(_function(tmpl, "drawGrid"))
+    assert "DIVIDERS_DROPPED = 0;" in grid, (
+        "drawGrid no longer zeroes the divider counter, so it grows on every slider event")
+    assert "DIVIDERS_DROPPED++" in grid, "nothing counts a refused divider"
+    wire = _code(_function(tmpl, "wireGrid"))
+    assert "DIVIDERS_DROPPED" in wire, "the readout never mentions a refused divider"
+    m = re.search(r"tag\.style\.color = \((.*?)\)\s*\?", wire, re.S)
+    assert m, "the readout no longer colours itself at all"
+    assert "DIVIDERS_DROPPED" in [t.strip() for t in m.group(1).split("||")], (
+        "a refused divider does not colour the readout, so the number is printed in the same "
+        "grey as the numbers that are fine")
+
+
+@needs_node
+def test_the_resource_never_crowds_the_dutys_own_marks(sweep):
+    """INSIDE ONE FRAME, DISTANCE IS THE ONLY THING SAYING THESE ARE TWO KINDS OF OBJECT.
+
+    While the resource had a frame of its own the separation was structural: two grounds, two
+    borders, nothing to read. In one frame a row of marks means "the actions you may take", and a
+    resource that drifts within `igap` of the last mark becomes a third icon in that row -- the
+    single misreading this arrangement has to avoid, and one that no amount of comment prevents.
+
+    SO THE CLEARANCE IS THE GAP BETWEEN THE MARKS THEMSELVES, which is the only distance on this
+    frame that already means "these belong together". Anything at least that far out is further
+    apart than the things that do. At the opening settings it comes to 24px against that 6.
+
+    Falsify: drop the clearance term from `hasTithe`, or compare against zero instead of `igap`.
+    """
+    drew = 0
+    for row in sweep:
+        if row["centre"]:
+            continue
+        p = row["plate"]
+        if not (p["hasPlate"] and p["hasTithe"]):
+            continue
+        drew += 1
+        # Where the widest row any duty needs ends, which is the span the marks are centred in.
+        row_end = p["marks"][0]["left"] - p["inset"] + p["fullRow"]
+        assert p["titheMark"]["left"] - row_end >= p["igap"], (
+            "%s: the duty's marks end at %g and the resource starts at %g, which is %g apart "
+            "against the %g between the marks themselves"
+            % (_tag(row), row_end, p["titheMark"]["left"],
+               p["titheMark"]["left"] - row_end, p["igap"]))
+    assert drew, "no arrangement drew both, so nothing was checked"
+
+
+@needs_node
+def test_the_resource_is_given_up_before_the_dutys_own_marks_are(sweep):
+    """WHICH OF THE TWO GOES WHEN THE RECTANGLE RUNS OUT OF ROOM, and it is not arbitrary.
+
+    The duty's marks are the object on this board that carries meaning -- they say what you may do
+    -- and the resource is a thing the board shows you. Testing both against the rectangle
+    together would drop the marks to keep the decoration; testing the frame against what the plate
+    LEAVES drops the decoration first. So `hasTithe` implies `has`, at every setting.
+
+    AND THE IMPLICATION IS NOT VACUOUS, which is the half of this that a one-line assert would
+    miss. If the resource and the marks always came and went together the implication would hold
+    perfectly and mean nothing, so the sweep is also asked to show settings where the marks are
+    drawn and the resource is not.
+
+    IT MATTERS MORE NOW THAN IT DID, because the resource is a CHILD of the duty's frame. When it
+    had a frame of its own the worst case was one frame hanging alone; placed into a frame that
+    was never drawn it lands loose inside the rectangle, which `.dcell`'s `overflow:hidden` then
+    crops to nothing. `hasTithe` keeps `has` as a term for exactly this -- and the width half of
+    `has` is implied by the clearance while the HEIGHT half is not, which is why the term stays
+    rather than going the way the last implied condition went.
+
+    Falsify: drop `has` from `hasTithe`, or drop the clearance term.
+    """
+    only_plate = 0
+    for row in sweep:
+        if row["centre"]:
+            continue
+        p = row["plate"]
+        assert not (p["hasTithe"] and not p["hasPlate"]), (
+            "%s: a resource was drawn under a rectangle whose own marks were refused" % _tag(row))
+        if p["hasPlate"] and not p["hasTithe"]:
+            only_plate += 1
+    assert only_plate, (
+        "no setting in the sweep draws the marks without the resource, so the order they are "
+        "given up in was never exercised")
+
+
+@needs_node
+def test_a_duty_dealt_no_resource_gets_no_resource_at_any_setting(sweep):
+    """TAXATION'S EMPTY RIGHT-HAND END IS CORRECT, and it has to stay distinguishable from the
+    two other ways that end can be empty: a resource whose cut is missing from the tree, which
+    draws an empty dashed slot, and a rectangle too narrow for one, which draws nothing and is
+    counted.
+
+    IT READS DIFFERENTLY SINCE THE FRAMES MERGED, and that is worth saying out loud rather than
+    discovering on the board. Taxation used to have no right-hand frame at all; it now has the
+    same full-width frame as every other duty with nothing at that end of it. The frame is the
+    same width everywhere on purpose -- that was the point of giving a one-mark duty the same
+    ground as a two-mark one -- so the empty end is Taxation saying "none belongs here" in the
+    same object the others say "here is yours" in.
+
+    The first is what `tkey === null` is for and the second is what `hasTithe` is for, and this
+    holds the first across every rectangle the sliders can make -- including the wide ones, where
+    there is plenty of room and nothing but the deal to stop a frame appearing.
+
+    Falsify: make placeFor ignore its third argument, or test it for truthiness somewhere that a
+    missing argument reads as "yes".
+    """
+    for row in sweep:
+        if row["centre"]:
+            continue
+        assert row["plate"]["titheWhenNoneIsDealt"] is False, (
+            "%s: a duty dealt no resource was given one anyway" % _tag(row))
+
+
+def test_the_tithe_ring_reads_clockwise_from_north(geo):
+    """THE DEAL, WRITTEN DOWN IN THE ONE FORM THE MISTAKE WOULD BE VISIBLE IN.
+
+    V2_TITHE is a bare tuple with no slugs in it, zipped against geometry's DUTIES -- which is the
+    right way to write it, because repeating the slugs would be a second list to keep in step. The
+    cost is that it is one step away from being silently wrong: reorder DUTIES, or drop an entry,
+    and every duty quietly takes its neighbour's resource. Nothing would raise and the board would
+    look finished.
+
+    So the deal is held here BY COMPASS FACE rather than by position, with the face derived from
+    each duty's clock angle the way geometry derives it -- 0 degrees north, 45 clockwise per step.
+    A reorder moves a resource to a different face and this fails; a reorder that somehow kept
+    every face's resource would not be a mistake.
+
+    Falsify: rotate V2_TITHE by one, swap two entries, or reorder geometry's DUTIES.
+    """
+    want = {"north": "wheat", "north_east": None, "east": "silver", "south_east": "stone",
+            "south": "wheat", "south_west": "wheat", "west": "silver", "north_west": "stone"}
+    ring = _v2_tithe()
+    assert len(ring) == len(geo.DUTIES), (
+        "V2_TITHE names %d resources and geometry publishes %d duties" % (len(ring),
+                                                                          len(geo.DUTIES)))
+    got = {geo.face_of(deg): key for (_, _, deg), key in zip(geo.DUTIES, ring)}
+    assert got == want, (
+        "the ring reads %s"
+        % ", ".join("%s %s" % (f, got.get(f, "missing") or "none") for f in geo.COMPASS))
+
+
+def test_only_taxation_is_dealt_no_resource(geo):
+    """THE ONE EXCEPTION, NAMED RATHER THAN COUNTED.
+
+    "Every duty but Taxation takes a resource" is the rule, and the two halves of it fail
+    differently: a second None is a duty quietly missing its resource, and a None that has MOVED is
+    two duties wrong at once with the count still right. Asserting there is exactly one None would
+    catch the first and miss the second, so this asks which duty it belongs to.
+
+    Falsify: deal Taxation a resource, or deal any other duty None.
+    """
+    ring = _v2_tithe()
+    none_at = [slug for (slug, _, _), key in zip(geo.DUTIES, ring) if key is None]
+    assert none_at == ["taxation"], (
+        "the duties dealt no resource are %s" % (", ".join(none_at) or "none"))
+
+
+def test_every_resource_the_ring_deals_is_one_the_tree_can_draw(geo):
+    """A KEY WITH NO CUT BEHIND IT DRAWS AN EMPTY FRAME, SILENTLY, which is the failure this
+    catches before it reaches the board.
+
+    The page looks a resource up in IMAGES by `tithe:<key>` and falls back to an empty frame, which
+    is the right behaviour at draw time -- a visible hole beats a crash -- and is exactly why a
+    typo in V2_TITHE would survive a build and a look at the page. So the three names are held
+    against TITHE_KEYS, and TITHE_KEYS against what is actually on disk AND recorded, which is the
+    pair of conditions the bundler gates on.
+
+    Falsify: add a fourth name to V2_TITHE, or rename a cut without renaming the key.
+    """
+    keys = _tithe_keys()
+    dealt = {k for k in _v2_tithe() if k is not None}
+    assert dealt <= set(keys), (
+        "the ring deals %s, which TITHE_KEYS does not name" % ", ".join(sorted(dealt - set(keys))))
+
+    folder = BOARD / "tokens" / "resources" / "icons"
+    rec = json.loads((BOARD / "attribution.json").read_text(encoding="utf-8"))["files"]
+    for key in sorted(dealt):
+        cuts = sorted(f for f in folder.glob("resource_%s_icon_v*" % key)
+                      if f.is_file() and f.suffix.lower() in (".png", ".webp"))
+        assert cuts, "no cut on disk for the %s resource, so its frame would draw empty" % key
+        rel = "tokens/resources/icons/%s" % cuts[-1].name
+        assert rel in rec, (
+            "%s is the newest %s cut and has no attribution entry, so the bundler leaves it out "
+            "and the frame draws empty" % (rel, key))
+
+
+def _tithe_block(tmpl: str) -> str:
+    """drawGrid's `if (L.hasTithe){...}` alone, by its own braces.
+
+    By braces rather than by a prose anchor, because _code() strips whole-line comments -- slicing
+    to one reads to the end of drawGrid, which includes every seal the duty plate makes, and a
+    guard asking "does this block mention `seal`" then passes on anything.
+    """
+    grid = _code(_function(tmpl, "drawGrid"))
+    head = "if (L.hasTithe){"
+    assert head in grid, "drawGrid no longer has a tithe block"
+    i = grid.index(head)
+    j, depth = grid.index("{", i), 0
+    while True:
+        if grid[j] == "{":
+            depth += 1
+        elif grid[j] == "}":
+            depth -= 1
+            if depth == 0:
+                break
+        j += 1
+    return grid[i:j + 1]
+
+
+def test_the_resource_is_choosable_without_joining_the_art_machinery(tmpl):
+    """THE `.seal` CLASS BUNDLES TWO THINGS AND ONLY ONE OF THEM IS WANTED.
+
+    The resource used to carry neither: it was a picture, with no duty, no slot, no handler and
+    pointer-events off, and this test held exactly that. It is a choice now -- a third thing a
+    duty offers beside its one or two actions -- so the half of `.seal` that is the SELECTION is
+    wanted and the half that is the ART MACHINERY still is not.
+
+    WHAT THAT HALF WOULD DO. `#board .seal` is how edit mode finds every picture the board can
+    replace, how wireDrop finds every drop target, and how a dropped file is filed under a duty
+    and a slot. A resource has no slot to be filed under -- it is cut in ui/board_v2/icon_lab/ and
+    lives in the tree -- so a tmark wearing `seal` would open a file dialog that writes somewhere
+    that does not exist, and `#board .seal` would start answering 21 where the board has 14
+    actions. Nothing throws. The board just does the wrong thing when you click the wrong picture.
+
+    So: its own class, its own handler, no drop wiring, and edit mode refused rather than served.
+
+    Falsify: give the resource the seal class, wire wireDrop to it, or let its handler reach
+    pickFile.
+    """
+    block = _tithe_block(tmpl)
+    assert 'el("div", "tmark"' in block, (
+        "drawGrid no longer makes the resource mark as a .tmark:\n%s" % block)
+    grid = _code(_function(tmpl, "drawGrid"))
+    assert '"seal"' in grid, (
+        "nothing in drawGrid makes a .seal any more, so this guard is comparing against nothing")
+    for bad, why in (('"seal"', "it would join #board .seal and be offered to edit mode"),
+                     ("wireDrop", "it would become a drop target for a file it cannot file"),
+                     ("pickFile", "it would offer to replace a picture that is not the board's")):
+        assert bad not in block, (
+            "the resource mark carries %s, and %s:\n%s" % (bad, why, block))
+
+    handler = _code(_function(tmpl, "titheClick"))
+    assert "pickFile" not in handler, (
+        "clicking a resource in `images` mode offers a file dialog:\n%s" % handler)
+    assert re.search(r"if \(S\.editing\) return;", handler), (
+        "the resource's handler does not refuse edit mode:\n%s" % handler)
+
+    rule = _rule(tmpl, ".tmark")
+    assert rule.get("pointer-events") == "auto", (
+        "the resource cannot take a click: .iplate is pointer-events:none, so a child of it has "
+        "to opt back in. %s" % rule)
+
+
+def test_choosing_a_resource_chooses_its_duty_and_the_tithe_in_one_click(tmpl):
+    """WHAT ADAM ASKED FOR, IN THE ONE PLACE IT IS DECIDED.
+
+    Clicking a resource has to do two things at once: show that duty's action pictures in the row
+    above, and select the Take Tithe box beside them. That is `pickAction(duty, TITHE_SLOT)` --
+    the same entry point an action mark uses, with the tithe in place of a slot.
+
+    NOT pickDuty FOLLOWED BY select(), which is the obvious way to write it and renders the board
+    twice. pickDuty answers the slot itself for a duty with one action, so Allocation would light
+    its action picture and then drop it for the Tithe box on the same click -- a visible flicker
+    that says the board changed its mind. slotClick's own comment settled this for the marks.
+
+    Falsify: call pickDuty and select separately, or pass a literal slot.
+    """
+    handler = _code(_function(tmpl, "titheClick"))
+    assert "pickAction(" in handler, (
+        "the resource no longer goes through the action marks' own entry point:\n%s" % handler)
+    assert "pickDuty(" not in handler and "select(" not in handler, (
+        "the resource sets the duty and the slot in two calls, so the board renders twice:\n%s"
+        % handler)
+    # THE SLOT IT PASSES IS THE ONE IT WAS GIVEN, which is what makes the dataset below load-bearing
+    # rather than decorative.
+    assert re.search(r"pickAction\(d\.duty,\s*d\.slot\)", handler), (
+        "the resource does not pass the duty and slot it carries:\n%s" % handler)
+
+    block = _tithe_block(tmpl)
+    assert "tm.dataset.duty = d.slug" in block, (
+        "the resource does not carry its duty, so the click cannot name one:\n%s" % block)
+    assert "tm.dataset.slot = TITHE_SLOT" in block, (
+        "the resource does not carry the tithe slot:\n%s" % block)
+    assert "titheClick" in block, "the resource is not wired to a click handler:\n%s" % block
+    # AND NO hoverSlot. lineFor would look up `d.tithe`, which is the resource's KEY -- a string
+    # with no shortLabel -- and the status line would blank out under the pointer.
+    assert "hoverSlot" not in block, (
+        "the resource carries a hoverSlot, so the status line goes blank over it:\n%s" % block)
+    assert "tm.dataset.hoverDuty = d.slug" in block, (
+        "hovering the resource no longer lights the duty it belongs to:\n%s" % block)
+
+
+def test_the_tithe_box_and_the_chosen_resource_are_lit_from_the_state(tmpl):
+    """EVERY ROUTE TO ONE FACT AGREES BECAUSE NONE OF THEM SETS THE CUE.
+
+    The Take Tithe box is reached two ways now -- the box itself, and a resource on any of the
+    seven tiles that carry one -- and the chosen resource has to light up the way a chosen action
+    mark does. Both are set in render() from `S.slot`, which is render()'s own stated rule for
+    exactly this reason: a class set where it is CLICKED is right on one route and stale on the
+    other.
+
+    THE BOX SAID NOTHING AT ALL UNTIL NOW. It has been clickable since it was drawn and the only
+    sign it had been pressed was the commit mark appearing in the column -- survivable while
+    pressing it was the only way to reach it, and much louder once a resource selects it. So
+    `.panel.sel` joins `.art.sel`'s own declaration rather than getting a matching outline of its
+    own.
+
+    AND THE RESOURCE IS LIT BY THE SEAL'S OWN RULE, in the same loop and the same CSS: it is the
+    same 50px of the same artwork, chosen the same way, so a different fraction of brightness
+    would be the board claiming there are two kinds of choosable mark.
+
+    Falsify: light either one in its click handler, give `.panel.sel` its own outline, or split
+    the render loop in two.
+    """
+    render = _code(_function(tmpl, "render"))
+    assert '#board .seal, #board .tmark' in render, (
+        "render no longer lights the resources in the same loop as the action marks:\n%s"
+        % render[:1200])
+    assert re.search(r'tbox\.classList\.toggle\("sel", S\.slot === TITHE_SLOT\)', render), (
+        "the Take Tithe box is not lit from S.slot in render()")
+
+    for fn in ("titheClick", "select", "pickAction"):
+        body = _code(_function(tmpl, fn))
+        assert "classList" not in body, (
+            "%s sets a cue where the click happens rather than leaving it to render():\n%s"
+            % (fn, body))
+
+    sel = _rule(tmpl, ".art.sel, .panel.sel")
+    assert sel.get("outline"), (
+        "the Tithe box no longer shares the action cards' own chosen outline: %s" % sel)
+    lit = _rule(tmpl, ".seal.filled, .tmark.filled")
+    assert lit.get("filter"), (
+        "the resource no longer dims with the action marks at rest: %s" % lit)
+    assert ".tmark.filled.on{filter" in re.sub(r"\s+", "", tmpl), (
+        "the chosen resource is not lit by the rule that lights a chosen action mark")
+
+
+def test_the_word_tithe_is_written_once_in_the_selection(tmpl):
+    """FIVE PLACES NEEDED THE SAME STRING AND A MISSPELLING IN ANY ONE IS A SILENT DEAD CLICK.
+
+    `S.slot` has held `"tithe"` since the box was first wired, as a bare literal. There were two
+    such places and it was survivable. A clickable resource makes five -- the panel's handler, the
+    mark's dataset, the picker, render()'s loop and render()'s box -- and they do not check each
+    other: a typo in one gives a resource that selects nothing while the box still works, or a box
+    that lights for everything except the resource. Nothing throws and nothing fails a build.
+
+    Falsify: write `"tithe"` into any of the five.
+    """
+    assert re.search(r'^var TITHE_SLOT = "tithe";$', tmpl, re.M), (
+        "the template no longer names the tithe slot in one place")
+
+    # THE BOX'S ELEMENT ID IS NOT THE SLOT'S VALUE, and they are the same word, which is exactly
+    # the sort of coincidence a guard like this mistakes for a duplicate. One is a DOM identifier
+    # shared with the `#tithe` CSS rule -- which cannot read a JavaScript variable, so it could
+    # not be folded into the constant even if it meant the same thing -- and the other is what
+    # `S.slot` holds. Renaming either leaves the other correct. So the two id uses are set aside
+    # by name and what is left has to come from the constant.
+    assert re.search(r"#tithe\s", tmpl), "the Take Tithe box's own CSS rule has gone"
+    id_uses = ('p.id = "tithe"', 'getElementById("tithe")')
+    for fn in ("drawSide", "render", "titheClick"):
+        body = _code(_function(tmpl, fn))
+        for use in id_uses:
+            body = body.replace(use, "")
+        assert '"tithe"' not in body, (
+            "%s writes the slot name out instead of reading TITHE_SLOT:\n%s" % (fn, body))
+    block = _tithe_block(tmpl)
+    assert '"tithe"' not in block, (
+        "the resource's dataset writes the slot name out instead of reading TITHE_SLOT:\n%s"
+        % block)
+
+
+def test_a_frame_that_would_not_fit_is_counted_apart_from_the_plates(tmpl):
+    """TWO COUNTERS BECAUSE THEY ARE TWO LOSSES, AND THEY HAPPEN AT DIFFERENT SETTINGS.
+
+    The frame is refused when the rectangle has no width left BESIDE the plate, which comes first:
+    at the opening gap and edge the marks are all drawn from size 56 up and the resources only from
+    85. A single counter would print "8 without room for icons" on a board whose icons are all
+    drawn -- a readout that is wrong in the direction of looking broken.
+
+    AND IT IS RESET WHERE THE OTHER IS. A counter incremented in drawGrid and zeroed nowhere grows
+    on every slider event, so the readout would be right once and absurd by the tenth drag.
+
+    Falsify: fold the two counters into one, drop the reset, or stop the readout mentioning it.
+    """
+    grid = _code(_function(tmpl, "drawGrid"))
+    assert "TITHES_DROPPED = 0;" in grid, (
+        "drawGrid no longer zeroes the resource counter, so it grows on every slider event")
+    assert "TITHES_DROPPED++" in grid, "nothing counts a refused resource frame"
+    assert "PLATES_DROPPED++" in grid, "nothing counts a refused plate any more"
+    wire = _code(_function(tmpl, "wireGrid"))
+    assert "TITHES_DROPPED" in wire, "the readout never mentions a refused resource"
+    assert "PLATES_DROPPED" in wire, "the readout never mentions a refused plate"
+    # The two are reported as different things, not summed into one phrase.
+    assert "PLATES_DROPPED + TITHES_DROPPED" not in wire, (
+        "the two losses are added together, so the readout cannot say which one happened")
+
+
+@needs_node
+def test_the_resource_is_right_aligned_and_not_centred_like_a_short_row(sweep, tmpl):
+    """THE ONE PLACE THE TWO FRAMES MUST NOT SHARE ARITHMETIC, and it looks like the place they
+    should.
+
+    `P.inset` centres a SHORT row of marks inside the widest row any duty needs -- it is what puts
+    Allocation's single mark in the middle of the span a two-mark duty fills. The resource is not
+    in that row and is not centred in anything: it is pinned to the frame's right-hand end. Borrow
+    `inset` for it and it would move right by half the difference between one mark and two, 28px,
+    and only on the duties that hold a single action -- so Allocation's and Taxation's resources
+    would sit somewhere no other duty's does, which looks like two of the eight being drawn wrong
+    rather than like one expression being shared where it should not be.
+
+    WHICH GIVES THE CLAIM ITS SHARPEST FORM: the resource sits in the same place whether its duty
+    holds one action or two. Nothing about how many marks a duty has may reach it.
+
+    Falsify: call markAt(P, 0) for the resource, or add P.inset to titheMarkAt.
+    """
+    src = _code(_function(tmpl, "titheMarkAt"))
+    assert "plateInset(P)" in src, (
+        "the resource's margin is no longer measured with the marks' own inset:\n%s" % src)
+    assert "inset" not in src.replace("plateInset", ""), (
+        "the resource has picked up the short-row centring term:\n%s" % src)
+
+    by_cell = {}
+    for row in sweep:
+        if row["centre"] or not row["plate"]["hasTithe"]:
+            continue
+        key = (row["gap"], row["disp"], row["size"], row["height"],
+               row["cell"]["col"], row["cell"]["row"])
+        by_cell.setdefault(key, {})[row["nAct"]] = row["plate"]["titheMark"]["left"]
+    compared = 0
+    for key, lefts in by_cell.items():
+        if len(lefts) < 2:
+            continue
+        compared += 1
+        assert len(set(lefts.values())) == 1, (
+            "gap %d, edge %d, size %d, height %d, cell (col %d, row %d): the resource sits at %g "
+            "for a duty holding one action and %g for one holding two"
+            % (key + (lefts[min(lefts)], lefts[max(lefts)])))
+    assert compared, (
+        "no rectangle drew a resource at both action counts, so the one thing this guard is "
+        "about was never compared")
+    # AND THE SPREAD WOULD BE VISIBLE IF IT HAPPENED, which is what makes the equality above worth
+    # asserting rather than merely true. A duty holding fewer marks than the widest row has a
+    # non-zero inset to borrow.
+    assert any(row["plate"]["inset"] > 0 for row in sweep if not row["centre"]), (
+        "every rectangle in the sweep held a full row, so the centring term was never non-zero "
+        "and borrowing it would have moved nothing")
 
 
 @needs_node
@@ -1282,12 +2035,11 @@ def test_the_icons_are_never_drawn_smaller_than_geometry_draws_them(sweep, geo, 
         assert row["plate"]["sz"] == seal, (
             "%s: the icon came out %g where geometry draws it at %g"
             % (_tag(row), row["plate"]["sz"], seal))
-        # The plate's own border is in the declared size, because box-sizing is border-box --
-        # so the ground around the mark is `ip` on every side rather than `ip` on two of them.
-        border = float(_decl(tmpl, "PLATE_BORDER"))
-        assert row["plate"]["fullH"] == seal + 2 * row["plate"]["ip"] + 2 * border, (
-            "%s: the plate is %g tall around a %g icon with %g of padding and a %g border"
-            % (_tag(row), row["plate"]["fullH"], seal, row["plate"]["ip"], border))
+        # The frame is the emblem plus its margin, border included -- which is how a control
+        # mark's ground is drawn, and the point of matching it.
+        assert row["plate"]["fullH"] == seal + 2 * row["plate"]["ip"], (
+            "%s: the plate is %g tall around a %g icon with %g of margin"
+            % (_tag(row), row["plate"]["fullH"], seal, row["plate"]["ip"]))
 
 
 @needs_node
@@ -1303,7 +2055,14 @@ def test_a_plate_too_wide_for_its_rectangle_is_refused(sweep):
     Measured across the whole slider space: 52% of settings draw all eight plates, and at the
     opening gap and edge all eight hold from size 50 upward -- twelve steps below the default.
 
-    Falsify: drop the `P.width <= P.innerW` term from placeFor's `has`.
+    IT IS THE ROW THAT CAN FAIL TO FIT, NOT THE FRAME, and that distinction arrived with the
+    tithe resource. The frame now spans its rectangle, so asking whether the frame fits would be
+    asking whether `innerW <= innerW` -- the third dead condition this file would have carried.
+    What the sliders can make too narrow is the ROW BOX: the widest row any duty needs plus its
+    margin either side.
+
+    Falsify: drop the `P.rowBox <= P.innerW` term from placeFor's `has`, or test `P.innerW`
+    against itself.
     """
     drew = refused = 0
     for row in sweep:
@@ -1312,9 +2071,9 @@ def test_a_plate_too_wide_for_its_rectangle_is_refused(sweep):
         p = row["plate"]
         if p["hasPlate"]:
             drew += 1
-            assert p["plateW"] <= p["innerW"] + 1e-9, (
-                "%s: a %g-wide plate was drawn under a %g-wide rectangle"
-                % (_tag(row), p["plateW"], p["innerW"]))
+            assert p["rowBox"] <= p["innerW"] + 1e-9, (
+                "%s: a row needing %g was drawn in a %g-wide rectangle"
+                % (_tag(row), p["rowBox"], p["innerW"]))
         else:
             refused += 1
     assert drew, "no plate was drawn anywhere in the sweep"
@@ -1339,9 +2098,20 @@ def test_a_plate_that_would_not_fit_is_counted_and_said(tmpl):
         "drawGrid does not reset the count, so it climbs on every slider event")
     wire = _code(_function(tmpl, "wireGrid"))
     assert "PLATES_DROPPED" in wire, "the readout never mentions the refused plates"
-    assert re.search(r"tag\.style\.color = \(over > 0\.5 \|\| PLATES_DROPPED\)", wire), (
+    # THE CONDITION IS PARSED, NOT MATCHED WHOLE. This used to pin the expression verbatim --
+    # `(over > 0.5 || PLATES_DROPPED)` -- and that broke the day the tithe frames got a loss of
+    # their own to report, which is a guard failing because the page learned something rather than
+    # because it forgot something. What it is really asserting is that losing a plate is one of
+    # the things that colours the tag, so that is what it asks, and a new disjunct is allowed to
+    # join without this needing an edit.
+    m = re.search(r"tag\.style\.color = \((.*?)\)\s*\?", wire)
+    assert m, "the readout no longer colours itself at all"
+    terms = [t.strip() for t in m.group(1).split("||")]
+    assert "PLATES_DROPPED" in terms, (
         "the readout does not colour itself when a duty has lost its icons, so the number is "
-        "printed in the same grey as the numbers that are fine")
+        "printed in the same grey as the numbers that are fine: %s" % terms)
+    assert "over > 0.5" in terms, (
+        "the readout no longer colours itself when the arrangement passes the margin: %s" % terms)
 
 
 @needs_node
@@ -1356,21 +2126,34 @@ def test_the_icons_sit_inside_the_plate_that_was_sized_for_them(sweep, tmpl):
     Falsify: change the icons' `left` to `ip + k * sz`, or drop the `(nAct - 1) * igap` from the
     plate's own width.
     """
-    place = re.search(r"left:\s*px\(ip \+ P\.inset \+ k \* \(sz \+ igap\)\)", tmpl)
-    assert place, (
-        "the icons are no longer placed at `ip + P.inset + k * (sz + igap)`, so this guard is "
-        "checking an expression the page has stopped using")
+    # THE PAGE'S OWN PLACEMENT, not a second copy of it. These numbers come from `markAt`,
+    # which drawGrid also calls, so the mutation that moves a mark moves what is checked here.
+    assert re.search(r"var at = markAt\(P, k\);", tmpl), (
+        "drawGrid no longer places its marks with markAt, so the sweep and the page are working "
+        "out two different positions")
     for row in sweep:
         if row["centre"] or not row["plate"]["hasPlate"]:
             continue
         p, n = row["plate"], row["nAct"]
-        last = p["ip"] + p["inset"] + (n - 1) * (p["sz"] + p["igap"]) + p["sz"]
-        assert last <= p["plateW"] - p["ip"] + 1e-9, (
-            "%s: the last of %d icon(s) reaches %g inside a plate %g wide with %g of padding"
-            % (_tag(row), n, last, p["plateW"], p["ip"]))
-        assert p["sz"] + 2 * p["ip"] <= p["plateH"] + 1e-9, (
-            "%s: a %g icon with %g of padding does not fit a plate %g tall"
-            % (_tag(row), p["sz"], p["ip"], p["plateH"]))
+        border = float(_decl(tmpl, "PLATE_BORDER"))
+        # THE ROW BOX, NOT THE FRAME. The frame spans the whole rectangle now, so bounding the
+        # marks by it would pass on a row three times too wide -- the frame has room to spare and
+        # the point of this guard is that the row and the space reserved for it agree.
+        inner_w = p["rowBox"] - 2 * border
+        inner_h = p["plateH"] - 2 * border
+        assert len(p["marks"]) == n, (
+            "%s: %d mark(s) placed for a duty with %d" % (_tag(row), len(p["marks"]), n))
+        first, last = p["marks"][0], p["marks"][-1]
+        assert first["left"] >= 0, (
+            "%s: the first mark starts at %g, outside its own frame"
+            % (_tag(row), first["left"]))
+        assert last["left"] + last["size"] <= inner_w + 1e-9, (
+            "%s: the last of %d mark(s) reaches %g inside a frame %g wide"
+            % (_tag(row), n, last["left"] + last["size"], inner_w))
+        # AND THE SAME GAP TOP AND BOTTOM, which is what the frame's height is for.
+        assert abs(first["top"] - (inner_h - (first["top"] + first["size"]))) < 1e-9, (
+            "%s: a mark sits %g from the top of its frame and %g from the bottom"
+            % (_tag(row), first["top"], inner_h - (first["top"] + first["size"])))
 
 
 def test_the_plate_lives_on_the_board_and_is_swept_with_the_grid(tmpl):
@@ -1407,12 +2190,31 @@ def test_every_duty_gets_the_same_frame_whatever_it_holds(sweep, tmpl):
     action widens every plate to match without anything else changing. A literal 2 here would
     leave the new mark hanging off the edge of seven frames.
 
+    ASKED PER ARRANGEMENT NOW, NOT ACROSS THE WHOLE SWEEP. This used to collect every frame width
+    in the sweep and demand there be exactly one, which worked while the frame was built to its
+    contents and was therefore the same 118 at every slider setting. The frame spans its rectangle
+    now, so its width changes with the sliders by design -- and a test still demanding one width
+    everywhere would be failing on the feature rather than on a fault. What the claim was always
+    about is two duties SIDE BY SIDE: at one setting, in one rectangle, a duty holding one mark
+    gets the same frame as a duty holding two.
+
     Falsify: size the plate from `rowW` again, or write the full row as `2 * sz + igap`.
     """
-    widths = {row["plate"]["fullW"] for row in sweep if not row["centre"]}
-    assert len(widths) == 1, (
-        "the plates come in %d widths (%s); one duty's frame is a different size from another's"
-        % (len(widths), sorted(widths)))
+    by_cell = {}
+    for row in sweep:
+        if row["centre"]:
+            continue
+        key = (row["gap"], row["disp"], row["size"], row["height"],
+               row["cell"]["col"], row["cell"]["row"])
+        by_cell.setdefault(key, {})[row["nAct"]] = row["plate"]["fullW"]
+    assert by_cell, "the sweep produced no rectangles to compare"
+    for key, widths in by_cell.items():
+        assert len(set(widths.values())) == 1, (
+            "gap %d, edge %d, size %d, height %d, cell (col %d, row %d): a duty holding one mark "
+            "gets a %g-wide frame and one holding two gets %g"
+            % (key + (widths[min(widths)], widths[max(widths)])))
+    assert any(len(w) > 1 for w in by_cell.values()), (
+        "no rectangle was measured at more than one action count, so nothing was compared")
     body = _code(_function(tmpl, "plateFor"))
     assert "mostActions()" in body, (
         "the frame is no longer built to the widest row any duty needs:\n%s" % body)
@@ -1429,13 +2231,22 @@ def test_a_short_row_of_marks_is_centred_in_the_frame(sweep, tmpl):
     row -- so the two cases are one expression and a duty with every mark cannot be pushed off
     centre by the arithmetic that centres a duty with fewer.
 
-    THE PLATE'S OWN BORDER IS IN THE WIDTH, which is what makes "centred" true rather than
-    nearly true. `*{box-sizing:border-box}` means a plate declared 130 wide has a 128 padding
-    box, and the marks are placed against that -- so a row set at `pad` from the left had `pad`
-    on one side and `pad - 2` on the other. Two pixels, invisible on a pair and exactly what
-    stops a single centred mark from being centred.
+    THE PLATE'S OWN BORDER IS PAID FOR, which is what makes "centred" true rather than nearly
+    true. `*{box-sizing:border-box}` means the border eats into the declared size and the marks
+    are placed against the PADDING box -- so a row set at `pad` from the left had `pad` on one
+    side and `pad - 2` on the other. Two pixels, invisible on a pair and exactly what stops a
+    single centred mark from being centred. A control mark's ground is drawn the same way, which
+    is why the plate places its row one border in.
 
-    Falsify: drop PLATE_BORDER from the width, or the `/ 2` from the inset.
+    CENTRED IN THE ROW BOX, NOT IN THE FRAME, and the two came apart when the frame was widened
+    to hold the tithe resource. The frame spans the rectangle now; centring a short row in THAT
+    would put Allocation's single mark in the middle of its rectangle, nowhere near where the
+    other duties' marks sit, and the row of eight would stop being a row. What the inset centres
+    is the row inside the WIDEST ROW ANY DUTY NEEDS -- `rowBox` -- which is the span the marks
+    occupy at the frame's left-hand end and is unchanged by the widening.
+
+    Falsify: drop the `- PLATE_BORDER` from the marks' placement, the `/ 2` from the inset, or
+    centre the row in `innerW`.
     """
     border = float(_decl(tmpl, "PLATE_BORDER"))
     assert border > 0, "PLATE_BORDER is not positive"
@@ -1444,9 +2255,13 @@ def test_a_short_row_of_marks_is_centred_in_the_frame(sweep, tmpl):
         if row["centre"]:
             continue
         p, n = row["plate"], row["nAct"]
-        inner = p["fullW"] - 2 * border          # the padding box the marks are placed against
-        left = p["ip"] + p["inset"]
-        right = inner - (left + p["rowW"])
+        # MEASURED FROM THE FRAME'S OUTER EDGE, which is the frame everybody can see. markAt
+        # returns offsets from the PADDING box -- one border further in -- so the border is added
+        # back before the two ends are compared. Comparing padding-box numbers against a row box
+        # measured from the outer edge is off by exactly one border, which is the size of error
+        # this test exists to catch and would therefore have hidden.
+        left = border + p["marks"][0]["left"]
+        right = p["rowBox"] - (border + p["marks"][-1]["left"] + p["marks"][-1]["size"])
         seen.add(n)
         assert abs(left - right) < 1e-9, (
             "%s: %d mark(s) sit %g from one end of the frame and %g from the other"
@@ -1483,6 +2298,51 @@ def test_no_rectangle_carries_a_name_any_more(tmpl):
     assert BANNERS_DIR.is_dir(), (
         "the banner art has been deleted from the tree; it is meant to stay, unused and recorded")
     assert any(BANNERS_DIR.glob("*.webp")), "duty_actions/banners/ has no art left in it"
+
+
+@needs_node
+def test_a_duty_plate_keeps_the_same_margin_as_a_control_mark(sweep, tmpl, geo):
+    """TWO FRAMES ROUND THE SAME 50px EMBLEMS SHOULD NOT KEEP TWO DIFFERENT MARGINS.
+
+    The plate used the ribbon's `pad` -- 12, what a tile kept around its marks when the marks
+    were on tiles -- against the 6 the Map and Hire controls keep. The duty plates read as a
+    looser kind of object than the controls rather than as the same kind in another place.
+
+    THE NUMBER IS READ FROM THE CONTROLS, NOT COPIED. `GEO.marks.pad` is what `.mark::before`
+    is inset by, so the two cannot be tuned apart -- and a control column that retightens takes
+    the duty plates with it.
+
+    THE HEIGHT FOLLOWS FROM IT, which is the other half of what was asked: emblem plus margin
+    either side is 62, the same as a control's frame, and geometry publishes that box so the two
+    are held against each other here rather than against a number typed in this file.
+
+    Falsify: put `GEO.ribbon.pad` back in plateFor.
+    """
+    g = geo.as_dict()
+    pad = g["marks"]["pad"]
+    seal = g["ribbon"]["seal"]
+    box = g["marks"][g["marks"]["order"][0]]["box"]
+    assert box["height"] == seal + 2 * pad, (
+        "a control's own published box is %g tall round a %g emblem with %g of margin, so this "
+        "test's idea of 'the same' is wrong before it starts"
+        % (box["height"], seal, pad))
+
+    body = _code(_function(tmpl, "plateFor"))
+    assert "GEO.marks.pad" in body, (
+        "the plate's margin is no longer the controls' own number:\n%s" % body)
+    assert "GEO.ribbon.pad" not in body, (
+        "the plate is back on the ribbon's padding, which is twice the controls':\n%s" % body)
+
+    for row in sweep:
+        if row["centre"]:
+            continue
+        p = row["plate"]
+        assert p["ip"] == pad, (
+            "%s: the plate keeps %g of margin and a control mark keeps %g"
+            % (_tag(row), p["ip"], pad))
+        assert p["fullH"] == box["height"], (
+            "%s: the plate is %g tall and a control's frame is %g"
+            % (_tag(row), p["fullH"], box["height"]))
 
 
 # ---------------------------------------------------------------- where the acolytes stand

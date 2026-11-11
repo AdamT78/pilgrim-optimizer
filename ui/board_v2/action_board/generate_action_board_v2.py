@@ -91,7 +91,90 @@ OUT = HERE / "generated" / "action_board_v2.html"
 # NO `centre`. The City was a ninth rectangle you could switch off while it stood for nothing;
 # it is where the City panel went and it holds people, so it is part of the wheel now and there
 # is nothing to switch.
-GRID_DEFAULTS = {"gap": 115, "disp": 60, "size": 90, "height": 130, "bare": True}
+# `divide` IS HOW FAR IN FRONT OF THE TITHE RESOURCE THE DIVIDER STANDS, in board pixels, and it
+# opens at half the clear ground a two-action duty has at these settings -- 24px between the last
+# mark and the resource, so 12 puts the line in the middle of it. It is measured leftward from the
+# resource because the resource is the thing on that frame that never moves.
+GRID_DEFAULTS = {"gap": 115, "disp": 60, "size": 90, "height": 130, "divide": 12, "bare": True}
+
+# WHERE THE THREE RESOURCE CUTS LIVE, and the three keys the board asks for them by.
+TITHE_DIR = v1.BOARD / "tokens" / "resources" / "icons"
+TITHE_KEYS = ("wheat", "stone", "silver")
+
+# WHICH TITHE RESOURCE SITS BESIDE EACH DUTY'S ICONS, read CLOCKWISE FROM NORTH.
+#
+# DEMO STATE, FLAGGED LIKE V2_SEATS AND FOR THE SAME REASON. These are to be dealt at setup; until
+# there is a setup to deal them the board needs eight answers to look at, and inventing them in the
+# template would put game state in the drawing. The day setup deals them this constant is what gets
+# deleted, and the template reads `d.tithe` either way.
+#
+# A TUPLE AGAINST G.DUTIES RATHER THAN A DICT OF SLUGS, which is the whole point of writing it this
+# way. G.DUTIES is in clock order -- north at 0 degrees and 45 clockwise per step, which `face_of`
+# derives rather than lists -- so this reads down the page in the order you would walk the ring, and
+# zipping the two means a duty added, removed or reordered in geometry.py fails HERE instead of
+# quietly pairing Produce's resource with Construct's tile. The zip is length-checked below for the
+# same reason: zip() is happy to be handed seven.
+V2_TITHE = ("wheat", None, "silver", "stone", "wheat", "wheat", "silver", "stone")
+
+# TAXATION IS None AND THAT IS NOT "nothing" SPELLED DIFFERENTLY. A duty with no resource gets no
+# FRAME either, which is a different drawing from an empty frame -- an empty frame says "a resource
+# belongs here and is missing", and what is true of Taxation is that none belongs. `None` is the
+# only value the template tests, so this is the one place the distinction is made.
+
+
+def tithe_by_duty() -> dict:
+    """Each duty's resource key, or None, paired off against geometry's own clock order."""
+    if len(V2_TITHE) != len(G.DUTIES):
+        raise SystemExit("V2_TITHE names %d resources and geometry publishes %d duties"
+                         % (len(V2_TITHE), len(G.DUTIES)))
+    bad = sorted({k for k in V2_TITHE if k is not None} - set(TITHE_KEYS))
+    if bad:
+        raise SystemExit("V2_TITHE names %s, which is not one of %s"
+                         % (", ".join(bad), ", ".join(TITHE_KEYS)))
+    return {slug: key for (slug, _, _), key in zip(G.DUTIES, V2_TITHE)}
+
+
+def bundled_tithe() -> tuple[dict, list]:
+    """The three resource cuts, inlined at twice the size the board draws them.
+
+    v1's bundled_controls() ONE ROOT OVER, and it is a separate function rather than a call
+    because v1 has no tithe frame to bundle for: adding the resources to v1's bundler would put
+    22 KB of picture into a page that draws none of it. What IS shared is everything that makes
+    the rule a rule -- `_inline`, `image_suffixes`, the record, the newest-version walk -- so the
+    two cannot disagree about what gating an image means.
+
+    THE RECORD GATES THESE TOO. A cut with no attribution entry is left out and NAMED rather than
+    guessed into a frame, which is the rule every other picture on this board is held to.
+
+    NEWEST VERSION WINS: `resource_<key>_icon_vNN.webp`, highest NN, so replacing a resource is
+    adding a file rather than overwriting one and orphaning its sha256.
+
+    A MISSING RESOURCE IS SAID OUT LOUD AND THE BOARD STILL DRAWS. The frame appears with nothing
+    in it, which is visibly unfinished -- unlike a frame silently not drawn, which is
+    indistinguishable from Taxation, the one duty whose empty right-hand side is correct.
+    """
+    notes: list = []
+    out: dict = {}
+    if not TITHE_DIR.is_dir():
+        return out, ["no tokens/resources/icons/ at %s, so the tithe frames draw empty"
+                     % TITHE_DIR]
+    rec = {}
+    if v1.ATTRIB_FILE.is_file():
+        rec = json.loads(v1.ATTRIB_FILE.read_text(encoding="utf-8")).get("files", {})
+    want = v1.image_suffixes()
+    for key in TITHE_KEYS:
+        found = sorted(f for f in TITHE_DIR.glob("resource_%s_icon_v*" % key)
+                       if f.is_file() and f.suffix.lower() in want)
+        if not found:
+            notes.append("no cut for the %s resource, so its frame draws empty" % key)
+            continue
+        f = found[-1]
+        rel = "tokens/resources/icons/%s" % f.name
+        if rel not in rec:
+            notes.append("%s: no attribution entry, left out" % rel)
+            continue
+        out["tithe:%s" % key] = v1._inline(f, (G.MARK * 2, G.MARK * 2), "PNG")
+    return out, notes
 
 
 def build() -> tuple[str, list]:
@@ -108,7 +191,8 @@ def build() -> tuple[str, list]:
     sfx, xnotes = v1.bundled_sfx()
     beds, dnotes = v1.bundled_beds()
     controls, cnotes = v1.bundled_controls()
-    notes += snotes + xnotes + dnotes + cnotes
+    tithe, tnotes = bundled_tithe()
+    notes += snotes + xnotes + dnotes + cnotes + tnotes
 
     # THE BACKDROP IS NOT BUNDLED, because v2 does not draw it. It was the valley the ribbon of
     # eight tiles stood on, and the ribbon is gone. Carrying the picture anyway would leave 22 KB
@@ -117,11 +201,16 @@ def build() -> tuple[str, list]:
     # or unrecorded backdrop cannot fail this build -- which is right here and would not be in v1.
 
     text = v1.duty_text()
+    byduty = tithe_by_duty()
     duties = {}
     for slug, name, deg in G.DUTIES:
         said = text[slug]
         entry = {"name": name, "clock": deg,
-                 "actions": 1 if said.get("actionB") is None else 2}
+                 "actions": 1 if said.get("actionB") is None else 2,
+                 # THE KEY, NOT THE PICTURE. The page looks the image up in IMAGES by
+                 # `tithe:<key>` exactly as it does a seal, so a duty whose resource has no cut
+                 # yet still knows it HAS one and draws the frame.
+                 "tithe": byduty[slug]}
         for slot in G.ACTIONS:
             s = said.get(slot) or {"name": None, "shortLabel": ""}
             a = by_duty.get(slug, {}).get(slot)
@@ -138,7 +227,7 @@ def build() -> tuple[str, list]:
         "__GEOMETRY__": json.dumps(G.as_dict()),
         "__DUTIES__": json.dumps(duties),
         "__CONTROLS__": json.dumps(v1.control_text()),
-        "__IMAGES__": json.dumps({**art, **seals, **controls}),
+        "__IMAGES__": json.dumps({**art, **seals, **controls, **tithe}),
         "__SFX__": json.dumps(sfx),
         "__BEDS__": json.dumps(beds),
         # NO __WHEEL_SVG__. The drawing is not inlined and geometry.WHEEL_ASSET is not read, so
@@ -212,6 +301,14 @@ def main() -> None:
     print("  sliders open at gap %d, edge %d, size %d%%, height %d%%, bare %s"
           % (GRID_DEFAULTS["gap"], GRID_DEFAULTS["disp"], GRID_DEFAULTS["size"],
              GRID_DEFAULTS["height"], "on" if GRID_DEFAULTS["bare"] else "off"))
+    # WHAT WAS DEALT, IN THE ORDER IT WILL BE WALKED. Eight placeholders are the kind of thing
+    # that goes unlooked-at for weeks, and the ring is the one property of them that is easy to
+    # get wrong by one step -- so the build reads it out with the compass face beside each, which
+    # is the form the mistake would be visible in.
+    ring = tithe_by_duty()
+    print("  tithe ring: %s"
+          % ", ".join("%s %s" % (G.face_of(deg), ring[slug] or "none")
+                      for slug, _, deg in G.DUTIES))
     for n in notes:
         print("  note: %s" % n)
 
