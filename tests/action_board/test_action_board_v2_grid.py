@@ -1615,10 +1615,16 @@ def test_the_tithe_ring_reads_clockwise_from_north(geo):
     A reorder moves a resource to a different face and this fails; a reorder that somehow kept
     every face's resource would not be a mistake.
 
+    THE CORNUCOPIA IS DEALT TO SOUTH, WHICH IS CONSTRUCT, and it is the WILDCARD rather than a
+    fourth resource -- the tile where the tithing player chooses what they take. It sits in the
+    ring like the other three because that is the arrangement being looked at; this guard holds
+    where it is, not what it means.
+
     Falsify: rotate V2_TITHE by one, swap two entries, or reorder geometry's DUTIES.
     """
     want = {"north": "wheat", "north_east": None, "east": "silver", "south_east": "stone",
-            "south": "wheat", "south_west": "wheat", "west": "silver", "north_west": "stone"}
+            "south": "cornucopia", "south_west": "wheat", "west": "silver",
+            "north_west": "stone"}
     ring = _v2_tithe()
     assert len(ring) == len(geo.DUTIES), (
         "V2_TITHE names %d resources and geometry publishes %d duties" % (len(ring),
