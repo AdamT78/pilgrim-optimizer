@@ -37,6 +37,18 @@
      moment there were two readers. Matching it by eye is how a board ends up with two nearly
      identical darks and no way to tell which one moved. */
   --plate-edge:#2a2721;
+  /* WHERE THIS SEAT MAY ACT, AS LIGHT IN THE RECTANGLE RATHER THAN A LINE AROUND SOMETHING.
+     THE FIRST ATTEMPT WAS A HAIRLINE AND IT FAILED IN USE. The icon frame's 1px edge went from
+     --plate-edge to a warm grey, which is a real step in colour and about forty pixels of area
+     on a 1400-wide board: measurable, and invisible. "It is still not clear what duty tiles are
+     eligible" was the whole of the verdict, and it was right. A cue has to be found at a glance
+     across eight tiles, so it needs AREA, and the rectangle is the largest thing each duty has.
+     GOLD, WHICH THIS BOARD ALREADY SPENDS ON "THIS CONCERNS YOU" -- it is --line itself at a low
+     mix, not a gold chosen next to it. The chosen rim stays a LINE and this is a WASH, so the
+     two are the same hue doing different jobs: a line is the answer you have given, a wash is the
+     room you are allowed to give it in. Nothing anywhere is dimmed; the shut tiles are the board
+     exactly as it has always looked. */
+  --open-wash:color-mix(in srgb, var(--line) 30%, transparent);
   /* AND THE GROUND INSIDE THAT EDGE, which is now worn by two kinds of object. It was written
      once, inline in .iplate, while the duty frames were the only thing on this board drawn in
      it; the three controls beside the Take Tithe box wear it too now, so it is a name. Written
@@ -344,6 +356,10 @@ body.full{background:#000}
 .mark img{width:100%;height:100%;object-fit:contain;display:block}
 @media (prefers-reduced-motion:reduce){.mark{transition:none}}
 .panel{border:1px solid #46413a;border-radius:5px;background:#0e0d0b}
+/* NO .panel.eligible RULE. The box wore the same wash for a round and it has been taken back
+   out: a box with nothing in it already writes "no tithe available" across its own middle, so
+   the light was the board saying one thing twice on one object. The rectangles keep it because
+   they have nowhere to write a sentence -- a duty tile is figures and icons and no room. */
 .panel .lb{position:absolute;left:0;right:0;text-align:center;font-family:Georgia,serif;font-weight:600;
   letter-spacing:.16em;text-transform:uppercase;color:var(--ink)}
 /* Take Tithe stands in a row with the two action names, so it is tracked like them rather than
@@ -400,6 +416,28 @@ body.full{background:#000}
    selection still read, in the only language a bare cell has left. */
 .dcell.bare{background:transparent;border-top-color:transparent;
   border-left-color:transparent;border-right-color:transparent}
+/* OPEN TO THIS SEAT: YOUR ACOLYTES ARE ON THIS TILE, SO ITS ACTIONS CAN BE PRESSED.
+   IT RISES FROM THE LINE THE ACOLYTES STAND ON, which is the reason the tile is open at all --
+   the light comes off your own people rather than being painted on the tile from nowhere. It
+   fades out around two thirds up, so the rectangle is lit without becoming a gold block and the
+   figures keep a dark ground above them to read against.
+   AND IT COMES AFTER `bare` ON PURPOSE, which is the opposite of the rule the line above states
+   for itself. `bare` is LAST so that it beats the states that colour the rectangle's edges; it
+   also sets `background`, and `bare` is the view the board OPENS in -- so a cue written before
+   it would be cleared exactly where it is most needed. It is `background-image`, so it composes
+   over whatever ground is underneath instead of replacing it: transparent in the default view,
+   the cell's own near-black when the rectangles are drawn, and the chosen tile's #231d12 without
+   either of them having to know about this.
+   NOTHING IS DIMMED. A shut tile is the board as it has always looked, and the whole cue is what
+   is ADDED to an open one -- see markEligible for why that direction and not the other.
+   `no-repeat` IS LOAD-BEARING AND IS NOT TIDINESS. A background's ORIGIN is the padding box and
+   its CLIP is the border box, so the image is sized to the inside of the rectangle and painted
+   across the edges as well -- and the 2px strip above the padding box gets the image REPEATED,
+   which puts the bottom of this gradient, its strongest gold, in a hard line along the top of
+   every open tile. It read exactly like the rectangle's hidden top edge coming back, which is
+   what it was reported as. One tile, no repeat, and the strip is simply not painted. */
+.dcell.eligible{background-image:linear-gradient(to top, var(--open-wash), transparent 70%);
+  background-repeat:no-repeat}
 /* THE ICONS GET THEIR TILE BACK. On the ribbon each duty's marks stood on a rounded plate --
    .tile, one pixel of #2a2721 round --plate at --tile-alpha -- and losing the ribbon lost that
    ground, leaving cut-out emblems floating on the rectangle. This is the same declaration, not
@@ -568,6 +606,14 @@ var V2_SEAT = "p1";
 // three; p3 stands on Construct, so the cornucopia unions all three in by itself; and p4 stands
 // nowhere, which is the empty box. All four cases are reachable from the picker, including the
 // one that is easiest to forget.
+//
+// AND p4 IS A POSITION THE GAME CANNOT REACH. Sowing guarantees every seat an Acolyte on at least
+// one duty tile, so arriving in Action Selection with figures nowhere does not happen: there is
+// no forced pass to design and no "you cannot act" state to draw. It is KEPT ANYWAY, as the
+// degenerate case the guards drive -- an empty pool, no eligible duty, no commit, every cue off
+// at once -- because the cheapest way to find out that a rule divides by the number of your own
+// figures is to have a seat with none. IMPOSSIBLE, NOT ILLEGAL: nothing here should be read as
+// the engine being allowed to produce it, and nothing should be built on top of it.
 
 var V2_SEATS = {
   clerical:    ["p1", "p1", "p2", "p3"],
@@ -643,16 +689,32 @@ function phaseLine(){
   for (var i = 0; i < GEO.phases.length; i++) if (GEO.phases[i].key === S.phase) return GEO.phases[i].line;
   return "";
 }
+// WHY A DUTY IS OUT OF REACH, JOINED ONTO WHAT IT DOES RATHER THAN REPLACING IT.
+//
+// The line a player wants over an ineligible tile answers two questions at once: what is this,
+// and why can I not press it. Replacing the labels with the reason answers only the second, and
+// the first is the one that makes the tile worth reading at all on a turn you cannot take it --
+// you are looking at Ordination BECAUSE you are deciding where to walk next.
+//
+// AND IT IS THE WHOLE OF THE FEEDBACK. A refused press changes no state and makes no sound, so
+// this sentence is the only thing that happens; see pickDuty.
+function reasonFor(slug){
+  return eligible(slug) ? "" : (GEO.lines.noAcolytes || "");
+}
+function say(body, why){
+  if (!why) return body;
+  return body ? body + "   —   " + why : why;
+}
 function lineFor(slug, slot){
   var d = dutyOf(slug);
   if (!d) return phaseLine();
-  if (slot) return (d[slot] && d[slot].shortLabel) || "";
+  if (slot) return say((d[slot] && d[slot].shortLabel) || "", reasonFor(slug));
   // A whole tile covers both of its actions, so it says both. A one-action duty says one.
   var out = [];
   ["actionA","actionB"].forEach(function(k){
     if (d[k] && d[k].shortLabel) out.push(d[k].shortLabel);
   });
-  return out.join("   ·   ");
+  return say(out.join("   ·   "), reasonFor(slug));
 }
 // WHAT A CONTROL IS CALLED, from the same wording the tooltip and the icon lab read.
 function controlLine(name){
@@ -662,7 +724,12 @@ function controlLine(name){
 
 function setStatus(){
   var t;
-  if (hovered && hovered.mark) t = controlLine(hovered.mark);
+  // A LINE CARRIED RATHER THAN LOOKED UP, which is how an object with no duty behind it says
+  // something. The Take Tithe box is the only one -- it is not a duty and not a control, so
+  // neither of the two routes below can answer for it. Set by a refused press and cleared by the
+  // next crossing, like every other hover state.
+  if (hovered && hovered.why) t = hovered.why;
+  else if (hovered && hovered.mark) t = controlLine(hovered.mark);
   else if (hovered) t = lineFor(hovered.duty, hovered.slot);
   else t = phaseLine();
   document.getElementById("statusText").textContent = t;
@@ -704,6 +771,43 @@ function hover(duty, slot){
 // hovering a rectangle lights its tile; written twice they would disagree the first time one
 // was changed. The name is the wheel's and is kept: it is the same job on a new object.
 // =================================================================================================
+// WHERE THIS SEAT MAY ACT, WHICH IS ONE RULE WITH TWO READERS.
+//
+// Both moves available in Action Selection need an Acolyte of yours standing on a duty tile. A
+// duty's actions are open to you if your figures are on it; the tithe pool is drawn from the same
+// tiles. So this is the one question underneath both -- "does this seat stand here" -- and the
+// pool below is built on it rather than asking it again in its own words.
+//
+// WRITTEN TWICE THEY WOULD DISAGREE, and the disagreement would be ON SCREEN: the box offering a
+// resource from a tile the board had just refused to let you act on, or the reverse. That is the
+// rule drawGrid and lightFace already follow for the hover pair, applied to the thing that now
+// decides what is pressable.
+//
+// THE TWO ARE NOT THE SAME SET, THOUGH, AND TAXATION IS WHY. It is the one duty with no resource,
+// so figures there make its actions available and add nothing to the box. "You may act here" is a
+// SUPERSET of "this feeds the box", which is exactly why the eligibility question has to be
+// asked about the TILE and the resource looked up separately -- a pool built first and reused as
+// eligibility would have quietly made Taxation unplayable.
+function standsOn(seat, slug){
+  return (S.occupancy[slug] || []).indexOf(seat) >= 0;
+}
+
+// WHETHER THE BOARD IS ASKING THE QUESTION AT ALL. Eligibility belongs to Action Selection: in
+// Sowing these same tiles mean "where may I walk", which is a different question with a different
+// answer, and marking them by where you ALREADY stand would answer the wrong one. The other two
+// phases are placeholders with nothing built behind them -- the note under the bar says so -- so
+// rather than guess at their rules this leaves them exactly as they were before eligibility
+// existed.
+function actionPhase(){ return S.phase === GEO.livePhase; }
+
+// AND THE ANSWER THE REST OF THE PAGE ASKS FOR. Outside Action Selection every duty is open,
+// which is the board's behaviour up to now and the honest state for a phase that is a label.
+function eligible(slug){
+  if (!actionPhase()) return true;
+  return standsOn(S.seat, slug);
+}
+
+// =================================================================================================
 // THE TITHE POOL: WHICH RESOURCES THIS SEAT MAY TAKE.
 //
 // NOT A PROPERTY OF THE SELECTED DUTY, which is what the box looked like it was for and is not.
@@ -723,8 +827,7 @@ function hover(duty, slot){
 function tithePool(seat){
   var have = {};
   GEO.duties.forEach(function(d){
-    var on = S.occupancy[d.slug] || [];
-    if (on.indexOf(seat) < 0) return;
+    if (!standsOn(seat, d.slug)) return;
     var info = dutyOf(d.slug);
     var key = info && info.tithe != null ? info.tithe : null;
     if (key === null) return;                    // Taxation offers none, so it adds none
@@ -753,8 +856,7 @@ function onlyTithe(){
 function lightTithe(key){
   var feeds = {};
   if (key) GEO.duties.forEach(function(d){
-    var on = S.occupancy[d.slug] || [];
-    if (on.indexOf(S.seat) < 0) return;
+    if (!standsOn(S.seat, d.slug)) return;
     var info = dutyOf(d.slug);
     var k = info && info.tithe != null ? info.tithe : null;
     if (k === key || k === TITHE.wild) feeds[d.slug] = 1;
@@ -1701,8 +1803,48 @@ function drawGrid(){
     var cell = document.getElementById("dcell-" + d.slug);
     if (cell) cell.classList.toggle("sel", d.slug === S.duty);
   });
+  markEligible();
   drawFigures();
 }
+
+// WHICH FRAMES ARE OPEN TO THIS SEAT. ONE SWEEP, TWO CALLERS.
+//
+// render() sets it because it is state, and drawGrid() sets it because the sliders throw these
+// nine elements away and build them again -- a rebuild that left it to the next render would
+// drop the cue under the pointer every time a slider moved. Written out at both ends it would be
+// two answers the first time one was edited, which is the rule the hover pair already follows.
+//
+// THE CUE IS PRESENT EXACTLY WHEN THE RESTRICTION IS. Outside Action Selection nothing is refused
+// -- see eligible() -- so nothing is marked either: eight lit frames saying "all open" is the
+// same noise as none, and it would be making a claim about phases that have nothing behind them.
+//
+// ADDITIVE, AND THAT IS THE WHOLE DESIGN. Nothing is dimmed. A shut tile is the board as it has
+// always looked and an open one is what is added to it, because the open set is the MINORITY --
+// your figures are on one or two tiles of eight -- so dimming would change six or seven objects
+// to say something about two, on a palette that has no room below the one it is already at. It
+// also keeps the board readable to the three players who are not taking this turn.
+//
+// ON THE RECTANGLE, WHICH IS THE SECOND PLACE THIS CUE HAS LIVED. It was the icon frame's 1px
+// edge first, and that failed in use for a reason worth keeping: the colour step was real and the
+// AREA was not. A cue that has to be found at a glance across eight tiles needs room, and the
+// rectangle is the largest object a duty has.
+function markEligible(){
+  var asking = actionPhase();
+  GEO.duties.forEach(function(d){
+    var cell = document.getElementById("dcell-" + d.slug);
+    if (cell) cell.classList.toggle("eligible", asking && eligible(d.slug));
+  });
+}
+// AND THE TAKE TITHE BOX IS NOT IN THIS SWEEP, which was tried and taken back out.
+//
+// IT SAYS THE SAME THING IN WORDS, AND IT IS THE ONLY OBJECT HERE THAT CAN. A box with nothing
+// in it draws "no tithe available" across the middle of itself -- see drawTithe -- so a wash
+// behind that sentence would be the board making one statement twice, in two languages, on one
+// object. The rectangles need the light precisely because they have no room for a sentence: a
+// duty tile is figures and icons, and there is nowhere in it to write why it cannot be pressed.
+//
+// A PRESS ON IT STILL ANSWERS. takeTithe refuses an empty pool out loud rather than silently;
+// what has gone is the resting cue, not the refusal.
 
 // THE ACOLYTES ARE THE DUTY WHEEL'S HOODED MARK, piled by seat, and the shape and its numbers
 // are board_v2's own copy of ui/render/population_sets.py -- see action_board/hood.py.
@@ -1905,7 +2047,7 @@ function wireGrid(){
   });
   seat.value = S.seat;
   seat.addEventListener("change", function(){
-    S.seat = seat.value; reconcileTithe(); render();
+    S.seat = seat.value; reconcile(); render();
   });
   cb.addEventListener("change", apply);
   apply();
@@ -2217,8 +2359,39 @@ function onlySlot(slug){
   var info = dutyOf(slug);
   return (info && info.actions === 1) ? "actionA" : null;
 }
+// A REFUSED PRESS, WHICH ANSWERS AND CHANGES NOTHING.
+//
+// IT COSTS YOU NOTHING YOU HAD. The state is not touched -- not the duty being looked at, not the
+// chosen action, not the resource -- so pressing a tile you cannot take does not put down a
+// choice you had already made somewhere you can. A press that both refuses you AND takes your
+// answer away would be the worst of both: you learn you cannot do this, and you have to redo the
+// thing you could.
+//
+// AND IT IS SILENT. `sfx("select")` is the sound of a choice being made and nothing was chosen;
+// played here it would be the board sounding exactly as it does when it accepts you. A refusal
+// cue of its own was considered and not added -- it is an asset with a measured trim and a
+// record, and a line that answers you is not confusing.
+//
+// THE LINE IS THE WHOLE OF IT, WHICH IS REDUNDANT ON A MOUSE AND ESSENTIAL ON A TOUCH SCREEN. A
+// pointer hovering the tile has already been told by lineFor; a finger has no hover at all, so
+// without this the tile would be the one object on the board that answers a tap with nothing.
+// Taking the hover state is deliberate rather than a convenience: a tap IS the pointer arriving,
+// and leaving the tile clears it by the route a mouse leaving already uses.
+function explain(slug, slot){
+  hovered = {duty: slug, slot: slot || null};
+  setStatus();
+  lightFace(slug);
+}
+// THE SAME REFUSAL FOR AN OBJECT THAT IS NOT A DUTY. The Take Tithe box has no duty to hand to
+// lineFor, so it carries its sentence instead of being described by one; see setStatus.
+function explainWhy(why){
+  hovered = {why: why};
+  setStatus();
+  lightFace(null);
+}
 function pickDuty(slug){
   if (S.editing) return;
+  if (!eligible(slug)) return explain(slug, null);
   sfxWake(); sfx("select");
   S.duty = slug; S.slot = onlySlot(slug);
   S.tithe = null;
@@ -2274,16 +2447,32 @@ function slotClick(ev){
 // AND IT PUTS THE RESOURCE DOWN. S.slot and S.tithe are two halves of one answer -- "I am taking
 // a tithe, and it is stone" -- so choosing an action has to clear the second or the board keeps a
 // resource chosen underneath an action, and the commit gate reads a stale yes.
-function select(slot){ sfxWake(); sfx("select"); S.slot = slot; S.tithe = null; render(); }
+// AND THE THIRD ROUTE IS GUARDED TOO, which is not the same test as the other two. The cards
+// above belong to whatever duty is being looked at, and a change of SEAT can make that duty
+// ineligible without anything being clicked -- so this asks about S.duty where pickDuty and
+// pickAction ask about the duty in the press. Missing it would leave the one route to a choice
+// that does not go through a tile able to choose an action the tiles refuse.
+function select(slot){
+  if (!eligible(S.duty)) return explain(S.duty, slot);
+  sfxWake(); sfx("select"); S.slot = slot; S.tithe = null; render();
+}
 
 // TAKING THE TITHE, which is a different shape from choosing an action and now has its own door.
 //
 // IT REFUSES AN EMPTY POOL rather than selecting nothing. A seat with no figures on any tile that
 // offers a resource -- or figures only on Taxation -- has no tithe to take, and a box that lit up
 // on a press while offering nothing would be the board accepting a move that cannot be made.
+// AND IT SAYS SO NOW, WHICH IT DID NOT. The press was refused in silence with nothing on the
+// board changed, so an empty box and a box that had not understood the click looked the same.
+//
+// "No Tithe to take" WAS HERE ONCE AND WAS REMOVED AS UNREACHABLE, so its return needs saying:
+// that line lived in phaseLine(), keyed on having CHOSEN a tithe with an empty pool, which is a
+// state this board cannot enter. This is a different thing on a different route -- what the
+// board answers when you PRESS a box that has nothing in it -- and it is reachable by definition,
+// because the press is what reaches it.
 function takeTithe(){
   if (S.editing) return;
-  if (!tithePool(S.seat).length) return;
+  if (!tithePool(S.seat).length) return explainWhy(GEO.lines.noTithe);
   sfxWake(); sfx("select");
   S.slot = TITHE_SLOT;
   S.tithe = onlyTithe();
@@ -2307,6 +2496,30 @@ function reconcileTithe(){
   if (pool.indexOf(S.tithe) < 0) S.tithe = onlyTithe();
 }
 
+// AND WHAT THE SAME CHANGE DOES TO A DUTY ACTION ALREADY CHOSEN, which is the same hole one
+// object over. Eligibility belongs to the seat and to the phase, so both of the things that can
+// change underneath you -- picking another seat, moving to Action Selection -- can take away the
+// right to the action you had chosen. Left alone the board kept the commit up over a move the
+// new state refuses, which is the identical failure reconcileTithe was written for.
+//
+// THE DUTY STAYS; ONLY THE CHOICE GOES. S.duty is what you are LOOKING at and the cards above
+// belong to it, so clearing it would empty the board's largest two objects to say something
+// about a small one. The action is what you had chosen, and that is what is no longer yours.
+//
+// NOTHING IS CHOSEN IN ITS PLACE. reconcileTithe falls back to onlyTithe() because a pool of one
+// has a single answer and offering it is not a decision; there is no equivalent here -- picking
+// some other duty's action for you would be the board taking your turn.
+function reconcileDuty(){
+  if (!S.slot || S.slot === TITHE_SLOT) return;
+  if (!eligible(S.duty)) S.slot = null;
+}
+
+// BOTH, ALWAYS, FROM ONE NAME. These answer for the two halves of what may be chosen and they are
+// invalidated by exactly the same events, so a call site that remembered one and forgot the other
+// would leave half the board stale -- and that is not a hypothetical: the tithe half shipped
+// first and the seat picker called it alone.
+function reconcile(){ reconcileTithe(); reconcileDuty(); }
+
 // AND CHOOSING WHICH RESOURCE, from inside the box. One click answers both halves, the way a
 // duty action mark answers both its duty and its slot.
 function titheClick(ev){
@@ -2323,6 +2536,7 @@ function titheClick(ev){
 // board twice on the way, once on a slot nobody asked for.
 function pickAction(duty, slot){
   if (S.editing) return;
+  if (!eligible(duty)) return explain(duty, slot);
   sfxWake(); sfx("select");
   S.duty = duty;
   S.slot = slot;
@@ -2372,6 +2586,7 @@ function render(){
   // clicked, and all the routes agree without any of them knowing about the others.
   var tbox = document.getElementById("tithe");
   if (tbox) tbox.classList.toggle("sel", S.slot === TITHE_SLOT);
+  markEligible();
   drawTithe();
   var info = dutyOf(S.duty);
   ["actionA","actionB"].forEach(function(slot){
@@ -2525,10 +2740,17 @@ function drawPhases(){
     b.setAttribute("aria-pressed", String(p.key === S.phase));
     b.addEventListener("click", function(){
       S.phase = p.key;
+      // AND THE PHASE IS NOW PART OF WHAT MAY BE CHOSEN, so changing it reconciles and redraws
+      // like changing seat does. It used to set the line and nothing else, which was right while
+      // the phase was a label: eligibility reads the phase, so leaving this at setStatus() would
+      // have left the frames marked for a phase the board was no longer in, and an action chosen
+      // under "Sowing" -- where nothing is refused -- still chosen on arrival in Action Selection,
+      // where it is.
+      reconcile();
       drawPhases();
       note(p.key === GEO.livePhase ? "" :
            "“" + p.label + "” is a placeholder — nothing is built behind it yet.");
-      setStatus();
+      render();
     });
     holder.appendChild(b);
   });

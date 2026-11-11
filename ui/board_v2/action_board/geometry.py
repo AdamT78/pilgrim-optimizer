@@ -839,9 +839,34 @@ def face_of(clock: int) -> str:
 PHASES = (
     ("ready",  "Ready / City",      "Pick up Acolytes or Hire Buildings"),
     ("sow",    "Sowing",            "Choose the next Duty"),
-    ("action", "Action Selection",  "Select a Duty Action or take Tithe"),
+    # AND IT NAMES THE CONDITION, because the condition is the whole of this phase. Both moves
+    # available here need an Acolyte standing on a duty tile: the actions you may take are the
+    # ones your own figures are on, and the Tithe is drawn from the same tiles. The line used to
+    # read "Select a Duty Action or take Tithe", which is true of the choice and silent about
+    # what makes a duty choosable -- so a player looking at seven tiles they cannot press had
+    # nothing at the top of the board telling them why.
+    ("action", "Action Selection",
+     "Select a Duty Action where your Acolytes stand, or take a Tithe"),
 )
 LIVE_PHASE = "action"          # the other two are placeholders and the page says so
+
+# THE BOARD'S OWN STATUS WORDING, which is the phases above and the refusals below.
+#
+# NOT IN duty_text.json, AND THE LINE BETWEEN THE TWO IS WORTH STATING. That file holds what the
+# game's things are CALLED -- a duty action's name and what it does, a control's name -- and it is
+# read by both boards and by the icon lab, which label cards with it. These are the board's own
+# chrome: sentences the status line says about the state it is in, which no card ever carries and
+# nothing outside the status line reads. PHASES has held exactly that kind of string here since
+# there were phases, so this sits beside it rather than starting a second home for one clause.
+#
+# APPENDED TO A LINE, NOT REPLACING IT. `noAcolytes` is a clause the page joins onto whatever the
+# pointer was already going to say, so hovering a duty you cannot take still tells you what its
+# actions DO and adds why it is out of reach -- the two things a player wants at once, and the
+# reason this is a fragment rather than a finished sentence.
+LINES = {
+    "noAcolytes": "no Acolytes present",
+    "noTithe": "no Tithe to take",
+}
 
 
 def tiles() -> dict:
@@ -969,6 +994,7 @@ def as_dict() -> dict:
                    for s, n, d in DUTIES],
         "phases": [{"key": k, "label": lbl, "line": line} for k, lbl, line in PHASES],
         "livePhase": LIVE_PHASE,
+        "lines": dict(LINES),
     }
 
 
