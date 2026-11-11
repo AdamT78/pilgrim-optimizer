@@ -91,11 +91,7 @@ OUT = HERE / "generated" / "action_board_v2.html"
 # NO `centre`. The City was a ninth rectangle you could switch off while it stood for nothing;
 # it is where the City panel went and it holds people, so it is part of the wheel now and there
 # is nothing to switch.
-# `divide` IS HOW FAR IN FRONT OF THE TITHE RESOURCE THE DIVIDER STANDS, in board pixels, and it
-# opens at half the clear ground a two-action duty has at these settings -- 24px between the last
-# mark and the resource, so 12 puts the line in the middle of it. It is measured leftward from the
-# resource because the resource is the thing on that frame that never moves.
-GRID_DEFAULTS = {"gap": 115, "disp": 60, "size": 90, "height": 130, "divide": 12, "bare": True}
+GRID_DEFAULTS = {"gap": 115, "disp": 60, "size": 90, "height": 130, "bare": True}
 
 # WHERE THE THREE RESOURCE CUTS LIVE, and the three keys the board asks for them by.
 TITHE_DIR = v1.BOARD / "tokens" / "resources" / "icons"
@@ -105,7 +101,11 @@ TITHE_DIR = v1.BOARD / "tokens" / "resources" / "icons"
 # here because this list answers "which pictures does the board inline", and the board inlines
 # four; it is NOT a claim that a duty handing you the choice is the same kind of offer as a duty
 # handing you stone. The day that distinction has to be drawn, it is drawn in the drawing.
-TITHE_KEYS = ("wheat", "stone", "silver", "cornucopia")
+# THE WILDCARD, NAMED ONCE. It is in TITHE_KEYS because the board inlines its picture like the
+# others, and it is named separately because the page has to know which of the four is the one
+# that unions the rest in rather than being chosen itself.
+TITHE_WILD = "cornucopia"
+TITHE_KEYS = ("wheat", "stone", "silver", TITHE_WILD)
 
 # WHICH TITHE RESOURCE SITS BESIDE EACH DUTY'S ICONS, read CLOCKWISE FROM NORTH.
 #
@@ -138,6 +138,43 @@ def tithe_by_duty() -> dict:
         raise SystemExit("V2_TITHE names %s, which is not one of %s"
                          % (", ".join(bad), ", ".join(TITHE_KEYS)))
     return {slug: key for (slug, _, _), key in zip(G.DUTIES, V2_TITHE)}
+
+
+# WHERE A RESOURCE'S NAME COMES FROM, which is a file and not this one.
+#
+# THE BOARD'S OWN RULE, stated where the controls are drawn: the wording comes from data, like
+# every other string the board prints -- a labels object typed into the tool is one file
+# restating another. tools/ui_debug/duty_wheel_layout.json already names all four, and
+# ui/render/gen_board.py already reads that file, so this is a second reader of an existing
+# source rather than a new dependency.
+#
+# AND IT IS NOT FATAL. A missing file or a missing key falls back to the key with a capital on
+# it and SAYS SO in the build notes -- the same bargain every other missing thing on this board
+# strikes. A build that refused over a caption would be refusing the wrong thing.
+WHEEL_LAYOUT = v1.ROOT / "tools" / "ui_debug" / "duty_wheel_layout.json"
+
+
+def tithe_names() -> tuple[dict, list]:
+    """What to call each resource on screen, read from the wheel layout."""
+    notes: list = []
+    out = {k: k.capitalize() for k in TITHE_KEYS}
+    try:
+        said = json.loads(WHEEL_LAYOUT.read_text(encoding="utf-8")).get("tithe_icons", {})
+    except Exception as why:
+        return out, ["%s is unreadable (%s), so the resources are named after their keys"
+                     % (WHEEL_LAYOUT.name, why)]
+    missing = []
+    for key in TITHE_KEYS:
+        label = (said.get(key) or {}).get("label")
+        if label:
+            out[key] = label
+        else:
+            missing.append(key)
+    if missing:
+        notes.append("no label in %s for %s, so %s named after the key"
+                     % (WHEEL_LAYOUT.name, ", ".join(missing),
+                        "it is" if len(missing) == 1 else "they are"))
+    return out, notes
 
 
 def bundled_tithe() -> tuple[dict, list]:
@@ -198,7 +235,8 @@ def build() -> tuple[str, list]:
     beds, dnotes = v1.bundled_beds()
     controls, cnotes = v1.bundled_controls()
     tithe, tnotes = bundled_tithe()
-    notes += snotes + xnotes + dnotes + cnotes + tnotes
+    names, nnotes = tithe_names()
+    notes += snotes + xnotes + dnotes + cnotes + tnotes + nnotes
 
     # THE BACKDROP IS NOT BUNDLED, because v2 does not draw it. It was the valley the ribbon of
     # eight tiles stood on, and the ribbon is gone. Carrying the picture anyway would leave 22 KB
@@ -240,6 +278,12 @@ def build() -> tuple[str, list]:
         # the asset could go missing without this build noticing -- which is correct here and
         # would not be in v1.
         "__GRID__": json.dumps(GRID_DEFAULTS),
+        # WHICH RESOURCES THERE ARE AND WHICH IS WILD. The page lists a player's pool in this
+        # ORDER so the box reads the same way every time, and unions the whole order in when a
+        # figure stands on the wild one. Both are facts about the tree, which is what this tool
+        # walks -- restated in the template they would be a second list to keep in step.
+        "__TITHE__": json.dumps({"order": [k for k in TITHE_KEYS if k != TITHE_WILD],
+                                 "wild": TITHE_WILD, "names": names}),
         "__HOOD__": json.dumps(hood.as_dict()),
         "__SAVEKEYS__": json.dumps(v1.SAVE_KEYS),
         "__BUILD__": json.dumps({"version": v1.BUILD_VERSION + "+v2", "notes": notes}),

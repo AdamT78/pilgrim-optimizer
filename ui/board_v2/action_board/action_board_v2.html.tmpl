@@ -202,10 +202,16 @@ body.full{background:#000}
    them. It is the same 50px of the same artwork sitting on the same frame, and it is now chosen
    the same way -- so a board where the resource dimmed or lit by a different fraction would be
    saying there are two kinds of choosable mark when there is one. */
-.seal.filled, .tmark.filled{filter:brightness(.88);transition:filter .12s ease}
+/* THE SAME REST WEIGHT FOR EVERY 50px MARK ON THE BOARD, chosen and unchoosable alike, so one
+   frame holding two duty marks and a resource reads as one object. */
+.seal.filled, .tmark.filled, .tslot.filled{filter:brightness(.88);transition:filter .12s ease}
+/* BUT ONLY THE CHOOSABLE ONES BRIGHTEN. A tile's resource is a label and never lights under the
+   pointer; it has no state to enter, and a label that responds to hover is a button that does
+   nothing when pressed. */
 .seal.filled:hover, .seal.filled.on,
-.tmark.filled:hover, .tmark.filled.on{filter:brightness(1.12)}
-@media (prefers-reduced-motion:reduce){.seal.filled, .tmark.filled{transition:none}}
+.tslot.filled:hover, .tslot.filled.on{filter:brightness(1.12)}
+@media (prefers-reduced-motion:reduce){
+  .seal.filled, .tmark.filled, .tslot.filled{transition:none}}
 .seal img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
 .seal.filled img{border-radius:0;object-fit:contain}
 /* A CUT-OUT BRINGS NO GROUND, so the board gives it one. A wax disc is a thing you could pick up
@@ -303,42 +309,23 @@ body.full{background:#000}
   color:var(--ink);font:700 15px/1 ui-monospace,monospace;
   filter:brightness(.88);transition:filter .12s ease}
 .mark:hover{filter:brightness(1.12)}
-/* THE GROUND UNDER A CONTROL, AND IT IS THE DUTY FRAME'S. The three marks used to stand on
-   nothing: every other object in this row has a ground, and the canvas here is black because the
-   backdrop ended at the foot of the ribbon, well above it.
+/* THE GROUND UNDER THE CONTROLS, AND IT IS THE DUTY FRAME'S.
+   Each mark used to carry its own, drawn as a ::before at a negative inset. At the box's own 65
+   that ground would be 77 tall against a 71 line pitch and three of them would overlap, so the
+   column is ONE rectangle holding three marks -- which is also what the Take Tithe box beside it
+   is, and the two now read as a pair.
 
-   IT WAS .panel's -- the Take Tithe box's own #0e0d0b -- AND THE REASON FOR THAT HAS EXPIRED.
-   The note here used to argue against the duty tile's plate on the grounds that a tile is GLASS,
-   55% of --plate over the picture behind it, and that with no picture behind this row the same
-   treatment comes out "a dark colour at 55% over black and very nearly invisible". That was true
-   when it was written and is not any more: v2 draws NO BACKDROP, so the duty frames are
-   themselves 55% over #board's black -- rgb(12, 17, 20) against the controls' rgb(14, 13, 11) --
-   and whatever is true of one is true of the other. The two were the same darkness and different
-   hues, warm against cool, for a reason that had stopped applying.
+   IT WAS .panel's #0e0d0b AND THE REASON FOR THAT HAD EXPIRED. The note here used to argue
+   against the duty tile's plate on the grounds that a tile is GLASS, 55% of --plate over the
+   picture behind it, and that with no picture behind this row the same treatment comes out "very
+   nearly invisible". True when written; v2 draws NO BACKDROP, so the duty frames are themselves
+   55% over #board's black and whatever is true of one is true of the other.
 
-   THE OTHER OBJECTION STILL STANDS AND IS NOT WHAT CHANGED. A duty frame also means "selectable,
-   takes the gold rim when chosen", and Show Map and Hire Building are never chosen. So what is
-   shared is the GROUND and nothing else: the border stays #46413a, the radius stays 5px, and no
-   control gains a selected state. --plate-ground is the ground alone, which is why it is a token
-   of its own rather than a `.iplate` class borrowed wholesale.
-
-   DRAWN AS ::before AT A NEGATIVE INSET rather than as a box of its own, because the mark's rect
-   is geometry's and the artwork fills it. The pad is handed in from GEO.marks.pad -- it is
-   CONTROL_PAD there, and geometry had to learn about it: two 6s round two marks is 12 of box
-   where the column has 6 of air, so the column is spaced as three BOXES now and the marks sit
-   inside them.
-
-   z-index UNDER THE ARTWORK AND SAFE THERE. `.mark` carries a filter, which makes it a stacking
-   context, so the -1 cannot escape behind the board -- it lands between the mark's own (absent)
-   background and its img. The filter also means the ground dims and brightens WITH the emblem on
-   hover, which is right: the control is one object and responds as one.
-
-   AND IT COMES AND GOES WITH THE COMMIT. `.mark.off{display:none}` takes the element, and the
-   ground is part of the element, so the commit's box appears at the moment the commit does --
-   which is the whole point of its sitting apart from the other two. */
-.mark::before{content:"";position:absolute;z-index:-1;
-  inset:calc(-1 * var(--control-pad));
-  border:1px solid #46413a;border-radius:5px;background:var(--plate-ground)}
+   THE OTHER OBJECTION STILL STANDS, which is why only the ground is shared. A duty frame also
+   means "selectable, takes the gold rim when chosen", and Show Map and Hire Building are never
+   chosen. So this keeps its own border and radius and gains no selected state. */
+.cbox{position:absolute;border:1px solid #46413a;border-radius:5px;
+  background:var(--plate-ground)}
 /* A STAND-IN LOOKS LIKE ONE. A control with no cut filed yet borrows Allocation's mark, and the
    whole reason that is better than drawing nothing is that a wrong emblem is visibly wrong --
    which only holds if it does not look as settled as the two beside it. Half-lit says provisional
@@ -426,12 +413,6 @@ body.full{background:#000}
    more present the honest fix is a higher alpha HERE, not a second hard-coded slate. */
 .iplate{position:absolute;border:1px solid var(--plate-edge);pointer-events:none;
   background:var(--plate-ground)}
-/* THE DIVIDER, WHICH IS THE FRAME'S OWN EDGE STOOD UP INSIDE IT. Same colour by reading the same
-   token, and its thickness is PLATE_BORDER rather than a 1 typed here, so a frame drawn with a
-   heavier edge takes the divider with it. It is SHORTER than the frame at both ends on purpose:
-   run to the full height and it reads as two frames sharing a wall, which is the thing the
-   merged frame exists to stop being. It is exactly as tall as the marks either side of it. */
-.tdiv{position:absolute;background:var(--plate-edge);pointer-events:none}
 /* NO .tframe RULE ANY MORE. The resource had a frame of its own beside the duty's for a round
    and it carried no declaration even then -- same ground, same border, same corner, because two
    frames that looked different would have said the board has two kinds of frame. There is one
@@ -444,7 +425,20 @@ body.full{background:#000}
    `pointer-events:none` so that a plate hanging below a rectangle cannot swallow clicks meant
    for the board, and a child of it has to opt back in. The seals do the same thing one line at
    a time in drawGrid; this says it once, where the rest of the mark is described. */
-.tmark{position:absolute;pointer-events:auto;cursor:pointer}
+.tmark{position:absolute;pointer-events:none}
+/* FED, which is the box pointing back at the board. Hovering a resource in the Take Tithe box
+   brightens the resource on every tile feeding it -- a cornucopia tile among them, for any
+   resource, which is the wildcard explaining itself. Brightness rather than a border because
+   `bare` is the state the board opens in and there are no borders to light. */
+.tmark.filled.feeds{filter:brightness(1.12)}
+/* A RESOURCE IN THE TAKE TITHE BOX, which IS a choice and answers like every other one. */
+.tslot{position:absolute;pointer-events:auto;cursor:pointer}
+.tslot img{width:100%;height:100%;object-fit:contain;display:block}
+.tslot.empty{border:1px dashed #46413a;border-radius:3px}
+/* AND THE BOX WITH NOTHING IN IT SAYS SO. A seat with no figures on any tile that offers a
+   resource has no tithe to take, and an empty box is indistinguishable from one still loading. */
+.tslot.none{text-align:center;color:var(--dim);font-size:12px;letter-spacing:.06em;
+  pointer-events:none}
 .tmark img{width:100%;height:100%;object-fit:contain;display:block}
 /* AN EMPTY FRAME SAYS SO. A resource whose cut is not on disk draws the frame with a faint
    outline in it rather than nothing: a frame with a hole in it is visibly unfinished, where a
@@ -483,12 +477,10 @@ body.editing .art.drop,body.editing .seal.drop{outline:2px solid var(--line)}
   <input type=range id=rHeight min=100 max=250 step=1
          title="taller rectangles, as a percentage of the 2:1 height; they grow UPWARD, so the line the acolytes stand on does not move">
   <span class=val id=vHeight></span>
-  <span class=tag>divider</span>
-  <input type=range id=rDivide min=0 max=48 step=1
-         title="how far in front of the tithe resource the divider stands; the resource does not move, so bigger means further left. A line that would reach the duty's own marks is not drawn">
-  <span class=val id=vDivide></span>
   <label class=chk><input type=checkbox id=cBare
          title="hide the rectangles' top, left and right edges and their ground; the bottom edge the acolytes stand on stays"> bare</label>
+  <span class=tag>seat</span>
+  <select id=rSeat title="whose board this is: the Take Tithe box shows the resources THIS seat's figures are standing on. Demo state -- there is no turn order in v2"></select>
   <span class=tag id=gridTag
         title="one rectangle, then the nine together -- what the sliders cost and what they come to"></span>
   <span class=tag>f &nbsp;full screen</span>
@@ -522,10 +514,21 @@ var board = document.getElementById("board");
 // is a click that selects nothing while every other route still works. It is a name now.
 var TITHE_SLOT = "tithe";
 
+// WHICH RESOURCES EXIST AND WHICH OF THEM IS THE WILDCARD, from the generator rather than typed
+// here. The page needs the ORDER to list a pool the same way every time and the WILD one to know
+// what unions the rest in; both are facts about the tree's resources, and the tree is what the
+// generator walks. Written out here they would be a second list to keep in step with TITHE_KEYS.
+var TITHE = __TITHE__;
+
 var S = {
   phase: GEO.livePhase,
   duty: GEO.duties[0].slug,
   slot: null,                       // the chosen action, or TITHE_SLOT; set below, not here
+  // THE OTHER HALF OF A TITHE. `slot` says you are taking one; this says which resource, and the
+  // commit waits for it. Null while an action is chosen, and put down by select() when one is.
+  tithe: null,
+  // WHOSE BOARD THIS IS. Demo state -- see V2_SEAT.
+  seat: null,
   editing: false,
   // WHO STANDS WHERE. Seeded from geometry so a fresh page opens on the crowded state the lab
   // opens on, which is the one worth looking at -- an empty wheel tells you nothing about
@@ -548,6 +551,24 @@ S.slot = onlySlot(S.duty);
 // COUNTS AND SEATS BOTH, because naming seats alone cannot show a pile of p2 three deep when
 // geometry says that duty holds two. These are demo numbers for a layout page and nothing reads
 // them but this file; the moment v2 has a real game state they go.
+// AND WHOSE TURN IT IS, WHICH THIS BOARD HAS NEVER NEEDED UNTIL NOW.
+//
+// Everything v2 draws is PUBLIC: where every seat stands, what each duty offers, which action is
+// being looked at. The Take Tithe box is the first object here whose content belongs to ONE
+// player -- the resources you may take are the ones your own figures are standing on, and the
+// same board shows a different box to each seat. There is no turn order in v2 and no engine
+// behind it, so the seat is picked in the bar.
+//
+// DEMO STATE, AND IT GOES THE WAY V2_SEATS GOES. When turn order arrives this is deleted and the
+// seat comes from the game; nothing else in the page reads it except the pool.
+var V2_SEAT = "p1";
+
+// WHAT EACH SEAT'S POOL COMES TO UNDER V2_SEATS, worked out rather than arranged -- p1 stands on
+// Clerical, Allocation and Give Alms, so wheat and stone; p2 adds Produce and Ordination, so all
+// three; p3 stands on Construct, so the cornucopia unions all three in by itself; and p4 stands
+// nowhere, which is the empty box. All four cases are reachable from the picker, including the
+// one that is easiest to forget.
+
 var V2_SEATS = {
   clerical:    ["p1", "p1", "p2", "p3"],
   allocation:  ["p1", "p2", "p2", "p3"],
@@ -573,6 +594,7 @@ var CITY_SEATS = ["p1", "p2", "p3", "p4"].reduce(function(a, id){
   return a;
 }, []);
 S.occupancy.city = CITY_SEATS;
+S.seat = V2_SEAT;
 
 function el(tag, cls, css, parent){
   var e = document.createElement(tag);
@@ -592,7 +614,32 @@ function dutyOf(slug){ return DUTIES[slug]; }
 // THE LINE IN THE UPPER BOX, and the one place that decides it. A hover shows what the hovered
 // thing does; nothing hovered shows the phase's own line. Two functions would be two answers.
 var hovered = null;
+// WHAT A RESOURCE IS CALLED, from the generator rather than from a capital letter put on the key
+// here. The board's rule, stated where the controls are drawn: the wording comes from data.
+function titheName(key){
+  return (TITHE.names && TITHE.names[key]) || key;
+}
+
 function phaseLine(){
+  // THE TITHE ANSWERS FOR ITSELF, because the phase line is written for the common case and the
+  // common case is choosing an action. "Select a Duty Action or take Tithe" is the right line
+  // while you are deciding WHICH of those to do; the moment you have decided on the tithe it is
+  // describing a choice already made, and saying nothing about the one still open.
+  //
+  // TWO STATES, NOT THREE. A line for the empty pool was written here -- "No tithe to take" --
+  // and driving the page found it unreachable: takeTithe REFUSES an empty pool, the box has no
+  // slots to click when there is nothing in it, and reconcileTithe puts the whole choice down
+  // when a change of seat empties it. So `S.slot === TITHE_SLOT` with nothing to take cannot
+  // happen, and a seat with no tithe correctly keeps the phase line, because it has not chosen
+  // anything. Removed rather than kept as reassurance: this file has carried three conditions
+  // that could not fail, and each one was trusted for protection it was not giving.
+  //
+  // THE CHOSEN LINE NAMES THE RESOURCE, so it and the lit mark in the box agree without the
+  // player having to look from one to the other.
+  if (S.slot === TITHE_SLOT){
+    if (!S.tithe) return "Choose a tithe resource";
+    return "Confirm to take " + titheName(S.tithe);
+  }
   for (var i = 0; i < GEO.phases.length; i++) if (GEO.phases[i].key === S.phase) return GEO.phases[i].line;
   return "";
 }
@@ -607,9 +654,29 @@ function lineFor(slug, slot){
   });
   return out.join("   ·   ");
 }
+// WHAT A CONTROL IS CALLED, from the same wording the tooltip and the icon lab read.
+function controlLine(name){
+  var said = CONTROLS[name] || {};
+  return said.name || name;
+}
+
 function setStatus(){
-  var t = hovered ? lineFor(hovered.duty, hovered.slot) : phaseLine();
+  var t;
+  if (hovered && hovered.mark) t = controlLine(hovered.mark);
+  else if (hovered) t = lineFor(hovered.duty, hovered.slot);
+  else t = phaseLine();
   document.getElementById("statusText").textContent = t;
+}
+
+// HOVERING A CONTROL, which is its own small state because a control has no duty to hang off.
+//
+// IT CLEARS THE DUTY HIGHLIGHT, through the same lightFace(null) a hover over nothing does. The
+// pointer has left the wheel; leaving a tile lit while the line talks about Show Map would be two
+// objects claiming the pointer at once.
+function hoverMark(name){
+  hovered = {mark: name};
+  setStatus();
+  lightFace(null);
 }
 function hover(duty, slot){
   // ON THE CHANGE, NOT ON THE CROSSING. mouseover bubbles and fires every time the pointer moves
@@ -636,6 +703,67 @@ function hover(duty, slot){
 // ONE FUNCTION FOR BOTH DIRECTIONS. Hovering a tile lights its rectangle in the grid and
 // hovering a rectangle lights its tile; written twice they would disagree the first time one
 // was changed. The name is the wheel's and is kept: it is the same job on a new object.
+// =================================================================================================
+// THE TITHE POOL: WHICH RESOURCES THIS SEAT MAY TAKE.
+//
+// NOT A PROPERTY OF THE SELECTED DUTY, which is what the box looked like it was for and is not.
+// Taking a tithe moves nobody, so it does not matter which duty is selected when you take one --
+// what matters is where your figures already are. The pool is the resources offered by every
+// tile this seat stands on, and the box shows it whatever is selected.
+//
+// A SET, NOT A TALLY. Figures on two stone tiles and one silver give you stone and silver, not
+// stone twice: you take ONE resource, so a second stone changes nothing you could choose. The
+// order is the generator's own, so the box lists them the same way every time rather than in
+// whatever order the duties happen to be walked.
+//
+// THE CORNUCOPIA UNIONS EVERYTHING IN, which is the whole of its rule in one line. It is the
+// wildcard -- a figure there lets you take any resource -- so rather than appearing in the box
+// as a fourth thing to choose, it puts the other three in. That also means it can never be
+// chosen itself, which is right: you do not take a cornucopia, you take what it stands for.
+function tithePool(seat){
+  var have = {};
+  GEO.duties.forEach(function(d){
+    var on = S.occupancy[d.slug] || [];
+    if (on.indexOf(seat) < 0) return;
+    var info = dutyOf(d.slug);
+    var key = info && info.tithe != null ? info.tithe : null;
+    if (key === null) return;                    // Taxation offers none, so it adds none
+    if (key === TITHE.wild){
+      TITHE.order.forEach(function(k){ have[k] = 1; });
+      return;
+    }
+    have[key] = 1;
+  });
+  return TITHE.order.filter(function(k){ return have[k]; });
+}
+
+// ONE RESOURCE ANSWERS ITSELF, exactly as a duty holding one action does. `onlySlot` already
+// settled this shape: where there is nothing to choose, choosing the thing chooses it, and the
+// board does not sit waiting for a second click that has only one possible target.
+function onlyTithe(){
+  var pool = tithePool(S.seat);
+  return pool.length === 1 ? pool[0] : null;
+}
+
+// WHICH TILES ARE FEEDING A RESOURCE, lit on the tile's own mark rather than on its border.
+// The border would be the obvious place and is invisible in `bare`, which is the state the board
+// opens in -- so the cue would be missing exactly when it is wanted. Brightening the resource
+// itself also points at the thing rather than at the box around it, and a cornucopia tile lights
+// for every resource, which is what makes the wildcard legible without a word of explanation.
+function lightTithe(key){
+  var feeds = {};
+  if (key) GEO.duties.forEach(function(d){
+    var on = S.occupancy[d.slug] || [];
+    if (on.indexOf(S.seat) < 0) return;
+    var info = dutyOf(d.slug);
+    var k = info && info.tithe != null ? info.tithe : null;
+    if (k === key || k === TITHE.wild) feeds[d.slug] = 1;
+  });
+  Array.prototype.forEach.call(document.querySelectorAll("#board .tmark"), function(m){
+    m.classList.toggle("feeds", !!feeds[m.dataset.duty]);
+  });
+}
+
 function lightFace(slug){
   GEO.duties.forEach(function(d){
     var tile = document.getElementById("tile-" + d.slug);
@@ -684,7 +812,7 @@ function drawStatus(){
 function hoverDataOf(node){
   while (node && node !== board){
     var d = node.dataset;
-    if (d && (d.hoverDuty || d.hoverSlot)) return d;
+    if (d && (d.hoverDuty || d.hoverSlot || d.hoverMark)) return d;
     node = node.parentNode;
   }
   return null;
@@ -692,6 +820,10 @@ function hoverDataOf(node){
 board.addEventListener("mouseover", function(ev){
   var d = hoverDataOf(ev.target);
   if (!d) return hover(null);
+  // A CONTROL IS NOT A DUTY AND HAS NO SLOT, so it cannot go through the duty route at all --
+  // `hover(S.duty, null)` would announce whatever duty happened to be selected, which is the
+  // board saying something true about the wrong object. It carries its own name instead.
+  if (d.hoverMark) return hoverMark(d.hoverMark);
   // A card carries only its slot: which duty it shows is state, not markup.
   hover(d.hoverDuty || S.duty, d.hoverSlot || null);
 });
@@ -717,20 +849,55 @@ function lifted(o){
   return {x: o.x, y: o.y - LIFT, width: o.width, height: o.height};
 }
 
-// THE THREE CONTROL MARKS, MOVED OUT TO THE BOARD'S OWN RIGHT MARGIN.
+// THE THREE CONTROL MARKS, IN A COLUMN LAID OUT AGAINST THE TAKE TITHE BOX.
 //
-// geometry puts them at x 1270, which left 74 of canvas to the right of their ground while the
-// cards keep 28 on the left -- a column that looked indented rather than aligned. They go to the
-// margin the cards use, measured the same way at the other end.
+// geometry puts them at x 1270 on three y values of its own -- 265, 333 and 432 -- which left 74
+// of canvas to the right of their ground while the cards keep 28 on the left, and put them on no
+// line anything else uses. They go to the margin the cards use, measured the same way at the
+// other end, and onto the THREE LINES THE TAKE TITHE BOX ALREADY HAS. Two columns, three rows,
+// and a mark in the controls sits level with the resource beside it.
 //
-// IT IS THE GROUND THAT IS ALIGNED, NOT THE ICON. A mark draws a .panel ground at a negative
-// inset of GEO.marks.pad, so the thing an eye lines up on is `pad` wider than the rect geometry
-// publishes. Aligning the rect would leave the visible square six pixels past the margin --
-// right by arithmetic and visibly wrong, which is the worse of the two.
-function marked(at){
+// geometry.py IS NOT TOUCHED, which is why this is arithmetic here rather than three new numbers
+// there. v1 draws the same three marks from the same rects and is not having this layout.
+//
+// ONE RECTANGLE, NOT THREE. Individual grounds are what these wore and they cannot survive the
+// size: a mark is drawn at the box's own 65 now, and a ground of `pad` either side of it is 77
+// tall against a line pitch of 71 -- three of them would overlap by six. One panel holding three
+// marks is also what the box beside it is, which is the point.
+//
+// AND IT IS NOT AS TALL AS THE BOX. It was, for one round, because sharing the box's rect made
+// the rows line up without any arithmetic -- but the box is 247 tall because it carries a LABEL,
+// and a column with no label wearing the same height has 31px of nothing at the top holding the
+// place of a word it does not have. So the panel closes up: the air the box leaves BELOW its
+// last resource is the air this leaves above its first and below its last, and the two panels
+// end on the same line instead of starting on it.
+//
+// AND THE COMMIT'S SLOT IS KEPT WHILE IT IS EMPTY. `.mark.off` takes the element, so with
+// nothing to confirm the bottom third of the column is bare ground rather than the other two
+// sliding down -- buttons that move when a third appears are buttons you cannot aim at.
+function controlBox(){
+  var t = lifted(GEO.tithe);
+  var pad = GEO.marks.pad;
+  var L = titheLayout(TITHE.order.length);
+  // The panel: one mark wide plus its margin either side, plus its own border at each end.
+  var width = L.size + 2 * pad + 2 * PANEL_BORDER;
   var m = GEO.slots.actionA.x;
-  var dx = (GEO.canvas.width - m - GEO.marks.pad) - (at.x + at.width);
-  return {x: at.x + dx, y: at.y - LIFT, width: at.width, height: at.height};
+  // THE MARGIN IS THE ONE THE BOX LEAVES BELOW ITS LAST RESOURCE, used at both ends here. The
+  // box's own top margin is not a margin at all -- it is the room its label sits in -- so
+  // borrowing that would reproduce a gap that exists for a reason this column does not have.
+  var below = (t.height - 2 * PANEL_BORDER) - (L.start + L.block);
+  // WHERE THE BOX'S FIRST ROW ACTUALLY IS, in board coordinates: its panel, one border in, then
+  // the offset titheLayout gives the first slot. The column is hung off this rather than off a
+  // shared top edge, which is the price of closing up -- so the guard measures both columns'
+  // rows and compares them rather than trusting that two rects match.
+  var first = t.y + PANEL_BORDER + L.start;
+  return {x: GEO.canvas.width - m - width,
+          y: first - PANEL_BORDER - below,
+          width: width, height: L.block + 2 * below + 2 * PANEL_BORDER,
+          size: L.size, pitch: L.pitch, start: below,
+          // CENTRED BY THE BOX'S OWN EXPRESSION, not by a copy of it that happens to agree. Both
+          // panels pay for their border the same way because there is one place that says how.
+          left: titheSlotLeft({panelW: width, size: L.size})};
 }
 
 function drawArt(){
@@ -776,19 +943,31 @@ function drawMarks(){
   // refused to draw would look finished and be empty; a column wearing the wrong emblem is
   // visibly wrong, which is the failure you want.
   var placeholder = IMAGES["seal:allocation:actionA"];
-  M.order.forEach(function(name){
-    var at = M[name];
+  var C = controlBox();
+  var panel = el("div", "cbox", {left: px(C.x), top: px(C.y),
+                                 width: px(C.width), height: px(C.height)});
+  panel.id = "controls";
+  M.order.forEach(function(name, i){
     var said = CONTROLS[name] || {};
     var label = said.name || name;
     var src = IMAGES["control:" + name] || placeholder;
-    var e = el("div", "mark", box(marked(at)));
-    // THE PAD IS GEOMETRY'S, handed to the stylesheet rather than typed in it. The ground is
-    // drawn at a negative inset of exactly the distance geometry left round the mark, so a
-    // number in the CSS would be the second place that distance was stated.
-    e.style.setProperty("--control-pad", px(M.pad));
+    // ORDER IS GEOMETRY'S, POSITION IS THE BOX'S. M.order says which mark is first; which LINE
+    // that is comes from the Take Tithe box, so the two columns stay level.
+    var e = el("div", "mark", {left: px(C.left), top: px(C.start + i * C.pitch),
+                               width: px(C.size), height: px(C.size)}, panel);
     e.id = "mark-" + name;
     e.dataset.kind = "mark"; e.dataset.mark = name;
     e.title = said.shortLabel ? label + " \u2014 " + said.shortLabel : label;
+    // AND THE STATUS LINE ANSWERS FOR IT TOO, which is where a hover on this board actually
+    // speaks. A duty tile, a mark and an action card all put a line at the top when the pointer
+    // crosses them; these three said nothing there and relied on a tooltip, which is a different
+    // register -- it arrives late, it sits where the pointer is rather than where the board's
+    // sentence is, and it is the only thing on this board that works that way.
+    //
+    // THE NAME ALONE UP THERE. The tooltip can afford `shortLabel` after an em dash because it
+    // is a second look; the status line is one line in a fixed place and the name is what it is
+    // for. Reading the same source means they cannot disagree about what the mark is called.
+    e.dataset.hoverMark = name;
     e.classList.toggle("stand-in", !IMAGES["control:" + name]);
     if (src){ var im = document.createElement("img"); im.src = src;
               im.alt = label; e.appendChild(im); }
@@ -801,11 +980,94 @@ function drawMarks(){
   });
 }
 
+// WHERE THE POOL GOES INSIDE THE BOX, and the box is a NARROW PORTRAIT: 154 x 247 with the
+// label across the top, so about 154 x 213 of usable column. Three abreast would be 51px each
+// and unreadable, so they stack.
+//
+// ONE SIZE, WHATEVER THE POOL HOLDS, and the size is the one the FULL SET gets. The column used
+// to be divided by however many resources you had, so a single resource was drawn at the box's
+// full width and three at a third of it -- the same object at two sizes for a reason that has
+// nothing to do with it, namely how many OTHER resources you happen to hold. Switch seat and the
+// wheat changed size while nothing about wheat changed. The duty marks settled this question for
+// the board already: an icon that changes size with the arrangement is one you cannot compare,
+// so the size is fixed and the ROOM is what gives.
+//
+// TAKEN FROM TITHE.order RATHER THAN FROM 3. The box is built for every resource there is, so
+// the day a fourth real one is added every pool rescales together instead of the box quietly
+// meaning something different depending on who is looking at it.
+//
+// AND THE BLOCK IS CENTRED, closing up rather than leaving holes. A resource you do not have is
+// not a slot standing empty -- there is nothing to say about it -- so two resources are two marks
+// in the middle of the column with the same air between them that three would have.
+//
+// READ OFF GEO.tithe AND GEO.marks.pad, not typed. The box is geometry's and the margin is the
+// one the duty frames and the controls already keep, so a board that retightens takes this with
+// it rather than leaving one panel on the old number.
+function titheLayout(n){
+  var t = GEO.tithe, pad = GEO.marks.pad;
+  var top = t.labelTop + t.labelH + pad;
+  var h = t.height - top - pad, w = t.width - 2 * pad;
+  var full = TITHE.order.length;
+  var size = Math.min(h / full - pad, w);
+  var block = n * size + (n - 1) * pad;
+  return {top: top, left: pad, width: w, height: h, panelW: t.width,
+          size: size, pitch: size + pad, block: block,
+          start: top + (h - block) / 2};
+}
+
+// THE BOX REDRAWN FROM THE STATE, like everything else on this board. The pool depends on the
+// seat and on where the figures are, and both can change while the page is open -- so this is
+// called from render() rather than once at build, and it sweeps its own slots first.
+// CENTRED IN THE PANEL'S PADDING BOX, which is the panel less its own border at each end.
+// Centring in `L.width` -- the column inside the margins -- was a pixel out, because the margins
+// are measured from the panel's OUTER edge and the child is placed from its inner one. Shared by
+// the box and the control column, so the two cannot be centred by different arithmetic.
+function titheSlotLeft(L){
+  return (L.panelW - 2 * PANEL_BORDER - L.size) / 2;
+}
+
+function drawTithe(){
+  var box = document.getElementById("tithe");
+  if (!box) return;
+  var old = box.querySelectorAll(".tslot");
+  for (var i = 0; i < old.length; i++) old[i].remove();
+
+  var pool = tithePool(S.seat);
+  if (!pool.length){
+    var L0 = titheLayout(0);
+    var none = el("div", "tslot none",
+                  {left: px(L0.left), width: px(L0.width),
+                   top: px(L0.top + L0.height / 2 - 8)}, box);
+    none.textContent = "no tithe available";
+    return;
+  }
+
+  var L = titheLayout(pool.length);
+  pool.forEach(function(key, i){
+    var slot = el("div", "tslot",
+                  {left: px(titheSlotLeft(L)),
+                   top: px(L.start + i * L.pitch),
+                   width: px(L.size), height: px(L.size)}, box);
+    slot.dataset.tithe = key;
+    var src = IMAGES["tithe:" + key];
+    if (src){
+      var im = document.createElement("img"); im.src = src;
+      slot.appendChild(im); slot.classList.add("filled");
+    } else slot.classList.add("empty");
+    // SET HERE FROM THE STATE, not in the click handler, for the reason render() already gives:
+    // the resource is reached two ways -- this slot, and a one-resource pool answering itself --
+    // and a class set where it is clicked is right on one of them.
+    slot.classList.toggle("on", S.slot === TITHE_SLOT && S.tithe === key);
+    slot.addEventListener("click", titheClick);
+    slot.addEventListener("mouseenter", function(){ lightTithe(key); });
+  });
+}
+
 function drawSide(){
   var t = GEO.tithe;
   var p = el("div", "panel", box(lifted(t)));
   p.id = "tithe";
-  p.addEventListener("click", function(){ if (!S.editing) select(TITHE_SLOT); });
+  p.addEventListener("click", takeTithe);
   // THE THREE RESOURCES ARE GONE AND SO IS THE LOOP THAT DREW THEM. It read wheat, stone and
   // silver out of GEO.tithe.order and placed each at GEO.tithe.slots[i] -- geometry no longer
   // publishes either, so this cannot quietly half-work: the page would throw on `t.order` rather
@@ -813,6 +1075,8 @@ function drawSide(){
   var lb = el("div", "lb", {top: px(t.labelTop), fontSize: px(t.labelSize),
                             lineHeight: String(t.lh)}, p);
   lb.textContent = "Take Tithe";
+  p.addEventListener("mouseleave", function(){ lightTithe(null); });
+  drawTithe();
 
   // THE CITY PANEL IS NOT DRAWN IN v2, AND GEO.city IS LEFT ALONE. geometry.py still publishes
   // the box, its label and its four figure slots, because v1 draws all of it and the two builds
@@ -863,13 +1127,6 @@ var PLATES_DROPPED = 0;
 // lose, which is the state it is meant to be in.
 var TITHES_DROPPED = 0;
 
-// AND HOW MANY DIVIDERS THE SLIDER PUSHED INTO THE MARKS. This one is unlike the other two: the
-// frame and the resource are lost to the rectangle running out of room, and a divider is lost
-// because somebody asked for it somewhere it cannot go. The slider reaches 48 and at the opening
-// settings the clear ground is 24, so a third of its travel draws nothing -- and all seven lines
-// go at the same setting, in one step, with no other sign that the slider did anything. A count
-// is the difference between "that is as far as it goes" and "the page broke".
-var DIVIDERS_DROPPED = 0;
 
 // HOW TALL AN ICON PLATE CAME OUT, because the acolytes are drawn to match it and the two are
 // worked out in different passes. drawGrid() sizes the plates; drawFigures() runs after it and
@@ -904,10 +1161,17 @@ var PLATE_DROP = 6;
 // -- so a row set at `pad` from the left ended up with `pad` on one side and `pad - 2` on the
 // other. Two pixels, invisible on a pair of marks and exactly the thing that stops a single
 // centred mark from being centred.
-// A CONTROL MARK'S GROUND IS DRAWN THE SAME WAY: `.mark::before` insets by `pad` and carries a
+// THE CONTROL COLUMN'S PANEL IS DRAWN THE SAME WAY: `.cbox` carries a
 // 1px border INSIDE that, so the emblem sits `pad` from the frame's outer edge. The plate
 // matches it by declaring `pad` either side and placing its marks one border further in, which
 // is where this constant is spent.
+// `.panel`'S OWN BORDER, which the Take Tithe box and the control column beside it both wear.
+// Named for the same reason PLATE_BORDER is: `*{box-sizing:border-box}` draws it INSIDE the
+// declared width and an absolutely positioned child is placed against the PADDING box, so
+// anything centred without paying for it comes out a pixel off -- which is exactly what the
+// box's resources were doing, 44.5 from one side and 42.5 from the other.
+var PANEL_BORDER = 1;
+
 var PLATE_BORDER = 1;
 
 // CLOCKWISE FROM THE TOP, which is the order geometry.py's COMPASS is in. A duty knows its face
@@ -1087,19 +1351,17 @@ function plateFor(rw, rh, nAct){
   var rowW = nAct * sz + (nAct - 1) * igap;
   var most = mostActions();
   var fullRow = most * sz + (most - 1) * igap;
-  // AND THE FRAME IS THE RECTANGLE'S WHOLE INNER WIDTH, which is the one number that changed
-  // when the tithe resource came inside it. There were two frames under each rectangle for a
-  // round -- the duty's marks flush left, the resource flush right, and a gap between them that
-  // was whatever the width happened to leave. One frame spanning the same span says the same
-  // thing with one object instead of two, and the resource sits at the right-hand end of it
-  // rather than in a box of its own.
+  // THE FRAME IS BUILT TO THE MARKS, AND THAT IS NOW WHAT IT MEANS. It spanned the whole
+  // rectangle for a round, with the tithe resource at its right-hand end -- and a frame holding
+  // both made the two look like one kind of thing, which they are not: an action is CHOSEN and a
+  // resource is a label saying what the tile provides. So the frame has come back to the row of
+  // marks and the resource stands outside it. INSIDE A FRAME YOU CAN CHOOSE IT; OUTSIDE, IT IS
+  // TELLING YOU SOMETHING -- readable at rest, without hovering anything, which is exactly what
+  // the merged bar could not do: the two were the same ink at the same weight on the same ground.
   //
-  // SO `innerW` IS WHAT IS DRAWN AND `rowBox` IS WHAT THE MARKS NEED, and they are two different
-  // questions now. They used to be one number under one name, `width`, which worked only while
-  // the frame was built to its contents; a frame that spans its rectangle has no size of its own
-  // to fit, and the thing that can fail to fit is the ROW. Keeping one name for both would make
-  // the fit test read as `innerW <= innerW`, which is a test that cannot fail -- this file has
-  // already carried two of those.
+  // `rowBox` IS BOTH WHAT THE MARKS NEED AND WHAT IS DRAWN. `innerW` is still worth naming,
+  // because the resource is placed against the RECTANGLE's far edge rather than the frame's, and
+  // because the fit test asks whether the row fits the rectangle.
   var innerW = rw - 2 * CELL_BORDER;
   return {mg: mg, ip: ip, igap: igap,
           innerW: innerW, innerH: rh - 2 * CELL_BORDER,
@@ -1158,8 +1420,8 @@ function cellRect(c){
 //
 // ONE BORDER IN FROM THE PADDING BOX. `*{box-sizing:border-box}` means the frame's border eats
 // into its declared size, so a mark set at `ip` from the padding box sits `ip + 1` from the
-// frame's outer edge. A control mark's ground is drawn the same way -- `.mark::before` insets
-// by `pad` and carries its border inside that -- so this is what makes the two match.
+// frame's outer edge. The control column's panel is drawn the same way -- it carries its border
+// inside its declared width -- so this is what makes the two match.
 // THE CORNER EVERY MARK STARTS FROM, which is one expression because there are now two frames
 // asking for it. Writing `P.ip - PLATE_BORDER` a second time inside the tithe frame is how the
 // border went unpaid for the first time: the number is small, the error is a couple of pixels off
@@ -1172,42 +1434,29 @@ function markAt(P, k){
           top: plateInset(P), size: P.sz};
 }
 
-// AND THE RESOURCE AT THE OTHER END OF THE SAME FRAME: `plateInset` measured from the right.
+// WHERE THE RESOURCE STANDS, WHICH IS EXACTLY WHERE IT STOOD WHEN THE FRAME REACHED IT.
 //
-// THE MIRROR IS WRITTEN AS A MIRROR rather than as its own arithmetic, which is what keeps the
-// two ends of the frame equal. The duty marks keep `ip` from the frame's outer left edge and the
-// resource keeps `ip` from its outer right; written out separately the two would be a pair of
-// margins that merely happen to match today, and the day `GEO.marks.pad` moves one of them would
-// move. `2 * PLATE_BORDER` is the frame's own border paid at both ends, because
-// `*{box-sizing:border-box}` draws it inside the declared width and an absolutely positioned
-// child is placed against the PADDING box -- the same reason plateInset subtracts one.
+// The frame moved away from the resource; the resource did not move. It keeps `GEO.marks.pad`
+// from the RECTANGLE's inner right edge -- the margin it kept from the frame's right edge while
+// the frame ended there -- so nothing shifted on the board when the frame shrank, and the only
+// visible change is that there is no edge around it any more.
+//
+// BOARD COORDINATES, NOT THE FRAME'S. It used to be a child of the plate, placed against the
+// plate's padding box; it is a child of #board now, because a frame 118 wide cannot hold
+// something 136 from the rectangle's left edge. That is also why drawGrid's sweep has to name
+// it: nothing else would take it away on a rebuild, and it would pile up one copy per slider
+// event -- the exact failure the plates had when they first left the cell.
+//
+// `P.ip` DOES BOTH JOBS, which is what keeps the resource level with the marks beside it: the
+// margin from the rectangle's edge, and the inset that centres a 50px mark on a 62px line. The
+// same number, because the line IS the mark plus that margin at each end.
 //
 // AND NO `P.inset`. That term centres a SHORT row inside the widest row any duty needs; the
-// resource is not in that row and is not centred in anything. Applying it would push the
-// resource right by half the difference between one mark and two -- 28px, which at this size is
-// the resource hanging off the end of its own frame.
-function titheMarkAt(P){
-  return {left: P.innerW - plateInset(P) - P.sz - 2 * PLATE_BORDER,
-          top: plateInset(P), size: P.sz};
-}
-
-// THE LINE BETWEEN THE ACTIONS AND WHAT THE DUTY HANDS YOU.
-//
-// MEASURED LEFTWARD FROM THE RESOURCE, not rightward from the marks, which is what makes the
-// slider behave. The resource is pinned to the frame's right-hand end and never moves; the duty
-// marks DO move, because a one-action duty centres its single mark in the span a two-action duty
-// fills, so Allocation's row ends 28px earlier than Clerical's. Anchor the divider to the marks
-// and one slider setting would put it in a different place on those two rectangles. Anchored to
-// the resource it stands in the same place under all seven, and the slider says how far in front
-// of the resource it stands.
-//
-// AS TALL AS THE MARKS, by reading their own top and size. "Leave some space at the top and
-// bottom" could have been any number; this is the one number already on the frame that means
-// `space at the top and bottom`, and it lines the divider's ends up with the tops and bottoms of
-// the icons either side of it rather than near them.
-function dividerAt(P, divide){
-  return {left: titheMarkAt(P).left - divide, top: plateInset(P),
-          width: PLATE_BORDER, height: P.sz};
+// resource is not in that row and is not centred in anything. Applying it would move the
+// resource on the two duties that hold a single action and nowhere else.
+function titheMarkAt(r, P, y){
+  return {x: r.x + CELL_BORDER + P.innerW - P.ip - P.sz,
+          y: y + P.ip, size: P.sz};
 }
 
 function placeFor(r, nAct, hasTithe){
@@ -1219,24 +1468,25 @@ function placeFor(r, nAct, hasTithe){
   // draws the cell's border INSIDE its declared width, so the inner box starts one border in.
   var x = r.x + CELL_BORDER;
   var y = r.y + r.height + PLATE_DROP;
-  var tm = titheMarkAt(P);
-  // WHERE THE DUTY'S OWN MARKS END, which is what the resource has to clear.
-  var rowEnd = plateInset(P) + P.fullRow;
+  var tm = titheMarkAt(r, P, y);
+  // WHERE THE FRAME ENDS, which is what the resource has to clear. It used to be where the row
+  // of marks ended, inside a frame that reached past it; the frame's own right edge is the
+  // boundary now, and it is the thing the eye actually sees.
+  var frameEnd = x + P.rowBox;
   var has = P.rowBox <= P.innerW && y + P.height <= GEO.canvas.height;
   // EACH CONDITION GETS A NAME BECAUSE EACH IS A DIFFERENT QUESTION, and they were a chain of
   // `&&` inside one object literal until the divider arrived and needed to ask the answer to the
   // one above it. A literal cannot read its own fields, and the alternative -- restating the
   // resource's test inside the divider's -- is the second copy this file keeps being bitten by.
-  var hasT = !!hasTithe && has && tm.left - rowEnd >= P.igap;
-  var dv = dividerAt(P, GRID.divide);
-  return {p: P, x: x, y: y, has: has, titheMark: tm, divider: dv,
+  var hasT = !!hasTithe && has && tm.x - frameEnd >= P.igap;
+  return {p: P, x: x, y: y, has: has, titheMark: tm,
           // THE FRAME'S DRAWN WIDTH, NAMED HERE RATHER THAN WORKED OUT IN drawGrid. It is
           // `P.innerW` and nothing else today, which is exactly why it needs a name: drawGrid is
           // the one function the guards cannot call, so a width decided there can only be
           // checked by a second copy of it -- and every bug this file has had came from a second
           // copy agreeing with the first. placeFor is what the sweep calls, so the page and the
           // guards read the same expression.
-          width: P.innerW,
+          width: P.rowBox,
           // THE RESOURCE NEEDS A CLEAR GAP, NOT MERELY A FREE PIXEL, and the gap it needs is the
           // one BETWEEN the duty's own marks. Inside a single frame the only thing separating
           // "the actions you may take" from "what this duty hands you" is distance: let the
@@ -1252,17 +1502,6 @@ function placeFor(r, nAct, hasTithe){
           // width, and without this term the resource would be placed into a frame that was
           // never drawn, landing loose inside the rectangle.
           hasTithe: hasT,
-          // AND THE DIVIDER NEEDS THE RESOURCE AND CLEAR GROUND TO STAND IN. There is nothing to
-          // divide without a resource on the other side of it, and a line drawn ON the duty's
-          // marks is not a divider but a stripe through an icon. The slider can ask for that --
-          // it reaches 48 and the clear ground is only 24 wide at the opening settings for a
-          // duty holding two actions -- so the line is refused where it would not land in the
-          // gap, and the readout counts it, the same bargain the resource and the frame strike.
-          //
-          // STRICTLY PAST THE ROW, not merely level with it. A divider exactly at `rowEnd` sits
-          // against the last mark's edge with no air at all, which reads as a mark with a line
-          // stuck to it rather than as a division.
-          hasDivider: hasT && dv.left > rowEnd,
           // THE ROW RUNS THE WHOLE RECTANGLE, less one margin at each end. It ran from the
           // banner's left edge to the plate's while both were inside; neither is any more.
           figLeft: r.x + CELL_BORDER + P.mg,
@@ -1274,12 +1513,14 @@ function drawGrid(){
   // rectangle, so removing the rectangle took them with it. They hang BELOW it now, which means
   // they are children of #board -- and a rebuild that cleared only `.dcell` would leave nine
   // orphaned plates behind on every slider event.
-  var old = board.querySelectorAll(".dcell, .iplate");
+  // AND THE RESOURCES, which left the plate when the frame stopped reaching them. A tmark is a
+  // child of #board now, so a rebuild that swept only `.dcell, .iplate` would leave one behind
+  // per duty per slider event -- the same failure the plates had the day they left the cell.
+  var old = board.querySelectorAll(".dcell, .iplate, .tmark");
   for (var i = 0; i < old.length; i++) old[i].remove();
   GRIDPOS = {};
   PLATES_DROPPED = 0;
   TITHES_DROPPED = 0;
-  DIVIDERS_DROPPED = 0;
   PLATE_H = 0;
   var byFace = {};
   GEO.duties.forEach(function(d){ byFace[d.face] = d; });
@@ -1398,40 +1639,40 @@ function drawGrid(){
       seal.addEventListener("click", slotClick);
       wireDrop(seal);
     }
-    // THE TITHE RESOURCE, AT THE RIGHT-HAND END OF THE DUTY'S OWN FRAME.
+    // THE TITHE RESOURCE, BESIDE THE FRAME AND OUTSIDE IT.
     //
-    // IT HAD A FRAME OF ITS OWN FOR A ROUND and now it does not: the duty's frame was widened to
-    // the rectangle and the resource moved into the end of it, standing exactly where it stood
-    // before. What was a gap between two frames is now clear ground inside one.
+    // THE FRAME IS THE SIGNAL NOW. It has been three things in three rounds -- a frame of its
+    // own, then the right-hand end of a frame spanning the rectangle, and now bare ground beside
+    // a frame built to the marks. The first two both made it look like the actions: same ground,
+    // same border, or no border and the same ground. It is not like the actions. An action is
+    // CHOSEN, and this says what the tile provides, to anyone, whether or not they have a figure
+    // standing on it. Inside a frame you can choose it; outside, it is telling you something.
     //
-    // WHICH PUTS THE WHOLE WEIGHT OF THE READING ON DISTANCE. A row of marks on this board means
-    // "the actions you may take"; the resource is not one, it is what the duty hands you. With a
-    // frame of its own the separation was structural. Inside one frame the only thing saying so
-    // is that the resource sits four times further from the last mark than the marks sit from
-    // each other -- which is what `hasTithe`'s clearance test defends, and why it refuses rather
-    // than crowds.
+    // WHICH COSTS NOTHING TO READ AND IS READABLE AT REST. The distinction used to live entirely
+    // in what happened on hover -- the marks brightened and this did not -- so a still board
+    // said nothing at all about which of the three objects on that line could be pressed.
     //
-    // AND IT IS CHOOSABLE WITHOUT BEING A `.seal`, which is the whole of why it kept its own
-    // class. The two things that class carries are bundled and only one of them is wanted. The
-    // SELECTION is: a resource is a third thing this duty offers, beside its one or two actions,
-    // and clicking it should answer the row above exactly as clicking an action does. The ART
-    // MACHINERY is not: `#board .seal` is how edit mode finds every picture that can be replaced,
-    // how wireDrop finds every drop target, and how a dropped file is filed under a duty and a
-    // slot. A resource has no slot to be filed under -- it is cut in the icon lab and lives in
-    // the tree -- so a tmark wearing `seal` would offer a file dialog that writes somewhere that
-    // does not exist. It takes the duty and the slot it needs for the selection, a handler of
-    // its own that refuses edit mode, and none of the rest.
+    // AND IT IS A LABEL, NOT A CHOICE. It was clickable for a round, and the mechanic that
+    // arrived afterwards took that back: you do not get Build Roads' stone by clicking Build
+    // Roads' stone. You get stone because one of YOUR figures is standing on a tile that offers
+    // it, and the tile draws its resource whether you are standing there or not -- so a click
+    // here would offer something you may have no claim to, and would put one decision in two
+    // places. The choosing happens in the Take Tithe box, against the pool; this says what the
+    // tile provides, which is a permanent fact about the tile.
     //
-    // `hoverDuty` AND NO `hoverSlot`. Hovering it lights its duty and the status line lists that
-    // duty's actions, which is the true answer to "what is this": the resource is what the duty
-    // hands you, not one of the things you may do. A hoverSlot of TITHE_SLOT would send lineFor
-    // looking up `d.tithe`, which is the resource's KEY -- a string, with no shortLabel on it --
-    // and the status line would go blank whenever the pointer crossed a sheaf of wheat.
+    // AND IT IS NOT GREYED, for the reason the controls column already gives about Map and Hire:
+    // a disabled look promises a state the thing can enter later. These never become clickable.
+    // So they are drawn at rest, at the same weight as the duty marks beside them -- one frame,
+    // one reading -- and they do not answer the pointer at all.
+    //
+    // `hoverDuty` STAYS, and so does the duty on the dataset, because the box lights the tiles
+    // feeding a resource through them. A label that knows which duty it belongs to is how the
+    // two halves of this are connected without either knowing about the other.
     if (L.hasTithe){
       var tat = L.titheMark;
       var tm = el("div", "tmark",
-                  {left: px(tat.left), top: px(tat.top),
-                   width: px(tat.size), height: px(tat.size)}, plate);
+                  {left: px(tat.x), top: px(tat.y),
+                   width: px(tat.size), height: px(tat.size)});
       // THE SAME LOOK-UP A SEAL DOES, so a resource with no cut on disk draws an EMPTY slot
       // rather than nothing: visibly unfinished, which is the state it is in.
       var tsrc = IMAGES["tithe:" + tkey];
@@ -1440,22 +1681,10 @@ function drawGrid(){
         tm.appendChild(ti); tm.classList.add("filled");
       } else tm.classList.add("empty");
       tm.dataset.tithe = tkey;
-      tm.dataset.duty = d.slug; tm.dataset.slot = TITHE_SLOT;
+      tm.dataset.duty = d.slug;
       tm.dataset.hoverDuty = d.slug;
-      tm.addEventListener("click", titheClick);
     }
 
-    // AND THE LINE THAT SAYS THE TWO ENDS OF THE FRAME ARE TWO DIFFERENT SENTENCES.
-    //
-    // A CHILD OF THE SAME PLATE, like the marks and the resource, so it is swept with them and
-    // cannot outlive the frame it divides. Its colour and thickness are the frame's own edge --
-    // the colour through `--plate-edge`, the thickness through PLATE_BORDER -- because it is
-    // meant to BE that edge rather than to match it.
-    if (L.hasDivider){
-      var D = L.divider;
-      el("div", "tdiv", {left: px(D.left), top: px(D.top),
-                         width: px(D.width), height: px(D.height)}, plate);
-    } else if (L.hasTithe) DIVIDERS_DROPPED++;
 
     // THE SAME ENTRY POINT THE TILE USES. A cell and its tile are two handles on one duty, so
     // both go through pickDuty and the selection, the action cards and the grid all follow from
@@ -1610,20 +1839,18 @@ function wireGrid(){
   var rd = document.getElementById("rDisp");
   var rs = document.getElementById("rSize");
   var rt = document.getElementById("rHeight");
-  var rv = document.getElementById("rDivide");
   var cb = document.getElementById("cBare");
   rg.value = GRID.gap; rd.value = GRID.disp; rs.value = GRID.size;
-  rt.value = GRID.height; rv.value = GRID.divide;
+  rt.value = GRID.height;
   cb.checked = !!GRID.bare;
   function apply(){
     GRID.gap = +rg.value; GRID.disp = +rd.value; GRID.size = +rs.value;
-    GRID.height = +rt.value; GRID.divide = +rv.value;
+    GRID.height = +rt.value;
     GRID.bare = cb.checked;
     document.getElementById("vGap").textContent = GRID.gap;
     document.getElementById("vDisp").textContent = GRID.disp;
     document.getElementById("vSize").textContent = GRID.size;
     document.getElementById("vHeight").textContent = GRID.height;
-    document.getElementById("vDivide").textContent = GRID.divide;
     drawGrid();
     // WHAT THE TWO NUMBERS COST, SAID OUT LOUD. Both sliders shrink the rectangles -- the gap
     // because it eats the row, the edge because the arrangement is inset to stay inside the
@@ -1660,17 +1887,26 @@ function wireGrid(){
                     + (PLATES_DROPPED ? "  ·  " + PLATES_DROPPED + " without room for icons"
                                       : "")
                     + (TITHES_DROPPED ? "  ·  " + TITHES_DROPPED + " without room for a resource"
-                                      : "")
-                    + (DIVIDERS_DROPPED ? "  ·  " + DIVIDERS_DROPPED
-                                          + " without room for the divider" : "");
-    tag.style.color = (over > 0.5 || PLATES_DROPPED || TITHES_DROPPED || DIVIDERS_DROPPED)
-                    ? "#d08c6a" : "";
+                                      : "");
+    tag.style.color = (over > 0.5 || PLATES_DROPPED || TITHES_DROPPED) ? "#d08c6a" : "";
   }
   rg.addEventListener("input", apply);
   rd.addEventListener("input", apply);
   rs.addEventListener("input", apply);
   rt.addEventListener("input", apply);
-  rv.addEventListener("input", apply);
+  // THE SEAT IS NOT A GRID SETTING AND IS WIRED APART FROM THEM. It changes nothing about the
+  // arrangement -- no rectangle moves -- so it does not belong in apply(), which rebuilds the
+  // nine and re-measures them. It changes WHOSE box is drawn, which is render()'s business.
+  var seat = document.getElementById("rSeat");
+  GEO.players.forEach(function(pl){
+    var o = document.createElement("option");
+    o.value = pl.id; o.textContent = pl.name || pl.id;
+    seat.appendChild(o);
+  });
+  seat.value = S.seat;
+  seat.addEventListener("change", function(){
+    S.seat = seat.value; reconcileTithe(); render();
+  });
   cb.addEventListener("change", apply);
   apply();
 }
@@ -1985,33 +2221,13 @@ function pickDuty(slug){
   if (S.editing) return;
   sfxWake(); sfx("select");
   S.duty = slug; S.slot = onlySlot(slug);
+  S.tithe = null;
   render();
 }
 function slotOrSelect(slot){
   if (S.editing) return pickFile({kind: "art", duty: S.duty, slot: slot});
   select(slot);
 }
-// CHOOSING THE TITHE FROM THE TILE IT BELONGS TO.
-//
-// ONE CLICK ANSWERS BOTH QUESTIONS, which is the rule slotClick already settled for the action
-// marks: the resource says which duty AND that the tithe is what you want from it, so it goes
-// through pickAction rather than pickDuty followed by select(). Two calls would render the board
-// twice -- once on whatever slot pickDuty answered for that duty, then again on this one -- and
-// a one-action duty would visibly light its action picture before dropping it for the Tithe box.
-//
-// AND IT REFUSES EDIT MODE RATHER THAN OFFERING A FILE DIALOG. slotClick hands the click to
-// pickFile while `images` is on, because every mark it serves is a picture the board can replace.
-// A resource is not: it is cut in ui/board_v2/icon_lab/ and filed in the tree, so there is no
-// duty-and-slot for a dropped file to be written under. Doing nothing is the honest answer, and
-// edit mode already outlines only what it can actually take.
-function titheClick(ev){
-  ev.stopPropagation();
-  if (S.editing) return;
-  var d = ev.currentTarget.dataset;
-  if (!d.duty) return;
-  pickAction(d.duty, d.slot);
-}
-
 function slotClick(ev){
   ev.stopPropagation();
   var d = ev.currentTarget.dataset;
@@ -2044,7 +2260,8 @@ function slotClick(ev){
 //
 // BOTH, NOT JUST THE MARK. The mark and the card below it set the same fact by different routes,
 // and one that toggles beside one that does not is the same click behaving two ways depending on
-// where you aimed it. The Tithe comes through select() too and is included for that reason.
+// where you aimed it. The Tithe NO LONGER comes through here -- it has its own route below,
+// because choosing it now means choosing a resource as well and that is more than a slot.
 //
 // Nothing is lost: "no action chosen" is still reached, by picking another duty, which is the
 // only time it means anything -- you have been asked which of the two.
@@ -2053,7 +2270,54 @@ function slotClick(ev){
 // Two ways to make the same choice, one of them audible, which reads as the sound being broken
 // rather than as a route that skips it. The Tithe comes through here too and gets it for the
 // same reason: it is a choice of what to do this turn, like the other two.
-function select(slot){ sfxWake(); sfx("select"); S.slot = slot; render(); }
+//
+// AND IT PUTS THE RESOURCE DOWN. S.slot and S.tithe are two halves of one answer -- "I am taking
+// a tithe, and it is stone" -- so choosing an action has to clear the second or the board keeps a
+// resource chosen underneath an action, and the commit gate reads a stale yes.
+function select(slot){ sfxWake(); sfx("select"); S.slot = slot; S.tithe = null; render(); }
+
+// TAKING THE TITHE, which is a different shape from choosing an action and now has its own door.
+//
+// IT REFUSES AN EMPTY POOL rather than selecting nothing. A seat with no figures on any tile that
+// offers a resource -- or figures only on Taxation -- has no tithe to take, and a box that lit up
+// on a press while offering nothing would be the board accepting a move that cannot be made.
+function takeTithe(){
+  if (S.editing) return;
+  if (!tithePool(S.seat).length) return;
+  sfxWake(); sfx("select");
+  S.slot = TITHE_SLOT;
+  S.tithe = onlyTithe();
+  render();
+}
+
+// WHAT A CHANGE OF SEAT DOES TO A TITHE ALREADY CHOSEN, which is not nothing.
+//
+// The pool belongs to the seat, so changing seat can take the chosen resource away -- and can
+// empty the pool altogether. Left alone, the board sat with the Take Tithe box lit and NOTHING
+// IN IT, offering a confirm for a move the new seat cannot make. So the two halves are
+// reconciled against the new pool: a resource that is no longer in it falls back to whatever the
+// pool answers by itself, and a pool with nothing in it puts the whole choice down.
+//
+// ONLY WHERE THE SEAT CHANGES. render() must not do this -- it is called from everywhere and a
+// render that quietly rewrites the state is a render nobody can reason about.
+function reconcileTithe(){
+  if (S.slot !== TITHE_SLOT){ S.tithe = null; return; }
+  var pool = tithePool(S.seat);
+  if (!pool.length){ S.slot = null; S.tithe = null; return; }
+  if (pool.indexOf(S.tithe) < 0) S.tithe = onlyTithe();
+}
+
+// AND CHOOSING WHICH RESOURCE, from inside the box. One click answers both halves, the way a
+// duty action mark answers both its duty and its slot.
+function titheClick(ev){
+  ev.stopPropagation();
+  if (S.editing) return;
+  var key = ev.currentTarget.dataset.tithe;
+  if (!key) return;
+  sfxWake(); sfx("select");
+  S.slot = TITHE_SLOT; S.tithe = key;
+  render();
+}
 // ONE RENDER, NOT TWO. pickDuty followed by select() would do the same work -- pickDuty sets the
 // duty and answers the slot for it, then select overwrites that answer -- and draw the whole
 // board twice on the way, once on a slot nobody asked for.
@@ -2062,17 +2326,28 @@ function pickAction(duty, slot){
   sfxWake(); sfx("select");
   S.duty = duty;
   S.slot = slot;
+  // AND THE RESOURCE GOES DOWN WITH IT, for the reason select() states. This was missed when
+  // select() was given the line and pickAction was not: choosing an action by its MARK left the
+  // tithe resource set underneath it while choosing the same action by its PICTURE cleared it --
+  // two routes to one fact disagreeing, which is the exact failure both of them exist to avoid.
+  S.tithe = null;
   render();
 }
 
 function render(){
   GEO.duties.forEach(function(d){
     var tile = document.getElementById("tile-" + d.slug);
-    if (tile) tile.classList.toggle("sel", d.slug === S.duty);
+    // AND NOT WHILE A TITHE IS BEING TAKEN. Taking a tithe moves nobody and depends on no duty,
+    // so the duty you happened to be looking at is not chosen -- and a board wearing the gold rim
+    // on Construct while the Take Tithe box is also lit is claiming two answers to a question
+    // that has one. The cards above stay up, because they are what you are BROWSING; the rim is
+    // what says CHOSEN, and only one thing can be.
+    var chosen = d.slug === S.duty && S.slot !== TITHE_SLOT;
+    if (tile) tile.classList.toggle("sel", chosen);
     // AND THE GRID, FROM THE SAME LINE. Two loops would be two answers the first time one of
     // them was edited; this is the rule lightFace() already states for the hover pair.
     var face = document.getElementById("dcell-" + d.slug);
-    if (face) face.classList.toggle("sel", d.slug === S.duty);
+    if (face) face.classList.toggle("sel", chosen);
   });
   // THE CHOSEN ACTION'S MARK, ASKED HERE AND NOT IN THE CLICK HANDLER. S.slot is reached three
   // ways -- the mark, the card below it, and picking a duty, which either clears it or, for a
@@ -2097,6 +2372,7 @@ function render(){
   // clicked, and all the routes agree without any of them knowing about the others.
   var tbox = document.getElementById("tithe");
   if (tbox) tbox.classList.toggle("sel", S.slot === TITHE_SLOT);
+  drawTithe();
   var info = dutyOf(S.duty);
   ["actionA","actionB"].forEach(function(slot){
     var art = document.getElementById("art-" + slot);
@@ -2131,7 +2407,12 @@ function render(){
   // chosen. One mark serves all three now, so the condition is simply that a slot is chosen at
   // all. S.slot is null until a duty with one action selects its own, so the board can open with
   // the column showing two marks rather than three.
-  document.getElementById("mark-" + COMMIT).classList.toggle("off", !S.slot);
+  // AND A TITHE IS NOT COMMITTABLE UNTIL IT NAMES A RESOURCE. `S.slot` alone used to be the
+  // whole question, because every answer it could hold was complete; a tithe is two halves, and
+  // offering the confirm on the first of them would let you commit a choice you have not made.
+  // A pool of one answers itself, so this is never in the way of the common case.
+  var ready = S.slot && !(S.slot === TITHE_SLOT && !S.tithe);
+  document.getElementById("mark-" + COMMIT).classList.toggle("off", !ready);
   setStatus();
   bedsFollow();
 }
