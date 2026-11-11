@@ -37,6 +37,13 @@
      moment there were two readers. Matching it by eye is how a board ends up with two nearly
      identical darks and no way to tell which one moved. */
   --plate-edge:#2a2721;
+  /* AND THE GROUND INSIDE THAT EDGE, which is now worn by two kinds of object. It was written
+     once, inline in .iplate, while the duty frames were the only thing on this board drawn in
+     it; the three controls beside the Take Tithe box wear it too now, so it is a name. Written
+     as the mix rather than as the colour it resolves to, because --tile-alpha is the thing
+     somebody would reach for to make these more or less present and it has to keep reaching
+     both. */
+  --plate-ground:color-mix(in srgb, var(--plate) var(--tile-alpha), transparent);
   /* NO --lift. A hovered tile used to rise 6px and a selected one stayed up, and both are gone:
      the tiles sit still now and say everything they have to say in colour. The variable went
      with the rule, along with the ::after that refilled the strip a rising tile vacated and the
@@ -296,16 +303,24 @@ body.full{background:#000}
   color:var(--ink);font:700 15px/1 ui-monospace,monospace;
   filter:brightness(.88);transition:filter .12s ease}
 .mark:hover{filter:brightness(1.12)}
-/* THE GROUND UNDER A CONTROL, and it is .panel's -- the same border, radius and colour the Take
-   Tithe box and the City wear. The three marks used to stand on nothing: every other object in
-   this row has a ground, and the canvas here is black because the backdrop ends at the foot of
-   the ribbon, well above it.
+/* THE GROUND UNDER A CONTROL, AND IT IS THE DUTY FRAME'S. The three marks used to stand on
+   nothing: every other object in this row has a ground, and the canvas here is black because the
+   backdrop ended at the foot of the ribbon, well above it.
 
-   NOT THE DUTY TILE'S PLATE, which was the other candidate and fails twice. A tile is GLASS --
-   55% of --plate over the picture behind it -- and there is no picture behind this row, so the
-   same treatment carried down is a dark colour at 55% over black and very nearly invisible.
-   And a tile means "selectable, takes the gold rim when chosen"; Show Map and Hire Building are
-   never chosen, so it would promise a state they cannot enter.
+   IT WAS .panel's -- the Take Tithe box's own #0e0d0b -- AND THE REASON FOR THAT HAS EXPIRED.
+   The note here used to argue against the duty tile's plate on the grounds that a tile is GLASS,
+   55% of --plate over the picture behind it, and that with no picture behind this row the same
+   treatment comes out "a dark colour at 55% over black and very nearly invisible". That was true
+   when it was written and is not any more: v2 draws NO BACKDROP, so the duty frames are
+   themselves 55% over #board's black -- rgb(12, 17, 20) against the controls' rgb(14, 13, 11) --
+   and whatever is true of one is true of the other. The two were the same darkness and different
+   hues, warm against cool, for a reason that had stopped applying.
+
+   THE OTHER OBJECTION STILL STANDS AND IS NOT WHAT CHANGED. A duty frame also means "selectable,
+   takes the gold rim when chosen", and Show Map and Hire Building are never chosen. So what is
+   shared is the GROUND and nothing else: the border stays #46413a, the radius stays 5px, and no
+   control gains a selected state. --plate-ground is the ground alone, which is why it is a token
+   of its own rather than a `.iplate` class borrowed wholesale.
 
    DRAWN AS ::before AT A NEGATIVE INSET rather than as a box of its own, because the mark's rect
    is geometry's and the artwork fills it. The pad is handed in from GEO.marks.pad -- it is
@@ -323,7 +338,7 @@ body.full{background:#000}
    which is the whole point of its sitting apart from the other two. */
 .mark::before{content:"";position:absolute;z-index:-1;
   inset:calc(-1 * var(--control-pad));
-  border:1px solid #46413a;border-radius:5px;background:#0e0d0b}
+  border:1px solid #46413a;border-radius:5px;background:var(--plate-ground)}
 /* A STAND-IN LOOKS LIKE ONE. A control with no cut filed yet borrows Allocation's mark, and the
    whole reason that is better than drawing nothing is that a wrong emblem is visibly wrong --
    which only holds if it does not look as settled as the two beside it. Half-lit says provisional
@@ -410,7 +425,7 @@ body.full{background:#000}
    it rather than catching a lit sky. Same colour, different thing behind it. If it wants to be
    more present the honest fix is a higher alpha HERE, not a second hard-coded slate. */
 .iplate{position:absolute;border:1px solid var(--plate-edge);pointer-events:none;
-  background:color-mix(in srgb, var(--plate) var(--tile-alpha), transparent)}
+  background:var(--plate-ground)}
 /* THE DIVIDER, WHICH IS THE FRAME'S OWN EDGE STOOD UP INSIDE IT. Same colour by reading the same
    token, and its thickness is PLATE_BORDER rather than a 1 typed here, so a frame drawn with a
    heavier edge takes the divider with it. It is SHORTER than the frame at both ends on purpose:
