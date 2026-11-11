@@ -1511,22 +1511,41 @@ def pool(tmpl, geo):
         "var GEO = %s;" % json.dumps({
             "duties": duties, "tithe": geo.as_dict()["tithe"],
             "marks": {"pad": geo.as_dict()["marks"]["pad"]},
-            "canvas": geo.as_dict()["canvas"], "slots": geo.as_dict()["slots"]}),
+            "canvas": geo.as_dict()["canvas"], "slots": geo.as_dict()["slots"],
+            # THE PHASE COMES FROM GEOMETRY HERE TOO, so a guard on the gate cannot pass by
+            # agreeing with a string this file typed. eligible() reads S.phase against this.
+            "livePhase": geo.LIVE_PHASE}),
         "var PANEL_BORDER = %s;" % _decl(tmpl, "PANEL_BORDER"),
         "var LIFT = %d;" % _lift(geo),
         "var DUTIES = %s;" % json.dumps(dmap),
         "var TITHE = %s;" % json.dumps(_tithe_token()),
-        "var S = {occupancy: %s, seat: null, slot: null, tithe: null};" % json.dumps(occ),
+        "var S = {occupancy: %s, seat: null, slot: null, tithe: null, phase: GEO.livePhase};"
+        % json.dumps(occ),
         "function dutyOf(slug){ return DUTIES[slug]; }",
+        # THE STANDING RULE THE POOL IS NOW BUILT ON, and the eligibility that reads it beside
+        # it. Both are driven here rather than restated, for the reason the pool already is:
+        # these two answers have to come from ONE walk of the occupancy or the box and the tiles
+        # can disagree on screen, and a test that asked them separately would not notice.
+        _function(tmpl, "standsOn"),
+        _function(tmpl, "actionPhase"),
+        _function(tmpl, "eligible"),
         _function(tmpl, "tithePool"),
         _function(tmpl, "onlyTithe"),
         _function(tmpl, "titheLayout"),
         _function(tmpl, "titheSlotLeft"),
         _function(tmpl, "lifted"),
         _function(tmpl, "controlBox"),
-        "var out = {pools: {}, only: {}, layout: {}, iso: {}, isoOnly: {}};",
+        "var out = {pools: {}, only: {}, layout: {}, iso: {}, isoOnly: {},",
+        "           can: {}, canIso: {}, canOff: {}};",
+        "function _can(){ return GEO.duties.filter(function(d){ return eligible(d.slug); })",
+        "                     .map(function(d){ return d.slug; }); }",
         "%s.forEach(function(p){ S.seat = p;" % json.dumps(players),
-        "  out.pools[p] = tithePool(p); out.only[p] = onlyTithe(); });",
+        "  out.pools[p] = tithePool(p); out.only[p] = onlyTithe();",
+        "  out.can[p] = _can();",
+        # AND THE SAME SEATS WITH THE PHASE TURNED OFF. The gate is the one part of this rule
+        # whose failure LOOKS like success -- every duty open reads as a board with no rule --
+        # so the off state is measured rather than assumed from the on state.
+        "  S.phase = 'not-' + GEO.livePhase; out.canOff[p] = _can(); S.phase = GEO.livePhase; });",
         "[1,2,3].forEach(function(n){ out.layout[n] = titheLayout(n); });",
         # BOTH COLUMNS' ROWS IN BOARD COORDINATES, worked out by the page's own functions. The
         # column used to share the box's rect, so "same y, same height" was proof enough; it is
@@ -1553,7 +1572,7 @@ def pool(tmpl, geo):
             json.dumps({"taxation": ["z"]}),
             json.dumps({_single_duty(geo, ring): ["z"]})),
         "for (var k in ISO){ S.occupancy = ISO[k]; S.seat = 'z';",
-        "  out.iso[k] = tithePool('z'); out.isoOnly[k] = onlyTithe(); }",
+        "  out.iso[k] = tithePool('z'); out.isoOnly[k] = onlyTithe(); out.canIso[k] = _can(); }",
         "S.occupancy = REAL;",
         "process.stdout.write(JSON.stringify(out));",
     ])
@@ -1838,10 +1857,367 @@ def test_a_change_of_seat_reconciles_a_tithe_already_chosen(tmpl):
     assert "tithePool(S.seat)" in body, "the reconciliation no longer asks the new seat's pool"
     assert "S.slot = null" in body, "an empty pool no longer puts the choice down:\n%s" % body
     assert "onlyTithe()" in body, "a shrunken pool no longer re-answers itself:\n%s" % body
+    # THROUGH reconcile(), WHICH IS THE PAIR. The seat picker called reconcileTithe alone while
+    # the tithe was the only half there was; the duty half arrived with eligibility and was
+    # forgotten at exactly this call site in the first draft. So what is pinned is that the seat
+    # change reconciles BOTH, by whatever name the pair goes under -- parsed, not matched, so the
+    # guard keeps meaning this when the pair grows a third member.
     wire = _code(_function(tmpl, "wireGrid"))
-    assert "reconcileTithe()" in wire, "the seat picker does not reconcile the tithe"
+    assert re.search(r"S\.seat = seat\.value;\s*reconcile\(\);", wire), (
+        "the seat picker does not reconcile:\n%s" % wire[-400:])
+    pair = _code(_function(tmpl, "reconcile"))
+    assert "reconcileTithe()" in pair and "reconcileDuty()" in pair, (
+        "reconcile() no longer does both halves: %s" % pair)
     assert "reconcileTithe" not in _code(_function(tmpl, "render")), (
         "render rewrites the state, so what it draws depends on how often it has run")
+
+
+@needs_node
+def test_a_seat_may_act_exactly_where_its_figures_stand(pool):
+    """BOTH MOVES IN ACTION SELECTION NEED AN ACOLYTE ON A DUTY TILE, so this is the rule.
+
+    Driven against the real demo occupancy and against four isolated cases, because the demo
+    state is generous: p3 stands on seven of the eight duties, so a rule that answered "all" and
+    a rule that answered correctly look nearly identical from p3's seat alone.
+
+    Falsify: return every duty, or read S.duty instead of the occupancy.
+    """
+    seats = _v2_seats()
+    for seat, got in pool["can"].items():
+        want = sorted(s for s, on in seats.items() if seat in on)
+        assert sorted(got) == want, (
+            "%s stands on %s and the board offers %s" % (seat, want, sorted(got)))
+
+    # A SEAT STANDING NOWHERE MAY ACT NOWHERE, which is the state p4 is in and the one the engine
+    # cannot produce -- sowing guarantees a figure on at least one tile. Kept because it is the
+    # cheapest way to find a rule that quietly divides by the number of your own figures.
+    assert pool["can"]["p4"] == [], "p4 stands nowhere and may act on %s" % pool["can"]["p4"]
+    assert pool["canIso"]["nowhere"] == [], pool["canIso"]["nowhere"]
+    assert pool["canIso"]["taxOnly"] == ["taxation"], pool["canIso"]["taxOnly"]
+
+
+@needs_node
+def test_being_able_to_act_is_wider_than_feeding_the_box(pool):
+    """TAXATION IS THE WHOLE OF THIS TEST, and it is why eligibility is not the pool.
+
+    It is the one duty with no resource, so figures there make its actions available and add
+    nothing to the Take Tithe box. "You may act here" is a SUPERSET of "this feeds the box" -- so
+    a board that built the pool first and reused it as eligibility would have quietly made
+    Taxation unplayable, which is the kind of mistake that reads as a missing feature rather than
+    as a bug.
+
+    Falsify: define eligibility as `tithePool(seat).indexOf(...) >= 0`, or give Taxation a key.
+    """
+    assert pool["canIso"]["taxOnly"] == ["taxation"] and pool["iso"]["taxOnly"] == [], (
+        "a figure on Taxation alone: may act on %s, offers %s"
+        % (pool["canIso"]["taxOnly"], pool["iso"]["taxOnly"]))
+    for seat, can in pool["can"].items():
+        got = pool["pools"][seat]
+        assert not got or can, "%s has a pool %s with nowhere to act" % (seat, got)
+
+
+@needs_node
+def test_nothing_is_refused_outside_action_selection(pool):
+    """ELIGIBILITY BELONGS TO ONE PHASE, and the other two are labels with nothing behind them.
+
+    In Sowing these same tiles mean "where may I walk", which is a different question with a
+    different answer -- marking them by where you ALREADY stand would answer the wrong one. So
+    outside Action Selection every duty is open, which is the board's behaviour up to now.
+
+    AND THE OFF STATE IS MEASURED. A broken gate -- everything open, always -- looks exactly like
+    a board that has no rule, so reading only the on state would agree with it.
+
+    Falsify: drop the phase test from eligible(), or compare against a typed "action".
+    """
+    want = sorted(d for d in _v2_seats())
+    for seat, got in pool["canOff"].items():
+        assert sorted(got) == want, (
+            "outside Action Selection %s is refused %s"
+            % (seat, sorted(set(want) - set(got))))
+    assert pool["canOff"]["p4"] and not pool["can"]["p4"], (
+        "the gate makes no difference, so it is not a gate")
+
+
+def test_the_pool_and_the_tiles_ask_one_question(tmpl):
+    """ONE WALK OF THE OCCUPANCY, TWO READERS, because the disagreement would be ON SCREEN.
+
+    Written twice, the box could offer a resource from a tile the board had just refused to let
+    you act on. Both go through standsOn, and neither re-implements it.
+
+    Falsify: inline `S.occupancy[...].indexOf(seat) >= 0` back into either one.
+    """
+    for name in ("tithePool", "eligible", "lightTithe"):
+        body = _code(_function(tmpl, name))
+        assert "standsOn(" in body, "%s no longer asks the standing rule:\n%s" % (name, body)
+        assert "indexOf(seat)" not in body and "indexOf(S.seat)" not in body, (
+            "%s walks the occupancy itself, so there are two answers again:\n%s" % (name, body))
+    rule = _code(_function(tmpl, "standsOn"))
+    assert "S.occupancy[slug]" in rule and "indexOf(seat)" in rule, (
+        "the standing rule no longer reads the occupancy: %s" % rule)
+
+
+def test_a_refused_press_changes_nothing_and_makes_no_sound(tmpl):
+    """A PRESS YOU CANNOT MAKE MUST NOT COST YOU THE ONE YOU HAD.
+
+    Three routes reach a choice -- the rectangle, the mark, and the card above -- and each
+    refuses BEFORE it touches the state or the sound. A refusal that also cleared the selection
+    would be the worst of both: you learn you cannot do this, and you have to redo the thing you
+    could. A refusal that played `select` would sound exactly like being accepted.
+
+    THE CARD ASKS A DIFFERENT QUESTION, and that is deliberate. pickDuty and pickAction ask about
+    the duty in the press; select() has no duty in the press at all, so it asks about S.duty --
+    which a change of SEAT can make ineligible with nothing clicked.
+
+    Falsify: move any guard below its sfx call, or give select() the others' test.
+    """
+    for name, asked in (("pickDuty", "slug"), ("pickAction", "duty"), ("select", "S.duty")):
+        body = _code(_function(tmpl, name))
+        m = re.search(r"if \(!eligible\((%s)\)\) return explain\(" % re.escape(asked), body)
+        assert m, "%s does not refuse an ineligible %s:\n%s" % (name, asked, body)
+        sound = body.find("sfx(")
+        assert sound < 0 or m.start() < sound, (
+            "%s refuses after it has already sounded like a choice:\n%s" % (name, body))
+
+    told = _code(_function(tmpl, "explain"))
+    assert "S." not in told.replace("setStatus", ""), (
+        "a refusal writes to the state, so it costs you something:\n%s" % told)
+    assert "sfx" not in told, "a refusal makes a sound:\n%s" % told
+
+
+def test_the_refusal_says_what_the_duty_does_as_well_as_why(tmpl):
+    """TWO QUESTIONS AT ONCE: what is this, and why can I not press it.
+
+    The first is the one that makes a tile worth reading on a turn you cannot take it -- you are
+    looking at Ordination BECAUSE you are deciding where to walk next -- so the reason is JOINED
+    onto the labels rather than put in their place.
+
+    AND THE WORDING IS NOT IN THE PAGE. It comes from geometry with the phase lines, which is
+    where the status line's own sentences live; typed here it would be the fault duty_text.json
+    was created to end.
+
+    Falsify: return the reason instead of appending it, or type the clause into the template.
+    """
+    body = _code(_function(tmpl, "lineFor"))
+    assert body.count("say(") == 2, (
+        "both the tile line and the mark line no longer carry the reason:\n%s" % body)
+    assert "reasonFor(" in body, "the reason is no longer asked for:\n%s" % body
+
+    why = _code(_function(tmpl, "reasonFor"))
+    assert "GEO.lines.noAcolytes" in why, "the clause is not read from geometry: %s" % why
+    assert "eligible(" in why, "the clause is not gated on eligibility: %s" % why
+
+    join = _code(_function(tmpl, "say"))
+    assert "body +" in join, "the reason replaces the labels instead of joining them: %s" % join
+
+    page = _code(_rule_free(tmpl))
+    assert "no Acolytes present" not in page and "no Tithe to take" not in page, (
+        "the refusal wording is typed into the page as well as published by geometry")
+
+
+def test_the_refusal_wording_is_published_by_geometry(geo):
+    """THE STATUS LINE'S OWN SENTENCES LIVE WITH THE PHASES, and reach the page as data.
+
+    duty_text.json holds what the game's things are CALLED and is read by both boards and the
+    icon lab; these are the board's chrome, which no card carries. PHASES has held exactly that
+    kind of string in geometry since there were phases, so one clause does not start a second
+    home -- but it does have to be EXPORTED, or the page falls back to an empty string and the
+    refusal is silent.
+
+    Falsify: drop `lines` from as_dict(), or empty a clause.
+    """
+    lines = geo.as_dict().get("lines")
+    assert lines, "geometry publishes no status lines, so the page cannot say why"
+    for key in ("noAcolytes", "noTithe"):
+        assert lines.get(key), "`%s` is missing or empty: %s" % (key, lines)
+        assert lines[key] == lines[key].strip(), "`%s` is padded: %r" % (key, lines[key])
+    assert lines == geo.LINES, "the export is not the table"
+
+    # AND THE PHASE NAMES THE CONDITION. The line a player reads while deciding has to say what
+    # makes a duty choosable, or seven unpressable tiles have nothing explaining them.
+    action = [p for p in geo.as_dict()["phases"] if p["key"] == geo.LIVE_PHASE]
+    assert len(action) == 1, geo.as_dict()["phases"]
+    assert "Acolytes" in action[0]["line"], (
+        "the live phase's line does not say what makes a duty choosable: %r" % action[0]["line"])
+
+
+def test_a_chosen_action_does_not_survive_losing_the_right_to_it(tmpl):
+    """TWO THINGS CHANGE UNDERNEATH YOU, and both can take away the action you had chosen.
+
+    Picking another seat and moving to Action Selection are the same hole one object apart: the
+    board kept the commit up over a move the new state refuses. That is exactly what
+    reconcileTithe was written for, so the duty half is done the same way and the two are called
+    together by one name.
+
+    THE DUTY STAYS; ONLY THE CHOICE GOES. S.duty is what you are LOOKING at and the two cards
+    above belong to it, so clearing it would empty the board's largest objects to say something
+    about a small one.
+
+    Falsify: clear S.duty as well, choose some other duty in its place, or call the pair from one
+    of its two sites only.
+    """
+    body = _code(_function(tmpl, "reconcileDuty"))
+    assert "eligible(S.duty)" in body, "the reconciliation does not ask the new state: %s" % body
+    assert "S.slot = null" in body, "the chosen action is not put down: %s" % body
+    assert "S.duty =" not in body, "the duty being looked at is cleared as well: %s" % body
+    assert "TITHE_SLOT" in body, (
+        "a tithe is reconciled as though it were an action: %s" % body)
+
+    phases = _code(_function(tmpl, "drawPhases"))
+    assert "reconcile()" in phases, "a change of phase does not reconcile:\n%s" % phases
+    assert "render()" in phases, "a change of phase does not redraw, so the cue is stale"
+
+
+def test_the_open_tile_is_lit_and_nothing_is_dimmed(tmpl):
+    """ADDITIVE, AND ON THE LARGEST THING A DUTY HAS.
+
+    The open set is the MINORITY -- your figures are on one or two tiles of eight -- so dimming
+    would change six or seven objects to say something about two, on a palette with no room below
+    the one the board is already at, and would take the board away from the three players who are
+    not taking this turn.
+
+    ON THE RECTANGLE, WHICH IS THE SECOND PLACE THIS LIVED. It was the icon frame's 1px edge
+    first: a real step in colour over about forty pixels of a 1400-wide board, which measured
+    fine and could not be seen. A cue that has to be found at a glance across eight tiles needs
+    AREA. That is the finding worth keeping, and it is why this guard pins the carrier.
+
+    Falsify: move the cue back onto the frame, or dim the shut tiles instead.
+    """
+    open_ = _rule(tmpl, ".dcell.eligible")
+    grad = open_.get("background-image", "")
+    assert "linear-gradient" in grad and "var(--open-wash)" in grad, (
+        "an open tile is not lit by the named wash: %s" % open_)
+    assert not {"opacity", "filter"} & set(open_), (
+        "availability is said by dimming something: %s" % open_)
+    assert "background" not in open_ and "background-color" not in open_, (
+        "the wash replaces the tile's ground instead of composing over it: %s" % open_)
+
+    # AND IT IS DRAWN ONCE. A background's origin is the PADDING box and its clip is the BORDER
+    # box, so the 2px strip above the padding box gets the image repeated -- which puts the
+    # bottom of this gradient, its strongest gold, in a hard line along the top of every open
+    # tile. It read as the rectangle's hidden top edge coming back, and that is what it was
+    # reported as. This looks like tidiness and is the fix.
+    assert open_.get("background-repeat") == "no-repeat", (
+        "the wash repeats, so its strong end draws a line along the tile's top edge: %s" % open_)
+
+    for sel in (".dcell", ".dcell.bare", ".iplate"):
+        assert not {"opacity", "filter"} & set(_rule(tmpl, sel)), (
+            "%s is dimmed, so a shut tile wears a disabled look" % sel)
+    assert ".iplate.eligible" not in _rule_free(tmpl), (
+        "the frame carries the cue as well, so the board says one thing in two places")
+
+
+def test_the_wash_is_written_after_bare_so_the_default_view_keeps_it(tmpl):
+    """`bare` IS THE VIEW THE BOARD OPENS IN, AND IT SETS `background`.
+
+    The rule above it is last on purpose so that it beats the states that colour the rectangle's
+    edges. This one has to come after IT, or the cue is cleared in exactly the view where it is
+    most needed -- which is the trap `.tmark.feeds` was written around, one object over.
+
+    AND IT IS background-image, so it composes over whatever ground is underneath rather than
+    replacing it: transparent in the default view, the cell's near-black when the rectangles are
+    drawn, the chosen tile's own ground when one is chosen.
+
+    Falsify: move the wash above `.dcell.bare`, or write it as the `background` shorthand.
+    """
+    body = _rule_free(tmpl)
+    bare = body.index(".dcell.bare{")
+    wash = body.index(".dcell.eligible{")
+    assert wash > bare, (
+        "`bare` is written after the wash, so the view the board opens in clears the cue")
+    assert "background-image" in _rule(tmpl, ".dcell.eligible"), (
+        "the wash is not an image, so it replaces the ground it is supposed to sit on")
+
+
+def test_the_light_is_the_gold_the_board_already_spends(tmpl):
+    """IT IS --line ITSELF RATHER THAN A GOLD CHOSEN BESIDE IT.
+
+    Gold is already what this board spends on "this concerns you"; the chosen rim is a LINE and
+    this is a WASH, so the same hue does two jobs without either becoming the other. A name
+    rather than a literal because the mix is the thing somebody would tune.
+
+    Falsify: mix the wash from some other colour, or make it opaque.
+    """
+    root = _rule(tmpl, ":root")
+    wash = root.get("--open-wash")
+    assert wash, "the wash is not a name, so it is written out at each reader"
+    assert "var(--line)" in wash, "the wash is not mixed from the board's gold: %s" % wash
+    assert "transparent" in wash, "the wash is opaque, so it is paint and not light: %s" % wash
+    assert "var(--open-wash)" in _rule(tmpl, ".dcell.eligible").get("background-image", ""), (
+        "the open tile no longer reads the name")
+
+
+def test_the_box_says_it_in_words_and_the_tiles_say_it_in_light(tmpl):
+    """ONE STATEMENT PER OBJECT, IN WHATEVER LANGUAGE THAT OBJECT HAS.
+
+    The Take Tithe box wore the same wash for a round and it was taken back out. A box with
+    nothing in it already writes "no tithe available" across its own middle, so the light was the
+    board saying one thing twice on one object. The rectangles keep it because they have nowhere
+    to write a sentence: a duty tile is figures and icons and no room.
+
+    AND THE REFUSAL IS NOT WHAT WENT. A press on an empty box still answers out loud; what was
+    removed is the resting cue, not the reply.
+
+    Falsify: light the box again, leave the empty box with nothing written in it, or make the
+    press silent.
+    """
+    body = _rule_free(tmpl)
+    assert ".panel.eligible" not in body, (
+        "the box is lit again, so it says in light what it already says in words")
+    assert "NO .panel.eligible RULE" in tmpl, (
+        "the reason the box is not lit is no longer written down, so it will come back")
+    sweep = _code(_function(tmpl, "markEligible"))
+    assert '"tithe"' not in sweep and "tbox" not in sweep, (
+        "the box is still given a class nothing draws, which is a write with no reader:\n%s"
+        % sweep)
+
+    empty = _code(_function(tmpl, "drawTithe"))
+    assert "no tithe available" in empty, (
+        "the empty box no longer writes what is wrong with it:\n%s" % empty[-700:])
+
+    assert "outline" in _rule(tmpl, ".art.sel, .panel.sel"), (
+        "the chosen box no longer uses the outline")
+
+    take = _code(_function(tmpl, "takeTithe"))
+    assert "explainWhy(GEO.lines.noTithe)" in take, (
+        "a press on an empty box is silent again:\n%s" % take)
+    assert re.search(r"if \(!tithePool\(S\.seat\)\.length\) return explainWhy", take), (
+        "the box is refused somewhere other than on the pool being empty:\n%s" % take)
+
+
+def test_the_cue_is_drawn_only_while_the_restriction_holds(tmpl):
+    """THE MARKING AND THE REFUSING ARE ONE GATE, so they cannot drift apart.
+
+    Eight lit frames saying "all open" is the same noise as none, and it would be a claim about
+    phases that have nothing built behind them. So outside Action Selection nothing is marked,
+    which is exactly when nothing is refused.
+
+    ONE SWEEP, TWO CALLERS. render() sets it because it is state; drawGrid() sets it because the
+    sliders throw these nine elements away and build them again, and a rebuild that left it to the
+    next render would drop the cue under the pointer on every slider move.
+
+    Falsify: mark without the phase test, or set the class in only one of the two.
+    """
+    body = _code(_function(tmpl, "markEligible"))
+    assert "actionPhase()" in body, "the cue is not gated on the phase:\n%s" % body
+    assert re.search(r'toggle\("eligible",\s*\w+ && eligible\(d\.slug\)\)', body), (
+        "the tiles are not marked from the gate and the rule together:\n%s" % body)
+    assert 'getElementById("dcell-" + d.slug)' in body, (
+        "the sweep no longer lights the rectangle, which is where the cue has area")
+
+    for caller in ("render", "drawGrid"):
+        assert "markEligible()" in _code(_function(tmpl, caller)), (
+            "%s does not set the cue, so it is stale after %s runs"
+            % (caller, "a state change" if caller == "render" else "a rebuild"))
+
+
+def _rule_free(text: str) -> str:
+    """The template with its CSS comments stripped as well as its JS ones.
+
+    A guard asking whether a string is TYPED into the page reads the prose too, and this file's
+    prose quotes the strings it is about -- which is how an earlier guard found "Show Map" in an
+    explanation of where "Show Map" comes from and passed on a page that had lost it.
+    """
+    return re.sub(r"/\*.*?\*/", "", text, flags=re.S)
 
 
 def test_a_tiles_resource_is_a_label_and_takes_no_clicks(tmpl):
@@ -2384,8 +2760,19 @@ def test_the_controls_stand_on_the_duty_frames_ground_in_one_rectangle(tmpl):
         "the duty frame no longer reads the shared ground: %s" % frame)
     assert column.get("background") == "var(--plate-ground)", (
         "the control column no longer stands on the duty frame's ground: %s" % column)
-    assert "color-mix" not in _code(tmpl).replace(ground, ""), (
-        "a second copy of the mix has appeared somewhere outside the token")
+    # THE MIX IS WRITTEN ONCE, WHICH IS NOT THE SAME AS BEING THE ONLY MIX ON THE PAGE. This read
+    # "no color-mix survives outside the token", which was true while this was the only thing on
+    # the board mixed from anything -- and it failed the moment an UNRELATED mix arrived (the gold
+    # wash that lights an open tile) without a copy of this one existing anywhere. A guard that
+    # fires on a stranger is a guard that gets edited under pressure, so it now says what it
+    # means: this ground appears once, and nothing else is mixed from --plate.
+    body = _code(tmpl)
+    assert body.count(ground) == 1, (
+        "the shared ground is written out %d times instead of read from the token"
+        % body.count(ground))
+    strangers = re.findall(r"color-mix\([^;)]*(?:\([^)]*\))?[^;)]*\)", body.replace(ground, ""))
+    assert not [m for m in strangers if "--plate" in m], (
+        "a second mix of the plate has appeared outside the token: %s" % strangers)
 
     assert "var(--plate-edge)" not in column.get("border", ""), (
         "the control column has taken the duty frame's own edge: %s" % column)
