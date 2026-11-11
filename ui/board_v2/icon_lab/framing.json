@@ -1,5 +1,5 @@
 {
-  "savedAt": "2026-10-05T20:09:10.510Z",
+  "savedAt": "2026-11-10T21:02:17.762Z",
   "iconSize": 115,
   "note": "scale, ox and oy are the framing; everything else is worked out from them and is here to be read. Offsets are fractions of the box, so they survive a change of icon size. A cut is the square (x, y, w) taken out of `file` at its own resolution, with no resampling and no ground; where it runs off the edge of the file it is clear.",
   "icons": {
@@ -239,6 +239,48 @@
         "w": 972
       },
       "markFillsSlot": 1.1,
+      "ground": null
+    },
+    "resource_silver_icon_master_v01.png": {
+      "name": "Silver",
+      "source": 1254,
+      "scale": 1.13228,
+      "ox": -0.07323,
+      "oy": -0.0163,
+      "crop": {
+        "x": 81,
+        "y": 18,
+        "w": 1108
+      },
+      "markFillsSlot": 1.02,
+      "ground": null
+    },
+    "resource_stone_icon_master_v01.png": {
+      "name": "Stone",
+      "source": 1254,
+      "scale": 1.3832,
+      "ox": -0.2011,
+      "oy": -0.20628,
+      "crop": {
+        "x": 182,
+        "y": 187,
+        "w": 907
+      },
+      "markFillsSlot": 1.31,
+      "ground": null
+    },
+    "resource_wheat_icon_master_v01.png": {
+      "name": "Wheat",
+      "source": 1254,
+      "scale": 1.09,
+      "ox": -0.08288,
+      "oy": -0.05266,
+      "crop": {
+        "x": 95,
+        "y": 61,
+        "w": 1150
+      },
+      "markFillsSlot": 1.04,
       "ground": null
     }
   }

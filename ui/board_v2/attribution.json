@@ -1806,6 +1806,105 @@
       "notes": "re-encoded as WebP at quality 90 from the PNG beside it in masters/; the drawing is unchanged and the master is the archive",
       "sha256": "7073b3894b70d061a39130009e06783e01e0558e72551c1178d26cf06ea41326"
     },
+    "tokens/resources/icons/masters/resource_silver_icon_master_v01.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "generated in a ChatGPT session for this project on a transparent background; no upstream URL and no seed. Which prompt produced it is reproducibleBy's to say, not this field's.",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 resource icons",
+      "title": "Silver, resource icon, as generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, 1254 square on transparency. The silver resource as a CUTOUT -- a cross-faced coin on a torn dark ground, which is the language the board's duty marks are actually drawn in. A THIRD TREATMENT OF THE SAME THREE RESOURCES, beside the grey wax of tokens/resources/seal_silver.webp and the coin of token_silver.webp: those two say `a thing you may take` and `a thing that is yours`, and this one is the duty icons' own hand.",
+      "notes": "master, not shipped. How much of the square the board draws was chosen in ui/board_v2/icon_lab/ and taken out as tokens/resources/icons/resource_silver_icon_v01.webp, which is what this is the original of; the framing that did it is in icon_lab/framing.json under this file's name. NOT A DUTY ACTION AND NOT A CONTROL, which is why these have a root of their own: taking a resource is not a move the engine scores, and it is not a button in the controls column either. Downloaded as tithe_resource_silver_coins_.png on 2026-11-10 and copied in unchanged -- same machine, copied between two mounted folders rather than through the device bridge, and the sha256 below was verified against the download rather than assumed.",
+      "reproducibleBy": "not recorded. The duty icons came from duty_art_lab/prompts/icons/01-icons-from-seal-motifs.md with the action's own wax seal attached; these three were not made from a seal and the brief that made them was not kept. If they are ever regenerated it should be written down first.",
+      "sha256": "dfe95bfd8f484206f52c170861803e8cf23923a61d5e38856aa7b460737ec99b"
+    },
+    "tokens/resources/icons/masters/resource_stone_icon_master_v01.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "generated in a ChatGPT session for this project on a transparent background; no upstream URL and no seed. Which prompt produced it is reproducibleBy's to say, not this field's.",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 resource icons",
+      "title": "Stone, resource icon, as generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, 1254 square on transparency. The stone resource as a CUTOUT -- a split block of stone on a torn dark ground, which is the language the board's duty marks are actually drawn in. A THIRD TREATMENT OF THE SAME THREE RESOURCES, beside the grey wax of tokens/resources/seal_stone.webp and the coin of token_stone.webp: those two say `a thing you may take` and `a thing that is yours`, and this one is the duty icons' own hand.",
+      "notes": "master, not shipped. How much of the square the board draws was chosen in ui/board_v2/icon_lab/ and taken out as tokens/resources/icons/resource_stone_icon_v01.webp, which is what this is the original of; the framing that did it is in icon_lab/framing.json under this file's name. NOT A DUTY ACTION AND NOT A CONTROL, which is why these have a root of their own: taking a resource is not a move the engine scores, and it is not a button in the controls column either. Downloaded as tithe_resource_stone_.png on 2026-11-10 and copied in unchanged -- same machine, copied between two mounted folders rather than through the device bridge, and the sha256 below was verified against the download rather than assumed.",
+      "reproducibleBy": "not recorded. The duty icons came from duty_art_lab/prompts/icons/01-icons-from-seal-motifs.md with the action's own wax seal attached; these three were not made from a seal and the brief that made them was not kept. If they are ever regenerated it should be written down first.",
+      "sha256": "fcc42474636cba98f7956f2bd5a2112d05a262f77d5e6feae4f81a99b2b8af29"
+    },
+    "tokens/resources/icons/masters/resource_wheat_icon_master_v01.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "generated in a ChatGPT session for this project on a transparent background; no upstream URL and no seed. Which prompt produced it is reproducibleBy's to say, not this field's.",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 resource icons",
+      "title": "Wheat, resource icon, as generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, 1254 square on transparency. The wheat resource as a CUTOUT -- an ear of wheat on a torn dark ground, which is the language the board's duty marks are actually drawn in. A THIRD TREATMENT OF THE SAME THREE RESOURCES, beside the grey wax of tokens/resources/seal_wheat.webp and the coin of token_wheat.webp: those two say `a thing you may take` and `a thing that is yours`, and this one is the duty icons' own hand.",
+      "notes": "master, not shipped. How much of the square the board draws was chosen in ui/board_v2/icon_lab/ and taken out as tokens/resources/icons/resource_wheat_icon_v01.webp, which is what this is the original of; the framing that did it is in icon_lab/framing.json under this file's name. NOT A DUTY ACTION AND NOT A CONTROL, which is why these have a root of their own: taking a resource is not a move the engine scores, and it is not a button in the controls column either. Downloaded as tithe_resource_wheat_.png on 2026-11-10 and copied in unchanged -- same machine, copied between two mounted folders rather than through the device bridge, and the sha256 below was verified against the download rather than assumed.",
+      "reproducibleBy": "not recorded. The duty icons came from duty_art_lab/prompts/icons/01-icons-from-seal-motifs.md with the action's own wax seal attached; these three were not made from a seal and the brief that made them was not kept. If they are ever regenerated it should be written down first.",
+      "sha256": "f60f33a435ae23dcb2e7c4941c0858cf8ce886848344da2174fb8e1e44471d14"
+    },
+    "tokens/resources/icons/resource_silver_icon_v01.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "cut in this repository from resource_silver_icon_master_v01.png; the drawing itself was generated in a ChatGPT session for this project on a transparent background, with no upstream URL and no seed.",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 resource icons",
+      "title": "Silver, resource icon",
+      "slot": "cut",
+      "role": "the silver resource as the board would draw it: a cross-faced coin on a torn dark ground, the language the duty marks are already in, with the generator's margin taken off. The third treatment of the same resource, beside the grey wax of tokens/resources/seal_silver.webp and the coin of token_silver.webp.",
+      "notes": "WHERE THE BOARD DRAWS THESE IS NOT DECIDED YET, so this record says what the file is and not what it is for. Every duty tile but Taxation is to carry one of the three (a fourth resource is still missing), and how it attaches is the next thing to work out. Filed beside its master in tokens/resources/icons/ rather than in a folder of its own because that is the name ui/board_v2/icon_lab/generate_icon_sizer.py's next_resource_cut() offers and the folder _resource_seeds() looks in: a cut that is anywhere else cannot be found by the lab, and a framing whose cut cannot be found can only be taken again, never revisited.",
+      "modifications": "cut from resource_silver_icon_master_v01.png at (81, 18), 1108 square, drawn 1:1 with no resampling and no ground -- whole source pixels, because a crop that lands between two source pixels is a resample wearing a crop's clothes. Encoded as WebP at quality 90, libwebp method 6, `exact` on so the colour under fully clear pixels is kept rather than chosen by the encoder: 160.8 KB from a 1254-square PNG master. Taken in Pillow rather than through the lab's canvas, which is the one way these three differ from the sixteen duty cuts: a canvas stores colour premultiplied by alpha and unmultiplies it on the way back out, moving the soft edge by up to 1 of 255 on about 4% of it. Skipping that round trip puts these closer to the master than the `cut` button's own output, not further -- but it does mean pressing `cut` on this same framing would hand back a file that differs in the soft edge and would NOT match the sha256 below. The alpha channel came through exactly: the worst pixel in all three moves 0 of 255 through the WebP encode, measured rather than assumed, which matters more on a cut-out than anywhere else because the alpha IS the edge.",
+      "reproducibleBy": "ui/board_v2/icon_lab, which holds the framing in framing.json under this master's name and takes this crop out of the master on the `cut` button. The framing is exact; the bytes are not, for the canvas reason in modifications. ONE PIXEL OF ARITHMETIC, RECORDED BECAUSE IT WILL COME BACK. framing.json carries both the three numbers that were chosen and the crop they produced, and the page recomputes the crop on load from `scale`, which is written to five decimals. For this framing five is one short: the rounded scale recomputes 1107 where 1108 was cut. The crop that was CUT wins, because it is what the preview showed. 1 of the 20 framings saved is on such a boundary.",
+      "sha256": "26221b1008174b9e1abc7eadfa0ca3768e7c7694f5a2b6e50297706271b7101a",
+      "master": "resource_silver_icon_master_v01.png",
+      "crop": {
+        "x": 81,
+        "y": 18,
+        "w": 1108
+      }
+    },
+    "tokens/resources/icons/resource_stone_icon_v01.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "cut in this repository from resource_stone_icon_master_v01.png; the drawing itself was generated in a ChatGPT session for this project on a transparent background, with no upstream URL and no seed.",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 resource icons",
+      "title": "Stone, resource icon",
+      "slot": "cut",
+      "role": "the stone resource as the board would draw it: a split block of stone on a torn dark ground, the language the duty marks are already in, with the generator's margin taken off. The third treatment of the same resource, beside the grey wax of tokens/resources/seal_stone.webp and the coin of token_stone.webp.",
+      "notes": "WHERE THE BOARD DRAWS THESE IS NOT DECIDED YET, so this record says what the file is and not what it is for. Every duty tile but Taxation is to carry one of the three (a fourth resource is still missing), and how it attaches is the next thing to work out. Filed beside its master in tokens/resources/icons/ rather than in a folder of its own because that is the name ui/board_v2/icon_lab/generate_icon_sizer.py's next_resource_cut() offers and the folder _resource_seeds() looks in: a cut that is anywhere else cannot be found by the lab, and a framing whose cut cannot be found can only be taken again, never revisited.",
+      "modifications": "cut from resource_stone_icon_master_v01.png at (182, 187), 907 square, drawn 1:1 with no resampling and no ground -- whole source pixels, because a crop that lands between two source pixels is a resample wearing a crop's clothes. Encoded as WebP at quality 90, libwebp method 6, `exact` on so the colour under fully clear pixels is kept rather than chosen by the encoder: 132.2 KB from a 1254-square PNG master. Taken in Pillow rather than through the lab's canvas, which is the one way these three differ from the sixteen duty cuts: a canvas stores colour premultiplied by alpha and unmultiplies it on the way back out, moving the soft edge by up to 1 of 255 on about 4% of it. Skipping that round trip puts these closer to the master than the `cut` button's own output, not further -- but it does mean pressing `cut` on this same framing would hand back a file that differs in the soft edge and would NOT match the sha256 below. The alpha channel came through exactly: the worst pixel in all three moves 0 of 255 through the WebP encode, measured rather than assumed, which matters more on a cut-out than anywhere else because the alpha IS the edge.",
+      "reproducibleBy": "ui/board_v2/icon_lab, which holds the framing in framing.json under this master's name and takes this crop out of the master on the `cut` button. The framing is exact; the bytes are not, for the canvas reason in modifications.",
+      "sha256": "16dfa9f54d1d77e8c7e328512da48cb830a2c4ef1bda63c10b7c8dbacb10a4fa",
+      "master": "resource_stone_icon_master_v01.png",
+      "crop": {
+        "x": 182,
+        "y": 187,
+        "w": 907
+      }
+    },
+    "tokens/resources/icons/resource_wheat_icon_v01.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "cut in this repository from resource_wheat_icon_master_v01.png; the drawing itself was generated in a ChatGPT session for this project on a transparent background, with no upstream URL and no seed.",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 resource icons",
+      "title": "Wheat, resource icon",
+      "slot": "cut",
+      "role": "the wheat resource as the board would draw it: an ear of wheat on a torn dark ground, the language the duty marks are already in, with the generator's margin taken off. The third treatment of the same resource, beside the grey wax of tokens/resources/seal_wheat.webp and the coin of token_wheat.webp.",
+      "notes": "WHERE THE BOARD DRAWS THESE IS NOT DECIDED YET, so this record says what the file is and not what it is for. Every duty tile but Taxation is to carry one of the three (a fourth resource is still missing), and how it attaches is the next thing to work out. Filed beside its master in tokens/resources/icons/ rather than in a folder of its own because that is the name ui/board_v2/icon_lab/generate_icon_sizer.py's next_resource_cut() offers and the folder _resource_seeds() looks in: a cut that is anywhere else cannot be found by the lab, and a framing whose cut cannot be found can only be taken again, never revisited.",
+      "modifications": "cut from resource_wheat_icon_master_v01.png at (95, 61), 1150 square, drawn 1:1 with no resampling and no ground -- whole source pixels, because a crop that lands between two source pixels is a resample wearing a crop's clothes. Encoded as WebP at quality 90, libwebp method 6, `exact` on so the colour under fully clear pixels is kept rather than chosen by the encoder: 117.4 KB from a 1254-square PNG master. Taken in Pillow rather than through the lab's canvas, which is the one way these three differ from the sixteen duty cuts: a canvas stores colour premultiplied by alpha and unmultiplies it on the way back out, moving the soft edge by up to 1 of 255 on about 4% of it. Skipping that round trip puts these closer to the master than the `cut` button's own output, not further -- but it does mean pressing `cut` on this same framing would hand back a file that differs in the soft edge and would NOT match the sha256 below. The alpha channel came through exactly: the worst pixel in all three moves 0 of 255 through the WebP encode, measured rather than assumed, which matters more on a cut-out than anywhere else because the alpha IS the edge.",
+      "reproducibleBy": "ui/board_v2/icon_lab, which holds the framing in framing.json under this master's name and takes this crop out of the master on the `cut` button. The framing is exact; the bytes are not, for the canvas reason in modifications.",
+      "sha256": "89ff84f30686e1d5f2da6c269a707d0682d72605f2b2c65ad9307017641d7070",
+      "master": "resource_wheat_icon_master_v01.png",
+      "crop": {
+        "x": 95,
+        "y": 61,
+        "w": 1150
+      }
+    },
     "duty_actions/clerical/gain_piety/clerical_gain_piety_left_v04.png": {
       "state": "present",
       "title": "Clerical devotion, fourth generation",

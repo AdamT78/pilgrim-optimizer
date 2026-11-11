@@ -33,6 +33,7 @@ HERE = pathlib.Path(__file__).resolve().parent
 BOARD = HERE.parent
 ART_DIR = BOARD / "duty_actions"
 CONTROL_DIR = BOARD / "controls"
+RESOURCE_DIR = BOARD / "tokens" / "resources"
 ATTRIB_FILE = BOARD / "attribution.json"
 TEXT_FILE = BOARD / "duty_text.json"
 TMPL = HERE / "icon_sizer.html.tmpl"
@@ -325,21 +326,102 @@ def next_control_cut(key: str) -> str:
     return "%s_v%02d%s" % (base, n + 1, PRINT_SUFFIX)
 
 
+def _resource_seeds(rec: dict) -> tuple[list, list]:
+    """The three resources' icon masters, which are a third kind again.
+
+    A DUTY ICON IS FOUND BY ITS DUTY AND ITS SLOT and a control by its name in the column; a
+    resource has neither. Wheat, stone and silver are not moves the engine scores and not buttons
+    anybody presses -- they are the things a Duty Action hands you -- so they are filed under
+    tokens/, where the other two treatments of the same three already live, rather than under a
+    ninth duty folder or beside the controls.
+
+    THEY ARE THE THIRD TREATMENT OF THE SAME THREE THINGS. tokens/resources/ already holds a grey
+    wax `seal_` and a coin `token_` for each; these are the CUTOUT, which is the language the
+    board's duty marks are actually drawn in -- so for the first time a resource can be drawn in
+    the same hand as the action that gives it.
+
+    WHAT IS THE SAME is everything this page cares about: a 1254 square with a mark somewhere
+    inside it, a judgement about how much of it the board draws, and a record saying where it
+    came from. So they get the same card by the same rules.
+
+    THE LABEL IS THE SLUG, AND THAT IS A GAP RATHER THAN A CHOICE. The controls read their
+    wording out of duty_text.json because the board prints it too, and a second copy here would
+    be the same fault twice. The board prints no resource name anywhere yet -- the Tithe box is
+    an empty panel -- so there is nothing to read and inventing wording here would be inventing
+    it for the board as well. The day the Tithe box names what it holds, this should read that
+    block the way control_names() reads its own.
+    """
+    out, notes = [], []
+    want = set(image_suffixes())
+    masters = RESOURCE_DIR / "icons" / MASTERS
+    if not masters.is_dir():
+        return out, notes
+
+    for f in sorted((RESOURCE_DIR / "icons").glob("*")):
+        if not f.is_file() or f.suffix.lower() not in want:
+            continue
+        crel = f.relative_to(RESOURCE_DIR).as_posix()
+        if not (RESOURCE_DIR / master_of(crel, rec.get("tokens/resources/" + crel))).is_file():
+            notes.append("%s has no master, so its framing cannot be revisited here without "
+                         "cutting a cut" % f.name)
+
+    for f in sorted(masters.glob("*")):
+        if not f.is_file() or f.suffix.lower() not in want:
+            continue
+        rel = f.relative_to(RESOURCE_DIR).as_posix()
+        if "tokens/resources/" + rel not in rec:
+            notes.append("%s: no attribution entry, left out" % rel)
+            continue
+        m = re.match(r"resource_([a-z0-9]+)_icon_master_v\d+$", f.stem)
+        if not m:
+            notes.append("%s: the name does not say which resource, left out" % rel)
+            continue
+        key = m.group(1)
+        out.append(_card(f, key.capitalize(), next_resource_cut(key)))
+    return out, notes
+
+
+def next_resource_cut(key: str) -> str:
+    """What the tree would call the next cut of a resource icon.
+
+    The rule next_cut() and next_control_cut() both follow, for a name shaped a third way: a
+    resource has no duty and no slot either. All three answer the same question -- never hand
+    back a name that would overwrite a file whose sha256 is already recorded.
+    """
+    base = "resource_%s_icon" % key
+    folder = RESOURCE_DIR / "icons"
+    n = 0
+    if folder.is_dir():
+        for f in folder.iterdir():
+            m = re.match(re.escape(base) + r"_v(\d+)$", f.stem)
+            if m:
+                n = max(n, int(m.group(1)))
+    return "%s_v%02d%s" % (base, n + 1, PRINT_SUFFIX)
+
+
 def seeds() -> tuple[list, list]:
     """Every icon master in the tree, as the page wants it.
 
-    TWO ROOTS, ONE PAGE. The duty actions' icons and the board's three controls are filed apart
-    because everything else in the tree treats them differently; they are framed together because
-    this lab's question -- how much of a 1254 square does the board draw -- is the same for both.
+    THREE ROOTS, ONE PAGE. The duty actions' icons, the board's three controls and the three
+    resources are filed apart because everything else in the tree treats them differently -- a
+    duty action is a move the engine scores, a control is a button, a resource is a thing you are
+    handed. They are framed together because this lab's question, how much of a 1254 square does
+    the board draw, is the same for all three.
+
+    THE ORDER IS THE ORDER THEY REACH THE PAGE IN, and it is the order they were added: the
+    duties, then the controls, then the resources. Each root's cards arrive as one run, so a kind
+    reads as a row of its own rather than being interleaved with the others.
     """
     rec = _records()
     duty, dnotes = _duty_seeds(rec)
     ctrl, cnotes = _control_seeds(rec)
-    out = duty + ctrl
-    notes = dnotes + cnotes
+    res, rnotes = _resource_seeds(rec)
+    out = duty + ctrl + res
+    notes = dnotes + cnotes + rnotes
     if not out:
-        notes.append("no icon master is filed under %s or %s, so there is nothing to frame; "
-                     "the page still takes files dropped onto it" % (ART_DIR, CONTROL_DIR))
+        notes.append("no icon master is filed under %s, %s or %s, so there is nothing to frame; "
+                     "the page still takes files dropped onto it"
+                     % (ART_DIR, CONTROL_DIR, RESOURCE_DIR))
     return out, notes
 
 
@@ -418,17 +500,19 @@ def _cut_from(master_name: str) -> tuple | None:
     the two versions come apart -- Build Roads' fifth cut was taken from its fourth master -- so
     walking the folder and matching numbers would find the wrong one or none at all.
 
-    BOTH ROOTS, which this missed when the controls arrived. It filtered on `duty_actions/`, so the
-    three control cuts were invisible to it and the build reported them "framed but never cut" with
-    the cuts sitting right there -- a line that is worse than silence, because it reads as a job
-    still to do. The lesson is the one the seeds walk already learned: a second root is a second
-    place every path filter in this file has to know about.
+    AND IT FILTERS ON NO ROOT AT ALL, which is this function's third try. It read `duty_actions/`
+    only, so the three control cuts were invisible and the build reported them "framed but never
+    cut" with the cuts sitting right there -- a line worse than silence, because it reads as a job
+    still to do. Adding `controls/` fixed that one case and left the trap armed with the lesson
+    written in the docstring: the three resource cuts walked into it next, and the build would have
+    called them never cut on the day they were taken. So the prefix test is GONE rather than
+    lengthened. A record that is not under /masters/, names a master, carries a crop and is on disk
+    IS a cut, and in this tree nothing else is -- the record already answers the question the
+    prefix was guessing at. A fourth root inherits the check instead of breaking it.
     """
     best = None
     for path, e in _records().items():
         if "/masters/" in path:
-            continue
-        if not (path.startswith("duty_actions/") or path.startswith("controls/")):
             continue
         if e.get("master") != master_name or not e.get("crop"):
             continue
