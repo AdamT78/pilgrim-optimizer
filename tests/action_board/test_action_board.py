@@ -3731,11 +3731,12 @@ def test_each_control_draws_its_own_mark_and_says_so_when_it_cannot(geo, gen):
     # THE WORDING IS duty_text.json'S. A `labels` object typed into the page is the fault that
     # file exists to end, and the icon lab reads the same three strings for its card titles.
     assert "CONTROLS[name]" in body, "the controls' names are not read from the shared wording"
-    for typed in ('"Show Map"', '"Hire Building"', '"Confirm"'):
+    for typed in ('"Show Map"', '"Hire a building"', '"Confirm"'):
         assert typed not in page, (
             "%s is typed into the template again, so it can differ from duty_text.json" % typed)
     said = gen.control_text()
-    assert [said[k]["name"] for k in geo.MARKS_ORDER] == ["Show Map", "Hire Building", "Confirm"]
+    assert [said[k]["name"] for k in geo.MARKS_ORDER] == [
+        "Show Map", "Hire a building", "Confirm"]
 
 
 def test_an_unrecorded_control_is_left_out_and_named(gen, tmp_path, monkeypatch):
