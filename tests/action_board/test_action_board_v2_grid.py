@@ -40,6 +40,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 
 import pytest
 
@@ -70,11 +71,6 @@ HEIGHTS = (100, 130, 175, 250)
 # rectangles by five -- every rectangle is simply asked for its divider at each of these, inside
 # the row it already produced. Both ends are covered, because both ends are where this board's
 # overflows have always been.
-DIVIDES = (0, 1, 12, 24, 48)
-# What `GRID.divide` is set to for the row's own `L` -- the one every test that is NOT about the
-# divider reads. It is the generator's opening value, so those tests measure the board as it
-# opens; the divider's own guards walk `divs` and ignore this.
-GRID_DIVIDE_FOR_SWEEP = 12
 NACTS = (1, 2)
 
 
@@ -116,10 +112,26 @@ def _v2_tithe() -> tuple:
 
 
 def _tithe_keys() -> tuple:
+    """The four resource keys the board can inline.
+
+    ONE OF THEM IS A NAME, NOT A STRING. TITHE_KEYS reads
+    `("wheat", "stone", "silver", TITHE_WILD)`, so stripping quotes off each entry yields the
+    identifier `TITHE_WILD` where the key should be -- and every guard comparing against it then
+    compares against a word that is not a resource. Resolved here rather than worked around at
+    each call site.
+    """
     src = (TOOL / "generate_action_board_v2.py").read_text(encoding="utf-8")
     m = re.search(r"^TITHE_KEYS\s*=\s*\((.*?)\)\s*$", src, re.M)
     assert m, "the generator no longer declares TITHE_KEYS on one line"
-    return tuple(p.strip().strip('"') for p in m.group(1).split(",") if p.strip())
+    w = re.search(r'^TITHE_WILD = "(\w+)"', src, re.M)
+    assert w, "the generator no longer names the wildcard"
+    out = []
+    for part in m.group(1).split(","):
+        part = part.strip()
+        if not part:
+            continue
+        out.append(w.group(1) if part == "TITHE_WILD" else part.strip('"'))
+    return tuple(out)
 
 
 def _load(name: str, where: pathlib.Path = TOOL):
@@ -222,7 +234,7 @@ def sweep(tmpl, geo):
         "var LIFT = %s;" % _decl(tmpl, "LIFT"),
         "var CELL_BORDER = %s;" % _decl(tmpl, "CELL_BORDER"),
         "var PLATE_DROP = %s;" % _decl(tmpl, "PLATE_DROP"),
-        "var GRID = {gap: 0, disp: 0, size: 100, height: 100, divide: 12};",
+        "var GRID = {gap: 0, disp: 0, size: 100, height: 100};",
         "var PLATES_DROPPED = 0;",
         "var PLATE_H = 0;",
         _function(tmpl, "gridArea"),
@@ -238,7 +250,6 @@ def sweep(tmpl, geo):
         _function(tmpl, "plateInset"),
         _function(tmpl, "markAt"),
         _function(tmpl, "titheMarkAt"),
-        _function(tmpl, "dividerAt"),
         _function(tmpl, "placeFor"),
         # Flattened, so the tests below read one dict per rectangle rather than a nest.
         #
@@ -261,35 +272,16 @@ def sweep(tmpl, geo):
         "                              a.push(markAt(P, k)); return a; })(),",
         "          hasTithe: L.hasTithe, titheWhenNoneIsDealt: N.hasTithe,",
         "          titheMark: L.titheMark,",
-        # THE DIVIDER AT EVERY SETTING OF ITS OWN SLIDER, from inside one rectangle. placeFor is
-        # pure given GRID, so the slider is swept by setting it and asking again -- and GRID is
-        # put back afterwards, because everything below this line in the same row reads it.
-        "          divs: (function(){ var was = GRID.divide, a = [];",
-        "            DIVIDES.forEach(function(d){ GRID.divide = d;",
-        "              var L2 = placeFor(r, nAct, true);",
-        "              a.push({divide: d, left: L2.divider.left, top: L2.divider.top,",
-        "                      width: L2.divider.width, height: L2.divider.height,",
-        "                      has: L2.hasDivider, hasTithe: L2.hasTithe}); });",
-        "            GRID.divide = was; return a; })(),",
-        # AND THE SAME QUESTION ASKED AS TAXATION. `divs` above is placeFor answering as a duty
-        # that takes a resource, every time -- so "a divider is never drawn without a resource to
-        # divide it from" could not be exercised there at all, and the guard holding it would
-        # have passed on a board that drew a line down the middle of Taxation's empty frame.
-        "          divsNone: (function(){ var was = GRID.divide, a = [];",
-        "            DIVIDES.forEach(function(d){ GRID.divide = d;",
-        "              a.push({divide: d, has: placeFor(r, nAct, false).hasDivider}); });",
-        "            GRID.divide = was; return a; })(),",
         "          innerW: P.innerW, innerH: P.innerH, hang: plateHang(),",
         "          figLeft: L.figLeft, figRight: L.figRight};",
         "}",
-        "var GAPS = %s, DISPS = %s, SIZES = %s, HEIGHTS = %s, NACTS = %s, DIVIDES = %s;" % (
+        "var GAPS = %s, DISPS = %s, SIZES = %s, HEIGHTS = %s, NACTS = %s;" % (
             json.dumps(list(GAPS)), json.dumps(list(DISPS)), json.dumps(list(SIZES)),
-            json.dumps(list(HEIGHTS)), json.dumps(list(NACTS)), json.dumps(list(DIVIDES))),
+            json.dumps(list(HEIGHTS)), json.dumps(list(NACTS))),
         "var out = [];",
         "GAPS.forEach(function(gap){ DISPS.forEach(function(disp){",
         "  SIZES.forEach(function(size){ HEIGHTS.forEach(function(height){",
-        "    GRID = {gap: gap, disp: disp, size: size, height: height, divide: %d};" % (
-            GRID_DIVIDE_FOR_SWEEP,),
+        "    GRID = {gap: gap, disp: disp, size: size, height: height};",
         "    var area = gridArea(), cells = gridCells();",
         "    NACTS.forEach(function(n){",
         "      cells.forEach(function(c){",
@@ -462,7 +454,7 @@ def test_the_sweep_covers_the_sliders_the_page_actually_offers(tmpl):
     Falsify: change any slider's `max` in the template.
     """
     for ident, values in (("rGap", GAPS), ("rDisp", DISPS), ("rSize", SIZES),
-                          ("rHeight", HEIGHTS), ("rDivide", DIVIDES)):
+                          ("rHeight", HEIGHTS)):
         m = re.search(r"<input type=range id=%s min=(-?\d+) max=(-?\d+)" % ident, tmpl)
         assert m, "the template has no `<input type=range id=%s min=.. max=..>`" % ident
         lo, hi = int(m.group(1)), int(m.group(2))
@@ -1274,236 +1266,95 @@ def test_the_plate_hangs_below_the_line_and_is_flush_with_its_left_edge(sweep, t
 
 
 @needs_node
-def test_the_one_frame_spans_its_rectangle_edge_to_edge(sweep, tmpl):
-    """ONE FRAME, AS WIDE AS THE THING IT HANGS FROM.
+def test_the_frame_is_built_to_the_marks_and_the_resource_is_outside_it(sweep, tmpl):
+    """THE FRAME IS THE SIGNAL, which is what it was reshaped to be.
 
-    There were two for a round -- the duty's marks flush left in theirs, the resource flush right
-    in its own, and a gap between them that was whatever the width happened to leave. The frame
-    was widened to the rectangle and the resource moved into the end of it, which puts the
-    resource exactly where it already was and turns the gap into clear ground inside one object.
+    It has been three things. A frame of its own beside the resource's; then one frame spanning
+    the rectangle with the resource at its right-hand end; and now a frame built to the row of
+    marks, with the resource standing outside it on bare ground. The first two both made the two
+    objects look alike -- same ground, same border, or no border and the same ground -- and they
+    are not alike. An action is CHOSEN; a resource says what the tile provides, to anyone,
+    standing there or not. Inside a frame you can choose it; outside, it is telling you something.
 
-    SO THE FRAME HAS NO SIZE OF ITS OWN ANY MORE, and that is the claim: its width is the
-    rectangle's inner width, both edges, not a number worked out from what it holds.
+    READABLE AT REST, which is the whole point. The distinction used to live entirely in what
+    happened on hover, so a still board said nothing about which of the three objects on that line
+    could be pressed.
 
-    Falsify: build the frame from `rowBox` again, or inset it from either edge.
+    AND ONE WIDTH ON EVERY TILE, at every slider setting: `rowBox` is the widest row any duty
+    needs plus its margin, and it does not depend on the rectangle at all. So Taxation's frame is
+    the same object as everyone else's with nothing beside it.
+
+    Falsify: span the rectangle again, inset the frame from the left edge, or size it from the
+    duty's own marks.
     """
     border = float(_decl(tmpl, "CELL_BORDER"))
-    drew = 0
+    widths, drew = set(), 0
     for row in sweep:
         if row["centre"] or not row["plate"]["hasPlate"]:
             continue
-        p, r = row["plate"], row["r"]
+        p_, r = row["plate"], row["r"]
         drew += 1
-        assert p["plateX"] == r["x"] + border, (
+        widths.add(p_["plateW"])
+        assert p_["plateX"] == r["x"] + border, (
             "%s: the rectangle's inner left edge is at %g and the frame starts at %g"
-            % (_tag(row), r["x"] + border, p["plateX"]))
-        assert p["plateX"] + p["plateW"] == r["x"] + r["width"] - border, (
-            "%s: the rectangle's inner right edge is at %g and the frame ends at %g"
-            % (_tag(row), r["x"] + r["width"] - border, p["plateX"] + p["plateW"]))
+            % (_tag(row), r["x"] + border, p_["plateX"]))
+        assert p_["plateW"] == p_["rowBox"], (
+            "%s: the frame is %g wide and the row it holds needs %g"
+            % (_tag(row), p_["plateW"], p_["rowBox"]))
+        assert p_["plateX"] + p_["plateW"] < r["x"] + r["width"] - border, (
+            "%s: the frame still reaches the rectangle's far edge" % _tag(row))
     assert drew, "no arrangement in the sweep drew a frame, so nothing was checked"
+    assert len(widths) == 1, (
+        "the frames come in %d widths (%s); one is built to something other than the widest row"
+        % (len(widths), sorted(widths)))
 
 
-@needs_node
-def test_the_resource_keeps_the_margin_at_its_end_that_the_marks_keep_at_theirs(sweep, tmpl):
-    """THE TWO ENDS OF ONE FRAME HAVE TO BE EQUAL, and nothing but a shared expression makes them.
+def test_the_resource_did_not_move_when_the_frame_left_it(sweep, tmpl, geo):
+    """THE FRAME MOVED AWAY FROM THE RESOURCE; THE RESOURCE DID NOT MOVE.
 
-    The duty's marks keep `GEO.marks.pad` from the frame's outer left edge and the resource keeps
-    the same from its outer right. Written as two margins they would be a pair that merely matches
-    today: the day the controls retighten and `GEO.marks.pad` moves, one end would follow and the
-    other would not, and the frame would be visibly lopsided in a way no single number explains.
-    So `titheMarkAt` is `plateInset` measured from the other end, and this holds the result.
+    It keeps `GEO.marks.pad` from the RECTANGLE's inner right edge -- the margin it kept from the
+    frame's right edge while the frame ended there -- so nothing on the board shifted when the
+    frame shrank and the only visible change is that there is no edge around it. A resource that
+    had also jumped sideways would have made the change look bigger than it is, and made it hard
+    to judge the one thing being judged.
 
-    Falsify: write the right-hand margin out as its own arithmetic, or drop the `2 * PLATE_BORDER`
-    that pays for the frame's border at both ends.
+    AND IT IS LEVEL WITH THE MARKS BESIDE IT. `P.ip` does both jobs: the margin from the
+    rectangle's edge, and the inset that centres a 50px mark on a 62px line. The same number,
+    because the line IS the mark plus that margin at each end -- so a resource that drifted
+    vertically would mean the two had come apart.
+
+    Falsify: measure from the frame's edge instead of the rectangle's, or centre it on the line
+    with its own arithmetic.
     """
-    src = _code(_function(tmpl, "titheMarkAt"))
-    assert "plateInset(P)" in src, (
-        "the resource's margin is no longer the mirror of the marks':\n%s" % src)
-    assert not re.search(r"GEO\.(ribbon|marks)\.", src), (
-        "the resource has started working its margin out from geometry a second time:\n%s" % src)
-    border = float(_decl(tmpl, "PLATE_BORDER"))
+    pad = geo.as_dict()["marks"]["pad"]
+    border = float(_decl(tmpl, "CELL_BORDER"))
     drew = 0
     for row in sweep:
         if row["centre"] or not row["plate"]["hasTithe"]:
             continue
-        p = row["plate"]
+        p_, r = row["plate"], row["r"]
         drew += 1
-        # Both measured from the frame's own outer edges, which is the frame anybody can see.
-        left = border + p["marks"][0]["left"] - p["inset"]
-        right = p["plateW"] - (border + p["titheMark"]["left"] + p["titheMark"]["size"])
-        assert left == right, (
-            "%s: the marks start %g from the frame's left edge and the resource ends %g from its "
-            "right" % (_tag(row), left, right))
-        assert p["titheMark"]["top"] == p["marks"][0]["top"], (
-            "%s: the resource and the duty marks sit at different heights in one frame"
-            % _tag(row))
-        assert p["titheMark"]["size"] == p["sz"], (
-            "%s: the resource is drawn at %g and a duty mark at %g"
-            % (_tag(row), p["titheMark"]["size"], p["sz"]))
+        right = p_["titheMark"]["x"] + p_["titheMark"]["size"]
+        assert right == r["x"] + r["width"] - border - pad, (
+            "%s: the resource ends %g from the rectangle's inner right edge, not %g"
+            % (_tag(row), (r["x"] + r["width"] - border) - right, pad))
+        assert p_["titheMark"]["y"] == p_["plateY"] + pad, (
+            "%s: the resource sits %g below the frame's top, not %g"
+            % (_tag(row), p_["titheMark"]["y"] - p_["plateY"], pad))
+        assert p_["titheMark"]["size"] == p_["sz"], (
+            "%s: the resource is %g and a duty mark is %g"
+            % (_tag(row), p_["titheMark"]["size"], p_["sz"]))
+        # LEVEL WITH THE MARKS, measured rather than argued. The marks are placed against the
+        # frame's PADDING box, one PLATE_BORDER inside its top; the resource is placed against the
+        # board. Comparing them without that border is off by one -- which is the size of error
+        # this guard exists to catch and would therefore have hidden.
+        pb = float(_decl(tmpl, "PLATE_BORDER"))
+        assert p_["titheMark"]["y"] - p_["plateY"] == pb + p_["marks"][0]["top"], (
+            "%s: the resource sits %g below the frame's top and the marks sit %g"
+            % (_tag(row), p_["titheMark"]["y"] - p_["plateY"], pb + p_["marks"][0]["top"]))
     assert drew, "no arrangement in the sweep drew a resource, so nothing was checked"
 
 
-@needs_node
-def test_the_divider_stands_in_front_of_the_resource_by_what_the_slider_says(sweep):
-    """MEASURED LEFTWARD FROM THE RESOURCE, WHICH IS THE ONLY ANCHOR THAT HOLDS STILL.
-
-    The resource is pinned to the frame's right-hand end and never moves. The duty's marks do: a
-    one-action duty centres its single mark in the span a two-action duty fills, so Allocation's
-    row ends 28px before Clerical's. Anchor the divider to the marks and one slider setting puts
-    the line in two different places on two rectangles side by side, which reads as the board
-    being wrong rather than as the duties differing.
-
-    So the claim is the slider's own arithmetic: at `divide`, the line stands exactly `divide` in
-    front of the resource, on every rectangle, at every setting of every other slider.
-
-    Falsify: measure the divider from `rowEnd`, from the frame's left edge, or add the slider
-    instead of subtracting it.
-    """
-    checked = 0
-    for row in sweep:
-        if row["centre"]:
-            continue
-        p = row["plate"]
-        for d in p["divs"]:
-            checked += 1
-            assert p["titheMark"]["left"] - d["left"] == d["divide"], (
-                "%s, divide %d: the resource starts at %g and the line at %g, which is %g in "
-                "front of it" % (_tag(row), d["divide"], p["titheMark"]["left"], d["left"],
-                                 p["titheMark"]["left"] - d["left"]))
-    assert checked, "the sweep never placed a divider, so nothing was checked"
-
-
-@needs_node
-def test_the_divider_is_the_frames_own_edge_stood_up_inside_it(sweep, tmpl):
-    """SAME COLOUR AND SAME THICKNESS BECAUSE IT IS THE SAME LINE, not because it matches today.
-
-    The frame's edge was a literal -- `1px solid #2a2721` -- while the frame was the only thing
-    drawn in it. A second dark hairline matched by eye is how a board ends up with two
-    near-identical colours and no way to tell which one moved when one of them does. So the
-    colour is a token both read, and the thickness is PLATE_BORDER rather than a 1 typed into
-    dividerAt.
-
-    AND IT IS SHORTER THAN THE FRAME AT BOTH ENDS, which is the part that was asked for and the
-    part that keeps it from reading as a wall between two frames -- the thing the merged frame
-    exists to stop being. The space it leaves is the marks' own: the line is exactly as tall as
-    the icons either side of it and starts and ends where they do.
-
-    Falsify: write the colour into .tdiv, type a width into dividerAt, or run the line to the
-    frame's full height.
-    """
-    root = _rule(tmpl, ":root")
-    assert root.get("--plate-edge"), "there is no --plate-edge token for the two to share"
-    plate = _rule(tmpl, ".iplate")
-    assert "var(--plate-edge)" in plate.get("border", ""), (
-        "the frame's border is no longer drawn from the shared token: %s" % plate.get("border"))
-    div = _rule(tmpl, ".tdiv")
-    assert div.get("background") == "var(--plate-edge)", (
-        "the divider is no longer drawn in the frame's own edge colour: %s" % div)
-
-    src = _code(_function(tmpl, "dividerAt"))
-    assert "PLATE_BORDER" in src, (
-        "the divider's thickness is no longer the frame's own:\n%s" % src)
-    assert "plateInset(P)" in src and "P.sz" in src, (
-        "the divider no longer takes its top and height from the marks:\n%s" % src)
-
-    border = float(_decl(tmpl, "PLATE_BORDER"))
-    for row in sweep:
-        if row["centre"]:
-            continue
-        p = row["plate"]
-        for d in p["divs"]:
-            assert d["width"] == border, (
-                "%s: the divider is %g thick and the frame's edge is %g"
-                % (_tag(row), d["width"], border))
-            assert d["top"] == p["marks"][0]["top"], (
-                "%s: the divider starts at %g and the marks at %g"
-                % (_tag(row), d["top"], p["marks"][0]["top"]))
-            assert d["height"] == p["sz"], (
-                "%s: the divider is %g tall and a mark is %g"
-                % (_tag(row), d["height"], p["sz"]))
-            # AND THE SPACE IT LEAVES IS REAL SPACE, measured against the frame it sits in rather
-            # than taken on trust from the two asserts above.
-            gap_top = border + d["top"]
-            gap_bottom = p["fullH"] - (border + d["top"] + d["height"])
-            assert gap_top > 0 and gap_bottom > 0, (
-                "%s: the divider runs to the frame's edge -- %g above, %g below"
-                % (_tag(row), gap_top, gap_bottom))
-            assert gap_top == gap_bottom, (
-                "%s: the divider leaves %g above and %g below" % (_tag(row), gap_top, gap_bottom))
-
-
-@needs_node
-def test_a_divider_that_would_land_on_the_marks_is_refused_and_counted(sweep, tmpl):
-    """THE SLIDER REACHES FURTHER THAN THE GAP DOES, WHICH IS THE POINT AND ALSO THE PROBLEM.
-
-    `divide` runs to 48 and the clear ground at the opening settings is 24. Past that the line
-    would be drawn ON the duty's marks -- not a divider but a stripe through an icon -- so it is
-    refused, and about a third of the slider's travel draws nothing at those settings. It is
-    counted and said, the same bargain the frame and the resource already strike.
-
-    ALL SEVEN GO TOGETHER, AND THAT IS WHY THE CLEARANCE IS MEASURED AGAINST `fullRow`. The span
-    reserved for the widest row any duty needs is the same on every rectangle; where a SHORT row
-    actually ends is not, because a one-action duty centres its mark in that span and so ends
-    28px earlier. Measure against the real end and Allocation would keep its line for another 28
-    steps of the slider after the other six lost theirs -- one rectangle out of eight behaving
-    differently, which reads as a fault rather than as a limit. Measured against the reserved
-    span the slider has one threshold for the whole board.
-
-    AND THE REFUSAL IS NOT VACUOUS: the sweep is asked to show both a setting where the line is
-    drawn and one where it is refused, because a condition that never binds is one this file has
-    carried twice before.
-
-    Falsify: draw the divider whatever the slider says, drop the counter, or let it sit exactly
-    on `rowEnd`.
-    """
-    drawn = refused = 0
-    for row in sweep:
-        if row["centre"]:
-            continue
-        p = row["plate"]
-        row_end = p["marks"][0]["left"] - p["inset"] + p["fullRow"]
-        for d in p["divsNone"]:
-            assert not d["has"], (
-                "%s, divide %d: a duty dealt no resource was given a divider, so its empty frame "
-                "has a line down the middle of it" % (_tag(row), d["divide"]))
-        for d in p["divs"]:
-            # ONLY WHERE THERE IS A RESOURCE TO DIVIDE FROM. A divider is refused for two quite
-            # different reasons -- the slider pushed it into the marks, or the rectangle had no
-            # room for the resource in the first place -- and this guard is about the first. The
-            # second is `test_the_resource_is_given_up_before_the_dutys_own_marks_are`'s, and
-            # lumping them together had this asserting that a line refused at x 474 under a
-            # rectangle whose frame fell off the canvas "had somewhere to go".
-            if not d["hasTithe"]:
-                continue
-            if d["has"]:
-                drawn += 1
-                assert d["left"] > row_end, (
-                    "%s, divide %d: the duty's marks end at %g and the line was drawn at %g"
-                    % (_tag(row), d["divide"], row_end, d["left"]))
-            else:
-                refused += 1
-                assert d["left"] <= row_end, (
-                    "%s, divide %d: the line was refused at %g with the marks ending at %g, so "
-                    "it had somewhere to go" % (_tag(row), d["divide"], d["left"], row_end))
-    assert drawn, "no divider was drawn anywhere in the sweep"
-    assert refused, (
-        "no divider was refused anywhere in the sweep, so the condition that refuses one cannot "
-        "be doing anything -- which is what this file has removed two conditions for")
-
-    grid = _code(_function(tmpl, "drawGrid"))
-    assert "DIVIDERS_DROPPED = 0;" in grid, (
-        "drawGrid no longer zeroes the divider counter, so it grows on every slider event")
-    assert "DIVIDERS_DROPPED++" in grid, "nothing counts a refused divider"
-    wire = _code(_function(tmpl, "wireGrid"))
-    assert "DIVIDERS_DROPPED" in wire, "the readout never mentions a refused divider"
-    m = re.search(r"tag\.style\.color = \((.*?)\)\s*\?", wire, re.S)
-    assert m, "the readout no longer colours itself at all"
-    assert "DIVIDERS_DROPPED" in [t.strip() for t in m.group(1).split("||")], (
-        "a refused divider does not colour the readout, so the number is printed in the same "
-        "grey as the numbers that are fine")
-
-
-@needs_node
 def test_the_resource_never_crowds_the_dutys_own_marks(sweep):
     """INSIDE ONE FRAME, DISTANCE IS THE ONLY THING SAYING THESE ARE TWO KINDS OF OBJECT.
 
@@ -1526,13 +1377,14 @@ def test_the_resource_never_crowds_the_dutys_own_marks(sweep):
         if not (p["hasPlate"] and p["hasTithe"]):
             continue
         drew += 1
-        # Where the widest row any duty needs ends, which is the span the marks are centred in.
-        row_end = p["marks"][0]["left"] - p["inset"] + p["fullRow"]
-        assert p["titheMark"]["left"] - row_end >= p["igap"], (
-            "%s: the duty's marks end at %g and the resource starts at %g, which is %g apart "
-            "against the %g between the marks themselves"
-            % (_tag(row), row_end, p["titheMark"]["left"],
-               p["titheMark"]["left"] - row_end, p["igap"]))
+        # THE FRAME'S OWN RIGHT EDGE, which is the boundary the eye actually sees. It used to be
+        # where the row of marks ended, inside a frame that reached past it.
+        frame_end = p["plateX"] + p["plateW"]
+        assert p["titheMark"]["x"] - frame_end >= p["igap"], (
+            "%s: the frame ends at %g and the resource starts at %g, which is %g apart against "
+            "the %g between the marks themselves"
+            % (_tag(row), frame_end, p["titheMark"]["x"],
+               p["titheMark"]["x"] - frame_end, p["igap"]))
     assert drew, "no arrangement drew both, so nothing was checked"
 
 
@@ -1599,6 +1451,633 @@ def test_a_duty_dealt_no_resource_gets_no_resource_at_any_setting(sweep):
             continue
         assert row["plate"]["titheWhenNoneIsDealt"] is False, (
             "%s: a duty dealt no resource was given one anyway" % _tag(row))
+
+
+# ---------------------------------------------------------------- the tithe pool
+
+
+def _v2_seats() -> dict:
+    """The demo occupancy the page opens on, read out of the template as JSON-ish text."""
+    src = TMPL.read_text(encoding="utf-8")
+    m = re.search(r"^var V2_SEATS = (\{.*?\n\};)", src, re.M | re.S)
+    assert m, "the template no longer declares V2_SEATS"
+    body = m.group(1).rstrip(";")
+    body = re.sub(r"(\w+):", r'"\1":', body)
+    return json.loads(body)
+
+
+def _lift(geo) -> int:
+    """The template's own LIFT, worked out from geometry the way the page works it out."""
+    d = geo.as_dict()
+    return d["art"]["y"] - (d["status"]["y"] + d["status"]["height"] + 16)
+
+
+def _wild_duty(geo, ring) -> str:
+    """The slug the wildcard is dealt to, found rather than typed -- it has moved once already."""
+    wild = _tithe_token()["wild"]
+    for (slug, _, _), key in zip(geo.DUTIES, ring):
+        if key == wild:
+            return slug
+    raise AssertionError("no duty is dealt the wildcard, so its rule cannot be isolated")
+
+
+def _single_duty(geo, ring) -> str:
+    """A duty offering exactly one ordinary resource, for the pool-of-one case."""
+    wild = _tithe_token()["wild"]
+    for (slug, _, _), key in zip(geo.DUTIES, ring):
+        if key is not None and key != wild:
+            return slug
+    raise AssertionError("no duty offers a plain resource")
+
+
+@pytest.fixture(scope="module")
+def pool(tmpl, geo):
+    """Every seat's tithe pool, worked out by the template's own functions in node.
+
+    Driven against the REAL demo occupancy and the REAL ring rather than a fixture of this
+    file's own, because what is being checked is partly the deal: that the cornucopia on
+    Construct reaches p3, and that Taxation's seats bring nothing. A stub here would check the
+    arithmetic and miss the thing the arithmetic is for.
+    """
+    if shutil.which("node") is None:
+        pytest.skip("node is not installed")
+    ring = _v2_tithe()
+    duties = [{"slug": s, "face": geo.face_of(d)} for s, _, d in geo.DUTIES]
+    dmap = {s: {"tithe": k} for (s, _, _), k in zip(geo.DUTIES, ring)}
+    seats = _v2_seats()
+    occ = {slug: seats.get(slug, []) for slug in dmap}
+    players = [p["id"] for p in geo.as_dict()["players"]]
+    script = "\n".join([
+        "var GEO = %s;" % json.dumps({
+            "duties": duties, "tithe": geo.as_dict()["tithe"],
+            "marks": {"pad": geo.as_dict()["marks"]["pad"]},
+            "canvas": geo.as_dict()["canvas"], "slots": geo.as_dict()["slots"]}),
+        "var PANEL_BORDER = %s;" % _decl(tmpl, "PANEL_BORDER"),
+        "var LIFT = %d;" % _lift(geo),
+        "var DUTIES = %s;" % json.dumps(dmap),
+        "var TITHE = %s;" % json.dumps(_tithe_token()),
+        "var S = {occupancy: %s, seat: null, slot: null, tithe: null};" % json.dumps(occ),
+        "function dutyOf(slug){ return DUTIES[slug]; }",
+        _function(tmpl, "tithePool"),
+        _function(tmpl, "onlyTithe"),
+        _function(tmpl, "titheLayout"),
+        _function(tmpl, "titheSlotLeft"),
+        _function(tmpl, "lifted"),
+        _function(tmpl, "controlBox"),
+        "var out = {pools: {}, only: {}, layout: {}, iso: {}, isoOnly: {}};",
+        "%s.forEach(function(p){ S.seat = p;" % json.dumps(players),
+        "  out.pools[p] = tithePool(p); out.only[p] = onlyTithe(); });",
+        "[1,2,3].forEach(function(n){ out.layout[n] = titheLayout(n); });",
+        # BOTH COLUMNS' ROWS IN BOARD COORDINATES, worked out by the page's own functions. The
+        # column used to share the box's rect, so "same y, same height" was proof enough; it is
+        # hung off the box's first row now, so the rows themselves are what has to be compared.
+        "var _C = controlBox(), _L = titheLayout(TITHE.order.length);",
+        "var _bt = lifted(GEO.tithe);",
+        "out.cols = {box: {y: _bt.y, height: _bt.height, rows: []},",
+        "            col: {y: _C.y, height: _C.height, width: _C.width, start: _C.start,",
+        "                  size: _C.size, left: _C.left, x: _C.x, rows: []},",
+        "            block: _L.block};",
+        "for (var i = 0; i < TITHE.order.length; i++){",
+        "  out.cols.box.rows.push(_bt.y + PANEL_BORDER + _L.start + i * _L.pitch);",
+        "  out.cols.col.rows.push(_C.y + PANEL_BORDER + _C.start + i * _C.pitch); }",
+        # THE DEMO OCCUPANCY PROVES LESS THAN IT LOOKS, which three mutations found at once. Every
+        # seat that stands on the cornucopia ALSO stands on a silver tile, so removing the union
+        # changes nothing; every seat on Taxation already holds wheat, so counting Taxation
+        # changes nothing; and no seat has a pool of exactly one, so the branch that answers a
+        # single resource was never taken. A guard driven only by the real state agreed with all
+        # three mistakes. These stand one figure on one tile so each rule is the only thing that
+        # could produce the answer.
+        "var REAL = S.occupancy;",
+        "var ISO = {wildOnly: %s, taxOnly: %s, oneOnly: %s, nowhere: {}};" % (
+            json.dumps({_wild_duty(geo, ring): ["z"]}),
+            json.dumps({"taxation": ["z"]}),
+            json.dumps({_single_duty(geo, ring): ["z"]})),
+        "for (var k in ISO){ S.occupancy = ISO[k]; S.seat = 'z';",
+        "  out.iso[k] = tithePool('z'); out.isoOnly[k] = onlyTithe(); }",
+        "S.occupancy = REAL;",
+        "process.stdout.write(JSON.stringify(out));",
+    ])
+    done = subprocess.run(["node", "-e", script], capture_output=True, text=True)
+    assert done.returncode == 0, (
+        "the template's own tithe arithmetic would not run:\n%s" % done.stderr[-3000:])
+    return json.loads(done.stdout)
+
+
+def _tithe_token() -> dict:
+    """What the generator hands the page as __TITHE__ -- the order and the wildcard."""
+    src = (TOOL / "generate_action_board_v2.py").read_text(encoding="utf-8")
+    m = re.search(r'^TITHE_WILD = "(\w+)"', src, re.M)
+    assert m, "the generator no longer names the wildcard"
+    wild = m.group(1)
+    keys = _tithe_keys()
+    return {"order": [k for k in keys if k != wild], "wild": wild}
+
+
+@needs_node
+def test_the_pool_is_what_this_seats_figures_are_standing_on(pool, geo):
+    """THE BOX IS NOT A PROPERTY OF THE SELECTED DUTY, which is what it looked like.
+
+    Taking a tithe moves nobody, so it does not matter which duty is selected when you take one.
+    What matters is where your figures already are: the pool is the resources offered by every
+    tile this seat stands on. Checked against the page's REAL demo occupancy and the REAL ring,
+    because half of what is being held is the deal rather than the arithmetic.
+
+    Falsify: read the selected duty's resource instead, or drop the occupancy test.
+    """
+    assert pool["pools"]["p1"] == ["wheat", "stone"], (
+        "p1 stands on Clerical, Allocation and Give Alms -- wheat, stone, wheat -- and got %s"
+        % pool["pools"]["p1"])
+    assert pool["pools"]["p2"] == ["wheat", "stone", "silver"], pool["pools"]["p2"]
+
+
+@needs_node
+def test_the_pool_is_a_set_in_the_generators_own_order(pool):
+    """FIGURES ON TWO STONE TILES GIVE YOU STONE, NOT STONE TWICE.
+
+    You take ONE resource, so a second tile offering the same thing changes nothing you could
+    choose -- and a box listing stone twice would be offering a choice between a thing and
+    itself. p1 stands on two wheat tiles and gets one wheat.
+
+    AND IN A FIXED ORDER, which is the generator's. Walking the duties and appending as they come
+    would list a pool in whatever order the ring happens to run, so the same two resources would
+    swap places between seats and the box would never settle.
+
+    Falsify: build the pool by appending per duty, or sort it some other way.
+    """
+    for seat, got in pool["pools"].items():
+        assert len(got) == len(set(got)), "%s's pool repeats: %s" % (seat, got)
+    order = _tithe_token()["order"]
+    for seat, got in pool["pools"].items():
+        assert got == [k for k in order if k in got], (
+            "%s's pool is %s, which is not %s order" % (seat, got, order))
+
+
+@needs_node
+def test_the_cornucopia_unions_every_resource_in_and_taxation_adds_none(pool):
+    """THE WILDCARD'S WHOLE RULE IN ONE LINE, and the one duty that offers nothing.
+
+    A figure on the cornucopia tile lets you take any resource, so rather than appearing in the
+    box as a fourth thing to choose it puts the other three in. p3 stands on Construct and on
+    nothing else that offers silver -- Produce is p2 and p3 both, so take care -- and still has
+    the full three.
+
+    TAXATION ADDS NOTHING, which is the other end of the same test: it is the one duty with no
+    resource, and a pool that counted it would be offering something that does not exist.
+
+    Falsify: let the wildcard into the pool as itself, or give Taxation a resource.
+    """
+    order = _tithe_token()["order"]
+    wild = _tithe_token()["wild"]
+
+    # ONE FIGURE ON THE CORNUCOPIA AND NOWHERE ELSE, which is the only way to see the rule at
+    # all. Every seat in the demo state that stands on Construct also stands on a silver tile, so
+    # a pool built WITHOUT the union comes out identical for all of them -- this guard passed on
+    # a page that had dropped the rule entirely until a mutation said so.
+    assert pool["iso"]["wildOnly"] == order, (
+        "a figure on the cornucopia alone should hold every resource, not %s"
+        % pool["iso"]["wildOnly"])
+    for where, got in list(pool["pools"].items()) + list(pool["iso"].items()):
+        assert wild not in got, (
+            "%s's pool offers the wildcard itself, which cannot be taken: %s" % (where, got))
+
+    # AND ONE FIGURE ON TAXATION, for the same reason: both seats standing there already hold
+    # wheat, so giving Taxation a resource changed nothing anybody could measure.
+    assert pool["iso"]["taxOnly"] == [], (
+        "a figure on Taxation alone should hold nothing, not %s" % pool["iso"]["taxOnly"])
+
+    # AND A SEAT STANDING NOWHERE HAS NOTHING. The empty box is the case easiest to forget and
+    # the one that lets a confirm be offered for a move nobody can make.
+    assert pool["pools"]["p4"] == [], "p4 stands nowhere and got %s" % pool["pools"]["p4"]
+    assert pool["iso"]["nowhere"] == [], pool["iso"]["nowhere"]
+
+
+@needs_node
+def test_one_resource_answers_itself_the_way_a_one_action_duty_does(pool):
+    """WHERE THERE IS NOTHING TO CHOOSE, CHOOSING THE THING CHOOSES IT.
+
+    `onlySlot` settled this shape for a duty holding one action; a pool holding one resource is
+    the same question. Without it the board sits with the Take Tithe box lit, the confirm
+    withheld, and exactly one place to click to proceed -- a second click with one possible
+    target, which reads as the board not having noticed the first.
+
+    Falsify: always return null, or return the first of any pool.
+    """
+    # NO SEAT IN THE DEMO STATE HAS A POOL OF ONE, so driven against it alone this guard took
+    # the `len == 1` branch exactly never and agreed with a function that returned null always.
+    # `oneOnly` stands one figure on one ordinary duty, which is the whole case.
+    assert len(pool["iso"]["oneOnly"]) == 1, pool["iso"]["oneOnly"]
+    assert pool["isoOnly"]["oneOnly"] == pool["iso"]["oneOnly"][0], (
+        "a pool of one does not answer itself: %r" % pool["isoOnly"]["oneOnly"])
+    assert pool["isoOnly"]["nowhere"] is None, "an empty pool answered with something"
+
+    for seat, got in pool["pools"].items():
+        want = got[0] if len(got) == 1 else None
+        assert pool["only"][seat] == want, (
+            "%s has a pool of %d (%s) and answers %r" % (seat, len(got), got, pool["only"][seat]))
+    assert any(len(g) > 1 for g in pool["pools"].values()), (
+        "no seat has more than one resource, so the null case is never shown")
+
+
+@needs_node
+def test_every_resource_in_the_box_is_drawn_the_same_size(pool, geo, tmpl):
+    """THE SAME OBJECT AT TWO SIZES, FOR A REASON THAT HAS NOTHING TO DO WITH IT.
+
+    The column used to be divided by however many resources the pool held, so one was drawn at
+    the box's full width and three at a third of it. Switch seat and the wheat changed size while
+    nothing about wheat changed -- the size was carrying how many OTHER resources you happened to
+    hold, which is not a fact about wheat. The duty marks settled this for the board already: an
+    icon that changes size with the arrangement is one you cannot compare, so the size is fixed
+    and the room is what gives.
+
+    AND THE SIZE IS THE FULL SET'S, taken from TITHE.order rather than from a 3. The box is built
+    for every resource there is, so a fourth would rescale every pool together instead of the box
+    quietly meaning something different depending on who is looking at it.
+
+    Falsify: divide the column by the pool again, or write the full count as a literal.
+    """
+    # READ, NOT MERELY CORRECT. Typing the right number passes every measurement below -- a
+    # mutation replacing the computed height with the 213 it happens to equal went unnoticed --
+    # so the source is asked whether it is deriving the column or restating it.
+    src = _code(_function(tmpl, "titheLayout"))
+    assert "GEO.tithe" in src and "GEO.marks.pad" in src, (
+        "the box's layout no longer comes from geometry:\n%s" % src)
+    assert "TITHE.order.length" in src, (
+        "the box is no longer built for every resource there is:\n%s" % src)
+    assert not re.search(r"[^.\w]\d{2,}", src), (
+        "the box's layout has a number typed into it:\n%s" % src)
+
+    t = geo.as_dict()["tithe"]
+    pad = geo.as_dict()["marks"]["pad"]
+    full = len(_tithe_token()["order"])
+    sizes = {n: pool["layout"][str(n)]["size"] for n in (1, 2, 3)}
+    assert len(set(sizes.values())) == 1, (
+        "a resource is drawn at %s depending on how many others there are" % sorted(set(sizes.values())))
+
+    L = pool["layout"]["3"]
+    top = t["labelTop"] + t["labelH"] + pad
+    h = t["height"] - top - pad
+    w = t["width"] - 2 * pad
+    assert L["size"] == min(h / full - pad, w), (
+        "the resources are %g where the full set of %d gives %g"
+        % (L["size"], full, min(h / full - pad, w)))
+    assert 0 < L["size"] <= w
+
+
+@needs_node
+def test_the_block_of_resources_is_centred_with_one_spacing(pool, geo):
+    """FEWER RESOURCES CLOSE UP AND SIT IN THE MIDDLE, with the air between them unchanged.
+
+    A resource you do not have is not a slot standing empty -- there is nothing to say about it --
+    so two resources are two marks in the middle of the column with the same gap between them
+    that three would have. The gap is the board's own margin, so the pair reads as the same
+    object spaced the same way rather than as a short version of a longer list.
+
+    THE CENTRING IS THE CLAIM, and it is checked as equal air at both ends rather than by
+    recomputing the start, because a test that re-derives the position agrees with a mistake in
+    it for the same reason the mistake happened.
+
+    Falsify: pin the block to the top, or let the spacing follow the pool.
+    """
+    t = geo.as_dict()["tithe"]
+    pad = geo.as_dict()["marks"]["pad"]
+    top = t["labelTop"] + t["labelH"] + pad
+    bottom = top + (t["height"] - top - pad)
+
+    pitches = set()
+    for n in (1, 2, 3):
+        L = pool["layout"][str(n)]
+        pitches.add(L["pitch"])
+        assert L["pitch"] == L["size"] + pad, (
+            "n=%d: the gap between resources is %g, not the board's own %g"
+            % (n, L["pitch"] - L["size"], pad))
+        assert L["block"] == n * L["size"] + (n - 1) * pad, (
+            "n=%d: %d resources and %d gaps do not come to %g" % (n, n, n - 1, L["block"]))
+        above = L["start"] - top
+        below = bottom - (L["start"] + L["block"])
+        assert abs(above - below) < 1e-9, (
+            "n=%d: %g of air above the resources and %g below" % (n, above, below))
+        assert above >= 0, "n=%d: the block starts %g above the column" % (n, -above)
+    assert len(pitches) == 1, (
+        "the spacing changes with the pool: %s" % sorted(pitches))
+
+
+def test_choosing_an_action_puts_the_resource_down(tmpl):
+    """S.slot AND S.tithe ARE TWO HALVES OF ONE ANSWER, so one cannot outlive the other.
+
+    "I am taking a tithe, and it is stone" is one sentence. Choose an action afterwards and the
+    resource has to go with it, or the board keeps a resource chosen underneath an action and the
+    confirm gate reads a stale yes.
+
+    ALL THREE ROUTES, which is the half that was missed. The line went into `select()` -- the
+    route the action PICTURES take -- and not into `pickAction`, the route the action MARKS take,
+    so clicking a mark left the resource set while clicking the picture cleared it. Two ways to
+    make one choice, disagreeing. Found by driving the page rather than by reading it.
+
+    Falsify: drop `S.tithe = null` from any of select, pickAction or pickDuty.
+    """
+    for fn in ("select", "pickAction", "pickDuty"):
+        body = _code(_function(tmpl, fn))
+        assert re.search(r"S\.tithe = null;", body), (
+            "%s does not put the resource down, so it can outlive the action:\n%s" % (fn, body))
+
+
+def test_the_board_never_claims_a_duty_and_a_tithe_at_once(tmpl):
+    """TAKING A TITHE CHOOSES NO DUTY, so no duty may wear the chosen rim while one is taken.
+
+    Nobody moves when you take a tithe, so it does not matter which duty was selected -- and the
+    board sat with the gold rim on whichever tile you were last looking at while the Take Tithe
+    box was also lit, which is two answers to a question that has one. The cards above stay up,
+    because they are what you are BROWSING; the rim is what says CHOSEN.
+
+    Falsify: set the rim from S.duty alone again.
+    """
+    body = _code(_function(tmpl, "render"))
+    m = re.search(r"var chosen = (.*?);", body)
+    assert m, "render no longer works the chosen duty out in one place:\n%s" % body[:600]
+    assert "S.slot !== TITHE_SLOT" in m.group(1), (
+        "the chosen rim ignores the tithe, so a duty stays lit while one is taken: %s"
+        % m.group(1))
+    assert body.count('classList.toggle("sel", chosen)') == 2, (
+        "the tile and the grid rectangle no longer take the rim from one answer")
+
+
+def test_the_confirm_waits_for_the_resource(tmpl):
+    """A TITHE IS TWO HALVES AND THE CONFIRM MAY NOT APPEAR ON THE FIRST.
+
+    `S.slot` alone used to be the whole question, because every answer it could hold was
+    complete. A tithe is not: offering the confirm the moment the box is pressed lets you commit
+    a choice you have not made. A pool of one answers itself, so this is never in the way of the
+    common case.
+
+    Falsify: gate the confirm on S.slot alone again.
+    """
+    body = _code(_function(tmpl, "render"))
+    m = re.search(r"var ready = (.*?);", body)
+    assert m, "render no longer works out whether there is something to commit:\n%s" % body[-900:]
+    cond = m.group(1)
+    assert "S.slot" in cond and "S.tithe" in cond and "TITHE_SLOT" in cond, (
+        "the confirm no longer waits for a resource when a tithe is being taken: %s" % cond)
+    assert re.search(r'toggle\("off", !ready\)', body), (
+        "the confirm is not drawn from that answer")
+
+
+def test_a_change_of_seat_reconciles_a_tithe_already_chosen(tmpl):
+    """THE POOL BELONGS TO THE SEAT, so changing seat can take the chosen resource away.
+
+    Left alone the board sat with the Take Tithe box lit and NOTHING IN IT, offering a confirm
+    for a move the new seat cannot make. A resource no longer in the pool falls back to whatever
+    the pool answers by itself; an empty pool puts the whole choice down.
+
+    AND IT IS NOT DONE IN render(). render is called from everywhere, and a render that quietly
+    rewrites the state is one nobody can reason about -- so the reconciliation happens where the
+    seat changes, which is the only place it can be needed.
+
+    Falsify: drop the call from the seat handler, or move it inside render.
+    """
+    body = _code(_function(tmpl, "reconcileTithe"))
+    assert "tithePool(S.seat)" in body, "the reconciliation no longer asks the new seat's pool"
+    assert "S.slot = null" in body, "an empty pool no longer puts the choice down:\n%s" % body
+    assert "onlyTithe()" in body, "a shrunken pool no longer re-answers itself:\n%s" % body
+    wire = _code(_function(tmpl, "wireGrid"))
+    assert "reconcileTithe()" in wire, "the seat picker does not reconcile the tithe"
+    assert "reconcileTithe" not in _code(_function(tmpl, "render")), (
+        "render rewrites the state, so what it draws depends on how often it has run")
+
+
+def test_a_tiles_resource_is_a_label_and_takes_no_clicks(tmpl):
+    """IT WAS CLICKABLE FOR A ROUND AND THE MECHANIC TOOK THAT BACK.
+
+    You do not get Build Roads' stone by clicking Build Roads' stone. You get stone because one
+    of YOUR figures stands on a tile that offers it -- and the tile draws its resource whether
+    you stand there or not, so a click here would offer something you may have no claim to, and
+    would put one decision in two places. The choosing happens in the box, against the pool.
+
+    AND IT IS NOT GREYED, for the reason the controls column already gives about Map and Hire: a
+    disabled look promises a state the thing can enter later, and these never become clickable.
+    They are drawn at the same rest weight as the duty marks beside them and do not answer the
+    pointer at all.
+
+    Falsify: wire a handler to it, give it pointer-events, or let it brighten on hover.
+    """
+    block = _tithe_block(tmpl)
+    for bad in ("addEventListener", "dataset.slot", '"seal"', "wireDrop", "pickFile"):
+        assert bad not in block, (
+            "the tile's resource carries %s, so it is a control again:\n%s" % (bad, block))
+    assert "tm.dataset.duty = d.slug" in block, (
+        "the label no longer knows its duty, so the box cannot light the tiles feeding a resource")
+    rule = _rule(tmpl, ".tmark")
+    assert rule.get("pointer-events") == "none", (
+        "the tile's resource answers the pointer: %s" % rule)
+    lit = re.sub(r"\s+", "", tmpl)
+    assert ".tmark.filled:hover" not in lit, (
+        "a label brightens under the pointer, which is a button that does nothing when pressed")
+    assert ".tmark.filled.on" not in lit, "a label can be chosen"
+    # IT STILL LIGHTS WHEN THE BOX POINTS AT IT, which is the job it kept.
+    assert ".tmark.filled.feeds{filter" in lit, (
+        "hovering a resource in the box no longer lights the tiles feeding it")
+
+
+def test_the_seat_is_demo_state_and_says_so(tmpl):
+    """THE FIRST PRIVATE THING ON THIS BOARD, and it has no engine behind it.
+
+    Everything else v2 draws is public -- where every seat stands, what each duty offers, which
+    action is being looked at. The pool belongs to ONE player, and v2 has no turn order, so the
+    seat is picked in the bar. That is a placeholder and has to be labelled as one, the way
+    V2_SEATS already is, or it becomes a fact nobody remembers inventing.
+
+    Falsify: hard-code a seat, or read it from somewhere that is not the picker.
+    """
+    assert re.search(r'^var V2_SEAT = "p\d";$', tmpl, re.M), (
+        "the template no longer opens on a named demo seat")
+    i = tmpl.index("var V2_SEAT")
+    preamble = tmpl[max(0, i - 1200):i]
+    assert "DEMO STATE" in preamble.upper(), (
+        "the demo seat is not flagged as demo state, so it reads as a decision")
+    assert re.search(r'<select id=rSeat', tmpl), "there is no seat picker in the bar"
+    wire = _code(_function(tmpl, "wireGrid"))
+    assert "S.seat = seat.value" in wire, "the picker does not set the seat"
+    # AND THE POOL READS IT RATHER THAN A PLAYER INDEX.
+    assert "tithePool(S.seat)" in _code(tmpl), "nothing asks the pool for the chosen seat"
+
+
+def test_the_top_line_answers_for_the_tithe_once_it_is_being_taken(tmpl):
+    """THE PHASE LINE IS WRITTEN FOR THE COMMON CASE, and the tithe stops being it.
+
+    "Select a Duty Action or take Tithe" is the right line while you are deciding WHICH of those
+    to do. The moment you have decided on the tithe it is describing a choice already made and
+    saying nothing about the one still open -- which resource.
+
+    TWO STATES, NOT THREE. A line for the empty pool was written and driving the page found it
+    unreachable: takeTithe refuses an empty pool, a box with nothing in it has no slots to click,
+    and reconcileTithe puts the whole choice down when a change of seat empties it. So the slot
+    cannot be the tithe with nothing to take, and a seat with no tithe keeps the phase line
+    because it has chosen nothing. This file has carried three conditions that could not fail.
+
+    Falsify: drop the tithe branch, or put the unreachable third state back.
+    """
+    body = _code(_function(tmpl, "phaseLine"))
+    assert "S.slot === TITHE_SLOT" in body, (
+        "the top line no longer answers for the tithe:\n%s" % body)
+    assert "S.tithe" in body and "titheName(" in body, (
+        "the chosen line does not name the resource, so it and the lit mark can disagree:\n%s"
+        % body)
+    assert "tithePool(" not in body, (
+        "the top line asks the pool a question it cannot answer -- the slot cannot be the tithe "
+        "with an empty pool:\n%s" % body)
+    assert "GEO.phases" in body, "the phase line has stopped being the fallback"
+
+
+def test_hovering_a_control_puts_its_name_in_the_status_line(tmpl):
+    """EVERY OTHER HOVER ON THIS BOARD SPEAKS IN ONE PLACE, and these three did not.
+
+    A duty tile, a mark and an action card all put a line at the top when the pointer crosses
+    them. Show Map, Hire a building and Confirm had only a tooltip -- a different register
+    altogether: it arrives late, it sits where the pointer is rather than where the board's
+    sentence is, and it was the only thing here that worked that way.
+
+    A CONTROL IS NOT A DUTY AND HAS NO SLOT, so it cannot go through the duty route. Passing it
+    `S.duty` would announce whichever duty happened to be selected -- the board saying something
+    true about the wrong object -- so the mark carries its own name and `hoverMark` is its own
+    small state.
+
+    AND IT CLEARS THE WHEEL. The pointer has left the tiles; a tile still lit while the line
+    talks about Show Map is two objects claiming the pointer at once.
+
+    THE NAME ALONE UP THERE, though the tooltip keeps `shortLabel` after an em dash. A tooltip is
+    a second look and can afford the sentence; the status line is one line in a fixed place.
+    Both read duty_text.json, so they cannot disagree about what the mark is called.
+
+    Falsify: route a control through hover(), drop the lightFace(null), or read the name from
+    anywhere but the shared wording.
+    """
+    draw = _code(_function(tmpl, "drawMarks"))
+    assert "e.dataset.hoverMark = name;" in draw, (
+        "a control no longer carries its own name for the hover:\n%s" % draw)
+    assert "CONTROLS[name]" in draw, (
+        "the controls' names are no longer read from the shared wording:\n%s" % draw)
+
+    picked = _code(_function(tmpl, "hoverDataOf"))
+    assert "hoverMark" in picked, (
+        "the hover walk does not stop on a control, so nothing reaches the status line:\n%s"
+        % picked)
+
+    code = _code(tmpl)
+    assert re.search(r"if \(d\.hoverMark\) return hoverMark\(d\.hoverMark\);", code), (
+        "a control does not take its own route out of the delegation, so it would be announced "
+        "as whatever duty is selected")
+
+    on = _code(_function(tmpl, "hoverMark"))
+    assert "hovered = {mark: name}" in on, "hovering a control sets no state:\n%s" % on
+    assert "lightFace(null)" in on, (
+        "hovering a control leaves a duty tile lit, so two objects claim the pointer:\n%s" % on)
+
+    status = _code(_function(tmpl, "setStatus"))
+    assert "hovered.mark" in status and "controlLine(" in status, (
+        "the status line does not answer for a control:\n%s" % status)
+    assert "phaseLine()" in status and "lineFor(" in status, (
+        "the status line has lost one of its other two answers:\n%s" % status)
+
+    line = _code(_function(tmpl, "controlLine"))
+    assert "CONTROLS[" in line, "the line is not read from the shared wording:\n%s" % line
+    assert "shortLabel" not in line, (
+        "the status line is carrying the tooltip's sentence:\n%s" % line)
+
+    # AND THE WORDING IS NOT TYPED HERE. Asked of the code: the prose on this board names these
+    # marks freely -- the control column's own rule explains itself by saying Show Map and Hire a
+    # building are never chosen -- so both comment kinds come off first.
+    bare = _code(re.sub(r"/\*.*?\*/", "", tmpl, flags=re.S))
+    said = json.loads((BOARD / "duty_text.json").read_text(encoding="utf-8"))["controls"]
+    for entry in said.values():
+        assert '"%s"' % entry["name"] not in bare, (
+            "%r is typed into the template, so it can differ from duty_text.json"
+            % entry["name"])
+    assert [said[k]["name"] for k in ("map", "hire", "commit")] == [
+        "Show Map", "Hire a building", "Confirm"], (
+        "the shipped control wording changed: %s" % [said[k]["name"] for k in said])
+
+
+def test_a_resources_name_comes_from_the_tree_and_not_from_a_capital_letter(tmpl):
+    """THE BOARD'S OWN RULE, stated where the controls are drawn: the wording comes from data.
+
+    A labels object typed into the tool is one file restating another, which is what the controls
+    column already learned -- so the four resource names are read from
+    tools/ui_debug/duty_wheel_layout.json, which names all four and which ui/render/gen_board.py
+    already reads. That is a second reader of an existing source, not a new dependency. It also
+    means "Silver coin" rather than "Silver", which no amount of capitalising a key would give.
+
+    AND A MISSING LABEL IS NOT FATAL. It falls back to the key with a capital on it and says so
+    in the build notes, the same bargain every other missing thing on this board strikes. A build
+    that refused over a caption would be refusing the wrong thing.
+
+    Falsify: capitalise the key in the template, or make a missing label fatal.
+    """
+    body = _code(_function(tmpl, "titheName"))
+    assert "TITHE.names" in body, (
+        "the page is no longer taking resource names from the generator:\n%s" % body)
+    assert "capitalize" not in _code(tmpl) and "toUpperCase" not in body, (
+        "the page is inventing a display name from the key")
+
+    src = (TOOL / "generate_action_board_v2.py").read_text(encoding="utf-8")
+    assert "duty_wheel_layout.json" in src, (
+        "the generator no longer reads the file that names the resources")
+    assert '"names": names' in src, "the names never reach the page"
+    fn = src[src.index("def tithe_names("):src.index("def bundled_tithe(")]
+    assert "raise" not in fn, "a missing caption stops the build"
+
+    # RUN, NOT READ. Asking whether `notes.append` APPEARS in the source is satisfied by a branch
+    # that can never be taken -- a mutation turning `if missing:` into `if False:` passed this
+    # guard untouched. The function is sliced out and executed against a tree of this test's own
+    # making instead, which is the trick the JS side of this file has used all along.
+    keys = _tithe_keys()
+    ns = {"json": json, "TITHE_KEYS": keys}
+    with tempfile.TemporaryDirectory() as tmp:
+        layout = pathlib.Path(tmp) / "duty_wheel_layout.json"
+        ns["WHEEL_LAYOUT"] = layout
+        exec(compile(fn, "<tithe_names>", "exec"), ns)          # noqa: S102 - this file's own text
+        tithe_names = ns["tithe_names"]
+
+        # EVERY LABEL PRESENT: taken as given, nothing said.
+        layout.write_text(json.dumps(
+            {"tithe_icons": {k: {"label": k.upper()} for k in keys}}), encoding="utf-8")
+        out, notes = tithe_names()
+        assert out == {k: k.upper() for k in keys}, out
+        assert not notes, "a complete tree still reports something: %s" % notes
+
+        # ONE MISSING: named after its key, AND SAID.
+        short = {k: {"label": k.upper()} for k in keys[1:]}
+        layout.write_text(json.dumps({"tithe_icons": short}), encoding="utf-8")
+        out, notes = tithe_names()
+        assert out[keys[0]] == keys[0].capitalize(), (
+            "a resource with no label is not named after its key: %r" % out[keys[0]])
+        assert notes and keys[0] in notes[0], (
+            "a missing label is not reported, so the board would quietly name a resource after "
+            "its key: %s" % notes)
+
+        # NO FILE AT ALL: all four fall back, and that is said too.
+        layout.unlink()
+        out, notes = tithe_names()
+        assert out == {k: k.capitalize() for k in keys}, out
+        assert notes, "an unreadable layout file is not reported"
+
+
+def test_the_resource_order_and_the_wildcard_come_from_the_generator(tmpl):
+    """TWO FACTS ABOUT THE TREE, AND THE TREE IS WHAT THE GENERATOR WALKS.
+
+    The page needs the ORDER to list a pool the same way every time and the WILD one to know what
+    unions the rest in. Written out in the template they would be a second list to keep in step
+    with TITHE_KEYS -- and the failure would be silent: a page whose order had drifted would
+    simply list resources in a different sequence from the one the build reports.
+
+    Falsify: write the three names or the wildcard into the template.
+    """
+    assert re.search(r"^var TITHE = __TITHE__;$", tmpl, re.M), (
+        "the page no longer takes the resources from the generator")
+    body = _code(_function(tmpl, "tithePool"))
+    assert "TITHE.order" in body and "TITHE.wild" in body, (
+        "the pool no longer reads the generator's answer:\n%s" % body)
+    for key in _tithe_keys():
+        assert '"%s"' % key not in _code(tmpl), (
+            "the template writes the resource name %r out instead of reading TITHE" % key)
 
 
 def test_the_tithe_ring_reads_clockwise_from_north(geo):
@@ -1703,153 +2182,195 @@ def _tithe_block(tmpl: str) -> str:
     return grid[i:j + 1]
 
 
-def test_the_resource_is_choosable_without_joining_the_art_machinery(tmpl):
-    """THE `.seal` CLASS BUNDLES TWO THINGS AND ONLY ONE OF THEM IS WANTED.
-
-    The resource used to carry neither: it was a picture, with no duty, no slot, no handler and
-    pointer-events off, and this test held exactly that. It is a choice now -- a third thing a
-    duty offers beside its one or two actions -- so the half of `.seal` that is the SELECTION is
-    wanted and the half that is the ART MACHINERY still is not.
-
-    WHAT THAT HALF WOULD DO. `#board .seal` is how edit mode finds every picture the board can
-    replace, how wireDrop finds every drop target, and how a dropped file is filed under a duty
-    and a slot. A resource has no slot to be filed under -- it is cut in ui/board_v2/icon_lab/ and
-    lives in the tree -- so a tmark wearing `seal` would open a file dialog that writes somewhere
-    that does not exist, and `#board .seal` would start answering 21 where the board has 14
-    actions. Nothing throws. The board just does the wrong thing when you click the wrong picture.
-
-    So: its own class, its own handler, no drop wiring, and edit mode refused rather than served.
-
-    Falsify: give the resource the seal class, wire wireDrop to it, or let its handler reach
-    pickFile.
-    """
-    block = _tithe_block(tmpl)
-    assert 'el("div", "tmark"' in block, (
-        "drawGrid no longer makes the resource mark as a .tmark:\n%s" % block)
-    grid = _code(_function(tmpl, "drawGrid"))
-    assert '"seal"' in grid, (
-        "nothing in drawGrid makes a .seal any more, so this guard is comparing against nothing")
-    for bad, why in (('"seal"', "it would join #board .seal and be offered to edit mode"),
-                     ("wireDrop", "it would become a drop target for a file it cannot file"),
-                     ("pickFile", "it would offer to replace a picture that is not the board's")):
-        assert bad not in block, (
-            "the resource mark carries %s, and %s:\n%s" % (bad, why, block))
-
-    handler = _code(_function(tmpl, "titheClick"))
-    assert "pickFile" not in handler, (
-        "clicking a resource in `images` mode offers a file dialog:\n%s" % handler)
-    assert re.search(r"if \(S\.editing\) return;", handler), (
-        "the resource's handler does not refuse edit mode:\n%s" % handler)
-
-    rule = _rule(tmpl, ".tmark")
-    assert rule.get("pointer-events") == "auto", (
-        "the resource cannot take a click: .iplate is pointer-events:none, so a child of it has "
-        "to opt back in. %s" % rule)
-
-
-def test_choosing_a_resource_chooses_its_duty_and_the_tithe_in_one_click(tmpl):
-    """WHAT ADAM ASKED FOR, IN THE ONE PLACE IT IS DECIDED.
-
-    Clicking a resource has to do two things at once: show that duty's action pictures in the row
-    above, and select the Take Tithe box beside them. That is `pickAction(duty, TITHE_SLOT)` --
-    the same entry point an action mark uses, with the tithe in place of a slot.
-
-    NOT pickDuty FOLLOWED BY select(), which is the obvious way to write it and renders the board
-    twice. pickDuty answers the slot itself for a duty with one action, so Allocation would light
-    its action picture and then drop it for the Tithe box on the same click -- a visible flicker
-    that says the board changed its mind. slotClick's own comment settled this for the marks.
-
-    Falsify: call pickDuty and select separately, or pass a literal slot.
-    """
-    handler = _code(_function(tmpl, "titheClick"))
-    assert "pickAction(" in handler, (
-        "the resource no longer goes through the action marks' own entry point:\n%s" % handler)
-    assert "pickDuty(" not in handler and "select(" not in handler, (
-        "the resource sets the duty and the slot in two calls, so the board renders twice:\n%s"
-        % handler)
-    # THE SLOT IT PASSES IS THE ONE IT WAS GIVEN, which is what makes the dataset below load-bearing
-    # rather than decorative.
-    assert re.search(r"pickAction\(d\.duty,\s*d\.slot\)", handler), (
-        "the resource does not pass the duty and slot it carries:\n%s" % handler)
-
-    block = _tithe_block(tmpl)
-    assert "tm.dataset.duty = d.slug" in block, (
-        "the resource does not carry its duty, so the click cannot name one:\n%s" % block)
-    assert "tm.dataset.slot = TITHE_SLOT" in block, (
-        "the resource does not carry the tithe slot:\n%s" % block)
-    assert "titheClick" in block, "the resource is not wired to a click handler:\n%s" % block
-    # AND NO hoverSlot. lineFor would look up `d.tithe`, which is the resource's KEY -- a string
-    # with no shortLabel -- and the status line would blank out under the pointer.
-    assert "hoverSlot" not in block, (
-        "the resource carries a hoverSlot, so the status line goes blank over it:\n%s" % block)
-    assert "tm.dataset.hoverDuty = d.slug" in block, (
-        "hovering the resource no longer lights the duty it belongs to:\n%s" % block)
-
-
 def test_the_tithe_box_and_the_chosen_resource_are_lit_from_the_state(tmpl):
     """EVERY ROUTE TO ONE FACT AGREES BECAUSE NONE OF THEM SETS THE CUE.
 
-    The Take Tithe box is reached two ways now -- the box itself, and a resource on any of the
-    seven tiles that carry one -- and the chosen resource has to light up the way a chosen action
-    mark does. Both are set in render() from `S.slot`, which is render()'s own stated rule for
+    The Take Tithe box is reached two ways -- pressing the box, which answers a pool of one by
+    itself, and clicking a resource inside it -- and the chosen resource has to light the way a
+    chosen action mark does. Both are set from the state, which is render()'s own stated rule for
     exactly this reason: a class set where it is CLICKED is right on one route and stale on the
     other.
 
-    THE BOX SAID NOTHING AT ALL UNTIL NOW. It has been clickable since it was drawn and the only
-    sign it had been pressed was the commit mark appearing in the column -- survivable while
-    pressing it was the only way to reach it, and much louder once a resource selects it. So
-    `.panel.sel` joins `.art.sel`'s own declaration rather than getting a matching outline of its
-    own.
+    THE BOX SAID NOTHING AT ALL BEFORE THIS. It had been clickable since it was drawn and the
+    only sign it had been pressed was the commit mark appearing in the column -- survivable while
+    pressing it was the only way in, and much louder now that it is where the choosing happens.
+    So `.panel.sel` joins `.art.sel`'s own declaration rather than getting a matching outline.
 
-    AND THE RESOURCE IS LIT BY THE SEAL'S OWN RULE, in the same loop and the same CSS: it is the
-    same 50px of the same artwork, chosen the same way, so a different fraction of brightness
-    would be the board claiming there are two kinds of choosable mark.
+    AND THE RESOURCES IN IT ARE LIT BY THE SEAL'S OWN RULE: same 50px artwork, chosen the same
+    way, so a different fraction of brightness would claim there are two kinds of choosable mark.
+    The tile's copy of the same picture is NOT in that rule, because it is a label.
 
-    Falsify: light either one in its click handler, give `.panel.sel` its own outline, or split
-    the render loop in two.
+    Falsify: light either one in a click handler, give `.panel.sel` its own outline, or put the
+    tile's label back in the brightening rule.
     """
     render = _code(_function(tmpl, "render"))
-    assert '#board .seal, #board .tmark' in render, (
-        "render no longer lights the resources in the same loop as the action marks:\n%s"
-        % render[:1200])
     assert re.search(r'tbox\.classList\.toggle\("sel", S\.slot === TITHE_SLOT\)', render), (
         "the Take Tithe box is not lit from S.slot in render()")
 
-    for fn in ("titheClick", "select", "pickAction"):
+    draw = _code(_function(tmpl, "drawTithe"))
+    assert re.search(r'classList\.toggle\("on",\s*S\.slot === TITHE_SLOT && S\.tithe === key\)',
+                     draw), (
+        "the chosen resource is not lit from the state:\n%s" % draw)
+
+    for fn in ("titheClick", "takeTithe", "select", "pickAction"):
         body = _code(_function(tmpl, fn))
         assert "classList" not in body, (
-            "%s sets a cue where the click happens rather than leaving it to render():\n%s"
+            "%s sets a cue where the click happens rather than leaving it to the draw:\n%s"
             % (fn, body))
 
     sel = _rule(tmpl, ".art.sel, .panel.sel")
     assert sel.get("outline"), (
         "the Tithe box no longer shares the action cards' own chosen outline: %s" % sel)
-    lit = _rule(tmpl, ".seal.filled, .tmark.filled")
+    lit = _rule(tmpl, ".seal.filled, .tmark.filled, .tslot.filled")
     assert lit.get("filter"), (
-        "the resource no longer dims with the action marks at rest: %s" % lit)
-    assert ".tmark.filled.on{filter" in re.sub(r"\s+", "", tmpl), (
+        "the board's marks no longer share one rest weight: %s" % lit)
+    flat = re.sub(r"\s+", "", tmpl)
+    assert ".tslot.filled.on{filter" in flat or ".tslot.filled.on," in flat, (
         "the chosen resource is not lit by the rule that lights a chosen action mark")
 
 
-def test_a_control_stands_on_the_same_ground_a_duty_frame_does(tmpl):
+@needs_node
+def test_the_controls_sit_on_the_take_tithe_boxs_own_lines(pool, geo, tmpl):
+    """TWO COLUMNS, THREE ROWS, AND A MARK LEVEL WITH THE RESOURCE BESIDE IT.
+
+    geometry puts the three controls on y values of its own -- 265, 333 and 432, unevenly spaced
+    because the commit was given extra air -- which belong to no line anything else on this board
+    uses. They are laid out against the Take Tithe box instead: same size as a resource, same
+    three rows.
+
+    THE SAME TOP AND THE SAME HEIGHT AS THE BOX is what makes that true without restating the
+    box's internals. Both are panels, both place their children against their own padding box,
+    and both lay them out with `titheLayout` -- so identical offsets land on identical rows, and
+    no arithmetic here has to know about the box's label or its border. Any other height would
+    need both restated, which is the drift this file keeps undoing.
+
+    THE FULL SET'S LINES, not the pool's. A pool of two centres its block and stops matching; the
+    controls are always three and always on the three-resource rows, which is the arrangement
+    the alignment was asked for.
+
+    Falsify: give the column its own y, its own height, or its own idea of how big a mark is.
+    """
+    src = _code(_function(tmpl, "controlBox"))
+    assert "lifted(GEO.tithe)" in src, (
+        "the control column no longer takes its position from the Take Tithe box:\n%s" % src)
+    assert "titheLayout(TITHE.order.length)" in src, (
+        "the column is not laid out on the full set's lines:\n%s" % src)
+    assert "GEO.marks." not in src.replace("GEO.marks.pad", ""), (
+        "the column is reading geometry's own control rects again:\n%s" % src)
+
+    # THE ROWS THEMSELVES, run rather than argued. This used to assert that the column shared the
+    # box's y and height, which was proof while it did -- a column that closes up does not, so the
+    # proxy had to go and the thing it stood for is measured instead. Both lists come from the
+    # page's own functions in node, so a mistake in either moves what is compared.
+    C = pool["cols"]
+    assert C["box"]["rows"] == C["col"]["rows"], (
+        "the two columns are on different rows: box %s, controls %s"
+        % (C["box"]["rows"], C["col"]["rows"]))
+    assert len(C["col"]["rows"]) == len(_tithe_token()["order"]), (
+        "the column does not have a row for every resource: %s" % C["col"]["rows"])
+
+
+    draw = _code(_function(tmpl, "drawMarks"))
+    assert re.search(r"top:\s*px\(C\.start \+ i \* C\.pitch\)", draw), (
+        "the marks are not placed on the box's rows:\n%s" % draw)
+    assert re.search(r"width:\s*px\(C\.size\)", draw), (
+        "the marks are not drawn at the box's own size:\n%s" % draw)
+    assert "box(marked(" not in draw, "the old geometry-driven placement is still here"
+
+    # AND THE SIZE IS THE RESOURCE'S. Measured off the same layout the box uses.
+    full = len(_tithe_token()["order"])
+    assert pool["layout"][str(full)]["size"] == pool["layout"]["1"]["size"], (
+        "the resources are not one size, so 'the same size as a resource' names nothing")
+
+    # BOTH COLUMNS CENTRE THEIR MARKS IN THEIR OWN PADDING BOX, which is the panel less its own
+    # border at each end. Centring in the margin-to-margin width instead is a pixel out, because
+    # the margins are measured from the panel's OUTER edge and an absolutely positioned child is
+    # placed from its inner one -- the box's resources sat 44.5 from one side and 42.5 from the
+    # other until this was fixed. The same border-box trap took the duty marks once already.
+    left = _code(_function(tmpl, "titheSlotLeft"))
+    assert "PANEL_BORDER" in left, (
+        "the box centres its resources without paying for the panel's border:\n%s" % left)
+    assert "panelW" in left, (
+        "the box centres against the margins rather than the panel:\n%s" % left)
+    # THE SAME EXPRESSION, NOT A MATCHING ONE. Asking whether PANEL_BORDER appears in controlBox
+    # proved nothing: it is in the panel's width too, so a `left` that had dropped it entirely
+    # still passed. The column calls the box's own centring function now, and that is what is
+    # asserted.
+    assert "titheSlotLeft(" in src, (
+        "the control column centres its marks with arithmetic of its own:\n%s" % src)
+    assert re.search(r'^var PANEL_BORDER = \d+;$', tmpl, re.M), (
+        "the panel's own border is not named, so the two columns can pay different amounts")
+
+
+@needs_node
+def test_the_control_column_closes_up_instead_of_matching_the_boxs_height(pool, tmpl):
+    """THE BOX IS 247 TALL BECAUSE IT CARRIES A LABEL, and this column carries none.
+
+    Sharing the box's rect made the rows line up with no arithmetic at all, which was worth
+    something -- but it also gave a column with no heading 31px of nothing at the top, holding
+    the place of a word it does not have. So the panel closes up: the air the box leaves BELOW
+    its last resource is the air this leaves above its first AND below its last.
+
+    THE BOX'S TOP MARGIN IS NOT A MARGIN and is deliberately not borrowed. It is the room the
+    label sits in, so copying it would reproduce a gap that exists for a reason this column does
+    not have -- which is the whole of what was wrong with matching the height.
+
+    WHICH MEANS THE TWO PANELS END ON THE SAME LINE rather than starting on it, and that is the
+    visible consequence worth having asserted somewhere.
+
+    Falsify: match the box's height again, or borrow its top margin for the top.
+    """
+    C = pool["cols"]
+    border = float(_decl(tmpl, "PANEL_BORDER"))
+    block = C["block"]
+    above = C["col"]["start"]
+    below = (C["col"]["height"] - 2 * border) - (C["col"]["start"] + block)
+    assert above == below, (
+        "the column leaves %g above its marks and %g below" % (above, below))
+    assert C["col"]["height"] == block + 2 * above + 2 * border, (
+        "the column is %g tall for a block of %g with %g of air at each end"
+        % (C["col"]["height"], block, above))
+    assert C["col"]["height"] < C["box"]["height"], (
+        "the column is still as tall as the box (%g), so it is holding room for a label it does "
+        "not have" % C["col"]["height"])
+    # THE BOX'S OWN BOTTOM MARGIN IS THE ONE BORROWED, not an invented number.
+    box_below = (C["box"]["height"] - 2 * border) - (C["box"]["rows"][-1] - C["box"]["y"]
+                                                     - border + 0)
+    assert abs(below - (box_below - C["col"]["size"])) < 1e-9, (
+        "the column's margin is %g where the box leaves %g below its last resource"
+        % (below, box_below - C["col"]["size"]))
+    # AND THE TWO END TOGETHER.
+    assert C["col"]["y"] + C["col"]["height"] == C["box"]["y"] + C["box"]["height"], (
+        "the panels do not end on the same line: column %g, box %g"
+        % (C["col"]["y"] + C["col"]["height"], C["box"]["y"] + C["box"]["height"]))
+
+
+def test_the_controls_stand_on_the_duty_frames_ground_in_one_rectangle(tmpl):
     """ONE GROUND, ONE TOKEN, AND ONLY THE GROUND.
 
-    The three controls beside the Take Tithe box wore `.panel`'s own #0e0d0b while the duty
-    frames wore 55% of --plate. Both sit on #board's black, so the two were the same darkness in
-    different hues -- rgb(14, 13, 11) warm against rgb(12, 17, 20) cool -- which reads as two
-    kinds of object holding the same 50px artwork.
+    LOST ONCE ALREADY, which is worth recording here rather than in a commit nobody re-reads.
+    This guard was written when each control carried its own ground, and it was deleted by a
+    slice-and-replace whose two anchors sat either side of it -- the third time this file has
+    lost a test that way. The count is the only thing that catches it, and printing the count is
+    not the same as comparing it with what you expected.
 
-    THE RULE'S OWN COMMENT ARGUED AGAINST SHARING, on the grounds that a duty frame is glass over
-    the backdrop picture and would come out invisible down here. v2 draws no backdrop: the duty
-    frames are themselves 55% over black, so that reason expired with the picture and the comment
-    now says so.
+    The three controls wore `.panel`'s own #0e0d0b while the duty frames wore 55% of --plate.
+    Both sit on #board's black, so the two were the same darkness in different hues -- rgb(14,
+    13, 11) warm against rgb(12, 16, 20) cool -- which reads as two kinds of object holding the
+    same artwork. They share one ground now, through a `--plate-ground` token that `.iplate` and
+    `.cbox` both read, so `--tile-alpha` still reaches both.
+
+    ONE RECTANGLE, NOT THREE, and that is geometry rather than taste: a mark is drawn at the Take
+    Tithe box's own size now, and a ground of `pad` either side of it is taller than the line
+    pitch, so three separate grounds would overlap. One panel holding three marks is also what
+    the box beside it is.
 
     WHAT IS NOT SHARED IS THE POINT OF THE TOKEN. A duty frame also means "selectable, takes the
     gold rim when chosen" and the controls are never chosen -- so they take `--plate-ground` and
     not `.iplate`: same background, their own border, their own radius, no selected state.
 
-    Falsify: write either background out as a literal, give a control the frame's border, or let
-    --tile-alpha stop reaching both.
+    Falsify: write either background out as a literal, give the column the frame's border, or
+    bring back a per-mark ground.
     """
     root = _rule(tmpl, ":root")
     ground = root.get("--plate-ground")
@@ -1858,23 +2379,26 @@ def test_a_control_stands_on_the_same_ground_a_duty_frame_does(tmpl):
         "the shared ground no longer goes through the numbers somebody would tune: %s" % ground)
 
     frame = _rule(tmpl, ".iplate")
-    control = _rule(tmpl, ".mark::before")
+    column = _rule(tmpl, ".cbox")
     assert frame.get("background") == "var(--plate-ground)", (
         "the duty frame no longer reads the shared ground: %s" % frame)
-    assert control.get("background") == "var(--plate-ground)", (
-        "a control no longer stands on the duty frame's ground: %s" % control)
+    assert column.get("background") == "var(--plate-ground)", (
+        "the control column no longer stands on the duty frame's ground: %s" % column)
     assert "color-mix" not in _code(tmpl).replace(ground, ""), (
         "a second copy of the mix has appeared somewhere outside the token")
 
-    # AND ONLY THE GROUND. A control that took the frame's edge as well would be promising the
-    # selected state it can never enter.
-    assert "var(--plate-edge)" not in control.get("border", ""), (
-        "a control has taken the duty frame's own edge: %s" % control)
-    assert control.get("border") and control.get("border-radius"), (
-        "the control's ground has lost its own border or radius: %s" % control)
+    assert "var(--plate-edge)" not in column.get("border", ""), (
+        "the control column has taken the duty frame's own edge: %s" % column)
+    assert column.get("border") and column.get("border-radius"), (
+        "the control column has lost its own border or radius: %s" % column)
+
+    # ONE RECTANGLE: no per-mark ground survives anywhere.
+    assert "::before" not in re.sub(r"/\*.*?\*/", "", tmpl, flags=re.S).split("</style>")[0], (
+        "a control is drawing a ground of its own again, which cannot fit the line pitch")
+
     # The Take Tithe box is NOT one of the three and keeps the ground it had.
     panel = _rule(tmpl, ".panel")
-    assert panel.get("background") == "var(--panel)" or panel.get("background", "").startswith("#"), (
+    assert panel.get("background", "").startswith("#"), (
         "the Take Tithe box's own ground moved with the controls', which was not asked for: %s"
         % panel)
 
@@ -1958,9 +2482,9 @@ def test_the_resource_is_right_aligned_and_not_centred_like_a_short_row(sweep, t
     Falsify: call markAt(P, 0) for the resource, or add P.inset to titheMarkAt.
     """
     src = _code(_function(tmpl, "titheMarkAt"))
-    assert "plateInset(P)" in src, (
-        "the resource's margin is no longer measured with the marks' own inset:\n%s" % src)
-    assert "inset" not in src.replace("plateInset", ""), (
+    assert "P.ip" in src, (
+        "the resource's margin is no longer the board's own:\n%s" % src)
+    assert "inset" not in src, (
         "the resource has picked up the short-row centring term:\n%s" % src)
 
     by_cell = {}
@@ -1969,7 +2493,7 @@ def test_the_resource_is_right_aligned_and_not_centred_like_a_short_row(sweep, t
             continue
         key = (row["gap"], row["disp"], row["size"], row["height"],
                row["cell"]["col"], row["cell"]["row"])
-        by_cell.setdefault(key, {})[row["nAct"]] = row["plate"]["titheMark"]["left"]
+        by_cell.setdefault(key, {})[row["nAct"]] = row["plate"]["titheMark"]["x"]
     compared = 0
     for key, lefts in by_cell.items():
         if len(lefts) < 2:
@@ -2227,9 +2751,17 @@ def test_the_plate_lives_on_the_board_and_is_swept_with_the_grid(tmpl):
         "the plate is no longer created with `el(\"div\", \"iplate\", {...})` and no parent -- a "
         "fourth argument here would put it back inside the cell, where overflow:hidden is:\n%s"
         % body)
-    assert 'querySelectorAll(".dcell, .iplate")' in body, (
-        "drawGrid does not sweep the plates, which are no longer children of the cells it does "
-        "sweep -- so every slider event leaves nine behind")
+    # PARSED, NOT PINNED. This held the selector verbatim and broke the day the resources left
+    # the plate and had to join the sweep -- a guard failing because the page learned something
+    # rather than because it forgot something. What it is really asserting is that everything
+    # drawGrid makes outside the cells is swept by it, so that is what it asks.
+    m = re.search(r'querySelectorAll\("([^"]+)"\)', body)
+    assert m, "drawGrid no longer sweeps anything before rebuilding"
+    swept = {s.strip() for s in m.group(1).split(",")}
+    for need in (".dcell", ".iplate", ".tmark"):
+        assert need in swept, (
+            "drawGrid does not sweep %s, which is not a child of the cells it does sweep -- so "
+            "every slider event leaves one behind per duty: %s" % (need, sorted(swept)))
 
 
 @needs_node
