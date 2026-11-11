@@ -99,7 +99,13 @@ GRID_DEFAULTS = {"gap": 115, "disp": 60, "size": 90, "height": 130, "divide": 12
 
 # WHERE THE THREE RESOURCE CUTS LIVE, and the three keys the board asks for them by.
 TITHE_DIR = v1.BOARD / "tokens" / "resources" / "icons"
-TITHE_KEYS = ("wheat", "stone", "silver")
+# THE CORNUCOPIA IS IN THIS LIST AND IS NOT A RESOURCE. It is the WILDCARD -- the tile where the
+# tithing player chooses which resource they take, as ui/concept/build_browser.py and
+# tools/ui_debug/duty_wheel_layout.json's `Cornucopia (wild resource)` both have it. It is listed
+# here because this list answers "which pictures does the board inline", and the board inlines
+# four; it is NOT a claim that a duty handing you the choice is the same kind of offer as a duty
+# handing you stone. The day that distinction has to be drawn, it is drawn in the drawing.
+TITHE_KEYS = ("wheat", "stone", "silver", "cornucopia")
 
 # WHICH TITHE RESOURCE SITS BESIDE EACH DUTY'S ICONS, read CLOCKWISE FROM NORTH.
 #
@@ -114,7 +120,7 @@ TITHE_KEYS = ("wheat", "stone", "silver")
 # zipping the two means a duty added, removed or reordered in geometry.py fails HERE instead of
 # quietly pairing Produce's resource with Construct's tile. The zip is length-checked below for the
 # same reason: zip() is happy to be handed seven.
-V2_TITHE = ("wheat", None, "silver", "stone", "wheat", "wheat", "silver", "stone")
+V2_TITHE = ("wheat", None, "silver", "stone", "cornucopia", "wheat", "silver", "stone")
 
 # TAXATION IS None AND THAT IS NOT "nothing" SPELLED DIFFERENTLY. A duty with no resource gets no
 # FRAME either, which is a different drawing from an empty frame -- an empty frame says "a resource

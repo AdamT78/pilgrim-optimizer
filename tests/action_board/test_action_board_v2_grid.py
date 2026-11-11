@@ -1615,10 +1615,16 @@ def test_the_tithe_ring_reads_clockwise_from_north(geo):
     A reorder moves a resource to a different face and this fails; a reorder that somehow kept
     every face's resource would not be a mistake.
 
+    THE CORNUCOPIA IS DEALT TO SOUTH, WHICH IS CONSTRUCT, and it is the WILDCARD rather than a
+    fourth resource -- the tile where the tithing player chooses what they take. It sits in the
+    ring like the other three because that is the arrangement being looked at; this guard holds
+    where it is, not what it means.
+
     Falsify: rotate V2_TITHE by one, swap two entries, or reorder geometry's DUTIES.
     """
     want = {"north": "wheat", "north_east": None, "east": "silver", "south_east": "stone",
-            "south": "wheat", "south_west": "wheat", "west": "silver", "north_west": "stone"}
+            "south": "cornucopia", "south_west": "wheat", "west": "silver",
+            "north_west": "stone"}
     ring = _v2_tithe()
     assert len(ring) == len(geo.DUTIES), (
         "V2_TITHE names %d resources and geometry publishes %d duties" % (len(ring),
@@ -1823,6 +1829,54 @@ def test_the_tithe_box_and_the_chosen_resource_are_lit_from_the_state(tmpl):
         "the resource no longer dims with the action marks at rest: %s" % lit)
     assert ".tmark.filled.on{filter" in re.sub(r"\s+", "", tmpl), (
         "the chosen resource is not lit by the rule that lights a chosen action mark")
+
+
+def test_a_control_stands_on_the_same_ground_a_duty_frame_does(tmpl):
+    """ONE GROUND, ONE TOKEN, AND ONLY THE GROUND.
+
+    The three controls beside the Take Tithe box wore `.panel`'s own #0e0d0b while the duty
+    frames wore 55% of --plate. Both sit on #board's black, so the two were the same darkness in
+    different hues -- rgb(14, 13, 11) warm against rgb(12, 17, 20) cool -- which reads as two
+    kinds of object holding the same 50px artwork.
+
+    THE RULE'S OWN COMMENT ARGUED AGAINST SHARING, on the grounds that a duty frame is glass over
+    the backdrop picture and would come out invisible down here. v2 draws no backdrop: the duty
+    frames are themselves 55% over black, so that reason expired with the picture and the comment
+    now says so.
+
+    WHAT IS NOT SHARED IS THE POINT OF THE TOKEN. A duty frame also means "selectable, takes the
+    gold rim when chosen" and the controls are never chosen -- so they take `--plate-ground` and
+    not `.iplate`: same background, their own border, their own radius, no selected state.
+
+    Falsify: write either background out as a literal, give a control the frame's border, or let
+    --tile-alpha stop reaching both.
+    """
+    root = _rule(tmpl, ":root")
+    ground = root.get("--plate-ground")
+    assert ground, "there is no --plate-ground token for the two to share"
+    assert "var(--tile-alpha)" in ground and "var(--plate)" in ground, (
+        "the shared ground no longer goes through the numbers somebody would tune: %s" % ground)
+
+    frame = _rule(tmpl, ".iplate")
+    control = _rule(tmpl, ".mark::before")
+    assert frame.get("background") == "var(--plate-ground)", (
+        "the duty frame no longer reads the shared ground: %s" % frame)
+    assert control.get("background") == "var(--plate-ground)", (
+        "a control no longer stands on the duty frame's ground: %s" % control)
+    assert "color-mix" not in _code(tmpl).replace(ground, ""), (
+        "a second copy of the mix has appeared somewhere outside the token")
+
+    # AND ONLY THE GROUND. A control that took the frame's edge as well would be promising the
+    # selected state it can never enter.
+    assert "var(--plate-edge)" not in control.get("border", ""), (
+        "a control has taken the duty frame's own edge: %s" % control)
+    assert control.get("border") and control.get("border-radius"), (
+        "the control's ground has lost its own border or radius: %s" % control)
+    # The Take Tithe box is NOT one of the three and keeps the ground it had.
+    panel = _rule(tmpl, ".panel")
+    assert panel.get("background") == "var(--panel)" or panel.get("background", "").startswith("#"), (
+        "the Take Tithe box's own ground moved with the controls', which was not asked for: %s"
+        % panel)
 
 
 def test_the_word_tithe_is_written_once_in_the_selection(tmpl):

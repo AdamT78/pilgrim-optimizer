@@ -1845,6 +1845,19 @@
       "reproducibleBy": "not recorded. The duty icons came from duty_art_lab/prompts/icons/01-icons-from-seal-motifs.md with the action's own wax seal attached; these three were not made from a seal and the brief that made them was not kept. If they are ever regenerated it should be written down first.",
       "sha256": "f60f33a435ae23dcb2e7c4941c0858cf8ce886848344da2174fb8e1e44471d14"
     },
+    "tokens/resources/icons/masters/resource_cornucopia_icon_master_v01.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "generated in a ChatGPT session for this project on a transparent background; no upstream URL and no seed. Which prompt produced it is reproducibleBy's to say, not this field's.",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 resource icons",
+      "title": "Cornucopia, resource icon, as generated",
+      "slot": "master",
+      "role": "the drawing as it came out of the generator, 1254 square on transparency. The FOURTH tithe resource and the only one that is not a thing: a horn spilling fruit on a torn dark ground, in the language the board's duty marks are drawn in. IT IS THE WILDCARD, which is why it is worth saying here rather than leaving to the rules. ui/concept/build_browser.py puts it plainly -- three of the four are resources and the cornucopia is the one where the tithing player CHOOSES which resource they take. tools/ui_debug/duty_wheel_layout.json labels it `Cornucopia (wild resource)` and ui/assets-gothic carries a token of it. So a board that draws this beside wheat, stone and silver as a fourth of the same kind is drawing something that is not true of it.",
+      "notes": "master, not shipped. How much of the square the board draws was chosen in ui/board_v2/icon_lab/ and taken out as tokens/resources/icons/resource_cornucopia_icon_v01.webp, which is what this is the original of; the framing that did it is in icon_lab/framing.json under this file's name. THE FIRST TREATMENT OF THE CORNUCOPIA IN board_v2. The other three resources each arrived here with a wax seal and a token already in tokens/resources/ -- seal_wheat, token_wheat and so on -- and the cornucopia has neither; the token in ui/assets-gothic/resources/token_cornucopia.png belongs to the older tree. So this is not a third treatment of something already drawn twice, the way the other three were. NOT A DUTY ACTION AND NOT A CONTROL, which is why these have a root of their own: taking a resource is not a move the engine scores, and it is not a button in the controls column either. Downloaded as 'Engraved Cornucopia Medallion.png' on 2026-11-11 and copied in unchanged -- same machine, copied between two mounted folders rather than through the device bridge, and the sha256 below was verified against the download rather than assumed.",
+      "reproducibleBy": "not recorded. The duty icons came from duty_art_lab/prompts/icons/01-icons-from-seal-motifs.md with the action's own wax seal attached; the four resources were not made from a seal and the briefs that made them were not kept. If they are ever regenerated it should be written down first.",
+      "sha256": "32d91c7256e80baa07d2a2273ddbb9e87f742d2ef1d635dcef70cc7be44fb71d"
+    },
     "tokens/resources/icons/resource_silver_icon_v01.webp": {
       "state": "present",
       "creator": "Generated with ChatGPT (OpenAI)",
@@ -1903,6 +1916,26 @@
         "x": 95,
         "y": 61,
         "w": 1150
+      }
+    },
+    "tokens/resources/icons/resource_cornucopia_icon_v01.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "source": "cut in this repository from resource_cornucopia_icon_master_v01.png; the drawing itself was generated in a ChatGPT session for this project on a transparent background, with no upstream URL and no seed.",
+      "licence": "openai-generated",
+      "collection": "Pilgrim board_v2 resource icons",
+      "title": "Cornucopia, resource icon",
+      "slot": "cut",
+      "role": "the cornucopia as the board draws it: a horn spilling fruit on a torn dark ground, the language the duty marks are already in, with the generator's margin taken off. THE WILDCARD, NOT A FOURTH RESOURCE. ui/concept/build_browser.py puts it plainly -- three of the four are resources and this is the one where the tithing player CHOOSES which resource they take; tools/ui_debug/duty_wheel_layout.json labels it `Cornucopia (wild resource)`. The board currently draws it on Construct's tile exactly as it draws wheat on Clerical's, which is the arrangement being looked at rather than a claim that the two are the same kind of thing.",
+      "notes": "Dealt to Construct by V2_TITHE in ui/board_v2/action_board/generate_action_board_v2.py, which is demo state flagged for removal when setup deals the resources for real -- so which tile this appears on is not a fact about the game yet. It replaced wheat there, leaving the ring at two wheat, two silver, two stone, one cornucopia and Taxation with none. Filed beside its master in tokens/resources/icons/ rather than in a folder of its own because that is the name ui/board_v2/icon_lab/generate_icon_sizer.py's next_resource_cut() offers and the folder _resource_seeds() looks in: a cut that is anywhere else cannot be found by the lab, and a framing whose cut cannot be found can only be taken again, never revisited.",
+      "modifications": "cut from resource_cornucopia_icon_master_v01.png at (100, 112), 1063 square, drawn 1:1 with no resampling and no ground -- whole source pixels, because a crop that lands between two source pixels is a resample wearing a crop's clothes. Encoded as WebP at quality 90, libwebp method 6, `exact` on so the colour under fully clear pixels is kept rather than chosen by the encoder: 138.9 KB from a 1254-square PNG master. Taken in Pillow rather than through the lab's canvas, which is how all four resources were cut and the one way they differ from the sixteen duty cuts: a canvas stores colour premultiplied by alpha and unmultiplies it on the way back out, moving the soft edge by up to 1 of 255 on about 4% of it. Skipping that round trip puts this closer to the master than the `cut` button's own output, not further -- but it does mean pressing `cut` on this same framing would hand back a file that differs in the soft edge and would NOT match the sha256 below. The alpha came through exactly: the worst pixel moves 0 of 255 through the WebP encode, measured rather than assumed, which matters more on a cut-out than anywhere else because the alpha IS the edge.",
+      "reproducibleBy": "ui/board_v2/icon_lab, which holds the framing in framing.json under this master's name and takes this crop out of the master on the `cut` button. The framing is exact; the bytes are not, for the canvas reason in modifications. This framing is NOT on the rounding boundary silver's is: scale 1.18019 recomputes the written 1063 exactly.",
+      "sha256": "cdef679e85428a34dde4fef05ff8bcb29e8ed5d7ee46814a2c0f692b2195de79",
+      "master": "resource_cornucopia_icon_master_v01.png",
+      "crop": {
+        "x": 100,
+        "y": 112,
+        "w": 1063
       }
     },
     "duty_actions/clerical/gain_piety/clerical_gain_piety_left_v04.png": {

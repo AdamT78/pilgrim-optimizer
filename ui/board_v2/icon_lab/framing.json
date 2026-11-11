@@ -1,5 +1,5 @@
 {
-  "savedAt": "2026-11-10T21:02:17.762Z",
+  "savedAt": "2026-11-11T09:38:55.528Z",
   "iconSize": 115,
   "note": "scale, ox and oy are the framing; everything else is worked out from them and is here to be read. Offsets are fractions of the box, so they survive a change of icon size. A cut is the square (x, y, w) taken out of `file` at its own resolution, with no resampling and no ground; where it runs off the edge of the file it is clear.",
   "icons": {
@@ -239,6 +239,20 @@
         "w": 972
       },
       "markFillsSlot": 1.1,
+      "ground": null
+    },
+    "resource_cornucopia_icon_master_v01.png": {
+      "name": "Cornucopia",
+      "source": 1254,
+      "scale": 1.18019,
+      "ox": -0.09441,
+      "oy": -0.10545,
+      "crop": {
+        "x": 100,
+        "y": 112,
+        "w": 1063
+      },
+      "markFillsSlot": 1.15,
       "ground": null
     },
     "resource_silver_icon_master_v01.png": {
