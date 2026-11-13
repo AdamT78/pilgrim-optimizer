@@ -2185,14 +2185,19 @@ def test_the_board_is_the_same_black_the_clip_is_drawn_on(tmpl):
     assert board.get("background") == "var(--film-black)", (
         "the canvas is not the clip's black, so a lit tile draws a rectangle: %s" % board)
 
+    # EVERY CLIP, NOT THE CLIP. There is more than one film now and they share one canvas, so
+    # they have to share one ground: a clip drawn on a different black cannot be absorbed by the
+    # same --film-black and would wear a rectangle in its own phase only, which is the kind of
+    # fault that gets noticed late because the board looks right in whichever phase you are in.
     rec = json.loads((BOARD / "attribution.json").read_text(encoding="utf-8"))["files"]
-    clip = [k for k in rec if k.startswith("effects/") and k.endswith(".mp4")]
-    assert len(clip) == 1, clip
-    m = re.search(r"rgb\((\d+),\s*(\d+),\s*(\d+)\)", rec[clip[0]]["measured"])
-    assert m, "the clip's record does not say what black it is drawn on"
-    assert css == tuple(int(g) for g in m.groups()), (
-        "the canvas is %s and the clip is recorded as being drawn on %s"
-        % (css, m.groups()))
+    clips = sorted(k for k in rec if k.startswith("effects/") and k.endswith(".mp4"))
+    assert clips, "no clip is recorded, so nothing says what black the canvas is matching"
+    for clip in clips:
+        m = re.search(r"rgb\((\d+),\s*(\d+),\s*(\d+)\)", rec[clip]["measured"])
+        assert m, "%s does not say what black it is drawn on" % clip
+        assert css == tuple(int(g) for g in m.groups()), (
+            "the canvas is %s and %s is recorded as being drawn on %s"
+            % (css, clip, m.groups()))
 
 
 def test_the_clip_is_an_element_so_bare_cannot_clear_it(tmpl):
