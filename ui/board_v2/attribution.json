@@ -9,6 +9,12 @@
       "attributionRequired": false,
       "shareAlike": false
     },
+      "project-authored": {
+        "name": "Made by hand by this project's author, in an editor. Nothing traced, filmed, diffused or model-generated is in the file and no upstream footage was used, so there is no third party's licence to honour and nobody to attribute. DISTINCT FROM `project-generated`, which means output a script in this repository produces and can produce again: this was composed by a person, the editor project is not in the tree, and the file is therefore the artefact rather than a rebuildable one.",
+        "url": "",
+        "attributionRequired": false,
+        "shareAlike": false
+      },
     "openai-generated": {
       "name": "OpenAI-generated output; rights assigned to the user under the OpenAI Europe Terms of Use. Not CC0, public domain or royalty-free stock",
       "url": "https://openai.com/policies/eu-terms-of-use/",
@@ -2590,6 +2596,20 @@
       "reproducibleBy": "tools/duty_art/knockout_icons.py --write, which rebuilds every one of these from the icons it finds. The thresholds and the cream are constants at the top of that file.",
       "sha256": "e70d425ca628e5987bcf522c3718f991308223c123e6fb6c4366c5d5d479ecab"
     },
+      "effects/duty_open_smoke_v01.mp4": {
+        "state": "present",
+        "creator": "The project's author",
+        "licence": "project-authored",
+        "source": "hand-built in a video editor for this project; no upstream footage, no stock, nothing model-generated, and no URL to point at.",
+        "collection": "Pilgrim board_v2 board effects",
+        "title": "Open duty, rising smoke",
+        "role": "WHAT AN OPEN DUTY TILE LOOKS LIKE IN ACTION SELECTION. A tile this seat has an Acolyte on carries this behind its figures; a tile it has none on carries nothing. Warm smoke rising off the line the Acolytes stand on and thinning out before the top, drawn on black so the page can screen it over the rectangle and the black costs nothing -- there is no alpha channel in it and none is needed.\nIT REPLACED A STILL GOLD GRADIENT, which is worth recording because the gradient is what this has to beat: the cue before that was a 1px warm edge on the icon frame, and it failed in use for want of AREA rather than contrast. Both are gone.",
+        "notes": "ONE FILE, EIGHT TILES, EIGHT DIFFERENT PLACES IN IT. The page gives each duty its own start offset so the wheel does not pulse in unison: the twelve seconds are divided evenly among the eight duties in clock order from north, floored to whole seconds, which is 0, 1, 3, 4, 6, 7, 9 and 10. The increments alternate 1 and 2 and the last step closes the loop, so the arrangement repeats exactly and no two tiles ever coincide.\nINLINED, NOT SERVED. generate_action_board_v2.py reads these bytes at build time and writes them into the page as a data URI, the way the interface sounds are handled; nothing in generated/ points at this path at run time.",
+        "modifications": "NONE. The file ships byte for byte as it was delivered -- 97520 bytes, sha256 below matching the source -- and that is deliberate rather than incidental: re-encoding is the one thing that would cost the 48 fps the effect was authored at, and a smoke loop resampled to 30 or 60 stops being seamless at the wrap.",
+        "reproducibleBy": "nothing in this repository. The editor project it was composed in is not in the tree, so this file is the artefact and not a build output; a change means a new version beside it rather than a re-run.",
+        "measured": "12.000 s, 576 frames at 48/1 fps, 192 x 128, H.264 High, yuv420p, 95.2 KB. The tile is 196 x 128 as a border box and 192 x 124 inside its 2px border, so the width matches the inner box and the height the outer one; the page covers from the floor rather than relying on either. ITS BACKGROUND IS NOT TRUE BLACK: it renders at rgb(4, 6, 8), steady to within one level across the whole loop, which matters because the page composites the clip with `screen` and screen only makes TRUE black disappear. The board's canvas is set to that same value -- --film-black in action_board_v2.html.tmpl -- so a lit tile leaves no rectangle on the board. Replace this clip with one drawn on a different black and that declaration has to move with it; a guard holds the two together.",
+        "sha256": "8c72dc6c7118c30519054454c7998359707ef6e2d64e010afec622de7d282b36"
+      },
     "backdrop/ribbon_backdrop_v07.webp": {
       "state": "present",
       "creator": "Generated with ChatGPT (OpenAI)",
@@ -8841,7 +8861,8 @@
     "controls",
     "tokens/masters",
     "tokens/resources",
-    "sfx"
+    "sfx",
+    "effects"
   ],
   "slotFoldersNote": "Which folder under duty_actions/ holds each duty action's pictures. IT CANNOT BE DERIVED and that is why it is written down: Clerical's actionA is `gain_piety` and its actionB `gain_coins`, while Produce's actionA is `gain_wheat` and its actionB `gain_stone` -- so neither alphabetical order nor the action's own name in duty_text.json gives the answer. It lives HERE rather than in duty_text.json because that file is the wording and says so; a folder is a fact about this tree, which is what this file is already about (see assetDirs). A duty with one action has one entry: Taxation and Allocation each have one, and the folders that were left over from before the wording existed -- taxation/action_b and allocation/special_activity -- are stale. ui/board_v2/action_board reads this when a picture lands in a slot that has none yet, and refuses to guess when a slot is missing from it.",
   "slotFolders": {
