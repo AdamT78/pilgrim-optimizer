@@ -30,6 +30,7 @@ Each test names the failure it exists to catch and how to falsify it.
 import hashlib
 import importlib.util
 import json
+import re
 import pathlib
 import sys
 
@@ -334,9 +335,29 @@ def test_the_resources_are_kept_although_nothing_draws_them_any_more():
     assert "def bundled_banners" not in gen, (
         "the generator bundles the banners again; if that is wanted, the page has to draw them "
         "too, and this test and the one in test_action_board_v2_grid.py both have to change")
-    assert "base64" not in gen, (
-        "the generator inlines something as base64 again -- v2 bundles art through v1's helpers, "
-        "so a base64 call here is the banner path coming back")
+    # "NO base64 ANYWHERE" WAS A PROXY, AND IT HAS STOPPED BEING ONE. It stood for "nothing is
+    # inlined here, because everything v2 ships goes through v1's helpers" -- true while the only
+    # thing this generator could have inlined was the banners. It is not true now: the open-duty
+    # loop is bundled HERE, by bundled_open, because v1 has no such cue to bundle for and no
+    # helper to share. So the guard says what it always meant -- the only thing inlined in this
+    # file is that one clip -- which still fails the moment a banner path comes back, and no
+    # longer fails on a cue that has nothing to do with banners.
+    where = {}
+    current = "<module>"
+    for line in gen.split("\n"):
+        m = re.match(r"def (\w+)", line)
+        if m:
+            current = m.group(1)
+        where.setdefault(current, []).append(line)
+    # CALLS, NOT THE WORD, and comments stripped before looking. Written as a bare substring
+    # this fired on build()'s own comment explaining a bug in which base64 ended up somewhere it
+    # should not have -- a guard failing on the prose that describes the thing it guards against,
+    # which is the third time this board has managed that.
+    inlines = sorted(k for k, v in where.items()
+                     if any("base64." in ln.split("#")[0] for ln in v))
+    assert inlines == ["bundled_open"], (
+        "base64 is used in %s; the only thing this generator may inline is the open-duty clip, "
+        "and anything else is the banner path coming back" % ", ".join(inlines))
     for token in ("__BANNERS__", "__BANNERMETA__", "__BANNERFONT__"):
         assert token not in gen and token not in tmpl, (
             "%s is back in the build, so the page carries banner data again" % token)

@@ -32,6 +32,8 @@ fixture runs the lot in one `node -e` and every test below reads its output.
 
 Each test names the failure it exists to catch and how to falsify it.
 """
+import base64
+import hashlib
 import importlib.util
 import json
 import math
@@ -161,6 +163,19 @@ def hood():
 @pytest.fixture(scope="module")
 def tmpl():
     return TMPL.read_text(encoding="utf-8")
+
+
+@pytest.fixture(scope="module")
+def gen():
+    """The v2 generator as a MODULE, not as text.
+
+    Most guards here read this file as a string, because what they are checking is how it is
+    written. The open-effect rules are different: the stagger and the clip's length are
+    arithmetic, and arithmetic is checked by running it. Reading `OPEN_STEPS` out of the source
+    and adding the numbers up here would be this file doing the generator's sum and agreeing
+    with itself.
+    """
+    return _load("generate_action_board_v2")
 
 
 # ---------------------------------------------------------------- reading the template
@@ -2082,68 +2097,124 @@ def test_the_open_tile_is_lit_and_nothing_is_dimmed(tmpl):
 
     Falsify: move the cue back onto the frame, or dim the shut tiles instead.
     """
-    open_ = _rule(tmpl, ".dcell.eligible")
-    grad = open_.get("background-image", "")
-    assert "linear-gradient" in grad and "var(--open-wash)" in grad, (
-        "an open tile is not lit by the named wash: %s" % open_)
-    assert not {"opacity", "filter"} & set(open_), (
-        "availability is said by dimming something: %s" % open_)
-    assert "background" not in open_ and "background-color" not in open_, (
-        "the wash replaces the tile's ground instead of composing over it: %s" % open_)
+    film = _rule(tmpl, ".smoke")
+    assert film.get("object-fit") == "cover", (
+        "the clip is not scaled to fill the rectangle: %s" % film)
+    assert film.get("object-position") == "bottom", (
+        "the plume is not anchored to the line the Acolytes stand on, so a short tile crops the "
+        "wrong end of it: %s" % film)
+    assert film.get("display") == "none" and film.get("pointer-events") == "none", (
+        "the clip shows on every tile, or takes clicks meant for one: %s" % film)
+    assert _rule(tmpl, ".dcell.eligible .smoke").get("display") == "block", (
+        "an open tile does not show the clip")
 
-    # AND IT IS DRAWN ONCE. A background's origin is the PADDING box and its clip is the BORDER
-    # box, so the 2px strip above the padding box gets the image repeated -- which puts the
-    # bottom of this gradient, its strongest gold, in a hard line along the top of every open
-    # tile. It read as the rectangle's hidden top edge coming back, and that is what it was
-    # reported as. This looks like tidiness and is the fix.
-    assert open_.get("background-repeat") == "no-repeat", (
-        "the wash repeats, so its strong end draws a line along the tile's top edge: %s" % open_)
-
-    for sel in (".dcell", ".dcell.bare", ".iplate"):
-        assert not {"opacity", "filter"} & set(_rule(tmpl, sel)), (
-            "%s is dimmed, so a shut tile wears a disabled look" % sel)
-    assert ".iplate.eligible" not in _rule_free(tmpl), (
-        "the frame carries the cue as well, so the board says one thing in two places")
-
-
-def test_the_wash_is_written_after_bare_so_the_default_view_keeps_it(tmpl):
-    """`bare` IS THE VIEW THE BOARD OPENS IN, AND IT SETS `background`.
-
-    The rule above it is last on purpose so that it beats the states that colour the rectangle's
-    edges. This one has to come after IT, or the cue is cleared in exactly the view where it is
-    most needed -- which is the trap `.tmark.feeds` was written around, one object over.
-
-    AND IT IS background-image, so it composes over whatever ground is underneath rather than
-    replacing it: transparent in the default view, the cell's near-black when the rectangles are
-    drawn, the chosen tile's own ground when one is chosen.
-
-    Falsify: move the wash above `.dcell.bare`, or write it as the `background` shorthand.
-    """
+    # NOT FOUR NAMED SELECTORS, BUT EVERY RULE THAT REACHES A RECTANGLE. Written as a list of
+    # selectors this guard slept through `.dcell:not(.eligible){opacity:.6}` -- a dimming rule
+    # that is obviously the thing being forbidden and is not any of the four names it was
+    # looking under. A mutation found it; the fix is to ask the question of the whole stylesheet.
     body = _rule_free(tmpl)
-    bare = body.index(".dcell.bare{")
-    wash = body.index(".dcell.eligible{")
-    assert wash > bare, (
-        "`bare` is written after the wash, so the view the board opens in clears the cue")
-    assert "background-image" in _rule(tmpl, ".dcell.eligible"), (
-        "the wash is not an image, so it replaces the ground it is supposed to sit on")
+    sheet = body.split("</style>")[0]
+    dim = sorted(sel.strip() for sel, decls in re.findall(r"([^{}]+)\{([^}]*)\}", sheet)
+                 if re.search(r"\bdcell\b|\bsmoke\b", sel)
+                 and re.search(r"(^|;)\s*(opacity|filter)\s*:", decls))
+    assert not dim, (
+        "a rectangle is dimmed by %s, so a shut tile wears a disabled look" % ", ".join(dim))
+    assert ".iplate.eligible" not in body, (
+        "the frame carries the cue as well, so the board says one thing in two places")
+    assert "--open-wash" not in _code(body).replace("NO --open-wash", ""), (
+        "the gold wash is still declared beside the film, so there are two cues")
 
 
-def test_the_light_is_the_gold_the_board_already_spends(tmpl):
-    """IT IS --line ITSELF RATHER THAN A GOLD CHOSEN BESIDE IT.
+def test_the_clip_is_lightened_and_nothing_above_it_isolates(tmpl):
+    """THE CLIP HAS NO ALPHA AND NEEDS NONE, AND THE BLEND IS WHAT STANDS IN FOR ONE.
 
-    Gold is already what this board spends on "this concerns you"; the chosen rim is a LINE and
-    this is a WASH, so the same hue does two jobs without either becoming the other. A name
-    rather than a literal because the mix is the thing somebody would tune.
+    `screen` WAS WRONG AND LOOKED RIGHT, which is why this is pinned. Screening black is a no-op
+    for TRUE black; the clip is drawn on rgb(4, 6, 8), so screen left four levels standing and
+    every open tile wore a cool dark rectangle. Matching the board to the clip's own ground made
+    it WORSE -- screen combines, so (4,6,8) over (4,6,8) is (8,12,16), the same gap again.
 
-    Falsify: mix the wash from some other colour, or make it opaque.
+    `lighten` takes the greater of the two, so a clip pixel at or below the board's ground is
+    exactly the board's ground and only what is brighter shows. It works only in company with
+    --film-black; the two together are the mechanism and neither half does anything alone, which
+    is why the guard on that colour and this one both exist.
+
+    AND NOTHING ABOVE IT MAY ISOLATE. Inside an isolated group the backdrop is transparent,
+    `lighten` returns the source unchanged, and the clip's ground paints a solid rectangle over
+    the board -- the cue becomes a hole. `.dcell` must stay a non-stacking context, which means
+    no isolation and no z-index on the way down to it.
+
+    Falsify: go back to screen, or isolate `.dcell` or `.smoke`.
+    """
+    film = _rule(tmpl, ".smoke")
+    assert film.get("mix-blend-mode") == "lighten", (
+        "the clip's ground is not hidden by the blend, so it draws a rectangle: %s" % film)
+    for sel in (".dcell", ".smoke"):
+        rule = _rule(tmpl, sel)
+        assert "isolation" not in rule, (
+            "%s isolates, so screen returns the clip unchanged and its black becomes a hole" % sel)
+        assert "z-index" not in rule, (
+            "%s takes a z-index, which makes it a stacking context and isolates the blend" % sel)
+
+
+def test_the_board_is_the_same_black_the_clip_is_drawn_on(tmpl):
+    """`screen` ONLY MAKES TRUE BLACK DISAPPEAR, AND THE CLIP'S BLACK IS NOT TRUE BLACK.
+
+    It renders at rgb(4, 6, 8) -- measured off the page, steady to within one level across the
+    loop -- so screened over a pure black board that pedestal survived untouched and every open
+    tile wore a cool dark rectangle. Not the border, which is transparent in the view the board
+    opens in: the clip's own ground, showing wherever the board's was darker.
+
+    THE BOARD MOVED TO MEET THE FILM. Crushing four levels out of the clip instead would be a
+    filter running on every frame of eight videos, and it would take the smoke's own darkest
+    values with it; the canvas is one declaration and costs nothing.
+
+    AND THE TWO ARE HELD TOGETHER, which is the point of this guard rather than the colour. The
+    pedestal is a fact about a FILE: a clip drawn on a different black needs this declaration to
+    move with it. So the number lives in the clip's own attribution record and the stylesheet is
+    checked against it -- neither is the other's copy, and a new clip that forgets this fails
+    here rather than looking slightly wrong to somebody eventually.
+
+    Falsify: put the board back to #000, or change one of the two without the other.
     """
     root = _rule(tmpl, ":root")
-    wash = root.get("--open-wash")
-    assert wash, "the wash is not a name, so it is written out at each reader"
-    assert "var(--line)" in wash, "the wash is not mixed from the board's gold: %s" % wash
-    assert "transparent" in wash, "the wash is opaque, so it is paint and not light: %s" % wash
-    assert "var(--open-wash)" in _rule(tmpl, ".dcell.eligible").get("background-image", ""), (
-        "the open tile no longer reads the name")
+    named = (root.get("--film-black") or "").strip().lstrip("#")
+    assert len(named) == 6, "the clip's black is not a name: %r" % root.get("--film-black")
+    css = tuple(int(named[i:i + 2], 16) for i in (0, 2, 4))
+
+    board = _rule(tmpl, "#board")
+    assert board.get("background") == "var(--film-black)", (
+        "the canvas is not the clip's black, so a lit tile draws a rectangle: %s" % board)
+
+    rec = json.loads((BOARD / "attribution.json").read_text(encoding="utf-8"))["files"]
+    clip = [k for k in rec if k.startswith("effects/") and k.endswith(".mp4")]
+    assert len(clip) == 1, clip
+    m = re.search(r"rgb\((\d+),\s*(\d+),\s*(\d+)\)", rec[clip[0]]["measured"])
+    assert m, "the clip's record does not say what black it is drawn on"
+    assert css == tuple(int(g) for g in m.groups()), (
+        "the canvas is %s and the clip is recorded as being drawn on %s"
+        % (css, m.groups()))
+
+
+def test_the_clip_is_an_element_so_bare_cannot_clear_it(tmpl):
+    """THE CUE STOPPED BEING A BACKGROUND, AND TWO TRAPS WENT WITH IT.
+
+    The gold wash this replaces had to be declared after `.dcell.bare`, because bare sets
+    `background` and is the view the board opens in; and it had to carry `no-repeat`, because a
+    background's origin is the padding box while its clip is the border box, so the strip above
+    the padding box repeated the image and drew its strong end as a hard line along every open
+    tile's top edge. A child element has neither problem, and this guard exists so that nobody
+    re-introduces them by moving the cue back into `background`.
+
+    Falsify: light an open tile with a background again.
+    """
+    body = _rule_free(tmpl)
+    assert ".dcell.eligible{" not in body, (
+        "an open tile is lit by a rule on the cell itself again, which `bare` can clear")
+    cell = _rule(tmpl, ".dcell.eligible .smoke")
+    assert set(cell) == {"display"}, (
+        "the open state says more than which element to show: %s" % cell)
+    assert "background" not in _code(_function(tmpl, "markEligible")), (
+        "the cue is being painted from script, where the stylesheet cannot be read")
 
 
 def test_the_box_says_it_in_words_and_the_tiles_say_it_in_light(tmpl):
@@ -2199,8 +2270,10 @@ def test_the_cue_is_drawn_only_while_the_restriction_holds(tmpl):
     """
     body = _code(_function(tmpl, "markEligible"))
     assert "actionPhase()" in body, "the cue is not gated on the phase:\n%s" % body
-    assert re.search(r'toggle\("eligible",\s*\w+ && eligible\(d\.slug\)\)', body), (
-        "the tiles are not marked from the gate and the rule together:\n%s" % body)
+    assert re.search(r"var open = \w+ && eligible\(d\.slug\);", body), (
+        "a tile is not open from the gate and the rule together:\n%s" % body)
+    assert re.search(r'toggle\("eligible",\s*open\)', body), (
+        "the rectangle is not marked from that answer:\n%s" % body)
     assert 'getElementById("dcell-" + d.slug)' in body, (
         "the sweep no longer lights the rectangle, which is where the cue has area")
 
@@ -2208,6 +2281,181 @@ def test_the_cue_is_drawn_only_while_the_restriction_holds(tmpl):
         assert "markEligible()" in _code(_function(tmpl, caller)), (
             "%s does not set the cue, so it is stale after %s runs"
             % (caller, "a state change" if caller == "render" else "a rebuild"))
+
+
+def test_the_stagger_is_the_sequence_that_was_asked_for(gen):
+    """EIGHT START TIMES ROUND THE RING: 0, 1, 3, 4, 6, 7, 9, 10 SECONDS, CLOCKWISE FROM NORTH.
+
+    The generator derives them by alternating +1 and +2 rather than listing them, because eight
+    numbers that look arbitrary are exactly what gets copied wrong -- but a derivation can drift
+    from the intent silently, which a list cannot. So the rule is in the code and the sequence it
+    has to produce is here, and neither is the other's copy.
+
+    Falsify: change the steps, their order, or where the ring starts.
+    """
+    geo = _load("geometry")
+    off = gen.open_offsets()
+    assert [off[slug] for slug, _n, _d in geo.DUTIES] == [0, 1, 3, 4, 6, 7, 9, 10], (
+        "the stagger is not the sequence asked for: %s" % off)
+    assert off[geo.DUTIES[0][0]] == 0, "north does not start at the beginning of the clip"
+    assert len(set(off.values())) == len(geo.DUTIES), (
+        "two duties share a start time, which is the one thing the stagger exists to prevent")
+
+
+def test_the_stagger_closes_the_loop_and_the_build_refuses_when_it_cannot(gen):
+    """EIGHT STEPS THAT ADD UP TO THE LENGTH OF THE CLIP, which is what makes it a ring.
+
+    The arrangement repeats exactly and no two tiles ever coincide ONLY while the steps sum to
+    the loop. A clip of some other length turns the stagger into a collision, so the build reads
+    the duration out of the file's own header and refuses rather than noting it -- a board that
+    reports this in a line nobody reads is a board that ships it.
+
+    AND THE DURATION IS READ, NOT ASSUMED. _mp4_seconds walks to `mvhd` and divides; this checks
+    it against the clip on disk and against what attribution.json measured, which are three
+    independent statements of one fact.
+
+    Falsify: drop the length check, or let the steps sum to something else.
+    """
+    span = gen.open_span()
+    assert span == sum(gen.OPEN_STEPS) * 4, "the ring no longer walks the steps evenly"
+
+    found = sorted(gen.OPEN_DIR.glob("%s_v*.mp4" % gen.OPEN_STEM))
+    assert found, "there is no open-duty clip in %s" % gen.OPEN_DIR
+    clip = found[-1]
+    seconds = gen._mp4_seconds(clip)
+    assert seconds is not None, "the clip's own header could not be read, so nothing is checked"
+    assert abs(seconds - span) < 0.05, (
+        "%s is %.3f s and the stagger closes a %d s loop" % (clip.name, seconds, span))
+
+    rec = json.loads((BOARD / "attribution.json").read_text(encoding="utf-8"))["files"]
+    entry = rec["effects/%s" % clip.name]
+    assert "%.3f s" % seconds in entry["measured"], (
+        "the record measures something other than what the file says: %s" % entry["measured"])
+
+    src = (TOOL / "generate_action_board_v2.py").read_text(encoding="utf-8")
+    body = src.split("def bundled_open")[1].split("\ndef ")[0]
+    assert "raise SystemExit" in body, (
+        "a clip of the wrong length is noted rather than refused, so it ships")
+
+
+def test_the_clip_ships_as_its_own_bytes_and_is_gated_on_the_record(gen):
+    """TWO RULES THIS TREE ALREADY HAS, APPLIED TO THE FIRST ASSET THAT IS NOT A PICTURE.
+
+    AN UNRECORDED ASSET IS LEFT OUT AND NAMED. Every picture on this board is gated on
+    attribution.json, and a board that quietly inlined an unrecorded clip would be that rule
+    broken by the newest kind of file -- which is how the interface sounds went uncredited for
+    months, invisible to a walk that knew only about pictures.
+
+    AND NOTHING IS RE-ENCODED ON THE WAY IN. The loop was authored at 48 fps; re-encoding is the
+    one thing that would quietly cost that and make the wrap stop being seamless. What the page
+    carries is base64 of the file, byte for byte, which this checks against the recorded sha256
+    rather than against a promise in a comment.
+
+    Falsify: drop the record check, or pass the clip through any encoder.
+    """
+    clip = sorted(gen.OPEN_DIR.glob("%s_v*.mp4" % gen.OPEN_STEM))[-1]
+    rel = "effects/%s" % clip.name
+    rec = json.loads((BOARD / "attribution.json").read_text(encoding="utf-8"))
+    assert rel in rec["files"], "%s is shipped with no attribution entry" % rel
+    assert hashlib.sha256(clip.read_bytes()).hexdigest() == rec["files"][rel]["sha256"], (
+        "%s is not the file that was recorded" % rel)
+
+    out, notes = gen.bundled_open()
+    assert out["src"].startswith("data:video/mp4;base64,"), out["src"][:40]
+    assert base64.b64decode(out["src"].split(",", 1)[1]) == clip.read_bytes(), (
+        "the page carries something other than the clip's own bytes, so the 48 fps is a claim")
+    assert out["loop"] == gen.open_span() and out["offsets"] == gen.open_offsets()
+
+    src = (TOOL / "generate_action_board_v2.py").read_text(encoding="utf-8")
+    body = src.split("def bundled_open")[1].split("\ndef ")[0]
+    assert "no attribution entry, left out" in body, (
+        "an unrecorded clip is no longer refused, so it can ship uncredited")
+
+    # AND effects/ IS WALKED AT ALL. A folder missing from assetDirs is a folder the verifier
+    # never opens, which is the other half of how the sounds stayed invisible.
+    assert "effects" in rec["assetDirs"], "effects/ is not a directory the asset walk opens"
+
+
+def test_the_clip_is_built_for_every_tile_and_played_by_the_state(tmpl):
+    """EIGHT ELEMENTS, BUILT ONCE; PLAYED, PAUSED AND SOUGHT FROM THE STATE.
+
+    HIDDEN IS NOT PAUSED. `display:none` stops a video being drawn and does not stop it being
+    decoded, so seven invisible films would run for the whole of a turn on a board where one or
+    two tiles are open.
+
+    SOUGHT ONLY ON THE WAY IN. render() runs on every click, hover cue and slider nudge, and
+    setting currentTime on a playing video is a seek -- done every render it would hold the clip
+    on one frame forever.
+
+    MUTED AS AN ATTRIBUTE AS WELL AS A PROPERTY, because that is what a browser reads when it
+    decides whether a video may autoplay without a gesture. Set only as a property, the play()
+    is refused on a page nobody has clicked yet, which is every page on first paint.
+
+    Falsify: build the elements on demand, leave a shut tile playing, seek on every render, or
+    drop the muted attribute.
+    """
+    grid = _code(_function(tmpl, "drawGrid"))
+    assert 'el("video", "smoke"' in grid, "the clip is not built with the rest of the rectangle"
+    assert 'sm.setAttribute("muted"' in grid and "sm.muted = true" in grid, (
+        "muted is not set both ways, so autoplay is refused before the first gesture")
+    for want in ("sm.loop = true", "playsinline", 'sm.id = "smoke-"'):
+        assert want in grid, "the clip is missing %s" % want
+    assert "if (OPEN.src)" in grid, (
+        "the element is built even when the generator bundled no clip")
+
+    mark = _code(_function(tmpl, "markEligible"))
+    assert re.search(r"if \(!open\)\{ if \(!sm\.paused\) sm\.pause\(\); return; \}", mark), (
+        "a shut tile is hidden without being paused:\n%s" % mark)
+    assert re.search(r"if \(!sm\.paused\) return;\s*\n\s*try \{ sm\.currentTime", mark), (
+        "the clip is sought on every render, which holds it on one frame:\n%s" % mark)
+    assert "openAt(d.slug)" in mark, "the clip does not join at its own place in the loop"
+
+
+def test_a_tile_that_opens_later_joins_the_others_in_step(tmpl):
+    """THE STAGGER IS A RELATIONSHIP, AND IT HAS TO SURVIVE THE SEAT PICKER.
+
+    The open set changes several times a turn -- a different seat, a different phase -- so a tile
+    starting its own clock when it happens to light up is the normal case, not an edge one. Eight
+    clips each begun at a different wall-clock moment are eight unrelated films; what makes this
+    one arrangement is that every tile's position is read off ONE clock that started with the
+    page.
+
+    Falsify: seek to the bare offset, or restart the clock when a tile opens.
+    """
+    body = _code(_function(tmpl, "openAt"))
+    assert "OPEN_T0" in body, "the position is not measured from the page's own clock"
+    assert re.search(r"%\s*span", body), (
+        "the position is not wrapped into the loop, so it runs past the end of the clip")
+    assert "OPEN.offsets" in body, "the position ignores the duty's own start time"
+    assert "Date.now" in _decl(tmpl, "OPEN_T0"), (
+        "the clock is not started when the page is: %s" % _decl(tmpl, "OPEN_T0"))
+    assert "OPEN_T0 =" not in _code(_function(tmpl, "markEligible")), (
+        "the clock is restarted where tiles open, so the eight drift apart")
+
+
+def test_a_token_named_twice_fails_the_build(gen):
+    """A TOKEN IN PROSE IS STILL A TOKEN.
+
+    The build already refuses a token left IN the page. This is the same hole from the other
+    side, and it is not hypothetical: a comment in the stylesheet mentioned the open bundle's
+    token by name while explaining what had replaced the gradient, and the fill duly wrote 130 KB
+    of base64 video into a CSS comment. The page still worked. It cost a quarter of a megabyte
+    and showed up as nothing but a bigger number in the build line, which is exactly the kind of
+    fault that survives for months.
+
+    Falsify: drop the count check from build().
+    """
+    src = (TOOL / "generate_action_board_v2.py").read_text(encoding="utf-8")
+    body = src.split("def build")[1].split("\ndef ")[0]
+    assert re.search(r"page\.count\(t\) > 1", body), (
+        "the build no longer notices a token written twice")
+    assert "raise SystemExit" in body.split("page.count(t) > 1")[1][:400], (
+        "a token written twice is noted rather than refused")
+
+    # AND THE TEMPLATE IS CLEAN TODAY, which is the thing the check is for.
+    page = (TOOL / "action_board_v2.html.tmpl").read_text(encoding="utf-8")
+    twice = sorted(set(t for t in re.findall(r"__[A-Z_]+__", page) if page.count(t) > 1))
+    assert not twice, "the template names %s more than once" % ", ".join(twice)
 
 
 def _rule_free(text: str) -> str:

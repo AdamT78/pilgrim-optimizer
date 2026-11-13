@@ -37,18 +37,19 @@
      moment there were two readers. Matching it by eye is how a board ends up with two nearly
      identical darks and no way to tell which one moved. */
   --plate-edge:#2a2721;
-  /* WHERE THIS SEAT MAY ACT, AS LIGHT IN THE RECTANGLE RATHER THAN A LINE AROUND SOMETHING.
-     THE FIRST ATTEMPT WAS A HAIRLINE AND IT FAILED IN USE. The icon frame's 1px edge went from
-     --plate-edge to a warm grey, which is a real step in colour and about forty pixels of area
-     on a 1400-wide board: measurable, and invisible. "It is still not clear what duty tiles are
-     eligible" was the whole of the verdict, and it was right. A cue has to be found at a glance
-     across eight tiles, so it needs AREA, and the rectangle is the largest thing each duty has.
-     GOLD, WHICH THIS BOARD ALREADY SPENDS ON "THIS CONCERNS YOU" -- it is --line itself at a low
-     mix, not a gold chosen next to it. The chosen rim stays a LINE and this is a WASH, so the
-     two are the same hue doing different jobs: a line is the answer you have given, a wash is the
-     room you are allowed to give it in. Nothing anywhere is dimmed; the shut tiles are the board
-     exactly as it has always looked. */
-  --open-wash:color-mix(in srgb, var(--line) 30%, transparent);
+  /* THE GROUND THE OPEN-DUTY FILM IS DRAWN ON, which is now also the board's. It is a MEASURED
+     value and not a chosen one: the clip's background renders at rgb(4, 6, 8), and the canvas
+     takes the same so that `screen` leaves no rectangle where a tile is lit. A name rather than
+     a literal because it is a fact about a FILE -- replace the clip with one drawn on a
+     different black and this is the line that has to move with it, which is exactly why the
+     guard compares it against the clip's own record rather than against itself. */
+  --film-black:#040608;
+  /* NO --open-wash. Where this seat may act was a still gold gradient in the rectangle for a
+     round and is a twelve-second film now -- see `.smoke` and the generator's open bundle -- so
+     the colour has gone with it. The cue has had three homes and the two it left are worth
+     keeping straight: a 1px warm edge on the icon frame, which failed for want of AREA rather
+     than contrast and could not be seen at all; then this wash, which could. Neither is a
+     fallback for the film; there is one cue. */
   /* AND THE GROUND INSIDE THAT EDGE, which is now worn by two kinds of object. It was written
      once, inline in .iplate, while the duty frames were the only thing on this board drawn in
      it; the three controls beside the Take Tithe box wear it too now, so it is a name. Written
@@ -104,7 +105,19 @@ body.full #bar,body.full #note{display:none}
 body.full #wrap{padding:0;align-items:center;min-height:100vh}
 body.full{background:#000}
 #fit{transform-origin:top left}
-#board{position:relative;background:#000;overflow:hidden}
+/* THE CANVAS IS THE CLIP'S OWN BLACK, NOT #000, AND THAT IS THE WHOLE REASON IT IS NOT #000.
+   The open-duty film is drawn on a near-black that is not zero -- measured off the rendered page
+   at rgb(4, 6, 8), steady to within one level across the loop -- and `screen` only disappears
+   TRUE black. Screened over a pure black board that pedestal survives untouched, so every open
+   tile wore a cool dark rectangle: not the border, which is transparent in the default view, but
+   the clip's own ground showing where the board's was darker.
+   SO THE BOARD MOVED TO MEET THE FILM rather than the film being crushed to meet the board.
+   Crushing it is a filter on every frame of eight videos to delete four levels, and it would
+   take the smoke's own darkest values with it; this is one declaration and it costs nothing.
+   It has to STAY in step with the clip: the number is recorded in attribution.json under the
+   clip's `measured`, and tests/action_board/test_action_board_v2_grid.py holds the two together.
+   See --film-black. */
+#board{position:relative;background:var(--film-black);overflow:hidden}
 /* DIRECT CHILDREN ONLY. `#board *` made every descendant absolute, which quietly killed the
    text flow inside the placeholders -- a card with no picture drew its action name and "no
    picture yet" on top of each other. Anything nested that needs placing says so itself. */
@@ -417,27 +430,40 @@ body.full{background:#000}
 .dcell.bare{background:transparent;border-top-color:transparent;
   border-left-color:transparent;border-right-color:transparent}
 /* OPEN TO THIS SEAT: YOUR ACOLYTES ARE ON THIS TILE, SO ITS ACTIONS CAN BE PRESSED.
-   IT RISES FROM THE LINE THE ACOLYTES STAND ON, which is the reason the tile is open at all --
-   the light comes off your own people rather than being painted on the tile from nowhere. It
-   fades out around two thirds up, so the rectangle is lit without becoming a gold block and the
-   figures keep a dark ground above them to read against.
-   AND IT COMES AFTER `bare` ON PURPOSE, which is the opposite of the rule the line above states
-   for itself. `bare` is LAST so that it beats the states that colour the rectangle's edges; it
-   also sets `background`, and `bare` is the view the board OPENS in -- so a cue written before
-   it would be cleared exactly where it is most needed. It is `background-image`, so it composes
-   over whatever ground is underneath instead of replacing it: transparent in the default view,
-   the cell's own near-black when the rectangles are drawn, and the chosen tile's #231d12 without
-   either of them having to know about this.
-   NOTHING IS DIMMED. A shut tile is the board as it has always looked, and the whole cue is what
-   is ADDED to an open one -- see markEligible for why that direction and not the other.
-   `no-repeat` IS LOAD-BEARING AND IS NOT TIDINESS. A background's ORIGIN is the padding box and
-   its CLIP is the border box, so the image is sized to the inside of the rectangle and painted
-   across the edges as well -- and the 2px strip above the padding box gets the image REPEATED,
-   which puts the bottom of this gradient, its strongest gold, in a hard line along the top of
-   every open tile. It read exactly like the rectangle's hidden top edge coming back, which is
-   what it was reported as. One tile, no repeat, and the strip is simply not painted. */
-.dcell.eligible{background-image:linear-gradient(to top, var(--open-wash), transparent 70%);
-  background-repeat:no-repeat}
+   A TWELVE-SECOND FILM OF SMOKE RISING OFF THE LINE THE ACOLYTES STAND ON, which is the reason
+   the tile is open at all -- the light comes off your own people rather than being painted on
+   from nowhere. One clip, eight tiles, eight places in it; the stagger is the generator's, see
+   markEligible.
+   `lighten` IS WHAT MAKES IT A GLOW RATHER THAN A PATCH, and it is not the obvious choice. The
+   clip has no alpha channel and needs none, so the blend has to do the work of one -- and the
+   first attempt was `screen`, on the reasoning that screening black is a no-op. It is, for TRUE
+   black. The clip is drawn on rgb(4, 6, 8), which is not that, and screen left those four levels
+   standing: every open tile wore a cool dark rectangle. Setting the board to the same value made
+   it worse rather than better, because screen COMBINES -- (4,6,8) over (4,6,8) is (8,12,16), the
+   same gap again. `lighten` takes the greater of the two instead, so a clip pixel at or below
+   the board's own ground is exactly the board's own ground, and only what is brighter than it
+   shows. That is what makes the rectangle vanish, and it needs --film-black to be what the clip
+   is drawn on. The pair is the mechanism; neither half works alone.
+   NO ISOLATION ANYWHERE ABOVE IT. An isolated group blends against a transparent backdrop, where
+   `lighten` returns the source unchanged and the clip's ground paints a solid rectangle over the
+   board -- the same failure screen had there. `.dcell` must stay a non-stacking context for this
+   to read, which is why nothing here sets z-index or isolation.
+   COVER, FROM THE FLOOR UP. The clip is 192 x 128 and the rectangle runs from 98px to 245px tall
+   as the height slider moves, so it is scaled to fill and anchored to the bottom: the plume
+   always stands on the line, and what a short tile loses is the thin top of it. `.dcell` is
+   `overflow:hidden`, so this is clipped to the padding box and never paints over the gold floor
+   line or the rectangle's edges.
+   AND IT IS AN ELEMENT, NOT A BACKGROUND, which quietly retires a trap. The wash this replaces
+   had to be declared after `.dcell.bare` because bare sets `background` and is the view the board
+   opens in, and had to carry `no-repeat` because a background's origin is the padding box while
+   its clip is the border box -- which drew the gradient's strong end as a hard line along every
+   open tile's top edge. A child element has neither problem.
+   NOTHING IS DIMMED. A shut tile is the board as it has always looked and the whole cue is what
+   is ADDED to an open one; see markEligible for why that direction and not the other. */
+.smoke{position:absolute;left:0;top:0;width:100%;height:100%;
+  object-fit:cover;object-position:bottom;mix-blend-mode:lighten;
+  pointer-events:none;display:none}
+.dcell.eligible .smoke{display:block}
 /* THE ICONS GET THEIR TILE BACK. On the ribbon each duty's marks stood on a rounded plate --
    .tile, one pixel of #2a2721 round --plate at --tile-alpha -- and losing the ribbon lost that
    ground, leaving cut-out emblems floating on the rectangle. This is the same declaration, not
@@ -557,6 +583,32 @@ var TITHE_SLOT = "tithe";
 // what unions the rest in; both are facts about the tree's resources, and the tree is what the
 // generator walks. Written out here they would be a second list to keep in step with TITHE_KEYS.
 var TITHE = __TITHE__;
+
+// WHAT AN OPEN DUTY TILE WEARS, AND WHEN EACH TILE STARTS WEARING IT.
+//
+// `src` is the clip as a data URI, `loop` is how long it runs, and `offsets` gives one start
+// time per duty slug. All three are the generator's: the clip because it gates every asset on
+// the attribution record, and the offsets because eight numbers that look arbitrary are exactly
+// the kind of thing that gets copied wrong. The generator derives them from a rule and refuses
+// to build when they do not close the clip's own length -- see bundled_open.
+//
+// `src` CAN BE NULL, and then nothing is drawn and the build has said why. There is no gradient
+// underneath to fall back to: a path that only runs when an asset is missing is a path nobody
+// ever looks at, and this board has removed three of those already.
+var OPEN = __OPEN__;
+
+// WHEN THE PAGE STARTED, so a tile that becomes open later joins the others IN STEP rather than
+// starting its own clock. The whole point of the stagger is that the eight are at different
+// places in one loop; eight clips each started whenever its tile happened to light up would be
+// eight unrelated films, and on a board where the open set changes with the seat picker that is
+// the normal case rather than an edge one.
+var OPEN_T0 = Date.now() / 1000;
+function openAt(slug){
+  var span = OPEN.loop || 0;
+  if (!span) return 0;
+  var since = (Date.now() / 1000) - OPEN_T0;
+  return (((OPEN.offsets && OPEN.offsets[slug]) || 0) + since) % span;
+}
 
 var S = {
   phase: GEO.livePhase,
@@ -1663,6 +1715,31 @@ function drawGrid(){
     cell.setAttribute("data-face", d.face);
     cell.dataset.hoverDuty = d.slug;
 
+    // THE OPEN-DUTY CLIP, INSIDE THE RECTANGLE AND BEHIND EVERYTHING IN IT.
+    //
+    // IT IS BUILT FOR ALL EIGHT AND PLAYED FOR SOME. Hidden by CSS and paused by markEligible,
+    // because a tile's state changes with the seat picker and the phase several times a turn,
+    // and building the element on the way in would make the first frame of a newly open tile
+    // wait on a decode. Eight exist; at most eight play, and usually one or two do.
+    //
+    // THE ACOLYTES STAY IN FRONT OF IT. They are drawn by drawFigures as children of #board, so
+    // they are later siblings of this rectangle and paint over it without either knowing about
+    // the other -- which is the right way round: the figures are the reason the tile is lit.
+    //
+    // `muted` TWICE, AS A PROPERTY AND AS AN ATTRIBUTE, and that is not belt and braces. Autoplay
+    // without a gesture is permitted for a muted video, and some browsers read the ATTRIBUTE when
+    // they decide that, not the property -- set only as a property, the play() in markEligible is
+    // refused on a page nobody has clicked yet, which is every page on first paint.
+    if (OPEN.src){
+      var sm = el("video", "smoke", null, cell);
+      sm.id = "smoke-" + d.slug;
+      sm.src = OPEN.src;
+      sm.muted = true; sm.loop = true; sm.playsInline = true;
+      sm.setAttribute("muted", ""); sm.setAttribute("playsinline", "");
+      sm.setAttribute("aria-hidden", "true");
+      sm.preload = "auto";
+    }
+
     // THE DUTY'S ICONS, BELOW THE RECTANGLE AND CENTRED UNDER IT.
     //
     // On the ribbon they were stacked down a 74-wide tile, which is why geometry.py hands over
@@ -1831,8 +1908,24 @@ function drawGrid(){
 function markEligible(){
   var asking = actionPhase();
   GEO.duties.forEach(function(d){
+    var open = asking && eligible(d.slug);
     var cell = document.getElementById("dcell-" + d.slug);
-    if (cell) cell.classList.toggle("eligible", asking && eligible(d.slug));
+    if (cell) cell.classList.toggle("eligible", open);
+    // AND THE CLIP IS STOPPED WHEN IT IS NOT BEING LOOKED AT. `display:none` hides it and does
+    // not pause it, so seven invisible films would go on being decoded for the whole of a turn.
+    var sm = document.getElementById("smoke-" + d.slug);
+    if (!sm) return;
+    if (!open){ if (!sm.paused) sm.pause(); return; }
+    // SOUGHT ONLY ON THE WAY IN. Setting currentTime on a playing video is a seek, and doing it
+    // every render -- render runs on every click, hover cue and slider nudge -- would hold the
+    // clip at one frame. It is already playing and already in step; leave it alone.
+    if (!sm.paused) return;
+    try { sm.currentTime = openAt(d.slug); } catch (e) {}
+    // A REJECTED play() IS NOT AN ERROR HERE. Autoplay is allowed because the clip is muted, but
+    // a browser may still refuse before the first gesture; the tile is marked either way, and
+    // the next render tries again because a paused video is what brings us back to this line.
+    var p = sm.play();
+    if (p && p.catch) p.catch(function(){});
   });
 }
 // AND THE TAKE TITHE BOX IS NOT IN THIS SWEEP, which was tried and taken back out.
