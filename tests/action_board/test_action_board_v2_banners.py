@@ -340,8 +340,10 @@ def test_the_resources_are_kept_although_nothing_draws_them_any_more():
     # thing this generator could have inlined was the banners. It is not true now: the open-duty
     # loop is bundled HERE, by bundled_open, because v1 has no such cue to bundle for and no
     # helper to share. So the guard says what it always meant -- the only thing inlined in this
-    # file is that one clip -- which still fails the moment a banner path comes back, and no
-    # longer fails on a cue that has nothing to do with banners.
+    # file is the phase films -- which still fails the moment a banner path comes back, and no
+    # longer fails on a cue that has nothing to do with banners. The bundler was bundled_open
+    # while there was one clip and is bundled_films now that each phase has its own; the name is
+    # pinned rather than the count, because what matters is that ONE function does the inlining.
     where = {}
     current = "<module>"
     for line in gen.split("\n"):
@@ -355,9 +357,9 @@ def test_the_resources_are_kept_although_nothing_draws_them_any_more():
     # which is the third time this board has managed that.
     inlines = sorted(k for k, v in where.items()
                      if any("base64." in ln.split("#")[0] for ln in v))
-    assert inlines == ["bundled_open"], (
-        "base64 is used in %s; the only thing this generator may inline is the open-duty clip, "
-        "and anything else is the banner path coming back" % ", ".join(inlines))
+    assert inlines == ["bundled_films"], (
+        "base64 is used in %s; the only thing this generator may inline is the phase films, and "
+        "anything else is the banner path coming back" % ", ".join(inlines))
     for token in ("__BANNERS__", "__BANNERMETA__", "__BANNERFONT__"):
         assert token not in gen and token not in tmpl, (
             "%s is back in the build, so the page carries banner data again" % token)

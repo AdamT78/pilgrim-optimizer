@@ -2105,8 +2105,8 @@ def test_the_open_tile_is_lit_and_nothing_is_dimmed(tmpl):
         "wrong end of it: %s" % film)
     assert film.get("display") == "none" and film.get("pointer-events") == "none", (
         "the clip shows on every tile, or takes clicks meant for one: %s" % film)
-    assert _rule(tmpl, ".dcell.eligible .smoke").get("display") == "block", (
-        "an open tile does not show the clip")
+    assert _rule(tmpl, ".smoke.on").get("display") == "block", (
+        "a chosen film is never shown")
 
     # NOT FOUR NAMED SELECTORS, BUT EVERY RULE THAT REACHES A RECTANGLE. Written as a list of
     # selectors this guard slept through `.dcell:not(.eligible){opacity:.6}` -- a dimming rule
@@ -2185,14 +2185,19 @@ def test_the_board_is_the_same_black_the_clip_is_drawn_on(tmpl):
     assert board.get("background") == "var(--film-black)", (
         "the canvas is not the clip's black, so a lit tile draws a rectangle: %s" % board)
 
+    # EVERY CLIP, NOT THE CLIP. There is more than one film now and they share one canvas, so
+    # they have to share one ground: a clip drawn on a different black cannot be absorbed by the
+    # same --film-black and would wear a rectangle in its own phase only, which is the kind of
+    # fault that gets noticed late because the board looks right in whichever phase you are in.
     rec = json.loads((BOARD / "attribution.json").read_text(encoding="utf-8"))["files"]
-    clip = [k for k in rec if k.startswith("effects/") and k.endswith(".mp4")]
-    assert len(clip) == 1, clip
-    m = re.search(r"rgb\((\d+),\s*(\d+),\s*(\d+)\)", rec[clip[0]]["measured"])
-    assert m, "the clip's record does not say what black it is drawn on"
-    assert css == tuple(int(g) for g in m.groups()), (
-        "the canvas is %s and the clip is recorded as being drawn on %s"
-        % (css, m.groups()))
+    clips = sorted(k for k in rec if k.startswith("effects/") and k.endswith(".mp4"))
+    assert clips, "no clip is recorded, so nothing says what black the canvas is matching"
+    for clip in clips:
+        m = re.search(r"rgb\((\d+),\s*(\d+),\s*(\d+)\)", rec[clip]["measured"])
+        assert m, "%s does not say what black it is drawn on" % clip
+        assert css == tuple(int(g) for g in m.groups()), (
+            "the canvas is %s and %s is recorded as being drawn on %s"
+            % (css, clip, m.groups()))
 
 
 def test_the_clip_is_an_element_so_bare_cannot_clear_it(tmpl):
@@ -2208,12 +2213,12 @@ def test_the_clip_is_an_element_so_bare_cannot_clear_it(tmpl):
     Falsify: light an open tile with a background again.
     """
     body = _rule_free(tmpl)
-    assert ".dcell.eligible{" not in body, (
-        "an open tile is lit by a rule on the cell itself again, which `bare` can clear")
-    cell = _rule(tmpl, ".dcell.eligible .smoke")
-    assert set(cell) == {"display"}, (
-        "the open state says more than which element to show: %s" % cell)
-    assert "background" not in _code(_function(tmpl, "markEligible")), (
+    assert ".dcell.eligible{" not in body and ".dcell.yours{" not in body, (
+        "a marked tile is lit by a rule on the cell itself again, which `bare` can clear")
+    shown = _rule(tmpl, ".smoke.on")
+    assert set(shown) == {"display"}, (
+        "the shown state says more than which element to show: %s" % shown)
+    assert "background" not in _code(_function(tmpl, "markStanding")), (
         "the cue is being painted from script, where the stylesheet cannot be read")
 
 
@@ -2236,7 +2241,7 @@ def test_the_box_says_it_in_words_and_the_tiles_say_it_in_light(tmpl):
         "the box is lit again, so it says in light what it already says in words")
     assert "NO .panel.eligible RULE" in tmpl, (
         "the reason the box is not lit is no longer written down, so it will come back")
-    sweep = _code(_function(tmpl, "markEligible"))
+    sweep = _code(_function(tmpl, "markStanding"))
     assert '"tithe"' not in sweep and "tbox" not in sweep, (
         "the box is still given a class nothing draws, which is a write with no reader:\n%s"
         % sweep)
@@ -2255,32 +2260,83 @@ def test_the_box_says_it_in_words_and_the_tiles_say_it_in_light(tmpl):
         "the box is refused somewhere other than on the pool being empty:\n%s" % take)
 
 
-def test_the_cue_is_drawn_only_while_the_restriction_holds(tmpl):
-    """THE MARKING AND THE REFUSING ARE ONE GATE, so they cannot drift apart.
+def test_the_phase_picks_the_film_and_the_occupancy_picks_the_tiles(tmpl):
+    """TWO QUESTIONS, AND THEY MUST NOT BE ANSWERED BY ONE RULE.
 
-    Eight lit frames saying "all open" is the same noise as none, and it would be a claim about
-    phases that have nothing built behind them. So outside Action Selection nothing is marked,
-    which is exactly when nothing is refused.
+    WHICH TILES are marked is where this seat's Acolytes stand -- the same set in Action
+    Selection and in Sowing, because that set is what both films are about. WHICH FILM they wear
+    is the phase.
+
+    IT MUST NOT ASK eligible(). That is the REFUSAL rule, and it answers `true` for every duty
+    outside Action Selection so that nothing is refused in a phase with no rules behind it -- so
+    a sweep built on it would light all eight tiles during Sowing. The two questions shared a
+    name until Sowing got a film, and this guard is what stops them sharing one again.
+
+    A PHASE WITH NO FILM MARKS NOTHING, which is the gate: `ready` has no entry in FILMS.byPhase
+    and needs no list of its own saying so.
 
     ONE SWEEP, TWO CALLERS. render() sets it because it is state; drawGrid() sets it because the
-    sliders throw these nine elements away and build them again, and a rebuild that left it to the
-    next render would drop the cue under the pointer on every slider move.
+    sliders throw these nine elements away and build them again, and a rebuild that left it to
+    the next render would drop the cue under the pointer on every slider move.
 
-    Falsify: mark without the phase test, or set the class in only one of the two.
+    Falsify: mark from eligible(), light a tile in the wrong phase, or set the class in only one
+    of the two callers.
     """
-    body = _code(_function(tmpl, "markEligible"))
-    assert "actionPhase()" in body, "the cue is not gated on the phase:\n%s" % body
-    assert re.search(r"var open = \w+ && eligible\(d\.slug\);", body), (
-        "a tile is not open from the gate and the rule together:\n%s" % body)
-    assert re.search(r'toggle\("eligible",\s*open\)', body), (
-        "the rectangle is not marked from that answer:\n%s" % body)
-    assert 'getElementById("dcell-" + d.slug)' in body, (
-        "the sweep no longer lights the rectangle, which is where the cue has area")
+    body = _code(_function(tmpl, "markStanding"))
+    assert "standsOn(S.seat, d.slug)" in body, (
+        "the marked tiles are not the ones this seat stands on:\n%s" % body)
+    assert "eligible(" not in body, (
+        "the sweep asks the refusal rule, which is true of every duty outside Action Selection "
+        "and would light all eight during Sowing:\n%s" % body)
+    assert re.search(r"phase === S\.phase", body), (
+        "the film is not chosen by the phase:\n%s" % body)
+    assert re.search(r'toggle\("on",\s*on\)', body), (
+        "the chosen film is not shown from that answer:\n%s" % body)
+    assert "FILMS.byPhase" in body, (
+        "the sweep does not take its phases from the bundle, so a phase with no film is not "
+        "simply a phase with no film:\n%s" % body)
 
     for caller in ("render", "drawGrid"):
-        assert "markEligible()" in _code(_function(tmpl, caller)), (
+        assert "markStanding()" in _code(_function(tmpl, caller)), (
             "%s does not set the cue, so it is stale after %s runs"
             % (caller, "a state change" if caller == "render" else "a rebuild"))
+
+
+def test_every_phase_with_a_film_has_one_that_is_recorded_and_its_own(gen):
+    """A FILM PER PHASE, EACH A DIFFERENT FILM, EACH THE SAME LENGTH.
+
+    THE SAME LENGTH because they share one set of offsets and one clock: a clip of some other
+    length would be in step for one cycle and adrift from then on. THE SAME GROUND because they
+    share one canvas -- see the guard on --film-black. A DIFFERENT FILM because the phase is what
+    the clip is there to say, and two that looked alike would leave the phase carried by nothing
+    but the word in the bar.
+
+    Falsify: point two phases at one clip, or add a phase to the map with no file behind it.
+    """
+    geo = _load("geometry")
+    keys = {p["key"] for p in geo.as_dict()["phases"]}
+    assert set(gen.FILM_STEMS) <= keys, (
+        "a film is keyed by something that is not a phase: %s"
+        % (set(gen.FILM_STEMS) - keys))
+    assert len(set(gen.FILM_STEMS.values())) == len(gen.FILM_STEMS), (
+        "two phases are pointed at one clip: %s" % gen.FILM_STEMS)
+
+    out, _notes = gen.bundled_films()
+    assert set(out["byPhase"]) == set(gen.FILM_STEMS), (
+        "a phase in the map shipped no clip: %s" % sorted(
+            set(gen.FILM_STEMS) - set(out["byPhase"])))
+    assert len(set(out["byPhase"].values())) == len(out["byPhase"]), (
+        "two phases shipped the same bytes, so the films cannot tell them apart")
+
+    rec = json.loads((BOARD / "attribution.json").read_text(encoding="utf-8"))["files"]
+    for phase, stem in gen.FILM_STEMS.items():
+        clip = sorted(gen.OPEN_DIR.glob("%s_v*.mp4" % stem))[-1]
+        rel = "effects/%s" % clip.name
+        assert rel in rec, "%s ships the unrecorded %s" % (phase, rel)
+        assert hashlib.sha256(clip.read_bytes()).hexdigest() == rec[rel]["sha256"], (
+            "%s is not the file that was recorded" % rel)
+        assert abs(gen._mp4_seconds(clip) - gen.open_span()) < 0.05, (
+            "%s does not close the loop the stagger divides" % rel)
 
 
 def test_the_stagger_is_the_sequence_that_was_asked_for(gen):
@@ -2319,21 +2375,22 @@ def test_the_stagger_closes_the_loop_and_the_build_refuses_when_it_cannot(gen):
     span = gen.open_span()
     assert span == sum(gen.OPEN_STEPS) * 4, "the ring no longer walks the steps evenly"
 
-    found = sorted(gen.OPEN_DIR.glob("%s_v*.mp4" % gen.OPEN_STEM))
-    assert found, "there is no open-duty clip in %s" % gen.OPEN_DIR
-    clip = found[-1]
-    seconds = gen._mp4_seconds(clip)
-    assert seconds is not None, "the clip's own header could not be read, so nothing is checked"
-    assert abs(seconds - span) < 0.05, (
-        "%s is %.3f s and the stagger closes a %d s loop" % (clip.name, seconds, span))
-
     rec = json.loads((BOARD / "attribution.json").read_text(encoding="utf-8"))["files"]
-    entry = rec["effects/%s" % clip.name]
-    assert "%.3f s" % seconds in entry["measured"], (
-        "the record measures something other than what the file says: %s" % entry["measured"])
+    for stem in sorted(set(gen.FILM_STEMS.values())):
+        found = sorted(gen.OPEN_DIR.glob("%s_v*.mp4" % stem))
+        assert found, "there is no %s clip in %s" % (stem, gen.OPEN_DIR)
+        clip = found[-1]
+        seconds = gen._mp4_seconds(clip)
+        assert seconds is not None, "%s: no duration in its header, so nothing is checked" % stem
+        assert abs(seconds - span) < 0.05, (
+            "%s is %.3f s and the stagger closes a %d s loop" % (clip.name, seconds, span))
+        entry = rec["effects/%s" % clip.name]
+        assert "%.3f s" % seconds in entry["measured"], (
+            "%s measures something other than what the file says: %s"
+            % (clip.name, entry["measured"]))
 
     src = (TOOL / "generate_action_board_v2.py").read_text(encoding="utf-8")
-    body = src.split("def bundled_open")[1].split("\ndef ")[0]
+    body = src.split("def bundled_films")[1].split("\ndef ")[0]
     assert "raise SystemExit" in body, (
         "a clip of the wrong length is noted rather than refused, so it ships")
 
@@ -2353,21 +2410,24 @@ def test_the_clip_ships_as_its_own_bytes_and_is_gated_on_the_record(gen):
 
     Falsify: drop the record check, or pass the clip through any encoder.
     """
-    clip = sorted(gen.OPEN_DIR.glob("%s_v*.mp4" % gen.OPEN_STEM))[-1]
-    rel = "effects/%s" % clip.name
     rec = json.loads((BOARD / "attribution.json").read_text(encoding="utf-8"))
-    assert rel in rec["files"], "%s is shipped with no attribution entry" % rel
-    assert hashlib.sha256(clip.read_bytes()).hexdigest() == rec["files"][rel]["sha256"], (
-        "%s is not the file that was recorded" % rel)
-
-    out, notes = gen.bundled_open()
-    assert out["src"].startswith("data:video/mp4;base64,"), out["src"][:40]
-    assert base64.b64decode(out["src"].split(",", 1)[1]) == clip.read_bytes(), (
-        "the page carries something other than the clip's own bytes, so the 48 fps is a claim")
+    out, notes = gen.bundled_films()
     assert out["loop"] == gen.open_span() and out["offsets"] == gen.open_offsets()
 
+    for phase, stem in sorted(gen.FILM_STEMS.items()):
+        clip = sorted(gen.OPEN_DIR.glob("%s_v*.mp4" % stem))[-1]
+        rel = "effects/%s" % clip.name
+        assert rel in rec["files"], "%s is shipped with no attribution entry" % rel
+        assert hashlib.sha256(clip.read_bytes()).hexdigest() == rec["files"][rel]["sha256"], (
+            "%s is not the file that was recorded" % rel)
+        uri = out["byPhase"][phase]
+        assert uri.startswith("data:video/mp4;base64,"), uri[:40]
+        assert base64.b64decode(uri.split(",", 1)[1]) == clip.read_bytes(), (
+            "%s carries something other than the clip's own bytes, so the 48 fps is a claim"
+            % phase)
+
     src = (TOOL / "generate_action_board_v2.py").read_text(encoding="utf-8")
-    body = src.split("def bundled_open")[1].split("\ndef ")[0]
+    body = src.split("def bundled_films")[1].split("\ndef ")[0]
     assert "no attribution entry, left out" in body, (
         "an unrecorded clip is no longer refused, so it can ship uncredited")
 
@@ -2395,20 +2455,20 @@ def test_the_clip_is_built_for_every_tile_and_played_by_the_state(tmpl):
     drop the muted attribute.
     """
     grid = _code(_function(tmpl, "drawGrid"))
-    assert 'el("video", "smoke"' in grid, "the clip is not built with the rest of the rectangle"
+    assert 'el("video", "smoke"' in grid, "the films are not built with the rest of the rectangle"
     assert 'sm.setAttribute("muted"' in grid and "sm.muted = true" in grid, (
         "muted is not set both ways, so autoplay is refused before the first gesture")
-    for want in ("sm.loop = true", "playsinline", 'sm.id = "smoke-"'):
-        assert want in grid, "the clip is missing %s" % want
-    assert "if (OPEN.src)" in grid, (
-        "the element is built even when the generator bundled no clip")
+    for want in ("sm.loop = true", "playsinline", 'sm.id = "smoke-" + phase'):
+        assert want in grid, "the films are missing %s" % want
+    assert "Object.keys(FILMS.byPhase || {})" in grid, (
+        "the elements are not built from the phases that actually have a film")
 
-    mark = _code(_function(tmpl, "markEligible"))
-    assert re.search(r"if \(!open\)\{ if \(!sm\.paused\) sm\.pause\(\); return; \}", mark), (
-        "a shut tile is hidden without being paused:\n%s" % mark)
+    mark = _code(_function(tmpl, "markStanding"))
+    assert re.search(r"if \(!on\)\{ if \(!sm\.paused\) sm\.pause\(\); return; \}", mark), (
+        "a film that is not showing is hidden without being paused:\n%s" % mark)
     assert re.search(r"if \(!sm\.paused\) return;\s*\n\s*try \{ sm\.currentTime", mark), (
-        "the clip is sought on every render, which holds it on one frame:\n%s" % mark)
-    assert "openAt(d.slug)" in mark, "the clip does not join at its own place in the loop"
+        "a clip is sought on every render, which holds it on one frame:\n%s" % mark)
+    assert "filmAt(d.slug)" in mark, "a clip does not join at its own place in the loop"
 
 
 def test_a_tile_that_opens_later_joins_the_others_in_step(tmpl):
@@ -2422,15 +2482,19 @@ def test_a_tile_that_opens_later_joins_the_others_in_step(tmpl):
 
     Falsify: seek to the bare offset, or restart the clock when a tile opens.
     """
-    body = _code(_function(tmpl, "openAt"))
-    assert "OPEN_T0" in body, "the position is not measured from the page's own clock"
+    body = _code(_function(tmpl, "filmAt"))
+    assert "FILM_T0" in body, "the position is not measured from the page's own clock"
     assert re.search(r"%\s*span", body), (
         "the position is not wrapped into the loop, so it runs past the end of the clip")
-    assert "OPEN.offsets" in body, "the position ignores the duty's own start time"
-    assert "Date.now" in _decl(tmpl, "OPEN_T0"), (
-        "the clock is not started when the page is: %s" % _decl(tmpl, "OPEN_T0"))
-    assert "OPEN_T0 =" not in _code(_function(tmpl, "markEligible")), (
-        "the clock is restarted where tiles open, so the eight drift apart")
+    assert "FILMS.offsets" in body, "the position ignores the duty's own start time"
+    assert "Date.now" in _decl(tmpl, "FILM_T0"), (
+        "the clock is not started when the page is: %s" % _decl(tmpl, "FILM_T0"))
+    assert "FILM_T0 =" not in _code(_function(tmpl, "markStanding")), (
+        "the clock is restarted where tiles are marked, so the eight drift apart")
+    # AND ONE CLOCK FOR BOTH FILMS. Changing phase swaps which clip a tile shows; a second clock
+    # would restart the ring at that moment, which is the one thing the stagger is for.
+    assert _code(tmpl).count("FILM_T0 =") == 1, (
+        "there is more than one clock, so the films cannot stay in step with each other")
 
 
 def test_a_token_named_twice_fails_the_build(gen):

@@ -106,8 +106,22 @@ GRID_DEFAULTS = {"gap": 115, "disp": 60, "size": 90, "height": 130, "bare": True
 # Written out as eight numbers that would be a coincidence nobody could check; written as the
 # rule, `check_open_loop` below can fail the build when the clip and the stagger disagree.
 OPEN_DIR = v1.BOARD / "effects"
-OPEN_STEM = "duty_open_smoke"
 OPEN_STEPS = (1, 2)
+
+# ONE FILM PER PHASE, OVER THE SAME SET OF TILES. The tiles a seat's Acolytes stand on are
+# marked in Action Selection and in Sowing both, because the two phases ask different things of
+# one set: there it is where you may ACT, here it is where your people are STANDING before you
+# move them. The set is `standsOn` either way and the FILM is what says which question is being
+# asked, so the clips differ on purpose -- the Sowing one is a smoulder against the other's
+# billow, measurably rather than by eye, and the record for each says by how much.
+#
+# KEYED BY THE PHASE KEY geometry.py PUBLISHES, so a phase with no film here simply has none and
+# the page draws nothing; `ready` is in that position today.
+#
+# `duty_open_smoke` IS NOT A TYPO FOR `duty_action_smoke`. It was named when there was one clip
+# and no phase to key it by, and renaming a file in this tree orphans its sha256 and its record.
+# The map is the right place to absorb that rather than a rename that costs provenance.
+FILM_STEMS = {"action": "duty_open_smoke", "sow": "duty_sow_smoke"}
 
 # WHERE THE THREE RESOURCE CUTS LIVE, and the three keys the board asks for them by.
 TITHE_DIR = v1.BOARD / "tokens" / "resources" / "icons"
@@ -308,60 +322,72 @@ def _mp4_seconds(path: pathlib.Path) -> float | None:
     return dur / scale if scale else None
 
 
-def bundled_open() -> tuple[dict, list]:
-    """The open-duty loop, inlined, with the stagger that goes with it.
+def bundled_films() -> tuple[dict, list]:
+    """One clip per phase, with the stagger they all share.
 
-    THE RECORD GATES IT, exactly as it gates every picture on this board: a clip with no
-    attribution entry is left out and NAMED rather than shipped. A board that quietly inlined an
-    unrecorded asset would be the one rule this tree has about assets, broken by the newest kind
-    of asset.
+    WAS bundled_open() AND BUNDLED ONE. It became a map the moment Sowing got a film of its own,
+    and the shape changed rather than a second near-copy being written: two bundlers would be two
+    places to forget the record gate, the length check or the no-re-encode rule, and all three
+    are the point of this function rather than decoration on it.
 
-    NEWEST VERSION WINS -- `duty_open_smoke_vNN.mp4`, highest NN -- so replacing the effect is
-    adding a file beside the old one rather than overwriting it and orphaning its sha256.
+    THE RECORD GATES EACH ONE, exactly as it gates every picture on this board: a clip with no
+    attribution entry is left out and NAMED rather than shipped. A phase whose clip is refused
+    simply has none, and the page draws nothing for it -- which is the same state `ready` is in
+    by having no entry here at all.
+
+    NEWEST VERSION WINS -- `<stem>_vNN.mp4`, highest NN -- so replacing an effect is adding a
+    file beside the old one rather than overwriting it and orphaning its sha256.
 
     INLINED RATHER THAN SERVED, which is bundled_sfx's decision and for its reasons: the page is
-    opened off disk and saved with a button, and an effect that lived in generated/ would be a
-    second file to carry. 95 KB is a third of what one action card's picture costs.
+    opened off disk and saved with a button, and an effect living in generated/ would be a second
+    file to carry. The two together cost about 250 KB of a 3 MB page.
 
-    AND NOTHING IS RE-ENCODED ON THE WAY IN. These are the file's own bytes, base64 and no more:
-    the loop was authored at 48 fps and re-encoding is the one thing that would quietly cost it.
+    AND NOTHING IS RE-ENCODED ON THE WAY IN. These are each file's own bytes, base64 and no more:
+    the loops were authored at 48 fps and re-encoding is the one thing that would quietly cost it.
     """
     notes: list = []
-    offsets = open_offsets()
     span = open_span()
-    out = {"src": None, "loop": float(span), "offsets": offsets}
+    out = {"loop": float(span), "offsets": open_offsets(), "byPhase": {}}
 
     if not OPEN_DIR.is_dir():
-        return out, ["no effects/ at %s, so an open duty tile is lit by nothing" % OPEN_DIR]
-    found = sorted(f for f in OPEN_DIR.glob("%s_v*.mp4" % OPEN_STEM) if f.is_file())
-    if not found:
-        return out, ["no %s_vNN.mp4 in effects/, so an open duty tile is lit by nothing"
-                     % OPEN_STEM]
-    f = found[-1]
-    rel = "effects/%s" % f.name
+        return out, ["no effects/ at %s, so no tile is lit in any phase" % OPEN_DIR]
+
     rec = {}
     if v1.ATTRIB_FILE.is_file():
         rec = json.loads(v1.ATTRIB_FILE.read_text(encoding="utf-8")).get("files", {})
-    if rel not in rec:
-        return out, ["%s: no attribution entry, left out" % rel]
 
-    seconds = _mp4_seconds(f)
-    if seconds is None:
-        notes.append("%s: could not read a duration out of it, so the %d s stagger is unchecked"
-                     % (rel, span))
-    elif abs(seconds - span) > 0.05:
-        # NOT A WARNING. The stagger would put two tiles on the same frame, which is the whole
-        # thing it exists to avoid, and a board that says so in a build note nobody reads is a
-        # board that ships it.
-        raise SystemExit(
-            "%s is %.3f s and the stagger closes a %d s loop, so two duties would run in step. "
-            "Either the clip or OPEN_STEPS is wrong." % (rel, seconds, span))
-    else:
-        # THE STAGGER IS PRINTED BY THE SUMMARY, not here. This says what the clip IS, which the
-        # summary cannot: that a file was found, that its own header agrees with the loop the
-        # stagger closes, and what it costs the page.
-        notes.append("%s: %.3f s, %d KB, inlined" % (rel, seconds, len(f.read_bytes()) // 1024))
-    out["src"] = "data:video/mp4;base64," + base64.b64encode(f.read_bytes()).decode("ascii")
+    for phase, stem in FILM_STEMS.items():
+        found = sorted(f for f in OPEN_DIR.glob("%s_v*.mp4" % stem) if f.is_file())
+        if not found:
+            notes.append("no %s_vNN.mp4 in effects/, so nothing is lit in %s" % (stem, phase))
+            continue
+        f = found[-1]
+        rel = "effects/%s" % f.name
+        if rel not in rec:
+            notes.append("%s: no attribution entry, left out" % rel)
+            continue
+
+        seconds = _mp4_seconds(f)
+        if seconds is None:
+            notes.append("%s: no duration in its header, so the %d s stagger is unchecked"
+                         % (rel, span))
+        elif abs(seconds - span) > 0.05:
+            # NOT A WARNING. The stagger would put two tiles on the same frame, which is the
+            # whole thing it exists to avoid, and a board that says so in a build note nobody
+            # reads is a board that ships it. Every film is held to the same loop, because they
+            # share one set of offsets and one clock: a clip of some other length would be in
+            # step with the others for one cycle and adrift from then on.
+            raise SystemExit(
+                "%s is %.3f s and the stagger closes a %d s loop, so two duties would run in "
+                "step. Either the clip or OPEN_STEPS is wrong." % (rel, seconds, span))
+        else:
+            # THE STAGGER IS PRINTED BY THE SUMMARY, not here. This says what each clip IS, which
+            # the summary cannot: that a file was found, that its own header agrees with the loop
+            # the stagger closes, and what it costs the page.
+            notes.append("%s: %s, %.3f s, %d KB, inlined"
+                         % (phase, rel, seconds, len(f.read_bytes()) // 1024))
+        out["byPhase"][phase] = ("data:video/mp4;base64,"
+                                 + base64.b64encode(f.read_bytes()).decode("ascii"))
     return out, notes
 
 
@@ -381,8 +407,8 @@ def build() -> tuple[str, list]:
     controls, cnotes = v1.bundled_controls()
     tithe, tnotes = bundled_tithe()
     names, nnotes = tithe_names()
-    openfx, onotes = bundled_open()
-    notes += snotes + xnotes + dnotes + cnotes + tnotes + nnotes + onotes
+    films, fnotes = bundled_films()
+    notes += snotes + xnotes + dnotes + cnotes + tnotes + nnotes + fnotes
 
     # THE BACKDROP IS NOT BUNDLED, because v2 does not draw it. It was the valley the ribbon of
     # eight tiles stood on, and the ribbon is gone. Carrying the picture anyway would leave 22 KB
@@ -430,21 +456,21 @@ def build() -> tuple[str, list]:
         # walks -- restated in the template they would be a second list to keep in step.
         "__TITHE__": json.dumps({"order": [k for k in TITHE_KEYS if k != TITHE_WILD],
                                  "wild": TITHE_WILD, "names": names}),
-        # WHAT AN OPEN TILE WEARS, AND WHEN EACH TILE STARTS WEARING IT. The clip, the length of
-        # its loop and one start offset per duty. The offsets are arithmetic here rather than a
-        # list in the template for the reason every other fact on this board travels as data: a
-        # second copy is a second thing to keep in step, and this one would be eight numbers that
-        # look arbitrary wherever they are read.
-        "__OPEN__": json.dumps(openfx),
+        # WHAT A MARKED TILE WEARS IN EACH PHASE, the length of the loop they share, and one
+        # start offset per duty. The offsets are arithmetic here rather than a list in the
+        # template for the reason every other fact on this board travels as data: a second copy
+        # is a second thing to keep in step, and this one would be eight numbers that look
+        # arbitrary wherever they are read.
+        "__FILMS__": json.dumps(films),
         "__HOOD__": json.dumps(hood.as_dict()),
         "__SAVEKEYS__": json.dumps(v1.SAVE_KEYS),
         "__BUILD__": json.dumps({"version": v1.BUILD_VERSION + "+v2", "notes": notes}),
     }
     # AND A TOKEN WRITTEN TWICE IS THE SAME HOLE FROM THE OTHER SIDE. The check below catches a
     # token left IN the page; this catches one substituted somewhere nobody meant it to be, which
-    # is not hypothetical: a comment in the stylesheet mentioned __OPEN__ by name while explaining
-    # what had replaced the gradient, and the replace below duly wrote 130 KB of base64 video into
-    # a CSS comment. The page still worked, which is what makes it worth failing on -- it cost a
+    # is not hypothetical: a comment in the stylesheet named the film bundle's own token while
+    # explaining what had replaced the gradient, and the replace below duly wrote 130 KB of base64
+    # video into a CSS comment. The page still worked, which is what makes it worth failing on -- it cost a
     # quarter of a megabyte and showed up as nothing but a bigger number in the build line.
     twice = sorted(t for t in fill if page.count(t) > 1)
     if twice:
@@ -527,8 +553,9 @@ def main() -> None:
     # are easy to get wrong by one step and impossible to see wrong in a page that is playing
     # them, so the build says what it dealt with the compass face beside each.
     off = open_offsets()
-    print("  open effect: %d s loop, starting %s"
+    print("  effects: %d s loop, %s, starting %s"
           % (open_span(),
+             "/".join(sorted(FILM_STEMS)) or "none",
              ", ".join("%s %ds" % (G.face_of(deg), off[slug]) for slug, _, deg in G.DUTIES)))
     for n in notes:
         print("  note: %s" % n)
