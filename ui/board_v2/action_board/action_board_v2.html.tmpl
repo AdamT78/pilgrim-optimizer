@@ -429,11 +429,14 @@ body.full{background:#000}
    selection still read, in the only language a bare cell has left. */
 .dcell.bare{background:transparent;border-top-color:transparent;
   border-left-color:transparent;border-right-color:transparent}
-/* OPEN TO THIS SEAT: YOUR ACOLYTES ARE ON THIS TILE, SO ITS ACTIONS CAN BE PRESSED.
+/* YOUR ACOLYTES ARE ON THIS TILE, WHICH IS WHAT BOTH FILMS MARK.
    A TWELVE-SECOND FILM OF SMOKE RISING OFF THE LINE THE ACOLYTES STAND ON, which is the reason
-   the tile is open at all -- the light comes off your own people rather than being painted on
-   from nowhere. One clip, eight tiles, eight places in it; the stagger is the generator's, see
-   markEligible.
+   the tile is marked at all -- the light comes off your own people rather than being painted on
+   from nowhere. Eight tiles, eight places in one loop; the stagger is the generator's.
+   THE SHOWING IS ON THE VIDEO AND NOT ON THE RECTANGLE, because there is more than one film and
+   a stylesheet cannot know which phase the board is in. Each tile carries one video per phase
+   that HAS a film and markStanding turns exactly one of them on, so the class says the whole
+   fact -- this film, on this tile, now -- rather than half of it.
    `lighten` IS WHAT MAKES IT A GLOW RATHER THAN A PATCH, and it is not the obvious choice. The
    clip has no alpha channel and needs none, so the blend has to do the work of one -- and the
    first attempt was `screen`, on the reasoning that screening black is a no-op. It is, for TRUE
@@ -459,11 +462,11 @@ body.full{background:#000}
    its clip is the border box -- which drew the gradient's strong end as a hard line along every
    open tile's top edge. A child element has neither problem.
    NOTHING IS DIMMED. A shut tile is the board as it has always looked and the whole cue is what
-   is ADDED to an open one; see markEligible for why that direction and not the other. */
+   is ADDED to a marked one; see markStanding for why that direction and not the other. */
 .smoke{position:absolute;left:0;top:0;width:100%;height:100%;
   object-fit:cover;object-position:bottom;mix-blend-mode:lighten;
   pointer-events:none;display:none}
-.dcell.eligible .smoke{display:block}
+.smoke.on{display:block}
 /* THE ICONS GET THEIR TILE BACK. On the ribbon each duty's marks stood on a rounded plate --
    .tile, one pixel of #2a2721 round --plate at --tile-alpha -- and losing the ribbon lost that
    ground, leaving cut-out emblems floating on the rectangle. This is the same declaration, not
@@ -584,30 +587,40 @@ var TITHE_SLOT = "tithe";
 // generator walks. Written out here they would be a second list to keep in step with TITHE_KEYS.
 var TITHE = __TITHE__;
 
-// WHAT AN OPEN DUTY TILE WEARS, AND WHEN EACH TILE STARTS WEARING IT.
+// WHAT A MARKED TILE WEARS IN EACH PHASE, AND WHEN EACH TILE STARTS WEARING IT.
 //
-// `src` is the clip as a data URI, `loop` is how long it runs, and `offsets` gives one start
-// time per duty slug. All three are the generator's: the clip because it gates every asset on
-// the attribution record, and the offsets because eight numbers that look arbitrary are exactly
-// the kind of thing that gets copied wrong. The generator derives them from a rule and refuses
-// to build when they do not close the clip's own length -- see bundled_open.
+// `byPhase` maps a phase key to a clip as a data URI, `loop` is how long they all run, and
+// `offsets` gives one start time per duty slug. All of it is the generator's: the clips because
+// it gates every asset on the attribution record, and the offsets because eight numbers that
+// look arbitrary are exactly the kind of thing that gets copied wrong. The generator derives
+// them from a rule and refuses to build a clip that does not close the loop -- see bundled_films.
 //
-// `src` CAN BE NULL, and then nothing is drawn and the build has said why. There is no gradient
+// WHICH TILES ARE MARKED IS ONE RULE IN BOTH PHASES: the ones this seat's Acolytes stand on.
+// WHICH FILM THEY WEAR IS THE PHASE. In Action Selection that set is where you may ACT, and in
+// Sowing it is where your people are STANDING before you move them -- one set, two questions,
+// so the clips differ rather than the set doing the talking. See markStanding.
+//
+// A PHASE WITH NO ENTRY HERE SIMPLY HAS NO FILM, and nothing is drawn for it; `ready` is in that
+// position today, as is any phase whose clip the generator refused. There is no gradient
 // underneath to fall back to: a path that only runs when an asset is missing is a path nobody
 // ever looks at, and this board has removed three of those already.
-var OPEN = __OPEN__;
+var FILMS = __FILMS__;
 
-// WHEN THE PAGE STARTED, so a tile that becomes open later joins the others IN STEP rather than
+// WHEN THE PAGE STARTED, so a tile that becomes marked later joins the others IN STEP rather than
 // starting its own clock. The whole point of the stagger is that the eight are at different
 // places in one loop; eight clips each started whenever its tile happened to light up would be
-// eight unrelated films, and on a board where the open set changes with the seat picker that is
-// the normal case rather than an edge one.
-var OPEN_T0 = Date.now() / 1000;
-function openAt(slug){
-  var span = OPEN.loop || 0;
+// eight unrelated films, and on a board where the marked set changes with the seat picker that
+// is the normal case rather than an edge one.
+//
+// AND IT IS SHARED ACROSS THE FILMS, not one clock each. Both clips run the same twelve seconds
+// from the same eight offsets, so changing phase swaps which film a tile is showing WITHOUT
+// moving it in the loop -- the ring stays in the arrangement it was in.
+var FILM_T0 = Date.now() / 1000;
+function filmAt(slug){
+  var span = FILMS.loop || 0;
   if (!span) return 0;
-  var since = (Date.now() / 1000) - OPEN_T0;
-  return (((OPEN.offsets && OPEN.offsets[slug]) || 0) + since) % span;
+  var since = (Date.now() / 1000) - FILM_T0;
+  return (((FILMS.offsets && FILMS.offsets[slug]) || 0) + since) % span;
 }
 
 var S = {
@@ -1715,12 +1728,17 @@ function drawGrid(){
     cell.setAttribute("data-face", d.face);
     cell.dataset.hoverDuty = d.slug;
 
-    // THE OPEN-DUTY CLIP, INSIDE THE RECTANGLE AND BEHIND EVERYTHING IN IT.
+    // THE FILMS, INSIDE THE RECTANGLE AND BEHIND EVERYTHING IN IT.
     //
-    // IT IS BUILT FOR ALL EIGHT AND PLAYED FOR SOME. Hidden by CSS and paused by markEligible,
+    // ONE ELEMENT PER PHASE THAT HAS A FILM, rather than one element whose `src` is swapped when
+    // the phase changes. Swapping would reload and re-decode eight videos on every press of a
+    // phase button, for a saving of eight paused elements holding a 95 KB clip each -- and it
+    // would put a blank frame in the place the board is meant to be most legible.
+    //
+    // BUILT FOR ALL EIGHT TILES AND PLAYED FOR SOME. Hidden by CSS and paused by markStanding,
     // because a tile's state changes with the seat picker and the phase several times a turn,
-    // and building the element on the way in would make the first frame of a newly open tile
-    // wait on a decode. Eight exist; at most eight play, and usually one or two do.
+    // and building the element on the way in would make the first frame of a newly marked tile
+    // wait on a decode. At most eight play at once, and usually one or two do.
     //
     // THE ACOLYTES STAY IN FRONT OF IT. They are drawn by drawFigures as children of #board, so
     // they are later siblings of this rectangle and paint over it without either knowing about
@@ -1728,17 +1746,18 @@ function drawGrid(){
     //
     // `muted` TWICE, AS A PROPERTY AND AS AN ATTRIBUTE, and that is not belt and braces. Autoplay
     // without a gesture is permitted for a muted video, and some browsers read the ATTRIBUTE when
-    // they decide that, not the property -- set only as a property, the play() in markEligible is
+    // they decide that, not the property -- set only as a property, the play() in markStanding is
     // refused on a page nobody has clicked yet, which is every page on first paint.
-    if (OPEN.src){
+    Object.keys(FILMS.byPhase || {}).forEach(function(phase){
       var sm = el("video", "smoke", null, cell);
-      sm.id = "smoke-" + d.slug;
-      sm.src = OPEN.src;
+      sm.id = "smoke-" + phase + "-" + d.slug;
+      sm.dataset.phase = phase;
+      sm.src = FILMS.byPhase[phase];
       sm.muted = true; sm.loop = true; sm.playsInline = true;
       sm.setAttribute("muted", ""); sm.setAttribute("playsinline", "");
       sm.setAttribute("aria-hidden", "true");
       sm.preload = "auto";
-    }
+    });
 
     // THE DUTY'S ICONS, BELOW THE RECTANGLE AND CENTRED UNDER IT.
     //
@@ -1880,54 +1899,65 @@ function drawGrid(){
     var cell = document.getElementById("dcell-" + d.slug);
     if (cell) cell.classList.toggle("sel", d.slug === S.duty);
   });
-  markEligible();
+  markStanding();
   drawFigures();
 }
 
-// WHICH FRAMES ARE OPEN TO THIS SEAT. ONE SWEEP, TWO CALLERS.
+// WHERE THIS SEAT'S ACOLYTES STAND, AND WHICH FILM THAT EARNS. ONE SWEEP, TWO CALLERS.
 //
-// render() sets it because it is state, and drawGrid() sets it because the sliders throw these
+// NOT NAMED AFTER ELIGIBILITY ANY MORE, AND THE RENAME IS THE POINT. The marked set is the tiles
+// this seat has figures on, which is true in BOTH phases that have a film; "eligible" is true of
+// it in one of them. eligible() is the REFUSAL rule and answers `true` for every duty outside
+// Action Selection, so a sweep built on it would have lit all eight during Sowing. Two different
+// questions had been sharing one word, and the day Sowing got a film was the day that cost
+// something.
+//
+// THE PHASE PICKS THE FILM AND THE OCCUPANCY PICKS THE TILES. A phase with no entry in
+// FILMS.byPhase marks nothing at all -- `ready` is in that position -- so the gate is simply
+// whether a film exists, rather than a second list of which phases are allowed to light.
+//
+// render() SETS IT BECAUSE IT IS STATE, and drawGrid() sets it because the sliders throw these
 // nine elements away and build them again -- a rebuild that left it to the next render would
 // drop the cue under the pointer every time a slider moved. Written out at both ends it would be
 // two answers the first time one was edited, which is the rule the hover pair already follows.
 //
-// THE CUE IS PRESENT EXACTLY WHEN THE RESTRICTION IS. Outside Action Selection nothing is refused
-// -- see eligible() -- so nothing is marked either: eight lit frames saying "all open" is the
-// same noise as none, and it would be making a claim about phases that have nothing behind them.
-//
-// ADDITIVE, AND THAT IS THE WHOLE DESIGN. Nothing is dimmed. A shut tile is the board as it has
-// always looked and an open one is what is added to it, because the open set is the MINORITY --
-// your figures are on one or two tiles of eight -- so dimming would change six or seven objects
-// to say something about two, on a palette that has no room below the one it is already at. It
-// also keeps the board readable to the three players who are not taking this turn.
+// ADDITIVE, AND THAT IS THE WHOLE DESIGN. Nothing is dimmed. An unmarked tile is the board as it
+// has always looked and a marked one is what is added to it, because the marked set is the
+// MINORITY -- your figures are on one or two tiles of eight -- so dimming would change six or
+// seven objects to say something about two, on a palette that has no room below the one it is
+// already at. It also keeps the board readable to the three players not taking this turn.
 //
 // ON THE RECTANGLE, WHICH IS THE SECOND PLACE THIS CUE HAS LIVED. It was the icon frame's 1px
 // edge first, and that failed in use for a reason worth keeping: the colour step was real and the
 // AREA was not. A cue that has to be found at a glance across eight tiles needs room, and the
 // rectangle is the largest object a duty has.
-function markEligible(){
-  var asking = actionPhase();
+function markStanding(){
+  var phases = Object.keys(FILMS.byPhase || {});
   GEO.duties.forEach(function(d){
-    var open = asking && eligible(d.slug);
-    var cell = document.getElementById("dcell-" + d.slug);
-    if (cell) cell.classList.toggle("eligible", open);
-    // AND THE CLIP IS STOPPED WHEN IT IS NOT BEING LOOKED AT. `display:none` hides it and does
-    // not pause it, so seven invisible films would go on being decoded for the whole of a turn.
-    var sm = document.getElementById("smoke-" + d.slug);
-    if (!sm) return;
-    if (!open){ if (!sm.paused) sm.pause(); return; }
-    // SOUGHT ONLY ON THE WAY IN. Setting currentTime on a playing video is a seek, and doing it
-    // every render -- render runs on every click, hover cue and slider nudge -- would hold the
-    // clip at one frame. It is already playing and already in step; leave it alone.
-    if (!sm.paused) return;
-    try { sm.currentTime = openAt(d.slug); } catch (e) {}
-    // A REJECTED play() IS NOT AN ERROR HERE. Autoplay is allowed because the clip is muted, but
-    // a browser may still refuse before the first gesture; the tile is marked either way, and
-    // the next render tries again because a paused video is what brings us back to this line.
-    var p = sm.play();
-    if (p && p.catch) p.catch(function(){});
+    var here = standsOn(S.seat, d.slug);
+    phases.forEach(function(phase){
+      var sm = document.getElementById("smoke-" + phase + "-" + d.slug);
+      if (!sm) return;
+      var on = here && phase === S.phase;
+      sm.classList.toggle("on", on);
+      // AND A CLIP IS STOPPED WHEN IT IS NOT BEING LOOKED AT. `display:none` hides a video and
+      // does not pause it, so the films of every other phase -- and of every tile this seat is
+      // not on -- would go on being decoded for the whole of a turn.
+      if (!on){ if (!sm.paused) sm.pause(); return; }
+      // SOUGHT ONLY ON THE WAY IN. Setting currentTime on a playing video is a seek, and doing
+      // it every render -- render runs on every click, hover cue and slider nudge -- would hold
+      // the clip at one frame. It is already playing and already in step; leave it alone.
+      if (!sm.paused) return;
+      try { sm.currentTime = filmAt(d.slug); } catch (e) {}
+      // A REJECTED play() IS NOT AN ERROR HERE. Autoplay is allowed because the clip is muted,
+      // but a browser may still refuse before the first gesture; the class is set either way,
+      // and the next render tries again because a paused video is what brings us back here.
+      var q = sm.play();
+      if (q && q.catch) q.catch(function(){});
+    });
   });
 }
+
 // AND THE TAKE TITHE BOX IS NOT IN THIS SWEEP, which was tried and taken back out.
 //
 // IT SAYS THE SAME THING IN WORDS, AND IT IS THE ONLY OBJECT HERE THAT CAN. A box with nothing
@@ -2679,7 +2709,7 @@ function render(){
   // clicked, and all the routes agree without any of them knowing about the others.
   var tbox = document.getElementById("tithe");
   if (tbox) tbox.classList.toggle("sel", S.slot === TITHE_SLOT);
-  markEligible();
+  markStanding();
   drawTithe();
   var info = dutyOf(S.duty);
   ["actionA","actionB"].forEach(function(slot){
