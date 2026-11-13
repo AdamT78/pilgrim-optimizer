@@ -32,7 +32,13 @@ RECORD = TREE / "attribution.json"
 # see them: assetDirs did not list sfx/ and this set held only picture suffixes. Both halves had
 # to change or the guard goes on passing by looking away.
 ASSET_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".svg", ".gif", ".avif",
-                  ".ogg", ".mp3", ".wav", ".flac"}
+                  ".ogg", ".mp3", ".wav", ".flac",
+                  # AND VIDEO, FOR THE REASON THE AUDIO LINE ABOVE ALREADY GIVES. The first one
+                  # arrived when the open-duty cue stopped being a CSS gradient and became a
+                  # twelve-second loop; a set that named only pictures and sound would have let
+                  # it sit in the tree unrecorded exactly as tile.ogg did, and for exactly as
+                  # long -- until somebody thought to look rather than until a guard said so.
+                  ".mp4", ".webm", ".mov"}
 
 # BUILD OUTPUT IS NOT A NEW ASSET. ui/.gitignore declares every `generated/` directory under ui/
 # to be output, and a generator that writes an image into one is copying a file that is already

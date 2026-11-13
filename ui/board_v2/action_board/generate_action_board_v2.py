@@ -56,6 +56,7 @@ action_board.html.tmpl explicitly, 4,400 lines of them, and none of it reaches t
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import pathlib
 import re
@@ -92,6 +93,21 @@ OUT = HERE / "generated" / "action_board_v2.html"
 # it is where the City panel went and it holds people, so it is part of the wheel now and there
 # is nothing to switch.
 GRID_DEFAULTS = {"gap": 115, "disp": 60, "size": 90, "height": 130, "bare": True}
+
+# WHAT AN OPEN DUTY TILE WEARS, AND WHEN EACH ONE STARTS WEARING IT.
+#
+# A twelve-second loop of warm smoke rising off the line the Acolytes stand on, drawn on black so
+# the page can screen it over the rectangle. One file; the eight tiles play it from eight
+# different places so the wheel does not pulse in unison.
+#
+# THE STAGGER IS A RULE, NOT A TABLE. Starting at zero and alternating +1 and +2 seconds round
+# the ring gives 0, 1, 3, 4, 6, 7, 9, 10 -- and the eighth step lands back on twelve, so the
+# arrangement closes the loop exactly and repeats forever without two tiles ever coinciding.
+# Written out as eight numbers that would be a coincidence nobody could check; written as the
+# rule, `check_open_loop` below can fail the build when the clip and the stagger disagree.
+OPEN_DIR = v1.BOARD / "effects"
+OPEN_STEM = "duty_open_smoke"
+OPEN_STEPS = (1, 2)
 
 # WHERE THE THREE RESOURCE CUTS LIVE, and the three keys the board asks for them by.
 TITHE_DIR = v1.BOARD / "tokens" / "resources" / "icons"
@@ -220,6 +236,135 @@ def bundled_tithe() -> tuple[dict, list]:
     return out, notes
 
 
+def open_offsets() -> dict:
+    """Where in the loop each duty starts, clockwise from north.
+
+    The rule and its arithmetic in four lines: alternate the two steps round the ring. The total
+    is what makes it a ring rather than a list -- see check_open_loop.
+    """
+    out, t = {}, 0
+    for i, (slug, _name, _deg) in enumerate(G.DUTIES):
+        out[slug] = t
+        t += OPEN_STEPS[i % len(OPEN_STEPS)]
+    return out
+
+
+def open_span() -> int:
+    """What the eight steps add up to, which has to be the length of the clip."""
+    return sum(OPEN_STEPS[i % len(OPEN_STEPS)] for i in range(len(G.DUTIES)))
+
+
+def _mp4_seconds(path: pathlib.Path) -> float | None:
+    """The duration an .mp4 declares, read out of its own header.
+
+    WHY THIS IS HERE AND NOT TAKEN ON TRUST. The stagger divides a twelve-second loop, and a clip
+    that is not twelve seconds turns that from an arrangement into a collision -- two tiles on the
+    same frame, which is the one thing the stagger exists to prevent. The file is the only place
+    that fact lives, so this asks it rather than believing a constant.
+
+    `mvhd` inside `moov`, which is the one box every mp4 has and the only one needed: a 32-bit
+    timescale and a duration in those units (64-bit in version 1). No decoder, no dependency, and
+    a file this cannot parse returns None rather than guessing -- the caller says so out loud.
+    """
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return None
+
+    def walk(buf: bytes, want: bytes):
+        i = 0
+        while i + 8 <= len(buf):
+            size = int.from_bytes(buf[i:i + 4], "big")
+            kind = buf[i + 4:i + 8]
+            if size == 1:                      # 64-bit extended size
+                size = int.from_bytes(buf[i + 8:i + 16], "big")
+                body = buf[i + 16:i + size]
+            else:
+                body = buf[i + 8:i + size]
+            if size < 8:
+                return None
+            if kind == want:
+                return body
+            if kind in (b"moov", b"trak", b"mdia"):
+                got = walk(body, want)
+                if got is not None:
+                    return got
+            i += size
+        return None
+
+    mvhd = walk(data, b"mvhd")
+    if not mvhd or len(mvhd) < 4:
+        return None
+    version = mvhd[0]
+    try:
+        if version == 1:
+            scale = int.from_bytes(mvhd[20:24], "big")
+            dur = int.from_bytes(mvhd[24:32], "big")
+        else:
+            scale = int.from_bytes(mvhd[12:16], "big")
+            dur = int.from_bytes(mvhd[16:20], "big")
+    except (IndexError, ValueError):
+        return None
+    return dur / scale if scale else None
+
+
+def bundled_open() -> tuple[dict, list]:
+    """The open-duty loop, inlined, with the stagger that goes with it.
+
+    THE RECORD GATES IT, exactly as it gates every picture on this board: a clip with no
+    attribution entry is left out and NAMED rather than shipped. A board that quietly inlined an
+    unrecorded asset would be the one rule this tree has about assets, broken by the newest kind
+    of asset.
+
+    NEWEST VERSION WINS -- `duty_open_smoke_vNN.mp4`, highest NN -- so replacing the effect is
+    adding a file beside the old one rather than overwriting it and orphaning its sha256.
+
+    INLINED RATHER THAN SERVED, which is bundled_sfx's decision and for its reasons: the page is
+    opened off disk and saved with a button, and an effect that lived in generated/ would be a
+    second file to carry. 95 KB is a third of what one action card's picture costs.
+
+    AND NOTHING IS RE-ENCODED ON THE WAY IN. These are the file's own bytes, base64 and no more:
+    the loop was authored at 48 fps and re-encoding is the one thing that would quietly cost it.
+    """
+    notes: list = []
+    offsets = open_offsets()
+    span = open_span()
+    out = {"src": None, "loop": float(span), "offsets": offsets}
+
+    if not OPEN_DIR.is_dir():
+        return out, ["no effects/ at %s, so an open duty tile is lit by nothing" % OPEN_DIR]
+    found = sorted(f for f in OPEN_DIR.glob("%s_v*.mp4" % OPEN_STEM) if f.is_file())
+    if not found:
+        return out, ["no %s_vNN.mp4 in effects/, so an open duty tile is lit by nothing"
+                     % OPEN_STEM]
+    f = found[-1]
+    rel = "effects/%s" % f.name
+    rec = {}
+    if v1.ATTRIB_FILE.is_file():
+        rec = json.loads(v1.ATTRIB_FILE.read_text(encoding="utf-8")).get("files", {})
+    if rel not in rec:
+        return out, ["%s: no attribution entry, left out" % rel]
+
+    seconds = _mp4_seconds(f)
+    if seconds is None:
+        notes.append("%s: could not read a duration out of it, so the %d s stagger is unchecked"
+                     % (rel, span))
+    elif abs(seconds - span) > 0.05:
+        # NOT A WARNING. The stagger would put two tiles on the same frame, which is the whole
+        # thing it exists to avoid, and a board that says so in a build note nobody reads is a
+        # board that ships it.
+        raise SystemExit(
+            "%s is %.3f s and the stagger closes a %d s loop, so two duties would run in step. "
+            "Either the clip or OPEN_STEPS is wrong." % (rel, seconds, span))
+    else:
+        # THE STAGGER IS PRINTED BY THE SUMMARY, not here. This says what the clip IS, which the
+        # summary cannot: that a file was found, that its own header agrees with the loop the
+        # stagger closes, and what it costs the page.
+        notes.append("%s: %.3f s, %d KB, inlined" % (rel, seconds, len(f.read_bytes()) // 1024))
+    out["src"] = "data:video/mp4;base64," + base64.b64encode(f.read_bytes()).decode("ascii")
+    return out, notes
+
+
 def build() -> tuple[str, list]:
     """v1's build(), with the wheel's drawing swapped for the grid's two numbers.
 
@@ -236,7 +381,8 @@ def build() -> tuple[str, list]:
     controls, cnotes = v1.bundled_controls()
     tithe, tnotes = bundled_tithe()
     names, nnotes = tithe_names()
-    notes += snotes + xnotes + dnotes + cnotes + tnotes + nnotes
+    openfx, onotes = bundled_open()
+    notes += snotes + xnotes + dnotes + cnotes + tnotes + nnotes + onotes
 
     # THE BACKDROP IS NOT BUNDLED, because v2 does not draw it. It was the valley the ribbon of
     # eight tiles stood on, and the ribbon is gone. Carrying the picture anyway would leave 22 KB
@@ -284,10 +430,28 @@ def build() -> tuple[str, list]:
         # walks -- restated in the template they would be a second list to keep in step.
         "__TITHE__": json.dumps({"order": [k for k in TITHE_KEYS if k != TITHE_WILD],
                                  "wild": TITHE_WILD, "names": names}),
+        # WHAT AN OPEN TILE WEARS, AND WHEN EACH TILE STARTS WEARING IT. The clip, the length of
+        # its loop and one start offset per duty. The offsets are arithmetic here rather than a
+        # list in the template for the reason every other fact on this board travels as data: a
+        # second copy is a second thing to keep in step, and this one would be eight numbers that
+        # look arbitrary wherever they are read.
+        "__OPEN__": json.dumps(openfx),
         "__HOOD__": json.dumps(hood.as_dict()),
         "__SAVEKEYS__": json.dumps(v1.SAVE_KEYS),
         "__BUILD__": json.dumps({"version": v1.BUILD_VERSION + "+v2", "notes": notes}),
     }
+    # AND A TOKEN WRITTEN TWICE IS THE SAME HOLE FROM THE OTHER SIDE. The check below catches a
+    # token left IN the page; this catches one substituted somewhere nobody meant it to be, which
+    # is not hypothetical: a comment in the stylesheet mentioned __OPEN__ by name while explaining
+    # what had replaced the gradient, and the replace below duly wrote 130 KB of base64 video into
+    # a CSS comment. The page still worked, which is what makes it worth failing on -- it cost a
+    # quarter of a megabyte and showed up as nothing but a bigger number in the build line.
+    twice = sorted(t for t in fill if page.count(t) > 1)
+    if twice:
+        raise SystemExit(
+            "the v2 template names %s more than once, so the fill would write the value into "
+            "every one of them. A token in prose is still a token; say it another way."
+            % ", ".join(twice))
     for token, value in fill.items():
         page = page.replace(token, value)
 
@@ -359,6 +523,13 @@ def main() -> None:
     print("  tithe ring: %s"
           % ", ".join("%s %s" % (G.face_of(deg), ring[slug] or "none")
                       for slug, _, deg in G.DUTIES))
+    # AND THE STAGGER, IN THE SAME FORM AND FOR THE SAME REASON. Eight start times round a ring
+    # are easy to get wrong by one step and impossible to see wrong in a page that is playing
+    # them, so the build says what it dealt with the compass face beside each.
+    off = open_offsets()
+    print("  open effect: %d s loop, starting %s"
+          % (open_span(),
+             ", ".join("%s %ds" % (G.face_of(deg), off[slug]) for slug, _, deg in G.DUTIES)))
     for n in notes:
         print("  note: %s" % n)
 

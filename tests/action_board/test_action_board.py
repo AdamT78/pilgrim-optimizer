@@ -3445,8 +3445,14 @@ def test_every_walk_finds_an_image_whatever_it_is_encoded_as(gen):
     # suffix list it checks against is imageSuffixes, so audio was never in scope -- the fault was
     # testing the wrong population, not the wrong suffixes.
     AUDIO = {".ogg", ".mp3", ".wav", ".flac"}
+    # AND NOW A FILM, FOR THE SECOND TIME AND THE SAME REASON. The paragraph above records this
+    # guard calling every .ogg unreadable when sound joined the record; the open-duty loop is the
+    # next kind of file to arrive and would have been called unreadable in its turn. The lesson
+    # the comment above drew is the right one and is worth applying rather than re-learning: the
+    # population this checks is PICTURES, and anything else recorded here is simply out of scope.
+    VIDEO = {".mp4", ".webm", ".mov"}
     bad = [p for p in doc["files"]
-           if pathlib.Path(p).suffix.lower() not in set(want) | {".svg"} | AUDIO]
+           if pathlib.Path(p).suffix.lower() not in set(want) | {".svg"} | AUDIO | VIDEO]
     assert not bad, "recorded but unreadable: %s" % ", ".join(bad)
 
 
