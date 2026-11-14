@@ -346,3 +346,67 @@ def test_a_recorded_sha256_is_the_file_that_is_there(record):
     assert not wrong, (
         "%d of %d recorded sha256 values do not match the file:\n  %s"
         % (len(wrong), checked, "\n  ".join(wrong)))
+
+
+def test_a_rewritten_cutout_states_the_ramp_it_was_actually_cut_at(record):
+    """A cut-out's record names the luminance ramp it was cut at, and that number can go stale.
+
+    THIS IS THE FAILURE THE RAMP MOVING ALREADY CAUSED. Each knocked-out emblem's record spells
+    out the ramp in its `modifications` -- the right place for it, because it is the only thing
+    that says how the file on disk was derived from the one beside it. But it is a NUMBER COPIED
+    OUT OF A SCRIPT, and when LO and HI moved from 30/180 to 150/215 every one of those sentences
+    became false the moment the files were rewritten. Nothing else would have noticed: the hash
+    guard next door checks that the bytes are the bytes, and bytes cut at the wrong ramp hash
+    perfectly well.
+
+    IT ASKS THIS OF `cutouts/` AND NOTHING ELSE, and the line is not arbitrary. A duty cut-out
+    keeps one filename and is REWRITTEN IN PLACE on every run, so its record is a claim about
+    whatever the constants say today and has to move with them. The other two trees the knockout
+    feeds -- the controls and the tithe resources -- are chosen by VERSION, so a run does not
+    rewrite anything: it files a new vNN beside the old one, and each version's record is a claim
+    about the day that version was cut. Those records should keep saying the ramp they were cut
+    at forever, and the three controls still saying 30 to 180 are CORRECT, not stale: the script
+    will not revisit them, because their newest version is already a cut-out with no field left
+    to take off. Holding them to today's constants would be demanding that a true record be
+    rewritten into a false one.
+
+    SO THE TEST READS BOTH AND COMPARES THEM, rather than naming the pair here. Writing 150 and
+    215 into this file would make a third copy of the same two numbers and a third thing to
+    forget; the script is what decides, so the script is what is read.
+    """
+    import re as _re
+
+    script = ROOT / "tools" / "duty_art" / "knockout_icons.py"
+    assert script.is_file(), "%s is gone -- has the knockout moved?" % script
+    src = script.read_text(encoding="utf-8")
+    m = _re.search(r"^LO, HI = ([\d.]+), ([\d.]+)$", src, _re.M)
+    assert m, "could not read LO, HI out of %s" % script
+    lo, hi = int(float(m.group(1))), int(float(m.group(2)))
+
+    # THE FOLDER THE SCRIPT REWRITES IN PLACE, read from the script rather than typed here, so a
+    # rename moves this guard with it instead of quietly emptying it.
+    out = _re.search(r'^OUT_DIR = "([^"]+)"$', src, _re.M)
+    assert out, "could not read OUT_DIR out of %s" % script
+    rewritten = "/%s/" % out.group(1)
+
+    SAYS_A_RAMP = _re.compile(r"alpha ramped from luminance (\d+) to (\d+)")
+    stale, found = [], 0
+    for key, entry in sorted(record["files"].items()):
+        if rewritten not in key:
+            continue
+        for said in SAYS_A_RAMP.finditer(str(entry.get("modifications", ""))):
+            found += 1
+            if (int(said.group(1)), int(said.group(2))) != (lo, hi):
+                stale.append("%s says %s to %s" % (key, said.group(1), said.group(2)))
+    assert found, (
+        "no record under %r states a knockout ramp, so this guard is watching nothing. Either "
+        "the cut-out entries have lost their `modifications` sentence, or the wording moved and "
+        "%r no longer matches it -- fix the pattern rather than deleting the test."
+        % (rewritten, SAYS_A_RAMP.pattern))
+    assert not stale, (
+        "%d of %d %s record(s) state a ramp the knockout no longer cuts at (it is now %d to %d):"
+        "\n  %s\n"
+        "Rerunning tools/duty_art/knockout_icons.py --write rewrites the FILES; the sentences "
+        "that describe them are hand-written and have to move with the constants, or the record "
+        "documents a derivation that never happened."
+        % (len(stale), found, rewritten, lo, hi, "\n  ".join(stale)))
