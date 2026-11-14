@@ -2042,9 +2042,13 @@ def test_the_refusal_wording_is_published_by_geometry(geo):
     """
     lines = geo.as_dict().get("lines")
     assert lines, "geometry publishes no status lines, so the page cannot say why"
-    for key in ("noAcolytes", "noTithe"):
-        assert lines.get(key), "`%s` is missing or empty: %s" % (key, lines)
-        assert lines[key] == lines[key].strip(), "`%s` is padded: %r" % (key, lines[key])
+    # EVERY LINE IN THE TABLE, not a list of the ones that existed when this was written. A new
+    # sentence added to LINES and left out of here is a sentence nothing checks, which is the
+    # same shape of hole as a walk that names its file types.
+    assert set(lines) >= {"noAcolytes", "noTithe", "titheResource"}, sorted(lines)
+    for key, text in sorted(lines.items()):
+        assert text, "`%s` is missing or empty: %s" % (key, lines)
+        assert text == text.strip(), "`%s` is padded: %r" % (key, text)
     assert lines == geo.LINES, "the export is not the table"
 
     # AND THE PHASE NAMES THE CONDITION. The line a player reads while deciding has to say what
@@ -2053,6 +2057,103 @@ def test_the_refusal_wording_is_published_by_geometry(geo):
     assert len(action) == 1, geo.as_dict()["phases"]
     assert "Acolytes" in action[0]["line"], (
         "the live phase's line does not say what makes a duty choosable: %r" % action[0]["line"])
+
+
+def test_the_city_is_lit_in_sowing_and_in_no_other_phase(gen, tmpl):
+    """THE TWO FILMS ARE NOT ASKING THE SAME QUESTION OF THE SAME PLACES.
+
+    It looked at first as though one set wore two clips. It does not. Action Selection marks the
+    tiles whose ACTIONS you may take, and the City has none -- it is not a duty, takes no pointer
+    and carries no icons. Sowing marks where your people ARE, and the City is the fullest place
+    on the board and the one Acolytes walk out of. So the rule is "where this seat stands" in
+    both, and what differs is WHERE that question is asked.
+
+    THE CITY GETS NO ELEMENT IT COULD NOT SHOW. filmPhases hands it only the phases that name
+    it, and buildFilms builds from that -- so there is no Action Selection video sitting paused
+    in the middle of the board forever, which is the kind of thing that is invisible until
+    somebody counts decoders.
+
+    AND IT CANNOT RUN IN STEP WITH A DUTY. The City is not on the ring, so it has no clock angle
+    and no place in the alternating walk that gives the eight their offsets. It takes the
+    smallest second the ring leaves free -- derived, so changing the steps moves the City with
+    them instead of silently landing it on top of a duty. It is the largest rectangle with the
+    most figures in it, so a coincidence there would be the most visible one available.
+
+    Falsify: light the City in Action Selection, build it a film it cannot wear, or give it a
+    start time a duty already has.
+    """
+    assert gen.FILM_CITY, "no phase lights the City, so it is dark in all of them"
+    assert set(gen.FILM_CITY) <= set(gen.FILM_STEMS), (
+        "the City is named for a phase that has no film: %s"
+        % (set(gen.FILM_CITY) - set(gen.FILM_STEMS)))
+    assert "action" not in gen.FILM_CITY, (
+        "the City is lit in Action Selection, where it has no action to take")
+
+    ring = gen.open_offsets()
+    city = gen.city_offset()
+    assert city not in set(ring.values()), (
+        "the City starts at %ds, which is already %s's" % (city, [k for k, v in ring.items()
+                                                                 if v == city]))
+    assert 0 <= city < gen.open_span(), "the City starts outside the loop: %s" % city
+    assert city == min(set(range(gen.open_span())) - set(ring.values())), (
+        "the City's start is not the first second the ring leaves free, so it is chosen rather "
+        "than derived: %s" % city)
+
+    out, _notes = gen.bundled_films()
+    assert out["offsets"][gen.CITY_SLUG] == city, "the City's start is not published"
+    assert out["city"] == [p for p in gen.FILM_CITY if p in gen.FILM_STEMS], out["city"]
+
+    # AND THE PAGE ASKS, RATHER THAN KNOWING. A list of phases typed into the template would be
+    # a second copy of FILM_CITY, and the two would part company the first time one was edited.
+    body = _code(_function(tmpl, "filmPhases"))
+    assert "FILMS.city" in body, (
+        "the page decides for itself which phases light the City:\n%s" % body)
+    assert "CITY_SLOT" in body, "the City is not what the exception is about:\n%s" % body
+
+
+def test_a_resource_names_itself_wherever_it_is_drawn(tmpl):
+    """THE SAME QUESTION IN TWO PLACES GETS THE SAME ANSWER.
+
+    The four resources are drawn twice over -- as a label beside each duty's icons, and as a slot
+    in the Take Tithe box -- and a player pointing at either is asking the same thing. So both
+    carry `hoverTithe` and both reach one line; two routes answering separately is how a board
+    ends up knowing a name in one place and not the other.
+
+    THE LINE IS HALF CHROME AND HALF DATA, deliberately. `titheResource` is the board's own label
+    and lives with the phase lines in geometry; the NAME is the icon lab's own, by way of the
+    generator -- which is why it reads "Silver coin" rather than "silver", and why renaming a
+    resource in the lab renames it here with nobody remembering to.
+
+    AND A LABEL IS ASKED BEFORE THE DUTY IT SITS ON. A tile's label carries both: the resource it
+    names and the duty it belongs to. Asked the other way round it would announce the duty's two
+    actions -- true of the tile, and not of the thing under the pointer. The duty travels anyway,
+    so the face still lights.
+
+    Falsify: type the label into the page, drop either route, or read the duty first.
+    """
+    for where, block in (("the tile's label", _tithe_block(tmpl)),
+                         ("the box's slot", _code(_function(tmpl, "drawTithe")))):
+        assert "hoverTithe" in block, "%s does not name itself on hover:\n%s" % (where, block)
+
+    line = _code(_function(tmpl, "titheLine"))
+    assert "GEO.lines.titheResource" in line, (
+        "the label is not read from geometry, so it is typed into the page: %s" % line)
+    assert "titheName(key)" in line, (
+        "the resource's own name is not used, so the line cannot follow a rename: %s" % line)
+
+    says = _code(_function(tmpl, "setStatus"))
+    assert "titheLine(hovered.tithe)" in says, (
+        "the status line has no branch for a hovered resource:\n%s" % says)
+
+    seen = _code(_function(tmpl, "hoverDataOf"))
+    assert "d.hoverTithe" in seen, (
+        "the delegation cannot see a resource, so neither route ever fires:\n%s" % seen)
+
+    body = _code(tmpl)
+    i, j = body.index("if (d.hoverTithe)"), body.index("hover(d.hoverDuty || S.duty")
+    assert i < j, "the duty is asked before the resource, so a label announces the tile instead"
+    assert "hoverTithe(d.hoverTithe, d.hoverDuty)" in body, (
+        "the duty does not travel with the resource, so the face goes dark under the pointer")
 
 
 def test_a_chosen_action_does_not_survive_losing_the_right_to_it(tmpl):
@@ -2283,8 +2384,17 @@ def test_the_phase_picks_the_film_and_the_occupancy_picks_the_tiles(tmpl):
     of the two callers.
     """
     body = _code(_function(tmpl, "markStanding"))
-    assert "standsOn(S.seat, d.slug)" in body, (
-        "the marked tiles are not the ones this seat stands on:\n%s" % body)
+    assert "standsOn(S.seat, slug)" in body, (
+        "the marked places are not the ones this seat stands on:\n%s" % body)
+    # AND THE CITY IS ONE OF THE PLACES WALKED. It is not a duty, so GEO.duties alone leaves it
+    # out -- which is correct in Action Selection, where it has no actions to take, and wrong in
+    # Sowing, where it is the fullest place on the board and the one Acolytes walk out of.
+    assert "CITY_SLOT" in body, (
+        "the City is not among the places the sweep walks, so it can never be marked:\n%s"
+        % body)
+    assert "filmPhases(slug)" in body, (
+        "the sweep does not ask which films a place may wear, so the City would be handed one "
+        "it cannot show:\n%s" % body)
     assert "eligible(" not in body, (
         "the sweep asks the refusal rule, which is true of every duty outside Action Selection "
         "and would light all eight during Sowing:\n%s" % body)
@@ -2292,9 +2402,13 @@ def test_the_phase_picks_the_film_and_the_occupancy_picks_the_tiles(tmpl):
         "the film is not chosen by the phase:\n%s" % body)
     assert re.search(r'toggle\("on",\s*on\)', body), (
         "the chosen film is not shown from that answer:\n%s" % body)
-    assert "FILMS.byPhase" in body, (
-        "the sweep does not take its phases from the bundle, so a phase with no film is not "
-        "simply a phase with no film:\n%s" % body)
+    # THE BUNDLE IS READ ONE FUNCTION DOWN, which is where the question moved when the City
+    # arrived: the sweep asks filmPhases, and filmPhases is what consults FILMS. Pinned where it
+    # lives rather than where it used to, so this keeps meaning "no typed list of phases".
+    phases = _code(_function(tmpl, "filmPhases"))
+    assert "FILMS.byPhase" in phases, (
+        "the phases are not taken from the bundle, so a phase with no film is not simply a "
+        "phase with no film:\n%s" % phases)
 
     for caller in ("render", "drawGrid"):
         assert "markStanding()" in _code(_function(tmpl, caller)), (
@@ -2412,7 +2526,12 @@ def test_the_clip_ships_as_its_own_bytes_and_is_gated_on_the_record(gen):
     """
     rec = json.loads((BOARD / "attribution.json").read_text(encoding="utf-8"))
     out, notes = gen.bundled_films()
-    assert out["loop"] == gen.open_span() and out["offsets"] == gen.open_offsets()
+    assert out["loop"] == gen.open_span()
+    # THE RING'S OFFSETS ARE IN THE TABLE UNCHANGED, and the City is added to it rather than
+    # replacing it: the page asks for a start time by slug and does not care which kind of
+    # place it is holding.
+    for slug, when in gen.open_offsets().items():
+        assert out["offsets"][slug] == when, "%s moved in the published table" % slug
 
     for phase, stem in sorted(gen.FILM_STEMS.items()):
         clip = sorted(gen.OPEN_DIR.glob("%s_v*.mp4" % stem))[-1]
@@ -2454,21 +2573,30 @@ def test_the_clip_is_built_for_every_tile_and_played_by_the_state(tmpl):
     Falsify: build the elements on demand, leave a shut tile playing, seek on every render, or
     drop the muted attribute.
     """
-    grid = _code(_function(tmpl, "drawGrid"))
-    assert 'el("video", "smoke"' in grid, "the films are not built with the rest of the rectangle"
-    assert 'sm.setAttribute("muted"' in grid and "sm.muted = true" in grid, (
+    build = _code(_function(tmpl, "buildFilms"))
+    assert 'el("video", "smoke"' in build, "the films are not built as elements"
+    assert 'sm.setAttribute("muted"' in build and "sm.muted = true" in build, (
         "muted is not set both ways, so autoplay is refused before the first gesture")
     for want in ("sm.loop = true", "playsinline", 'sm.id = "smoke-" + phase'):
-        assert want in grid, "the films are missing %s" % want
-    assert "Object.keys(FILMS.byPhase || {})" in grid, (
-        "the elements are not built from the phases that actually have a film")
+        assert want in build, "the films are missing %s" % want
+    assert "filmPhases(slug)" in build, (
+        "the elements are not built from the phases that place may actually wear, so the City "
+        "carries a film it can never show")
+
+    # ONE BUILDER FOR THE RING AND THE CITY. Written at both ends they would be two answers the
+    # first time one was edited, and the City's copy is the one nobody would remember to edit.
+    grid = _code(_function(tmpl, "drawGrid"))
+    assert grid.count("buildFilms(cell,") == 2, (
+        "the ring and the City do not both go through one builder:\n%s" % grid[-900:])
+    assert 'el("video"' not in grid, (
+        "drawGrid builds a video of its own again, beside the builder")
 
     mark = _code(_function(tmpl, "markStanding"))
     assert re.search(r"if \(!on\)\{ if \(!sm\.paused\) sm\.pause\(\); return; \}", mark), (
         "a film that is not showing is hidden without being paused:\n%s" % mark)
     assert re.search(r"if \(!sm\.paused\) return;\s*\n\s*try \{ sm\.currentTime", mark), (
         "a clip is sought on every render, which holds it on one frame:\n%s" % mark)
-    assert "filmAt(d.slug)" in mark, "a clip does not join at its own place in the loop"
+    assert "filmAt(slug)" in mark, "a clip does not join at its own place in the loop"
 
 
 def test_a_tile_that_opens_later_joins_the_others_in_step(tmpl):
@@ -2542,10 +2670,17 @@ def test_a_tiles_resource_is_a_label_and_takes_no_clicks(tmpl):
 
     AND IT IS NOT GREYED, for the reason the controls column already gives about Map and Hire: a
     disabled look promises a state the thing can enter later, and these never become clickable.
-    They are drawn at the same rest weight as the duty marks beside them and do not answer the
-    pointer at all.
+    They are drawn at the same rest weight as the duty marks beside them.
 
-    Falsify: wire a handler to it, give it pointer-events, or let it brighten on hover.
+    IT DOES ANSWER THE POINTER NOW, AND THAT IS NOT THE SAME AS BEING CHOOSABLE. This guard read
+    `pointer-events: none` for a round, on the reasoning that a thing you cannot choose should
+    not answer the pointer at all -- and that went one step too far. With no pointer events the
+    element receives no mouseover either, so the one question a player has about it, WHICH
+    RESOURCE IS THAT, had nowhere to be answered. Pointing at something to find out what it is
+    is not choosing it, and the line it puts in the status bar is all it gained.
+
+    Falsify: wire a click to it, let it brighten on hover, or take the pointer away again and
+    leave it mute.
     """
     block = _tithe_block(tmpl)
     for bad in ("addEventListener", "dataset.slot", '"seal"', "wireDrop", "pickFile"):
@@ -2554,9 +2689,17 @@ def test_a_tiles_resource_is_a_label_and_takes_no_clicks(tmpl):
     assert "tm.dataset.duty = d.slug" in block, (
         "the label no longer knows its duty, so the box cannot light the tiles feeding a resource")
     rule = _rule(tmpl, ".tmark")
-    assert rule.get("pointer-events") == "none", (
-        "the tile's resource answers the pointer: %s" % rule)
-    lit = re.sub(r"\s+", "", tmpl)
+    assert rule.get("pointer-events") == "auto", (
+        "the tile's resource takes no pointer events, so it receives no mouseover and cannot "
+        "say what it is: %s" % rule)
+    assert "cursor" not in rule, (
+        "the label sets a cursor, which is how an inert thing starts looking pressable: %s" % rule)
+    # COMMENTS STRIPPED BEFORE THE SQUASH. Written against the raw template this fired on the
+    # stylesheet's own comment explaining that there is no `.tmark.filled:hover` rule -- a guard
+    # failing on the prose that describes the thing it forbids, which is the fourth time this
+    # board has managed that. The squash is what makes it easy: it turns a sentence into
+    # something that contains every selector it mentions.
+    lit = re.sub(r"\s+", "", _code(_rule_free(tmpl)))
     assert ".tmark.filled:hover" not in lit, (
         "a label brightens under the pointer, which is a button that does nothing when pressed")
     assert ".tmark.filled.on" not in lit, "a label can be chosen"

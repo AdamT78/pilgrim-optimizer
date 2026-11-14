@@ -485,14 +485,19 @@ body.full{background:#000}
    frames that looked different would have said the board has two kinds of frame. There is one
    frame now and the resource sits at the end of it, so the class has gone with the element. */
 /* THE MARK IS NOT A .seal, for machinery reasons rather than visual ones -- see drawGrid. It is
-   CHOOSABLE like a seal and it is not EDITABLE like one: the art machinery finds every replaceable
-   picture by `#board .seal`, and a resource is cut in the icon lab and filed in the tree rather
-   than dropped onto the board. Same geometry, same response, none of the file handling.
-   IT TAKES THE POINTER EXPLICITLY, because the frame it sits in does not: `.iplate` is
-   `pointer-events:none` so that a plate hanging below a rectangle cannot swallow clicks meant
-   for the board, and a child of it has to opt back in. The seals do the same thing one line at
-   a time in drawGrid; this says it once, where the rest of the mark is described. */
-.tmark{position:absolute;pointer-events:none}
+   not EDITABLE like one: the art machinery finds every replaceable picture by `#board .seal`, and
+   a resource is cut in the icon lab and filed in the tree rather than dropped onto the board.
+   IT TAKES THE POINTER, AND IT IS STILL NOT CHOOSABLE. Those are two different things and this
+   rule has now said both. It was `none` while the resource was purely a label, on the reasoning
+   that a thing you cannot choose should not answer the pointer at all -- and that went one step
+   too far: with no pointer events the element receives no mouseover either, so the one question
+   a player actually has about it, WHICH RESOURCE IS THAT, had no way to be answered. Pointing at
+   something to find out what it is is not choosing it.
+   SO THE CLICK IS STILL NOT THERE and neither is the hover brightening: no handler in drawGrid,
+   no `.tmark.filled:hover` rule, and the pointer stays an arrow because this element is outside
+   the rectangle that carries `cursor:pointer`. What it gained is a line in the status bar and
+   nothing else; see hoverTithe. */
+.tmark{position:absolute;pointer-events:auto}
 /* FED, which is the box pointing back at the board. Hovering a resource in the Take Tithe box
    brightens the resource on every tile feeding it -- a cornucopia tile among them, for any
    resource, which is the wildcard explaining itself. Brightness rather than a border because
@@ -615,6 +620,24 @@ var FILMS = __FILMS__;
 // AND IT IS SHARED ACROSS THE FILMS, not one clock each. Both clips run the same twelve seconds
 // from the same eight offsets, so changing phase swaps which film a tile is showing WITHOUT
 // moving it in the loop -- the ring stays in the arrangement it was in.
+// WHICH PLACES CAN WEAR A FILM, AND WHICH FILM EACH OF THEM CAN WEAR.
+//
+// The eight duties can wear any of them. The CITY can wear only the films of the phases that
+// name it -- Sowing today -- because the two films are not asking the same question of the same
+// places. Action Selection marks the tiles whose ACTIONS you may take and the City has none;
+// Sowing marks where your people ARE, and the City is the fullest place on the board.
+//
+// IT RETURNS A LIST SO THE CITY CAN RETURN AN EMPTY ONE, which is what makes the rest of this
+// uniform: drawGrid builds an element per phase a place can wear, so the City never carries an
+// Action Selection video that could not be shown, and markStanding walks what was built.
+var CITY_SLOT = "city";
+function filmPhases(slug){
+  var all = Object.keys(FILMS.byPhase || {});
+  if (slug !== CITY_SLOT) return all;
+  var only = FILMS.city || [];
+  return all.filter(function(p){ return only.indexOf(p) >= 0; });
+}
+
 var FILM_T0 = Date.now() / 1000;
 function filmAt(slug){
   var span = FILMS.loop || 0;
@@ -730,6 +753,14 @@ var hovered = null;
 function titheName(key){
   return (TITHE.names && TITHE.names[key]) || key;
 }
+// AND WHAT THE STATUS LINE SAYS WHEN THE POINTER IS ON ONE. Two halves from two places on
+// purpose: the LABEL is board chrome and lives with the phase lines in geometry, and the NAME is
+// a fact about the tree -- the icon lab's own label for that resource, by way of the generator.
+// So this reads "Tithe resource: Silver coin" rather than "silver", and a resource renamed in
+// the lab is renamed here without anybody remembering to.
+function titheLine(key){
+  return ((GEO.lines && GEO.lines.titheResource) || "") + ": " + titheName(key);
+}
 
 function phaseLine(){
   // THE TITHE ANSWERS FOR ITSELF, because the phase line is written for the common case and the
@@ -794,6 +825,7 @@ function setStatus(){
   // neither of the two routes below can answer for it. Set by a refused press and cleared by the
   // next crossing, like every other hover state.
   if (hovered && hovered.why) t = hovered.why;
+  else if (hovered && hovered.tithe) t = titheLine(hovered.tithe);
   else if (hovered && hovered.mark) t = controlLine(hovered.mark);
   else if (hovered) t = lineFor(hovered.duty, hovered.slot);
   else t = phaseLine();
@@ -809,6 +841,18 @@ function hoverMark(name){
   hovered = {mark: name};
   setStatus();
   lightFace(null);
+}
+// HOVERING A TITHE RESOURCE, wherever it is drawn: the label on a duty tile and the slot in the
+// Take Tithe box both go through here, because they are two pictures of one thing and a player
+// pointing at either is asking the same question.
+//
+// IT STILL LIGHTS THE TILE. A resource on a tile is PART of that tile, so the face it belongs to
+// stays lit under the pointer -- what changes is only what the line SAYS. The box's slots pass no
+// duty and light nothing, which is right: a slot belongs to the pool, not to any one tile.
+function hoverTithe(key, duty){
+  hovered = {tithe: key};
+  setStatus();
+  lightFace(duty || null);
 }
 function hover(duty, slot){
   // ON THE CHANGE, NOT ON THE CROSSING. mouseover bubbles and fires every time the pointer moves
@@ -979,7 +1023,7 @@ function drawStatus(){
 function hoverDataOf(node){
   while (node && node !== board){
     var d = node.dataset;
-    if (d && (d.hoverDuty || d.hoverSlot || d.hoverMark)) return d;
+    if (d && (d.hoverDuty || d.hoverSlot || d.hoverMark || d.hoverTithe)) return d;
     node = node.parentNode;
   }
   return null;
@@ -991,6 +1035,11 @@ board.addEventListener("mouseover", function(ev){
   // `hover(S.duty, null)` would announce whatever duty happened to be selected, which is the
   // board saying something true about the wrong object. It carries its own name instead.
   if (d.hoverMark) return hoverMark(d.hoverMark);
+  // A RESOURCE BEFORE THE DUTY IT SITS ON, because a tile's label carries BOTH -- the resource it
+  // names and the duty it belongs to. Asked in the other order the label would announce the
+  // duty's two actions, which is true of the tile and not of the thing under the pointer. The
+  // duty goes along so the face still lights; see hoverTithe.
+  if (d.hoverTithe) return hoverTithe(d.hoverTithe, d.hoverDuty);
   // A card carries only its slot: which duty it shows is state, not markup.
   hover(d.hoverDuty || S.duty, d.hoverSlot || null);
 });
@@ -1225,6 +1274,10 @@ function drawTithe(){
     // the resource is reached two ways -- this slot, and a one-resource pool answering itself --
     // and a class set where it is clicked is right on one of them.
     slot.classList.toggle("on", S.slot === TITHE_SLOT && S.tithe === key);
+    // THE SAME LINE THE TILE LABELS GIVE, from the same place. The box and the wheel draw the
+    // same four resources and a player pointing at either is asking the same question; two
+    // answers would be the board knowing the name in one place and not the other.
+    slot.dataset.hoverTithe = key;
     slot.addEventListener("click", titheClick);
     slot.addEventListener("mouseenter", function(){ lightTithe(key); });
   });
@@ -1714,6 +1767,10 @@ function drawGrid(){
       r.figLeft = r.x + CELL_BORDER + cmg;
       r.figRight = r.x + CELL_BORDER + r.width - 2 * CELL_BORDER - cmg;
       GRIDPOS.city = r;
+      // A HANDLE, BECAUSE IT CARRIES A STATE NOW. The centre went without an id for as long as
+      // it was a rectangle with people in it and nothing else; markStanding has to find it.
+      cell.id = "dcell-" + CITY_SLOT;
+      buildFilms(cell, CITY_SLOT);
       return;
     }
 
@@ -1728,36 +1785,13 @@ function drawGrid(){
     cell.setAttribute("data-face", d.face);
     cell.dataset.hoverDuty = d.slug;
 
-    // THE FILMS, INSIDE THE RECTANGLE AND BEHIND EVERYTHING IN IT.
+    // THE FILMS, INSIDE THE RECTANGLE AND BEHIND EVERYTHING IN IT. See buildFilms, which the
+    // City calls too -- the reasoning that was written out here moved there with the code.
     //
-    // ONE ELEMENT PER PHASE THAT HAS A FILM, rather than one element whose `src` is swapped when
-    // the phase changes. Swapping would reload and re-decode eight videos on every press of a
-    // phase button, for a saving of eight paused elements holding a 95 KB clip each -- and it
-    // would put a blank frame in the place the board is meant to be most legible.
-    //
-    // BUILT FOR ALL EIGHT TILES AND PLAYED FOR SOME. Hidden by CSS and paused by markStanding,
-    // because a tile's state changes with the seat picker and the phase several times a turn,
-    // and building the element on the way in would make the first frame of a newly marked tile
-    // wait on a decode. At most eight play at once, and usually one or two do.
-    //
-    // THE ACOLYTES STAY IN FRONT OF IT. They are drawn by drawFigures as children of #board, so
-    // they are later siblings of this rectangle and paint over it without either knowing about
-    // the other -- which is the right way round: the figures are the reason the tile is lit.
-    //
-    // `muted` TWICE, AS A PROPERTY AND AS AN ATTRIBUTE, and that is not belt and braces. Autoplay
-    // without a gesture is permitted for a muted video, and some browsers read the ATTRIBUTE when
-    // they decide that, not the property -- set only as a property, the play() in markStanding is
-    // refused on a page nobody has clicked yet, which is every page on first paint.
-    Object.keys(FILMS.byPhase || {}).forEach(function(phase){
-      var sm = el("video", "smoke", null, cell);
-      sm.id = "smoke-" + phase + "-" + d.slug;
-      sm.dataset.phase = phase;
-      sm.src = FILMS.byPhase[phase];
-      sm.muted = true; sm.loop = true; sm.playsInline = true;
-      sm.setAttribute("muted", ""); sm.setAttribute("playsinline", "");
-      sm.setAttribute("aria-hidden", "true");
-      sm.preload = "auto";
-    });
+    // THE ACOLYTES STAY IN FRONT OF THEM. They are drawn by drawFigures as children of #board,
+    // so they are later siblings of this rectangle and paint over it without either knowing
+    // about the other -- which is the right way round: the figures are the reason it is lit.
+    buildFilms(cell, d.slug);
 
     // THE DUTY'S ICONS, BELOW THE RECTANGLE AND CENTRED UNDER IT.
     //
@@ -1881,6 +1915,11 @@ function drawGrid(){
       tm.dataset.tithe = tkey;
       tm.dataset.duty = d.slug;
       tm.dataset.hoverDuty = d.slug;
+      // AND IT NAMES ITSELF ON HOVER. `hoverDuty` above still lights the face, because the
+      // resource is part of this tile; this is what the LINE says, which is the resource rather
+      // than the duty's two actions. A label that cannot say what it is a label OF is a picture
+      // of a sack of grain and nothing else.
+      tm.dataset.hoverTithe = tkey;
     }
 
 
@@ -1931,12 +1970,49 @@ function drawGrid(){
 // edge first, and that failed in use for a reason worth keeping: the colour step was real and the
 // AREA was not. A cue that has to be found at a glance across eight tiles needs room, and the
 // rectangle is the largest object a duty has.
+// THE FILMS A PLACE CAN WEAR, BUILT ONCE WITH THE RECTANGLE THEY SIT IN.
+//
+// ONE ELEMENT PER PHASE THAT PLACE CAN WEAR, rather than one element whose `src` is swapped when
+// the phase changes. Swapping would reload and re-decode every video on each press of a phase
+// button, for a saving of a few paused elements holding a 95 KB clip each -- and it would put a
+// blank frame in the place the board is meant to be most legible.
+//
+// BUILT FOR EVERY PLACE AND PLAYED FOR SOME. Hidden by CSS and paused by markStanding, because a
+// place's state changes with the seat picker and the phase several times a turn, and building
+// the element on the way in would make the first frame of a newly marked rectangle wait on a
+// decode. At most nine play at once, and usually one or two do.
+//
+// ONE FUNCTION FOR THE RING AND THE CITY, because they differ in WHICH films they may wear and
+// in nothing else -- same element, same attributes, same reasons. Written at both ends they
+// would be two answers the first time one was edited, and the City's copy is the one nobody
+// would remember to edit.
+//
+// `muted` TWICE, AS A PROPERTY AND AS AN ATTRIBUTE, and that is not belt and braces. Autoplay
+// without a gesture is permitted for a muted video, and some browsers read the ATTRIBUTE when
+// they decide that, not the property -- set only as a property, the play() in markStanding is
+// refused on a page nobody has clicked yet, which is every page on first paint.
+function buildFilms(cell, slug){
+  filmPhases(slug).forEach(function(phase){
+    var sm = el("video", "smoke", null, cell);
+    sm.id = "smoke-" + phase + "-" + slug;
+    sm.dataset.phase = phase;
+    sm.src = FILMS.byPhase[phase];
+    sm.muted = true; sm.loop = true; sm.playsInline = true;
+    sm.setAttribute("muted", ""); sm.setAttribute("playsinline", "");
+    sm.setAttribute("aria-hidden", "true");
+    sm.preload = "auto";
+  });
+}
+
 function markStanding(){
-  var phases = Object.keys(FILMS.byPhase || {});
-  GEO.duties.forEach(function(d){
-    var here = standsOn(S.seat, d.slug);
-    phases.forEach(function(phase){
-      var sm = document.getElementById("smoke-" + phase + "-" + d.slug);
+  // THE CITY IS ONE OF THE PLACES, not a second loop after the eight. It answers standsOn like
+  // any other -- S.occupancy.city is where the seats in the city are -- and filmPhases hands it
+  // an empty list in the phases that do not name it, so there is nothing here that knows the
+  // City is special beyond the fact that it is in this list.
+  GEO.duties.map(function(d){ return d.slug; }).concat([CITY_SLOT]).forEach(function(slug){
+    var here = standsOn(S.seat, slug);
+    filmPhases(slug).forEach(function(phase){
+      var sm = document.getElementById("smoke-" + phase + "-" + slug);
       if (!sm) return;
       var on = here && phase === S.phase;
       sm.classList.toggle("on", on);
@@ -1948,7 +2024,7 @@ function markStanding(){
       // it every render -- render runs on every click, hover cue and slider nudge -- would hold
       // the clip at one frame. It is already playing and already in step; leave it alone.
       if (!sm.paused) return;
-      try { sm.currentTime = filmAt(d.slug); } catch (e) {}
+      try { sm.currentTime = filmAt(slug); } catch (e) {}
       // A REJECTED play() IS NOT AN ERROR HERE. Autoplay is allowed because the clip is muted,
       // but a browser may still refuse before the first gesture; the class is set either way,
       // and the next render tries again because a paused video is what brings us back here.
