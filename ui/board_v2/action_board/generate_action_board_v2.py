@@ -123,6 +123,20 @@ OPEN_STEPS = (1, 2)
 # The map is the right place to absorb that rather than a rename that costs provenance.
 FILM_STEMS = {"action": "duty_open_smoke", "sow": "duty_sow_smoke"}
 
+# AND WHICH PHASES LIGHT THE CITY, WHICH IS NOT THE SAME SET OF PLACES AS THE RING.
+#
+# The two films looked at first like one set under two clips. They are not. Action Selection
+# marks the tiles whose ACTIONS you may take, and the City has none -- it is not a duty, takes no
+# pointer and carries no icons. Sowing marks where your people ARE, and the City is full of them:
+# it is the middle of the wheel and the thing acolytes walk out of. So the set is "where this
+# seat stands" in both, and what differs is WHERE that question is asked.
+#
+# NAMED RATHER THAN DERIVED, because it cannot be derived from anything else here. Nothing in the
+# geometry says a phase is about standing rather than acting; that IS the fact, so it is written
+# down once and travels as data like the rest.
+FILM_CITY = ("sow",)
+CITY_SLUG = "city"
+
 # WHERE THE THREE RESOURCE CUTS LIVE, and the three keys the board asks for them by.
 TITHE_DIR = v1.BOARD / "tokens" / "resources" / "icons"
 # THE CORNUCOPIA IS IN THIS LIST AND IS NOT A RESOURCE. It is the WILDCARD -- the tile where the
@@ -268,6 +282,29 @@ def open_span() -> int:
     return sum(OPEN_STEPS[i % len(OPEN_STEPS)] for i in range(len(G.DUTIES)))
 
 
+def city_offset() -> int:
+    """Where in the loop the City starts, which the ring cannot answer for.
+
+    THE CITY IS NOT ON THE RING, so it has no clock angle and no place in the alternating walk
+    that gives the eight duties theirs. It still needs an offset, and it must not be any of
+    theirs: two tiles on the same frame is the one thing the stagger exists to prevent, and the
+    City is the largest rectangle with the most figures in it, so a coincidence there is the most
+    visible one available.
+
+    THE SMALLEST SECOND THE RING LEAVES FREE. Alternating +1 and +2 uses 0, 1, 3, 4, 6, 7, 9 and
+    10, and skips 2, 5, 8 and 11; the City takes the first of those. Derived rather than chosen,
+    so changing OPEN_STEPS moves the City with the ring instead of silently landing it on top of
+    a duty -- and if a future ring ever used every second, this says so rather than guessing.
+    """
+    used = set(open_offsets().values())
+    for t in range(open_span()):
+        if t not in used:
+            return t
+    raise SystemExit(
+        "the ring uses every second of its %d s loop, so the City has nowhere to start that is "
+        "not already a duty's. Either the loop is longer or OPEN_STEPS is wrong." % open_span())
+
+
 def _mp4_seconds(path: pathlib.Path) -> float | None:
     """The duration an .mp4 declares, read out of its own header.
 
@@ -347,7 +384,12 @@ def bundled_films() -> tuple[dict, list]:
     """
     notes: list = []
     span = open_span()
-    out = {"loop": float(span), "offsets": open_offsets(), "byPhase": {}}
+    # THE CITY TRAVELS IN THE SAME TABLE the duties do, so the page asks for a start time by
+    # slug and does not care which kind of place it is holding.
+    offsets = dict(open_offsets())
+    offsets[CITY_SLUG] = city_offset()
+    out = {"loop": float(span), "offsets": offsets, "byPhase": {},
+           "city": [p for p in FILM_CITY if p in FILM_STEMS]}
 
     if not OPEN_DIR.is_dir():
         return out, ["no effects/ at %s, so no tile is lit in any phase" % OPEN_DIR]
@@ -553,10 +595,11 @@ def main() -> None:
     # are easy to get wrong by one step and impossible to see wrong in a page that is playing
     # them, so the build says what it dealt with the compass face beside each.
     off = open_offsets()
-    print("  effects: %d s loop, %s, starting %s"
+    print("  effects: %d s loop, %s, starting %s, city %ds in %s"
           % (open_span(),
              "/".join(sorted(FILM_STEMS)) or "none",
-             ", ".join("%s %ds" % (G.face_of(deg), off[slug]) for slug, _, deg in G.DUTIES)))
+             ", ".join("%s %ds" % (G.face_of(deg), off[slug]) for slug, _, deg in G.DUTIES),
+             city_offset(), "/".join(FILM_CITY) or "no phase"))
     for n in notes:
         print("  note: %s" % n)
 

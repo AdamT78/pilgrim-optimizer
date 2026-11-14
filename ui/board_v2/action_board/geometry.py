@@ -863,9 +863,16 @@ LIVE_PHASE = "action"          # the other two are placeholders and the page say
 # pointer was already going to say, so hovering a duty you cannot take still tells you what its
 # actions DO and adds why it is out of reach -- the two things a player wants at once, and the
 # reason this is a fragment rather than a finished sentence.
+# AND `titheResource` IS A LABEL RATHER THAN A SENTENCE, which is why it carries no colon and no
+# name of its own. The page joins it to whatever the hovered resource is CALLED, and what it is
+# called comes from the icon lab by way of the generator -- "Silver coin", not "silver" -- so a
+# resource renamed in one place is renamed on the status line too. Writing the finished sentence
+# here would put half the wording in this file and half in the tree, with nothing holding the two
+# in step.
 LINES = {
     "noAcolytes": "no Acolytes present",
     "noTithe": "no Tithe to take",
+    "titheResource": "Tithe resource",
 }
 
 
