@@ -355,11 +355,19 @@ def test_the_resources_are_kept_although_nothing_draws_them_any_more():
     # this fired on build()'s own comment explaining a bug in which base64 ended up somewhere it
     # should not have -- a guard failing on the prose that describes the thing it guards against,
     # which is the third time this board has managed that.
+    #
+    # AND A SECOND NAME EARNED ITS PLACE ON THE LIST. `fitted_to_ink` re-encodes the duty line's
+    # icons at build time -- it crops each one to what is actually drawn in it, because the
+    # marks and the resource share a line and have to be framed by one rule -- so it decodes and
+    # re-encodes pictures that v1's helpers inlined. It adds nothing to the page that was not
+    # already there, which is the property this guard is really about, and it is named here
+    # rather than letting the check go vague.
     inlines = sorted(k for k, v in where.items()
                      if any("base64." in ln.split("#")[0] for ln in v))
-    assert inlines == ["bundled_films"], (
-        "base64 is used in %s; the only thing this generator may inline is the phase films, and "
-        "anything else is the banner path coming back" % ", ".join(inlines))
+    assert inlines == ["bundled_films", "fitted_to_ink"], (
+        "base64 is used in %s; the only things this generator may inline are the phase films and "
+        "the trim of the duty line's own icons, and anything else is the banner path coming back"
+        % ", ".join(inlines))
     for token in ("__BANNERS__", "__BANNERMETA__", "__BANNERFONT__"):
         assert token not in gen and token not in tmpl, (
             "%s is back in the build, so the page carries banner data again" % token)

@@ -238,7 +238,18 @@ body.full{background:#000}
 @media (prefers-reduced-motion:reduce){
   .seal.filled, .tmark.filled, .tslot.filled{transition:none}}
 .seal img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
-.seal.filled img{border-radius:0;object-fit:contain}
+/* TAKEN OUT OF THE GRID, AND THAT IS NOT A STYLE PREFERENCE. A mark is a grid with
+   `place-items:center`, and ANY percentage height on a grid item whose row is sized from that
+   same item is cyclic -- the browser drops it and uses `auto`. `height:100%` quietly meant "as
+   tall as this drawing wants to be", and so did `max-height:100%`, which is why swapping one
+   for the other changed nothing. It never showed while every icon was a square: 50 wide and
+   auto-tall IS 50 tall. The moment the icons were trimmed to their own ink, a tall one grew out
+   of its box and over the frame's edge.
+   POSITIONED INSTEAD, so the box it fills is the mark's padding box rather than a grid row that
+   does not exist until the picture has decided how big it is. `object-fit:contain` then fits
+   the drawing inside it, whatever shape the drawing is. */
+.seal.filled img{position:absolute;inset:0;width:100%;height:100%;
+  border-radius:0;object-fit:contain}
 /* A CUT-OUT BRINGS NO GROUND, so the board gives it one. A wax disc is a thing you could pick up
    and it carries its own; an emblem drawn on transparency does not, and on the tile's black it
    floats with nothing behind it. Which a seal is, is recorded in attribution.json and arrives
@@ -574,10 +585,6 @@ body.editing .art.drop,body.editing .seal.drop{outline:2px solid var(--line)}
   <input type=range id=rFig min=40 max=220 step=1
          title="the size of the acolytes, as a percentage of the size the board works out for itself; the rectangles do not move">
   <span class=val id=vFig></span>
-  <span class=tag>apart</span>
-  <input type=range id=rApart min=-40 max=120 step=1
-         title="how far apart the acolytes stand, in hundredths of a figure's width, added to the spacing the figure itself asks for; their size does not change">
-  <span class=val id=vApart></span>
   <span class=tag>cols</span>
   <input type=range id=rCols min=-150 max=150 step=1
          title="how far the left and right columns of tiles sit from the middle one, in board pixels; both move by the same amount and the middle column does not move">
@@ -637,6 +644,11 @@ var TITHE = __TITHE__;
 // it was never drawn in, silently, on every tile at once. The generator measures the file it
 // inlines and hands the number over with it.
 var MERCHANT = __MERCHANT__;
+
+// THE SHAPE OF EVERY DRAWING ON A DUTY'S LINE, keyed as IMAGES is. The line is laid out by what
+// is DRAWN rather than by boxes around it -- see bandFor -- and a data URI does not tell the page
+// its own proportions, so the generator measures them off the same crop it ships.
+var SHAPES = __SHAPES__;
 
 // WHAT A MARKED TILE WEARS IN EACH PHASE, AND WHEN EACH TILE STARTS WEARING IT.
 //
@@ -735,29 +747,36 @@ S.slot = onlySlot(S.duty);
 // seat comes from the game; nothing else in the page reads it except the pool.
 var V2_SEAT = "p1";
 
-// WHAT EACH SEAT'S POOL COMES TO UNDER V2_SEATS, worked out rather than arranged -- p1 stands on
-// Clerical, Allocation and Give Alms, so wheat and stone; p2 adds Produce and Ordination, so all
-// three; p3 stands on Construct, so the cornucopia unions all three in by itself; and p4 stands
-// nowhere, which is the empty box. All four cases are reachable from the picker, including the
-// one that is easiest to forget.
+// WHAT EACH SEAT'S POOL COMES TO UNDER V2_SEATS: all of it. Every seat stands on every duty, so
+// every pool holds every resource -- which is the cost of a deal arranged for looking at rather
+// than for exercising the rules, and it is why the pool's own cases are driven in the guards by
+// single figures on single tiles instead of by this.
 //
-// AND p4 IS A POSITION THE GAME CANNOT REACH. Sowing guarantees every seat an Acolyte on at least
-// one duty tile, so arriving in Action Selection with figures nowhere does not happen: there is
-// no forced pass to design and no "you cannot act" state to draw. It is KEPT ANYWAY, as the
-// degenerate case the guards drive -- an empty pool, no eligible duty, no commit, every cue off
-// at once -- because the cheapest way to find out that a rule divides by the number of your own
-// figures is to have a seat with none. IMPOSSIBLE, NOT ILLEGAL: nothing here should be read as
-// the engine being allowed to produce it, and nothing should be built on top of it.
+// EVERY SEAT STANDS ON EVERY DUTY BECAUSE THIS IS A BENCH BEFORE IT IS A GAME. Four acolytes
+// line up with four slots on a duty's line -- the two marks, the merchant, the resource -- and
+// that is a rule you cannot check on a tile where a seat has nobody: the column is simply empty
+// and the alignment is a claim rather than a thing you can look at. One figure per seat per tile
+// puts all four columns under the eye on all eight tiles at once. THE PILES ARE STILL UNEVEN,
+// which is the other thing this deal is for: Give Alms stands four of p1 so the deepest pile is
+// still on the board.
+//
+// AND THE SEAT THAT STANDS NOWHERE IS STILL DRIVEN, just not from here. It was p4's job: an
+// empty pool, no eligible duty, no commit, every cue off at once, which is the cheapest way to
+// find a rule that divides by the number of your own figures. The guards drive it with a seat
+// of their own standing on nothing -- see the `nowhere` case in the pool fixture -- which is
+// better than borrowing a demo deal for it, because the deal is for looking at and the degenerate
+// case is for testing. IMPOSSIBLE, NOT ILLEGAL: Sowing guarantees every seat an Acolyte
+// somewhere, so the engine cannot produce it and nothing should be built on top of it.
 
 var V2_SEATS = {
-  clerical:    ["p1", "p1", "p2", "p3"],
-  allocation:  ["p1", "p2", "p2", "p3"],
-  taxation:    ["p2", "p2", "p2", "p3"],
-  give_alms:   ["p1", "p1", "p1", "p1", "p2", "p3"],
-  produce:     ["p2", "p3"],
-  build_roads: ["p3", "p3", "p3"],
-  ordination:  ["p2", "p2"],
-  construct:   ["p3"]
+  clerical:    ["p1", "p1", "p2", "p3", "p4"],
+  allocation:  ["p1", "p2", "p2", "p3", "p4"],
+  taxation:    ["p1", "p2", "p2", "p2", "p3", "p4"],
+  give_alms:   ["p1", "p1", "p1", "p1", "p2", "p3", "p4"],
+  produce:     ["p1", "p2", "p3", "p4"],
+  build_roads: ["p1", "p2", "p3", "p3", "p3", "p4"],
+  ordination:  ["p1", "p2", "p2", "p3", "p4"],
+  construct:   ["p1", "p2", "p3", "p4"]
 };
 GEO.duties.forEach(function(d){
   if (V2_SEATS[d.slug]){ S.occupancy[d.slug] = V2_SEATS[d.slug].slice(); return; }
@@ -1473,21 +1492,21 @@ var RING_FACES = ["north", "north_east", "east", "south_east",
 function gridArea(){
   // THE ROW ABOVE IS WHAT THE GRID LINES UP WITH, END TO END. It ran margin to margin -- the
   // card's left edge to the same distance off the right of the canvas -- which lined it up with
-  // the board rather than with the things on the board. The card row does not reach that far:
-  // it stops at the Tithe's right edge, 198 short of the mirror margin, so a grid spanning the
-  // full width was wider than every object above it by most of a Tithe box.
-  // SO BOTH ENDS ARE READ OFF THE ACTION CARDS. The left is the leftmost card's own left edge
-  // and the right is where the second one ends -- the two pictures the grid is a choice
-  // between. It reached the Tithe's right edge for a round, which lined the wheel up with the
-  // whole row including a box that is not a duty; the cards are what the nine rectangles answer
-  // to. Nothing here is a margin, so the grid follows the pair if either ever moves.
-  var a = GEO.slots.actionA, b = GEO.slots.actionB;
-  // The vertical still uses the card's left margin as its gap, above and below: it is the one
-  // spacing this board repeats everywhere, and the row gives no vertical number to read.
+  // the board rather than with the things on the board.
+  //
+  // THE LEFT END IS THE FIRST CARD'S AND THE RIGHT END IS THE TITHE BOX'S. It was the second
+  // card's right edge for a while, on the argument that the wheel answers to the two pictures
+  // it is a choice between and not to a box that is not a duty. The row above does not read
+  // that way: the Tithe box is part of it, it is the rightmost thing in it, and a wheel ending
+  // short of it looks like a wheel that missed. Nothing here is a margin -- both ends are read
+  // off objects -- so the grid follows them if either ever moves.
+  var a = GEO.slots.actionA, t = GEO.tithe;
+  // The vertical still uses the card's left margin as its gap above: it is the one spacing this
+  // board repeats everywhere, and the row gives no vertical number to read.
   var m = a.x;
   var top = (a.y - LIFT) + a.height + m;
   return {x: a.x, y: top,
-          width: (b.x + b.width) - a.x,
+          width: (t.x + t.width) - a.x,
           height: GEO.canvas.height - top - m};
 }
 
@@ -1537,7 +1556,23 @@ function gridCells(){
   // typed, so the slider reads as a percentage of the shape the fork is about and keeps that
   // meaning when the other three sliders change the shape's size.
   var extra = rh * (GRID.height / 100 - 1);
-  var oy = w.y + (w.height - (bh + 2 * d + hang)) / 2 + d;
+  // AND THE BOTTOM IS PINNED RATHER THAN CENTRED, which is a change of what the wheel hangs
+  // from. It used to be centred in the area between the cards and the bottom margin, with the
+  // plates' hang paid for so the DRAWING was what sat in the middle; the slack then moved with
+  // every slider and the lowest plate finished a different distance off the bottom edge on every
+  // setting. It now sits so that the lowest plate keeps exactly the drop a plate keeps from its
+  // own rectangle -- the one gap this line already repeats -- so the board ends on the same
+  // spacing it is built from.
+  //
+  // MEASURED TO THE LOWEST PLATE, not to the lowest rectangle. The bottom row's middle cell is
+  // pushed DOWN by the displacement and its plate hangs below that, so the lowest ink on the
+  // board is `d` further down than the row it belongs to.
+  //
+  // AND IT IS ALLOWED TO RUN OFF THE TOP. The size slider is already allowed past the margins
+  // on purpose -- asking for bigger and silently being refused is worse than seeing it -- and
+  // pinning the bottom means that overflow now comes off the top rather than both ends.
+  var low = 2 * (rh + g) + rh + d;
+  var oy = GEO.canvas.height - PLATE_DROP - plateHeight() - PLATE_DROP - low;
   var out = [];
   for (var row = 0; row < 3; row++){
     for (var col = 0; col < 3; col++){
@@ -1624,36 +1659,30 @@ function mostActions(){
   return n;
 }
 
+// THE SMALLEST SPACE THE LINE IS ALLOWED TO COME DOWN TO, which is what decides how big the
+// drawings may be. Everything on a duty's line is drawn at one ink height and the widths follow
+// each drawing's own shape, so a tile holding two wide marks and a block of stone needs more
+// room than one holding a stalk of wheat -- and they all have to be the same size as each other
+// or the board stops reading as one set. So the height is as large as the WORST line can take
+// while still keeping this much air between its pieces.
+var LINE_MIN_GAP = 10;
+
 function plateFor(rw, rh, nAct){
   var mg = GEO.ribbon.sealInset * 2, ip = GEO.marks.pad, igap = 6;
   var sz = GEO.ribbon.seal;
-  // ONE FRAME FOR EVERY DUTY, WHATEVER IT HOLDS. Allocation and Taxation have a single mark
-  // each and used to get a plate 74 wide against the other six's 130 -- two sizes of the same
-  // object in one row, which reads as two kinds of thing rather than as one kind holding
-  // different amounts. The frame is built to the widest row any duty needs and a short row is
-  // CENTRED in it, so what differs between duties is the marks and not the ground they sit on.
-  var rowW = nAct * sz + (nAct - 1) * igap;
+  // ONE FRAME FOR EVERY DUTY, WHATEVER IT HOLDS -- and a duty with fewer marks leaves the SLOTS
+  // it does not use empty rather than centring what it has: the acolytes above stand over these
+  // slots, so a short row that closed up would move the people on two tiles out of step with
+  // the other seven.
   var most = mostActions();
-  var fullRow = most * sz + (most - 1) * igap;
-  // THE FRAME IS BUILT TO THE MARKS, AND THAT IS NOW WHAT IT MEANS. It spanned the whole
-  // rectangle for a round, with the tithe resource at its right-hand end -- and a frame holding
-  // both made the two look like one kind of thing, which they are not: an action is CHOSEN and a
-  // resource is a label saying what the tile provides. So the frame has come back to the row of
-  // marks and the resource stands outside it. INSIDE A FRAME YOU CAN CHOOSE IT; OUTSIDE, IT IS
-  // TELLING YOU SOMETHING -- readable at rest, without hovering anything, which is exactly what
-  // the merged bar could not do: the two were the same ink at the same weight on the same ground.
-  //
-  // `rowBox` IS BOTH WHAT THE MARKS NEED AND WHAT IS DRAWN. `innerW` is still worth naming,
-  // because the resource is placed against the RECTANGLE's far edge rather than the frame's, and
-  // because the fit test asks whether the row fits the rectangle.
   var innerW = rw - 2 * CELL_BORDER;
-  return {mg: mg, ip: ip, igap: igap,
+  return {mg: mg, ip: ip, igap: igap, most: most,
           innerW: innerW, innerH: rh - 2 * CELL_BORDER,
-          // WHERE THE ROW STARTS INSIDE THE PADDING, which is what centres a short one. It is
-          // zero for a duty holding the full row, so the two cases are one expression.
-          sz: sz, rowW: rowW, inset: (fullRow - rowW) / 2,
-          fullRow: fullRow, rowBox: fullRow + 2 * ip, height: plateHeight()};
+          // WHAT THE LINE HAS TO FILL, inner edge to inner edge less one margin at each end.
+          span: innerW - 2 * ip, gaps: most + 1,
+          sz: sz, height: plateHeight()};
 }
+
 
 // WHAT THE PLATES ADD BELOW THE BOTTOM ROW, which is what the arrangement has to be centred on.
 // No longer a function of the rectangle, because the plate is not: one number for the board.
@@ -1713,141 +1742,164 @@ function cellRect(c){
 // this, so the two frames cannot pad their marks differently.
 function plateInset(P){ return P.ip - PLATE_BORDER; }
 
-function markAt(P, k){
-  return {left: plateInset(P) + P.inset + k * (P.sz + P.igap),
-          top: plateInset(P), size: P.sz};
+// THE LINE, WORKED OUT ONCE: four slots of one width at one pitch, and what is drawn in each.
+//
+// EVEN BOXES, AND THE DRAWINGS CENTRED IN THEM. The other arrangement was tried: slots as wide
+// as the drawings they hold, with the leftover shared equally, which makes the space between the
+// pictures one number. It reads well on a line by itself and it breaks the people standing over
+// it -- the slot middles come out unevenly spaced, and four figures that ARE all one width
+// inherit that unevenness, down to touching each other on the tightest tiles. Both cannot hold
+// unless every drawing is the same width, and they are not: the wheat stalk's ink is 28 x 97
+// against the stone block's 100 x 77.
+//
+// SO THE PITCH IS WHAT IS EVEN, because the acolytes are what the pitch is for. A slot is a
+// place on the line, the drawing sits in the middle of it, and the person who may take it stands
+// over the same middle. The cost is air: a narrow drawing keeps more of it than a wide one, and
+// that is visible around the wheat.
+//
+// AND EVERY DRAWING IS THE SAME HEIGHT, which is the other half of looking like one set. The box
+// is therefore as wide as the WIDEST drawing at that height -- work it out the other way round
+// and the widest drawing would have to shrink to fit, taking its height with it and undoing the
+// first half.
+function slotsFor(P, box, band){
+  var n = P.most + 2, g = (P.span - n * box) / P.gaps;
+  var w = [], at = [], k;
+  for (k = 0; k < n; k++){ at.push(P.ip + k * (box + g)); w.push(box); }
+  return {w: w, at: at, g: g, band: band, box: box};
 }
 
-// WHERE THE RESOURCE STANDS, WHICH IS EXACTLY WHERE IT STOOD WHEN THE FRAME REACHED IT.
+// WHAT IS DRAWN IN ONE SLOT: the picture at the band's height, at its own width, centred.
+function inkAt(P, k, scale){
+  var L = P.line, h = L.band * (scale || 1), wide = h * (P.shapes[k] || 1);
+  return {x: L.at[k] + (L.box - wide) / 2, w: wide, h: h};
+}
+
+// WHERE THE k-TH MARK SITS INSIDE ITS PLATE: centred in its slot, and vertically centred on the
+// mark's own square so a short wide drawing sits level with a tall narrow one.
 //
-// The frame moved away from the resource; the resource did not move. It keeps `GEO.marks.pad`
-// from the RECTANGLE's inner right edge -- the margin it kept from the frame's right edge while
-// the frame ended there -- so nothing shifted on the board when the frame shrank, and the only
-// visible change is that there is no edge around it any more.
+// THE INSET IS GONE AND THAT IS A DECISION, not a simplification. It centred a short ROW inside
+// the widest row any duty needs, which looked right while the frame was the only thing on the
+// line -- and is wrong now that four acolytes stand over four slots: Allocation's one mark
+// centred would sit between slot A and slot B with a person over each of them.
+function markAt(P, k){
+  var ink = inkAt(P, k, 1);
+  return {left: plateInset(P) + ink.x - P.ip,
+          top: plateInset(P) + (P.sz - ink.h) / 2,
+          w: ink.w, h: ink.h};
+}
+
+// WHERE THE RESOURCE STANDS: in the last slot on the line, which ends `ip` in from the
+// rectangle's own right edge.
 //
-// BOARD COORDINATES, NOT THE FRAME'S. It used to be a child of the plate, placed against the
-// plate's padding box; it is a child of #board now, because a frame 118 wide cannot hold
-// something 136 from the rectangle's left edge. That is also why drawGrid's sweep has to name
-// it: nothing else would take it away on a rebuild, and it would pile up one copy per slider
-// event -- the exact failure the plates had when they first left the cell.
-//
-// `P.ip` DOES BOTH JOBS, which is what keeps the resource level with the marks beside it: the
-// margin from the rectangle's edge, and the inset that centres a 50px mark on a 62px line. The
-// same number, because the line IS the mark plus that margin at each end.
-//
-// AND NO `P.inset`. That term centres a SHORT row inside the widest row any duty needs; the
-// resource is not in that row and is not centred in anything. Applying it would move the
-// resource on the two duties that hold a single action and nowhere else.
+// BOARD COORDINATES, NOT THE FRAME'S. It is a child of #board, because a frame drawn round the
+// action slots cannot hold something past the end of them -- which is also why drawGrid's sweep
+// has to name it: nothing else would take it away on a rebuild, and it would pile up one copy
+// per slider event.
 function titheMarkAt(r, P, y){
-  return {x: r.x + CELL_BORDER + P.innerW - P.ip - P.sz,
-          y: y + P.ip, size: P.sz};
+  var ink = inkAt(P, P.line.w.length - 1, 1);
+  return {x: r.x + CELL_BORDER + ink.x,
+          y: y + P.ip + (P.sz - ink.h) / 2, w: ink.w, h: ink.h};
 }
 
 // HOW SMALL THE MERCHANT MAY GET BEFORE IT IS NOT DRAWN AT ALL, as a share of a duty mark. The
-// sliders take these rectangles down to 215 x 107 and the space between the frame and the
-// resource closes with them; below half a mark the figure is a smudge with a hat, and a smudge
-// on every tile reads as dirt on the board rather than as a thing that is there on purpose.
+// sliders take these rectangles down to 215 x 107 and everything on the line shrinks with them;
+// below half a mark the figure is a smudge with a hat, and a smudge on every tile reads as dirt
+// on the board rather than as a thing that is there on purpose.
 var MERCHANT_FLOOR = 0.5;
 
-// WHERE THE MERCHANT STANDS.
+// WHERE THE MERCHANT STANDS: in the slot after the marks, like everything else on this line.
 //
-// AS TALL AS A DUTY MARK, AND NO WIDER THAN THE LINE CAN SPARE. It is the third object on a line
-// whose other two are fixed -- the frame is built to the marks and the resource is pinned to the
-// rectangle's right edge -- so the merchant gets what is left and nothing else moves to make
-// room for it. HEIGHT IS WHAT THE EYE COMPARES, though, which is why the cap is on the height:
-// this is a standing figure beside 50-pixel emblems, and a figure sized by the gap would be a
-// third taller than them at the opening settings and taller still as the board got roomier.
-// Width only ever takes size AWAY, when the gap is too tight for the figure that height asks
-// for.
+// THE SAME HEIGHT AS THE DRAWINGS BESIDE IT, which is what the trade slider scales: it is a
+// standing figure among emblems and the one thing the eye compares them by is how tall they are.
 //
-// AND IT KEEPS THE MARKS' OWN GAP FROM BOTH, which is the same `igap` the resource clears the
-// frame by. Centred in whatever is left over once the cap bites, so the two clearances stay
-// equal rather than the leftover piling up on one side.
+// AND THE SLIDER MOVES NOTHING ELSE, because the slots are fixed. The figure grows and shrinks
+// inside its own box about its own middle; past 100 it grows out of the box on both sides, which
+// is the point -- the size is being chosen by eye, and a marker that refused to be looked at
+// would teach nothing.
 //
-// TAXATION GETS THE SAME MARKER IN THE SAME PLACE, which is why the gap is measured to where the
-// resource WOULD be rather than to a resource. It is the one duty that takes no tithe, so there
-// is nothing on its right to bound the space -- and placed by what it actually has beside it,
-// its merchant would stand somewhere no other merchant stands, on the tile that is already the
-// odd one out. Eight markers, one line, one offset from the frame.
-//
-// ON THE MARKS' OWN BASELINE, NOT CENTRED IN THE ROW. The frame's padding is not part of what
-// the eye lines things up by: what reads as the line is the bottom edge of the emblems, and a
-// figure is a thing that STANDS. Centred in the row it floated a few pixels above icons that
-// did not, which is the kind of difference nobody can name and everybody sees.
-//
-// AND THE SLIDER MULTIPLIES WHAT THE GAP CAN SPARE, and is allowed to go past it. Below 100 the
-// marker keeps its clearance and gains more; above it the clearance goes negative and the
-// merchant grows into the frame and the resource, which is the point -- the size is being
-// chosen by eye, and refusing to draw the thing being looked at teaches nothing. THE FLOOR IS
-// MEASURED ON THE UNSCALED WIDTH, so what is refused is a board with no room for a marker,
-// never a size somebody asked for.
-function merchantAt(P, frameX, y, gap){
-  var fits = Math.min(P.sz / (MERCHANT.h || 1), gap - 2 * P.igap);
-  if (fits < P.sz * MERCHANT_FLOOR) return null;
-  var w = fits * (GRID.merch == null ? 100 : GRID.merch) / 100;
-  var h = w * (MERCHANT.h || 1);
-  // GROWN ABOUT WHERE IT FITS rather than from its own left edge, so the slider opens it out
-  // around the place it stood instead of walking it along the line into the resource.
-  var clear = (gap - fits) / 2;
-  return {x: frameX + P.rowBox + clear + (fits - w) / 2,
-          y: y + plateInset(P) + P.sz - h, w: w, h: h};
+// ON THE MARKS' OWN BASELINE. What reads as the line is the bottom edge of the drawings, and a
+// figure is a thing that STANDS; scaled about its middle it would float as the slider moved.
+function merchantAt(P, frameX, y){
+  var L = P.line;
+  if (L.band < P.sz * MERCHANT_FLOOR) return null;
+  var ink = inkAt(P, P.most, (GRID.merch == null ? 100 : GRID.merch) / 100);
+  return {x: frameX + ink.x, w: ink.w, h: ink.h,
+          y: y + P.ip + (P.sz - L.band) / 2 + L.band - ink.h};
 }
 
-function placeFor(r, nAct, hasTithe){
+// THE SHAPES ONE DUTY'S LINE HOLDS, in slot order: its marks, the merchant, its resource. A
+// slot with nothing in it is a square, because it is still a place on the line.
+function lineShapes(info){
+  var out = [], most = mostActions();
+  for (var k = 0; k < most; k++){
+    var key = info && info[k === 0 ? "actionA" : "actionB"];
+    key = key && key.seal;
+    out.push((key && SHAPES[key]) || 1);
+  }
+  out.push(1 / (MERCHANT.h || 1));
+  var tk = info && info.tithe != null ? info.tithe : null;
+  out.push((tk != null && SHAPES["tithe:" + tk]) || 1);
+  return out;
+}
+
+// HOW BIG EVERY DRAWING ON THE BOARD IS, which the WIDEST one on any line decides for all of
+// them: one height, and a box wide enough to hold the broadest drawing at that height.
+//
+// THE MERCHANT IS MEASURED AT ITS OWN SIZE, not at the trade slider's. Sizing the boxes to a
+// dragged merchant would make every icon on the board shrink as it grew, which is the opposite
+// of a slider that moves one thing.
+function bandFor(P){
+  var worst = 1;
+  GEO.duties.forEach(function(d){
+    var a = lineShapes(dutyOf(d.slug));
+    for (var i = 0; i < a.length; i++) worst = Math.max(worst, a[i]);
+  });
+  var box = (P.span - P.gaps * LINE_MIN_GAP) / (P.most + 2);
+  var band = Math.min(P.sz, box / worst);
+  return {band: band, box: Math.min(box, band * worst)};
+}
+
+function placeFor(r, nAct, hasTithe, shapes, line){
   var P = plateFor(r.width, r.height, nAct);
-  // THE FRAME SPANS THE RECTANGLE, inner edge to inner edge. It was centred under the rectangle
-  // while it was built to its contents, then flush left while the resource had a frame of its
-  // own beside it; it is neither now, because there is one frame and it is as wide as the thing
-  // it hangs from. `CELL_BORDER` is paid once on each side because `*{box-sizing:border-box}`
-  // draws the cell's border INSIDE its declared width, so the inner box starts one border in.
+  // WHAT THE LINE IS MADE OF, and the defaults are what the guards drive it with: square
+  // drawings at a mark's height in boxes just wide enough to hold them.
+  if (!shapes){
+    shapes = [];
+    for (var k = 0; k < P.most; k++) shapes.push(1);
+    shapes.push(1 / (MERCHANT.h || 1));
+    shapes.push(1);
+  }
+  P.shapes = shapes;
+  var band = (line && line.band) || P.sz;
+  P.line = slotsFor(P, (line && line.box) || band, band);
+  P.g = P.line.g;
+  // THE FRAME IS DRAWN ROUND THE ACTION SLOTS, with its own padding at each end. It is the last
+  // thing worked out rather than the first, because it has no say in where anything stands.
+  P.rowBox = P.most * P.line.box + (P.most - 1) * P.g + 2 * P.ip;
   var x = r.x + CELL_BORDER;
   var y = r.y + r.height + PLATE_DROP;
   var tm = titheMarkAt(r, P, y);
-  // WHERE THE FRAME ENDS, which is what the resource has to clear. It used to be where the row
-  // of marks ended, inside a frame that reached past it; the frame's own right edge is the
-  // boundary now, and it is the thing the eye actually sees.
-  var frameEnd = x + P.rowBox;
-  var has = P.rowBox <= P.innerW && y + P.height <= GEO.canvas.height;
-  // EACH CONDITION GETS A NAME BECAUSE EACH IS A DIFFERENT QUESTION, and they were a chain of
-  // `&&` inside one object literal until the divider arrived and needed to ask the answer to the
-  // one above it. A literal cannot read its own fields, and the alternative -- restating the
-  // resource's test inside the divider's -- is the second copy this file keeps being bitten by.
-  var hasT = !!hasTithe && has && tm.x - frameEnd >= P.igap;
-  // THE MERCHANT ASKS THE RECTANGLE, NOT THE DUTY. The gap it stands in is the one between the
-  // frame and where the resource goes, and every rectangle has that whether a resource is drawn
-  // in it or not -- which is what puts Taxation's marker in the same place as the other seven.
-  // It needs the FRAME, because that is what it is offset from: a rectangle too narrow for the
-  // row has no line for anything to stand on. Nothing else is asked, because a gap too tight
-  // for a resource is a gap too tight for this, and the arithmetic says so without being told.
-  var mer = has ? merchantAt(P, x, y, tm.x - frameEnd) : null;
-  return {p: P, x: x, y: y, has: has, titheMark: tm, merchant: mer,
-          // THE FRAME'S DRAWN WIDTH, NAMED HERE RATHER THAN WORKED OUT IN drawGrid. It is
-          // `P.innerW` and nothing else today, which is exactly why it needs a name: drawGrid is
-          // the one function the guards cannot call, so a width decided there can only be
-          // checked by a second copy of it -- and every bug this file has had came from a second
-          // copy agreeing with the first. placeFor is what the sweep calls, so the page and the
-          // guards read the same expression.
-          width: P.rowBox,
-          // THE RESOURCE NEEDS A CLEAR GAP, NOT MERELY A FREE PIXEL, and the gap it needs is the
-          // one BETWEEN the duty's own marks. Inside a single frame the only thing separating
-          // "the actions you may take" from "what this duty hands you" is distance: let the
-          // resource come closer than `igap` and it reads as a third icon in the row, which is
-          // the one misreading this arrangement has to avoid. At the opening settings the
-          // clearance is 24px against the 6 between the two duty marks, so the resource is four
-          // times further from them than they are from each other.
-          //
-          // AND IT RIDES IN THE DUTY'S FRAME, SO IT NEEDS THE FRAME. `has` is kept here even
-          // though its WIDTH half is implied -- clearing the row by `igap` cannot happen in a
-          // rectangle too narrow for the row -- because its HEIGHT half is not: a frame pushed
-          // off the bottom of the board is refused for a reason that has nothing to do with
-          // width, and without this term the resource would be placed into a frame that was
-          // never drawn, landing loose inside the rectangle.
-          hasTithe: hasT,
-          // THE ROW RUNS THE WHOLE RECTANGLE, less one margin at each end. It ran from the
-          // banner's left edge to the plate's while both were inside; neither is any more.
+  var has = P.g >= P.igap && P.rowBox <= P.innerW && y + P.height <= GEO.canvas.height;
+  var hasT = !!hasTithe && has;
+  var mer = has ? merchantAt(P, x, y) : null;
+  // THE FOUR PLACES AN ACOLYTE STANDS OVER, which is the whole reason the slots are even. Seat
+  // one stands over the first mark, seat two over the second, seat three over the merchant and
+  // seat four over the resource -- on every tile, including the two that leave a slot empty,
+  // because a slot is a position on the line and not a thing that happens to be drawn in it.
+  var seats = null;
+  if (has){
+    seats = [];
+    for (var j = 0; j < P.line.w.length; j++)
+      seats.push(x + P.line.at[j] + P.line.box / 2);
+  }
+  return {p: P, x: x, y: y, has: has, titheMark: tm, merchant: mer, seats: seats,
+          width: P.rowBox, hasTithe: hasT,
+          // THE ROW THE CITY SPREADS ITS PEOPLE ACROSS -- the eight duties stand them over their
+          // slots instead -- and what caps how big a figure may be.
           figLeft: r.x + CELL_BORDER + P.mg,
           figRight: r.x + CELL_BORDER + P.innerW - P.mg};
 }
+
 
 function drawGrid(){
   // THE PLATES ARE SWEPT TOO, AND THEY HAVE TO BE SWEPT HERE. They used to be children of the
@@ -1869,6 +1921,12 @@ function drawGrid(){
   var byFace = {};
   GEO.duties.forEach(function(d){ byFace[d.face] = d; });
 
+  // THE BAND: ONE INK HEIGHT FOR EVERYTHING ON EVERY LINE, worked out before any of them is
+  // drawn. Each duty's line needs a width proportional to the shapes it holds -- two wide marks
+  // and a block of stone want more room than two narrow ones and a stalk of wheat -- and they
+  // must all come out the same size or the eight tiles stop reading as one set. So the height is
+  // the largest that leaves even the WORST line its minimum air, capped at a mark.
+  var LINE = bandFor(plateFor(cellRect(gridCells()[0]).width, 0, 1));
   gridCells().forEach(function(c){
     var r = cellRect(c);
     var cell = el("div", "dcell", box(r));
@@ -1890,6 +1948,19 @@ function drawGrid(){
       var cmg = GEO.ribbon.sealInset * 2;
       r.figLeft = r.x + CELL_BORDER + cmg;
       r.figRight = r.x + CELL_BORDER + r.width - 2 * CELL_BORDER - cmg;
+      // AND THE CITY STANDS ITS PEOPLE AT THE SAME PITCH AS EVERY DUTY, which is the only thing
+      // that makes the nine rectangles read as one board. It had a spread of its own -- four
+      // figures and three gaps shared across the rectangle -- which was the right answer while
+      // the duties had one too, and became the odd one out the day they started standing over
+      // the slots on their own lines. The City has no line, so it borrows the pitch and centres
+      // four columns on its middle.
+      //
+      // ASKED OF ITS OWN RECTANGLE, because every cell in the wheel is the same size: the line
+      // the City does not draw would have the same slots as the one next door.
+      var cl = placeFor(r, 1, false, null, LINE).p.line;
+      var cpitch = cl.box + cl.g, cmid = r.x + CELL_BORDER + (r.width - 2 * CELL_BORDER) / 2;
+      r.seats = [];
+      for (var cs = 0; cs < 4; cs++) r.seats.push(cmid + (cs - 1.5) * cpitch);
       GRIDPOS.city = r;
       // A HANDLE, BECAUSE IT CARRIES A STATE NOW. The centre went without an id for as long as
       // it was a rectangle with people in it and nothing else; markStanding has to find it.
@@ -1947,7 +2018,7 @@ function drawGrid(){
     // states have to stay distinguishable. `=== null` rather than falsy: a key is a string or it
     // is null, and testing truthiness would make a future "" mean Taxation.
     var tkey = info && info.tithe != null ? info.tithe : null;
-    var L = placeFor(r, nAct, tkey !== null);
+    var L = placeFor(r, nAct, tkey !== null, lineShapes(info), LINE);
     var P = L.p, ip = P.ip, igap = P.igap, sz = P.sz;
     var plateW = L.width, plateH = P.height;
     var plateX = L.x, plateY = L.y;
@@ -1963,6 +2034,11 @@ function drawGrid(){
     if (hasPlate && !L.merchant) MERCHANTS_DROPPED++;
     r.figLeft = L.figLeft;
     r.figRight = L.figRight;
+    // AND WHERE THIS DUTY'S PEOPLE STAND, which drawFigures reads back off GRIDPOS. It runs
+    // after this pass and cannot call placeFor itself -- the rectangles are already gone by
+    // then -- so the four slot middles travel with the rectangle rather than being worked out
+    // a second time from numbers that would have to agree.
+    r.seats = L.seats;
 
     var plate = hasPlate
       ? el("div", "iplate", {left: px(plateX), top: px(plateY),
@@ -1978,7 +2054,7 @@ function drawGrid(){
       var at = markAt(P, k);
       var seal = el("div", "seal",
                     {left: px(at.left), top: px(at.top),
-                     width: px(at.size), height: px(at.size),
+                     width: px(at.w), height: px(at.h),
                      zIndex: String(k + 1)}, plate);
       seal.style.pointerEvents = "auto";
       // EVERY HANDLE THE RIBBON'S SEALS CARRIED, CARRIED OVER. The picker, the drop target and
@@ -2029,7 +2105,7 @@ function drawGrid(){
       var tat = L.titheMark;
       var tm = el("div", "tmark",
                   {left: px(tat.x), top: px(tat.y),
-                   width: px(tat.size), height: px(tat.size)});
+                   width: px(tat.w), height: px(tat.h)});
       // THE SAME LOOK-UP A SEAL DOES, so a resource with no cut on disk draws an EMPTY slot
       // rather than nothing: visibly unfinished, which is the state it is in.
       var tsrc = IMAGES["tithe:" + tkey];
@@ -2301,6 +2377,13 @@ function drawFigures(){
     var cap = (r.height - 2 * CELL_BORDER)
               / (HOOD.h * (1 + HOOD.step * (tallest - 1)));
     fw = Math.min(fw, w, cap);
+    // AND NO CAP FOR THE SLOTS, WHICH IS A CLAIM RATHER THAN AN OMISSION. The people stand over
+    // the line's four slots and those are evenly spaced, at a pitch of a slot plus a gap --
+    // which is wider than the quarter of the row this cap already allows them. So a figure that
+    // fits the row fits between its neighbours, and a cap for the slots would be a line of code
+    // that never ran. It stopped being true for an afternoon, when the slots were as wide as
+    // the drawings they held and two of them could close right up; a guard holds the version
+    // that is true now.
   });
   // AND THE SLIDER SCALES WHAT THE CAPS ALLOWED, rather than being a fourth cap. At 100 this is
   // exactly the size the board worked out, so the opening board is unchanged; above it the
@@ -2319,16 +2402,13 @@ function drawFigures(){
   if (vf) vf.textContent = GRID.fig + " \u00b7 " + Math.round(fw) + "px";
   if (fw < 3) return;                       // below this a hood is a smudge; draw nobody
 
-  // HOW FAR APART THEY STAND, WHICH IS NOT HOW BIG THEY ARE. The cap above divides the row by
-  // the figure's OWN spacing and is left alone, so moving this slider does not resize anybody --
-  // `folk` owns the size and this owns the distance, and two controls that each changed both
-  // would be impossible to aim. Past what fits, the row overflows the way an oversized one does:
-  // centred, into the margins from the middle.
-  var apart = HOOD.gap + GRID.apart / 100;
-  var va = document.getElementById("vApart");
-  if (va) va.textContent = (GRID.apart > 0 ? "+" : "") + GRID.apart
-                         + " \u00b7 " + Math.round(fw * apart) + "px";
-  var step = fh * HOOD.step, lean = fw * HOOD.lean, gap = fw * apart;
+  // HOW FAR APART THEY STAND IS NOT A SLIDER ANY MORE. It was one -- `apart`, in hundredths of
+  // a figure's width -- while the four acolytes were spread across their rectangle and the
+  // distance between them was a free choice. It is not free now: every tile stands its people
+  // over the four slots on its line, the City borrows that same pitch, and a control that moved
+  // them would be a control for breaking the alignment. What is left is the figure's own
+  // spacing, which is a fact about the drawing and lives with it.
+  var step = fh * HOOD.step, lean = fw * HOOD.lean, gap = fw * HOOD.gap;
   CELLS.forEach(function(slug){
     var r = GRIDPOS[slug];
     if (!r) return;
@@ -2357,8 +2437,24 @@ function drawFigures(){
       // AND THAT DIFFERENCE IS THE WHOLE MECHANISM HERE. When the row is wider than its
       // rectangle the slack goes NEGATIVE and half of it comes off the left edge, which is how
       // an oversized row ends up centred rather than hanging off the right of it.
-      var slack = (r.figRight - r.figLeft) - (fw * 4 + gap * 3);
-      var x = r.figLeft + slack / 2 + j * (fw + gap);
+      // OVER THE SLOT, WHERE THERE IS ONE. A duty's line is four places -- its two marks, the
+      // merchant, the resource -- and the acolyte that may take each of them stands over it, so
+      // the question "whose figures are on this action" is answered by looking straight down
+      // rather than by counting across. The City has no line and keeps the even spread below.
+      //
+      // CENTRED ON THE SLOT'S MIDDLE AND NOT ON ITS LEFT EDGE, because the figure and the slot
+      // are different widths -- a figure is about 51 wide against a 50 mark and a 34 merchant --
+      // and two objects line up by their middles or they do not line up at all.
+      var x;
+      if (r.seats && r.seats[j] != null){
+        x = r.seats[j] - fw / 2;
+      } else {
+        // AND THAT DIFFERENCE IS THE WHOLE MECHANISM HERE. When the row is wider than its
+        // rectangle the slack goes NEGATIVE and half of it comes off the left edge, which is how
+        // an oversized row ends up centred rather than hanging off the right of it.
+        var slack = (r.figRight - r.figLeft) - (fw * 4 + gap * 3);
+        x = r.figLeft + slack / 2 + j * (fw + gap);
+      }
       for (var i = 0; i < n; i++){
         var up = n - 1 - i;                 // 0 is the one standing on the line
         // EVERY OTHER ONE IS NUDGED, AND THE ONE ON THE LINE IS NOT. The jog exists so a pile
@@ -2396,17 +2492,16 @@ function wireGrid(){
   var rs = document.getElementById("rSize");
   var rt = document.getElementById("rHeight");
   var rf = document.getElementById("rFig");
-  var ra = document.getElementById("rApart");
   var rc = document.getElementById("rCols");
   var rm = document.getElementById("rMerch");
   var cb = document.getElementById("cBare");
   rg.value = GRID.gap; rd.value = GRID.disp; rs.value = GRID.size;
-  rt.value = GRID.height; rf.value = GRID.fig; ra.value = GRID.apart;
+  rt.value = GRID.height; rf.value = GRID.fig;
   rc.value = GRID.cols; rm.value = GRID.merch;
   cb.checked = !!GRID.bare;
   function apply(){
     GRID.gap = +rg.value; GRID.disp = +rd.value; GRID.size = +rs.value;
-    GRID.height = +rt.value; GRID.fig = +rf.value; GRID.apart = +ra.value;
+    GRID.height = +rt.value; GRID.fig = +rf.value;
     GRID.cols = +rc.value; GRID.merch = +rm.value;
     document.getElementById("vCols").textContent = (GRID.cols > 0 ? "+" : "") + GRID.cols;
     document.getElementById("vMerch").textContent = GRID.merch + "%";
@@ -2462,7 +2557,6 @@ function wireGrid(){
   rs.addEventListener("input", apply);
   rt.addEventListener("input", apply);
   rf.addEventListener("input", apply);
-  ra.addEventListener("input", apply);
   rc.addEventListener("input", apply);
   rm.addEventListener("input", apply);
   // THE SEAT IS NOT A GRID SETTING AND IS WIRED APART FROM THEM. It changes nothing about the

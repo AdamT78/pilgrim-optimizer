@@ -24,6 +24,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 TOOL = ROOT / "ui" / "board_v2" / "action_board"
 MARKERS = ROOT / "ui" / "board_v2" / "tokens" / "markers"
 ATTRIB = ROOT / "ui" / "board_v2" / "attribution.json"
+TMPL = TOOL / "action_board_v2.html.tmpl"
 
 
 def _load(name: str, where: pathlib.Path = TOOL):
@@ -155,3 +156,70 @@ def test_what_is_filed_is_what_the_record_says_is_filed(filed):
             "%s is recorded as %s and is %s" % (rel, rec[rel]["sha256"][:16], got[:16]))
         assert rec[rel]["licence"] != "provenance-pending", (
             "%s carries provenance-pending, which may not be inlined into the board" % rel)
+
+
+def test_the_duty_line_s_icons_are_trimmed_to_what_is_drawn_in_them(gen):
+    """Every icon on the line arrives as its own ink, with no canvas around it.
+
+    THE DRAWINGS ARE NOT THE SIZE THEY LOOK. Each icon is generated on a square and the drawing
+    inside it is whatever it is -- 28 x 97 for the wheat stalk, 100 x 77 for the stone block --
+    and it is not centred in that square either: one carries 3% of empty canvas above it and 12%
+    below. The board draws them in identical 50-pixel slots, so what the eye compares is the
+    canvas, not the drawing: two marks the same size sit at different heights and look like two
+    different sizes.
+
+    SO THE CANVAS COMES OFF AT BUILD TIME and the files on disk are untouched. That keeps a
+    layout decision out of fourteen assets and their records -- and it is checked here, on the
+    pictures the page actually carries, rather than on the function that makes them.
+
+    Falsify: inline the icons as they come, or crop them with getbbox(), which counts the halo
+    of almost-nothing pixels a generated drawing carries and leaves the canvas back on.
+    """
+    Image = pytest.importorskip("PIL.Image", reason="Pillow is not installed")
+    np = pytest.importorskip("numpy", reason="numpy is not installed")
+    import base64
+    import io
+
+    page, _notes = gen.build()
+    images = json.loads(re.search(r"^var IMAGES = (\{.*?\});\s*$", page, re.M).group(1))
+    line = {k: v for k, v in images.items()
+            if (k.startswith("seal:") or k.startswith("tithe:")) and isinstance(v, str)}
+    assert len(line) > 10, "the page carries only %d icons on the duty line" % len(line)
+    for key, uri in sorted(line.items()):
+        im = Image.open(io.BytesIO(base64.b64decode(uri.split(",", 1)[1]))).convert("RGBA")
+        a = np.asarray(im)[:, :, 3]
+        ys, xs = np.where(a > 8)
+        assert len(xs), "%s has nothing drawn in it" % key
+        pad = (int(xs.min()), int(ys.min()),
+               im.width - 1 - int(xs.max()), im.height - 1 - int(ys.max()))
+        assert max(pad) <= 1, (
+            "%s is %d x %d with %s pixels of empty canvas around its drawing (left, top, right, "
+            "bottom). The board centres it in a 50-pixel slot, so that canvas becomes a margin "
+            "nobody chose and every icon gets a different one." % ((key, im.width, im.height) + (pad,)))
+
+
+def test_a_mark_cannot_grow_out_of_its_box(gen):
+    """The drawing is bounded by the slot, and `height:100%` is not what bounds it.
+
+    A MARK IS A GRID, and a grid item's percentage height against a row sized from that same
+    item is cyclic: the browser drops it and uses `auto`. `height:100%` therefore meant "as tall
+    as this drawing wants to be", and so did `max-height:100%` -- which is why swapping one for
+    the other changed nothing. It never showed while every icon was a square, because 50 wide
+    and auto-tall IS 50 tall. The moment the icons were trimmed to their own ink, a tall one
+    grew out of its slot and over the frame's edge, on the two tiles that have the tallest
+    drawings.
+
+    SO THE PICTURE IS POSITIONED RATHER THAN SIZED: `position:absolute` with `inset:0` fills the
+    mark's own padding box, which is a box that exists before the picture is measured.
+
+    Falsify: put the image back in the grid's flow, or bound it with a percentage of any kind.
+    """
+    style = TMPL.read_text(encoding="utf-8")
+    rule = re.search(r"\.seal\.filled img\{([^}]*)\}", style)
+    assert rule, "there is no `.seal.filled img` rule left to bound the drawing"
+    body = rule.group(1).replace("\n", " ")
+    assert "position:absolute" in body and "inset:0" in body, (
+        "the mark's drawing is sized inside the grid again, where a percentage height resolves "
+        "to auto and a tall icon grows out of its slot: %s" % body)
+    assert "object-fit:contain" in body, (
+        "the drawing is no longer fitted inside its box: %s" % body)

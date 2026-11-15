@@ -115,7 +115,7 @@ OUT = HERE / "generated" / "action_board_v2.html"
 # centred on the middle column whatever it is set to. Negative brings them in, positive pushes
 # them out. It does NOT resize anything -- `gap` already does that, by eating the room the
 # three columns divide -- which is what makes the two worth having separately.
-GRID_DEFAULTS = {"gap": 120, "disp": 60, "size": 110, "height": 140, "fig": 100, "apart": 20,
+GRID_DEFAULTS = {"gap": 120, "disp": 60, "size": 100, "height": 140, "fig": 100,
                  "cols": -30, "merch": 90, "bare": True}
 
 # WHAT AN OPEN DUTY TILE WEARS, AND WHEN EACH ONE STARTS WEARING IT.
@@ -400,6 +400,75 @@ def bundled_merchant() -> tuple[dict, list]:
              "src": v1._inline(f, (MERCHANT_PX, round(MERCHANT_PX * aspect)), "PNG")}, notes)
 
 
+# HOW MUCH OF A SLOT A TRIMMED ICON FILLS, and it is 1 rather than a margin of taste. The slot
+# already carries `GEO.marks.pad` of ground on every side -- that is what the frame's padding is
+# -- so an icon that stopped short of its own box would be keeping two margins, one of them
+# invisible and unnameable.
+INK_FILL = 1.0
+
+
+def fitted_to_ink(images: dict, box: int) -> tuple[dict, dict, list]:
+    """The same pictures, cropped to what is drawn in them and fitted to a square box.
+
+    WHY THE BOARD CANNOT JUST CENTRE THEM. Every icon on the duty line is drawn inside a square
+    that is mostly empty -- the ink runs from 28 x 97 for the wheat stalk to 100 x 77 for the
+    stone block in a 100 square -- and it is not centred IN that square either: give_alms B
+    carries 3% of canvas above its drawing and 12% below. `object-fit: contain` then honours the
+    canvas, not the drawing, so two icons side by side in identical 50-pixel boxes sit at
+    different heights and read as different sizes. On a line four objects long that is the first
+    thing the eye finds.
+
+    SO THE CANVAS IS TAKEN OFF HERE, at build time, and the files on disk are untouched. The
+    alternative is re-cutting fourteen assets to make a layout decision, which would mean
+    fourteen new versions and fourteen new records saying nothing about provenance -- and the
+    next board that wanted them framed differently would have to do it again.
+
+    CROPPED AT ALPHA 8 for the reason the merchant marker is: a drawing generated on
+    transparency carries a halo of almost-nothing pixels, sometimes to the canvas edge, and
+    PIL's getbbox() counts every one of them. That mistake cost this board a marker that floated
+    above its own line.
+
+    AND THE ASPECT IS KEPT. The box is square and the ink is not, so the fit is by the longer
+    side; what comes back is the drawing at its own shape, which the page then centres.
+    """
+    notes: list = []
+    try:
+        from PIL import Image
+    except ImportError:                                           # pragma: no cover
+        return images, {}, ["Pillow is not installed, so the icons keep their own canvas"]
+    import base64
+    import io
+
+    import numpy as np
+
+    out, shape = {}, {}
+    for key, uri in images.items():
+        if not isinstance(uri, str) or not uri.startswith("data:image/"):
+            out[key] = uri
+            continue
+        im = Image.open(io.BytesIO(base64.b64decode(uri.split(",", 1)[1]))).convert("RGBA")
+        ys, xs = np.where(np.asarray(im)[:, :, 3] > 8)
+        if not len(xs):
+            notes.append("%s has nothing drawn in it, so it is left as it is" % key)
+            out[key] = uri
+            continue
+        ink = im.crop((int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1))
+        side = max(ink.width, ink.height)
+        w = max(1, round(box * INK_FILL * ink.width / side))
+        h = max(1, round(box * INK_FILL * ink.height / side))
+        buf = io.BytesIO()
+        ink.resize((w, h), Image.LANCZOS).save(buf, "PNG", optimize=True)
+        out[key] = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+        # AND THE SHAPE GOES WITH IT, because the board lays this line out by what is DRAWN. A
+        # row of identical boxes with different drawings centred in them has even boxes and
+        # uneven spaces, which is what the eye reads: a wide block of stone fills its box and
+        # nearly touches its neighbour while a wheat stalk floats in the middle of its own with
+        # air on both sides. The page spaces the drawings instead, so it needs each one's aspect
+        # -- measured here, off the same crop, rather than guessed from the file.
+        shape[key] = round(ink.width / ink.height, 4)
+    return out, shape, notes
+
+
 def open_offsets() -> dict:
     """Where in the loop each duty starts, clockwise from north.
 
@@ -595,6 +664,13 @@ def build() -> tuple[str, list]:
         raise SystemExit("ACOLYTE is %r, which is neither 'hood' nor 'friar'" % ACOLYTE)
 
     tithe, tnotes = bundled_tithe()
+    # THE DUTY LINE'S OWN ICONS, TRIMMED TO WHAT IS DRAWN IN THEM. The marks and the resource
+    # share a line and are read against each other, so they are framed by one rule; the controls
+    # in the column are not on that line and keep their own canvas.
+    seals, sshape, inotes1 = fitted_to_ink(seals, G.MARK * 2)
+    tithe, tshape, inotes2 = fitted_to_ink(tithe, G.MARK * 2)
+    shapes = {**sshape, **tshape}
+    tnotes += inotes1 + inotes2
     merchant, mnotes = bundled_merchant()
     names, nnotes = tithe_names()
     films, fnotes = bundled_films()
@@ -644,6 +720,11 @@ def build() -> tuple[str, list]:
         # pointed at eight times, with the aspect measured off that file -- see
         # bundled_merchant() for why the shape is not a constant in the template.
         "__MERCHANT__": json.dumps(merchant),
+        # THE SHAPE OF EVERY DRAWING ON THE DUTY LINE, keyed as the images are. The page sizes
+        # each one to one common ink height and spaces them by the widths that come out, so this
+        # is the one thing it cannot work out for itself: the pictures arrive as data URIs and
+        # their proportions are not knowable until they are decoded.
+        "__SHAPES__": json.dumps(shapes),
         # WHICH RESOURCES THERE ARE AND WHICH IS WILD. The page lists a player's pool in this
         # ORDER so the box reads the same way every time, and unions the whole order in when a
         # figure stands on the wild one. Both are facts about the tree, which is what this tool
@@ -724,9 +805,10 @@ def main() -> None:
     OUT.write_text(page, encoding="utf-8")
     print("  wrote %s  (%d KB)" % (OUT, len(page.encode("utf-8")) // 1024))
     # WHAT THE PAGE WILL ACTUALLY DO, worked out the same way the template works it out. The
-    # grid is no longer laid into GEO.wheel: v2 centres it in the room the lifted card row
-    # leaves, spanning the two ACTION CARDS end to end rather than margin to margin. Printing
-    # the wheel's rect here would be printing a number the page does not use.
+    # grid is no longer laid into GEO.wheel: v2 fits it to the room the lifted card row leaves,
+    # from the first action card's left edge to the TAKE TITHE box's right edge -- the row above
+    # it, end to end. Printing the wheel's rect here would be printing a number the page does
+    # not use.
     #
     # THIS IS A SECOND COPY OF gridArea() AND IT HAS ALREADY DRIFTED ONCE. The template's version
     # is the one that draws; this one only prints. When the span stopped being margin-to-margin
@@ -734,17 +816,17 @@ def main() -> None:
     # page drew 1174 -- a wrong number in the one place somebody checks instead of measuring.
     # `test_the_build_summary_agrees_with_the_page` now runs both and compares them.
     d = G.as_dict()
-    card, far = d["slots"]["actionA"], d["slots"]["actionB"]
+    card, far = d["slots"]["actionA"], d["tithe"]
     m = card["x"]
     lift = d["art"]["y"] - (d["status"]["y"] + d["status"]["height"] + 16)
     top = (card["y"] - lift) + card["height"] + m
-    print("  the duty grid is centred in %d x %d at (%d, %d), margin %d, read at draw time"
+    print("  the duty grid is fitted to %d x %d at (%d, %d), margin %d, read at draw time"
           % ((far["x"] + far["width"]) - card["x"], d["canvas"]["height"] - top - m,
              card["x"], top, m))
-    print("  sliders open at gap %d, edge %d, size %d%%, height %d%%, folk %d%%, apart %+d, "
+    print("  sliders open at gap %d, edge %d, size %d%%, height %d%%, folk %d%%, "
           "cols %+d, trade %d%%, bare %s"
           % (GRID_DEFAULTS["gap"], GRID_DEFAULTS["disp"], GRID_DEFAULTS["size"],
-             GRID_DEFAULTS["height"], GRID_DEFAULTS["fig"], GRID_DEFAULTS["apart"],
+             GRID_DEFAULTS["height"], GRID_DEFAULTS["fig"],
              GRID_DEFAULTS["cols"], GRID_DEFAULTS["merch"],
              "on" if GRID_DEFAULTS["bare"] else "off"))
     # WHAT WAS DEALT, IN THE ORDER IT WILL BE WALKED. Eight placeholders are the kind of thing
