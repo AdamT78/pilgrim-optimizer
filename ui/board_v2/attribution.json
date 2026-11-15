@@ -2173,6 +2173,21 @@
       "reproducibleBy": "tools/duty_art/knockout_icons.py --write, which rebuilds every one of these from the cuts it finds. The thresholds and the cream are constants at the top of that file.",
       "sha256": "8de90ca54e62c417b9dab09ca3c0e23c56c112adde07e718e3b7ee93ad9eb99d"
     },
+    "tokens/resources/icons/resource_silver_icon_v03.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "licence": "openai-generated",
+      "source": "derived from resource_silver_icon_v01.webp, which is the shipped cut; see that entry for where the drawing came from",
+      "collection": "Pilgrim board_v2 resource icons, cut out",
+      "title": "Silver, resource icon, cut out",
+      "slot": "cut",
+      "ground": "board",
+      "derivedFrom": "resource_silver_icon_v01.webp",
+      "role": "the silver resource as the board draws it, with its painted dark ground removed so only the emblem remains. V02 RATHER THAN A cutouts/ FOLDER because a resource is chosen by version -- bundled_tithe() globs this folder and takes the highest -- so filing this IS the switch, the way it is for a control, and a folder here would be a folder nothing reads. v01 stays beside it.",
+      "modifications": "the field knocked out of resource_silver_icon_v01.webp and nothing else: same pixel dimensions, same artwork, alpha ramped from luminance 190 to 225 and the colour set flat to the emblem's own cream rgb(248, 236, 201). A HIGHER FLOOR THAN v02's 150, AND THE CORNUCOPIA IS WHY. Its scratch strokes are drawn at luminance 160-180 where every other icon in this tree and in the duty icons puts them at 90-130, so at 150 they came through at about a third alpha -- four grey slashes across the corners of a tile, which reads as a background that was never removed. 190 clears them; 225 is as high as the ceiling can go before these emblems, which are dimmer than the duty icons' (1st percentiles of 211-216 against 229-231), start to look washed rather than cut. All four resources are re-cut at the one pair rather than the Cornucopia alone, because a ramp chosen per file is taste and a ramp chosen per tree is a measurement; at board size the other three are indistinguishable from v02, which was checked at the 42 pixels a resource is drawn at. This cut keeps 17.6% of the square. Encoded WebP LOSSLESS, because a flat colour with a soft edge is the shape lossy coding handles worst.",
+      "reproducibleBy": "python3 tools/duty_art/knockout_icons.py --write, which cuts every tree it walks from the newest version that still has a painted field. The resources' pair is RESOURCE_LO, RESOURCE_HI at the top of that file; the duty icons and the controls keep LO, HI.",
+      "sha256": "450075a1c5d735f9295b178a640e8f1a38515c696d393df55bac7d4b2a9c2cb8"
+    },
     "tokens/resources/icons/resource_stone_icon_v01.webp": {
       "state": "present",
       "creator": "Generated with ChatGPT (OpenAI)",
@@ -2207,6 +2222,21 @@
       "modifications": "the field knocked out of resource_stone_icon_v01.webp and nothing else: same pixel dimensions, same artwork, alpha ramped from luminance 150 to 215 and the colour set flat to the emblem's own cream rgb(248, 236, 201). The colour is set FLAT because keeping each pixel's own rgb leaves every soft edge carrying the dark it was blended against, which shows as a grey fringe over anything lighter than the field it came from. The ramp starts at 150 rather than at the 30 the duty cut-outs were first filed at, because these four carry the same three populations those do -- measured here: 55-83% field at luminance 10-13, a 4-5% band of scratch texture at 90-130, and an emblem whose fifth percentile is 220-232. A ramp starting below the strokes keeps them at half alpha, which over a dark board reads as a ground that was never taken off. Encoded WebP LOSSLESS, which the rest of this tree's prints are not: a cut-out is one flat colour with a varying alpha, the shape lossy coding handles worst and lossless handles best, and on this kind of picture it is the smaller file as well.",
       "reproducibleBy": "tools/duty_art/knockout_icons.py --write, which rebuilds every one of these from the cuts it finds. The thresholds and the cream are constants at the top of that file.",
       "sha256": "e194867a5eb84f2e1ad88d28b1a4e857ecdf85ca1884bd94e700e40819ec9f70"
+    },
+    "tokens/resources/icons/resource_stone_icon_v03.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "licence": "openai-generated",
+      "source": "derived from resource_stone_icon_v01.webp, which is the shipped cut; see that entry for where the drawing came from",
+      "collection": "Pilgrim board_v2 resource icons, cut out",
+      "title": "Stone, resource icon, cut out",
+      "slot": "cut",
+      "ground": "board",
+      "derivedFrom": "resource_stone_icon_v01.webp",
+      "role": "the stone resource as the board draws it, with its painted dark ground removed so only the emblem remains. V02 RATHER THAN A cutouts/ FOLDER because a resource is chosen by version -- bundled_tithe() globs this folder and takes the highest -- so filing this IS the switch, the way it is for a control, and a folder here would be a folder nothing reads. v01 stays beside it.",
+      "modifications": "the field knocked out of resource_stone_icon_v01.webp and nothing else: same pixel dimensions, same artwork, alpha ramped from luminance 190 to 225 and the colour set flat to the emblem's own cream rgb(248, 236, 201). A HIGHER FLOOR THAN v02's 150, AND THE CORNUCOPIA IS WHY. Its scratch strokes are drawn at luminance 160-180 where every other icon in this tree and in the duty icons puts them at 90-130, so at 150 they came through at about a third alpha -- four grey slashes across the corners of a tile, which reads as a background that was never removed. 190 clears them; 225 is as high as the ceiling can go before these emblems, which are dimmer than the duty icons' (1st percentiles of 211-216 against 229-231), start to look washed rather than cut. All four resources are re-cut at the one pair rather than the Cornucopia alone, because a ramp chosen per file is taste and a ramp chosen per tree is a measurement; at board size the other three are indistinguishable from v02, which was checked at the 42 pixels a resource is drawn at. This cut keeps 35.9% of the square. Encoded WebP LOSSLESS, because a flat colour with a soft edge is the shape lossy coding handles worst.",
+      "reproducibleBy": "python3 tools/duty_art/knockout_icons.py --write, which cuts every tree it walks from the newest version that still has a painted field. The resources' pair is RESOURCE_LO, RESOURCE_HI at the top of that file; the duty icons and the controls keep LO, HI.",
+      "sha256": "4ea550a0cc3bcf91ad4b26c2207dc9e8d8ef60649c72fb1a6fb65992f5fc3562"
     },
     "tokens/resources/icons/resource_wheat_icon_v01.webp": {
       "state": "present",
@@ -2243,6 +2273,21 @@
       "reproducibleBy": "tools/duty_art/knockout_icons.py --write, which rebuilds every one of these from the cuts it finds. The thresholds and the cream are constants at the top of that file.",
       "sha256": "6fbb078d9860f1b41395da406989380b4af02f5075c149ff506c0c3b366b4ddc"
     },
+    "tokens/resources/icons/resource_wheat_icon_v03.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "licence": "openai-generated",
+      "source": "derived from resource_wheat_icon_v01.webp, which is the shipped cut; see that entry for where the drawing came from",
+      "collection": "Pilgrim board_v2 resource icons, cut out",
+      "title": "Wheat, resource icon, cut out",
+      "slot": "cut",
+      "ground": "board",
+      "derivedFrom": "resource_wheat_icon_v01.webp",
+      "role": "the wheat resource as the board draws it, with its painted dark ground removed so only the emblem remains. V02 RATHER THAN A cutouts/ FOLDER because a resource is chosen by version -- bundled_tithe() globs this folder and takes the highest -- so filing this IS the switch, the way it is for a control, and a folder here would be a folder nothing reads. v01 stays beside it.",
+      "modifications": "the field knocked out of resource_wheat_icon_v01.webp and nothing else: same pixel dimensions, same artwork, alpha ramped from luminance 190 to 225 and the colour set flat to the emblem's own cream rgb(248, 236, 201). A HIGHER FLOOR THAN v02's 150, AND THE CORNUCOPIA IS WHY. Its scratch strokes are drawn at luminance 160-180 where every other icon in this tree and in the duty icons puts them at 90-130, so at 150 they came through at about a third alpha -- four grey slashes across the corners of a tile, which reads as a background that was never removed. 190 clears them; 225 is as high as the ceiling can go before these emblems, which are dimmer than the duty icons' (1st percentiles of 211-216 against 229-231), start to look washed rather than cut. All four resources are re-cut at the one pair rather than the Cornucopia alone, because a ramp chosen per file is taste and a ramp chosen per tree is a measurement; at board size the other three are indistinguishable from v02, which was checked at the 42 pixels a resource is drawn at. This cut keeps 7.2% of the square. Encoded WebP LOSSLESS, because a flat colour with a soft edge is the shape lossy coding handles worst.",
+      "reproducibleBy": "python3 tools/duty_art/knockout_icons.py --write, which cuts every tree it walks from the newest version that still has a painted field. The resources' pair is RESOURCE_LO, RESOURCE_HI at the top of that file; the duty icons and the controls keep LO, HI.",
+      "sha256": "8540399bfac890e4d564b767070a13db492bc7af84b907bd74b2c457def597ec"
+    },
     "tokens/resources/icons/resource_cornucopia_icon_v01.webp": {
       "state": "present",
       "creator": "Generated with ChatGPT (OpenAI)",
@@ -2277,6 +2322,21 @@
       "modifications": "the field knocked out of resource_cornucopia_icon_v01.webp and nothing else: same pixel dimensions, same artwork, alpha ramped from luminance 150 to 215 and the colour set flat to the emblem's own cream rgb(248, 236, 201). The colour is set FLAT because keeping each pixel's own rgb leaves every soft edge carrying the dark it was blended against, which shows as a grey fringe over anything lighter than the field it came from. The ramp starts at 150 rather than at the 30 the duty cut-outs were first filed at, because these four carry the same three populations those do -- measured here: 55-83% field at luminance 10-13, a 4-5% band of scratch texture at 90-130, and an emblem whose fifth percentile is 220-232. A ramp starting below the strokes keeps them at half alpha, which over a dark board reads as a ground that was never taken off. Encoded WebP LOSSLESS, which the rest of this tree's prints are not: a cut-out is one flat colour with a varying alpha, the shape lossy coding handles worst and lossless handles best, and on this kind of picture it is the smaller file as well.",
       "reproducibleBy": "tools/duty_art/knockout_icons.py --write, which rebuilds every one of these from the cuts it finds. The thresholds and the cream are constants at the top of that file.",
       "sha256": "707f28f159058b492279b1419361ee122be84795a7a5e6c747a26ef86abd9439"
+    },
+    "tokens/resources/icons/resource_cornucopia_icon_v03.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "licence": "openai-generated",
+      "source": "derived from resource_cornucopia_icon_v01.webp, which is the shipped cut; see that entry for where the drawing came from",
+      "collection": "Pilgrim board_v2 resource icons, cut out",
+      "title": "Cornucopia, resource icon, cut out",
+      "slot": "cut",
+      "ground": "board",
+      "derivedFrom": "resource_cornucopia_icon_v01.webp",
+      "role": "the cornucopia resource as the board draws it, with its painted dark ground removed so only the emblem remains. V02 RATHER THAN A cutouts/ FOLDER because a resource is chosen by version -- bundled_tithe() globs this folder and takes the highest -- so filing this IS the switch, the way it is for a control, and a folder here would be a folder nothing reads. v01 stays beside it.",
+      "modifications": "the field knocked out of resource_cornucopia_icon_v01.webp and nothing else: same pixel dimensions, same artwork, alpha ramped from luminance 190 to 225 and the colour set flat to the emblem's own cream rgb(248, 236, 201). A HIGHER FLOOR THAN v02's 150, AND THE CORNUCOPIA IS WHY. Its scratch strokes are drawn at luminance 160-180 where every other icon in this tree and in the duty icons puts them at 90-130, so at 150 they came through at about a third alpha -- four grey slashes across the corners of a tile, which reads as a background that was never removed. 190 clears them; 225 is as high as the ceiling can go before these emblems, which are dimmer than the duty icons' (1st percentiles of 211-216 against 229-231), start to look washed rather than cut. All four resources are re-cut at the one pair rather than the Cornucopia alone, because a ramp chosen per file is taste and a ramp chosen per tree is a measurement; at board size the other three are indistinguishable from v02, which was checked at the 42 pixels a resource is drawn at. This cut keeps 27.0% of the square. Encoded WebP LOSSLESS, because a flat colour with a soft edge is the shape lossy coding handles worst.",
+      "reproducibleBy": "python3 tools/duty_art/knockout_icons.py --write, which cuts every tree it walks from the newest version that still has a painted field. The resources' pair is RESOURCE_LO, RESOURCE_HI at the top of that file; the duty icons and the controls keep LO, HI.",
+      "sha256": "a9561006c4de5c2148679b64003cfe7dd864eba08830ddf314150385ff3d96d6"
     },
     "duty_actions/clerical/gain_piety/clerical_gain_piety_left_v04.png": {
       "state": "present",

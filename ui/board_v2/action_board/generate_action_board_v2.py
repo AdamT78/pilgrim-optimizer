@@ -116,7 +116,7 @@ OUT = HERE / "generated" / "action_board_v2.html"
 # them out. It does NOT resize anything -- `gap` already does that, by eating the room the
 # three columns divide -- which is what makes the two worth having separately.
 GRID_DEFAULTS = {"gap": 120, "disp": 60, "size": 110, "height": 140, "fig": 100, "apart": 20,
-                 "cols": -30, "merch": 100, "bare": True}
+                 "cols": -30, "merch": 90, "bare": True}
 
 # WHAT AN OPEN DUTY TILE WEARS, AND WHEN EACH ONE STARTS WEARING IT.
 #

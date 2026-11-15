@@ -12,8 +12,10 @@ a pennant on Taxation. The row ends up with no common silhouette, which reads as
 accidents rather than one set.
 
 WHAT IT DOES, AND WHY IT IS A THRESHOLD AND NOT A JUDGEMENT. Measured across the tree the field
-sits at luminance 10-13 and the emblem at 220-250, so the alpha is a straight ramp between LO and
-HI and nothing is decided by taste.
+sits at luminance 10-13 and the emblem at 220-250, so the alpha is a straight ramp between a LO
+and a HI and nothing is decided by taste. There are two pairs, not one: the duty icons and the
+controls share theirs, and the resources need a higher floor because one of the four draws its
+strokes brighter than any other icon in the tree -- see RESOURCE_LO.
 
 THERE ARE THREE POPULATIONS, NOT TWO, AND THE FIRST RAMP ONLY KNEW ABOUT TWO. Painted ON the
 black field is a scratch texture -- the diagonal strokes -- and it sits at luminance 90-130, in
@@ -114,10 +116,29 @@ CREAM = (248, 236, 201)
 # balanced on its lip; by 175 the emblem starts to thin, which is visible on a wheat stalk and on
 # Silver's ring.
 #
-# THE SAME PAIR FITS BOTH TREES because both were drawn by the same hand: measured separately,
-# the four resources carry 55-83% field, a 4-5% stroke band and an emblem whose 5th percentile is
-# 220-232, against the duty icons' 62-69%, 4% and 229-231.
+# THE DUTY ICONS AND THE CONTROLS SHARE THIS PAIR: measured separately, both carry 62-69% field,
+# a 4% stroke band at 90-130 and an emblem whose 5th percentile is 229-231.
 LO, HI = 150.0, 215.0
+
+# AND THE RESOURCES DO NOT, WHICH THIS FILE CLAIMED THEY DID. The claim was that one pair fits
+# both trees because one hand drew them, and it held for three of the four resources and not for
+# the Cornucopia: its strokes are drawn at luminance 160-180 where every other icon in both trees
+# puts them at 90-130. Cut at 150 they come through at about a third alpha -- four grey slashes
+# across the corners of the tile, which is exactly the "background that was never removed" this
+# script exists to prevent, and it sat on the board for days because the measurement that chose
+# 150 was taken over the tree and never over the one icon that disagreed with it.
+#
+# 190 CLEARS THEM AND 225 IS AS HIGH AS THE RAMP CAN REACH. The four resources' emblems are
+# dimmer than the duty icons' -- 1st percentiles of 211-216 against 229-231 -- so a ramp ending
+# at 230 takes Silver's ring down to 0.78 alpha at its 5th percentile and the emblem starts to
+# look washed rather than cut. At 190/225 the strokes are gone at board size, which was checked
+# at the 42 pixels a resource is actually drawn at and not at full size, and no emblem's 5th
+# percentile falls below 0.89.
+#
+# A SHORTER RAMP THAN THE OTHER TREE'S, 35 rather than 65, and that is what a brighter stroke
+# band costs: the floor has to clear 180 and the ceiling cannot pass the dimmest emblem. It is
+# still a ramp, which is what keeps the antialiasing the artist drew.
+RESOURCE_LO, RESOURCE_HI = 190.0, 225.0
 
 # WHAT "STILL HAS A FIELD" MEANS, measured rather than named. A drawn icon is 51-61% near-opaque
 # dark; a cutout is 0.0%, because every visible pixel of one is the flat cream and everything else
@@ -208,14 +229,19 @@ def field_fraction(path: pathlib.Path) -> float:
     return float(((alpha > 200) & (rgb.mean(axis=2) <= 140)).mean())
 
 
-def knockout(path: pathlib.Path):
-    """One icon, with its field taken off. Same pixel dimensions as the cut it came from."""
+def knockout(path: pathlib.Path, lo: float = LO, hi: float = HI):
+    """One icon, with its field taken off. Same pixel dimensions as the cut it came from.
+
+    THE RAMP IS AN ARGUMENT BECAUSE THE TREES NEEDED DIFFERENT ONES, and it defaults to the pair
+    the duty icons and the controls are cut at so a caller that does not care cannot silently
+    pick the wrong one for them.
+    """
     from PIL import Image
     import numpy as np
 
     a = np.asarray(Image.open(path).convert("RGBA")).astype(float)
     lum = 0.2126 * a[:, :, 0] + 0.7152 * a[:, :, 1] + 0.0722 * a[:, :, 2]
-    alpha = np.clip((lum - LO) / (HI - LO), 0, 1) * (a[:, :, 3] / 255.0)
+    alpha = np.clip((lum - lo) / (hi - lo), 0, 1) * (a[:, :, 3] / 255.0)
     out = np.zeros_like(a, dtype=np.uint8)
     out[:, :, 0], out[:, :, 1], out[:, :, 2] = CREAM
     out[:, :, 3] = (alpha * 255).round().astype(np.uint8)
@@ -230,7 +256,7 @@ def encoded(im) -> bytes:
 
 
 def cut_by_version(found: dict, folder: pathlib.Path, name_fmt: str, rel_fmt: str,
-                   rec: dict, write: bool, np) -> None:
+                   rec: dict, write: bool, np, lo: float = LO, hi: float = HI) -> None:
     """Cut each drawn source to the next version beside it, for the trees picked by version.
 
     IT CUTS FROM THE DRAWN ORIGINAL, NOT FROM THE NEWEST, and that distinction is the whole of
@@ -269,7 +295,7 @@ def cut_by_version(found: dict, folder: pathlib.Path, name_fmt: str, rel_fmt: st
         if srel not in rec:
             print("  %-34s no attribution entry, skipped" % src.name)
             continue
-        im = knockout(src)
+        im = knockout(src, lo, hi)
         kept = (np.asarray(im)[:, :, 3] > 8).mean()
         if kept > 0.60:
             print("  %-34s keeps %.0f%% -- that is a field, not an emblem, SKIPPED"
@@ -331,8 +357,11 @@ def main() -> int:
     # copies of these six guards is how the second one quietly stops matching the first.
     cut_by_version(all_controls(), CONTROL_DIR, "control_%s_icon_v%02d",
                    "controls/icons/%s", rec, a.write, np)
+    # THE RESOURCES GET THEIR OWN RAMP, for the reason written beside RESOURCE_LO: one of the
+    # four draws its strokes brighter than anything else in either tree, and the pair that suits
+    # the rest leaves them on the board.
     cut_by_version(all_resources(), RESOURCE_DIR, "resource_%s_icon_v%02d",
-                   "tokens/resources/icons/%s", rec, a.write, np)
+                   "tokens/resources/icons/%s", rec, a.write, np, RESOURCE_LO, RESOURCE_HI)
 
     if not a.write:
         print("\nnothing written; pass --write to file them")
