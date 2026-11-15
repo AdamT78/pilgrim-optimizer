@@ -1875,6 +1875,34 @@
       "reproducibleBy": "not re-runnable: a generator session, not a script in this tree. The file is the artefact.",
       "sha256": "e8087484f7e4a152e26ae064fe288441c985f1e3ee4337754455a5027ffbb3af"
     },
+    "tokens/markers/masters/merchant_marker_master_v02.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "licence": "openai-generated",
+      "source": "merchant_marker_master_v01.png with the satchel filled in; supplied to the build in chat on 2026-11-15",
+      "collection": "Pilgrim board_v2 markers",
+      "title": "Merchant marker, master, solid satchel",
+      "slot": "master",
+      "derivedFrom": "merchant_marker_master_v01.png",
+      "role": "the drawn merchant the board stands on every duty's line, in the ochre and the dark brown the duty marks use rather than in any player's colour -- which is the whole of what the marker says: it belongs to the board and not to a seat. The satchel was an outline with a buckle in v01 and is a solid shape here: at the 36 pixels the board draws this figure, the outline closed up into a smudge and the buckle was never a buckle. Same canvas, same pose, same colours within a shade.",
+      "notes": "master, not shipped, and SUPERSEDED as the drawing the board ships by merchant_marker_master_v03.png. While it was current the board inlined tokens/markers/merchant_marker_v03.webp, which is this file cropped to its own ink; that cut-out is kept for the record alongside this master.",
+      "reproducibleBy": "not re-runnable: a generator session, not a script in this tree. The file is the artefact.",
+      "sha256": "3a6c1d3b4c70506a422f3aecd036e145c6a3639af7767c9d3c4d237720102b28"
+    },
+    "tokens/markers/masters/merchant_marker_master_v03.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "licence": "openai-generated",
+      "source": "the v02 drawing made again with the satchel joined to the body rather than hung on it; supplied to the build in chat on 2026-11-15 as Ochre_Pilgrim_Pawn_with_Seamless_Satchel.png",
+      "collection": "Pilgrim board_v2 markers",
+      "title": "Merchant marker, master, seamless satchel",
+      "slot": "master",
+      "derivedFrom": "merchant_marker_master_v02.png",
+      "role": "the drawn merchant the board stands on every duty's line, in the ochre and the dark brown the duty marks use rather than in any player's colour -- which is the whole of what the marker says: it belongs to the board and not to a seat. Same canvas, same pose. The satchel went from an outline with a buckle (v01) to a solid shape (v02) to a shape that meets the strap and the robe without a seam, which is this file.",
+      "notes": "master, not shipped. The board inlines tokens/markers/merchant_marker_v04.webp, which is this file cropped to its own ink. NOT A PIXEL EDIT OF v02, whatever the two look like side by side: 328,427 pixels differ and the worst channel differs by the full 255, because this is the drawing made again rather than the old file painted over. The ink runs 579 x 843 where v02's ran 576 x 838 -- three wider, five taller, and starting three pixels further left and up -- and the ochre moved from (201,153,80) to (203,157,81), a shade warmer. At the 36 pixels the board draws this figure neither is visible. The body is laid down at alpha 253-254 rather than 255, exactly as v02's was; nothing downstream cares, because every threshold this file meets sits far below that.",
+      "reproducibleBy": "not re-runnable: a generator session, not a script in this tree. The file is the artefact.",
+      "sha256": "e77b5d6477658ab6548f2bdbf431d22f2f50c34f9719d29ff2c3583807a15c0c"
+    },
     "tokens/markers/merchant_marker_v01.webp": {
       "state": "present",
       "creator": "Generated with ChatGPT (OpenAI)",
@@ -1902,6 +1930,34 @@
       "modifications": "cropped to where the drawing actually is and re-encoded; nothing resized, nothing recoloured, every pixel inside the crop the master's own. CROPPED AT ALPHA 8 RATHER THAN AT ANY ALPHA AT ALL, which is the whole difference between this and v01. The master carries 6,019 pixels under alpha 8 -- at most 3% opaque, invisible on any ground -- scattered to within a few pixels of the canvas edge, and PIL's getbbox() counts every one of them: v01 trimmed to that halo and came out 1209 x 1131 with the figure in the middle of it and 15% of the height empty canvas below the feet. The board aligns this marker by its BOX, so that empty canvas lifted the merchant off the line the duty icons stand on -- the one thing it is there to share with them. Cropped to the ink the file is 574 x 835, an aspect of 1.4547, and the drawing touches all four edges. Encoded WebP LOSSLESS, for the reason the acolyte layers and the duty cut-outs are: a flat-coloured drawing with a soft edge is the shape lossy coding handles worst.",
       "reproducibleBy": "PIL: open the master, take the bounding box of alpha > 8 rather than getbbox(), crop to it, save WEBP lossless with quality=100, method=6, exact=True. The board inlines it at 128 wide and generate_action_board_v2.py's bundled_merchant() measures the aspect off this file rather than carrying a number for it.",
       "sha256": "d869bf2b6b343b5ea875cf2c095be5569ed9b82a796cca238ff2145786be6962"
+    },
+    "tokens/markers/merchant_marker_v03.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "licence": "openai-generated",
+      "source": "derived from merchant_marker_master_v02.png; see that entry for what changed",
+      "collection": "Pilgrim board_v2 markers",
+      "title": "Merchant marker, solid satchel",
+      "derivedFrom": "merchant_marker_master_v02.png",
+      "ground": "board",
+      "role": "the merchant the board stands on every duty's icon line, in the slot between the marks and the resource -- Taxation included, which takes no tithe and gets the marker in the same place regardless. ONE PICTURE FOR ALL EIGHT: not tinted, not per seat and not per duty, because it belongs to the board rather than to a player or a tile.",
+      "modifications": "cropped to where the drawing actually is and re-encoded; nothing resized, nothing recoloured, every pixel inside the crop the master's own. CROPPED AT ALPHA 8 RATHER THAN AT ANY ALPHA AT ALL, for the reason v01 had to be re-cut: this master carries 4,900 pixels under alpha 8 -- at most 3% opaque, invisible on any ground -- scattered to within a few pixels of the canvas edge, and PIL's getbbox() counts every one of them. Trimmed to that halo the figure would sit in empty canvas and float above the line the duty icons stand on. Cropped to the ink the file is 576 x 838, an aspect of 1.4549 against v02's 1.4547, so nothing on the line moves. Encoded WebP LOSSLESS, because a flat-coloured drawing with a soft edge is the shape lossy coding handles worst.",
+      "reproducibleBy": "PIL: open the master, take the bounding box of alpha > 8 rather than getbbox(), crop to it, save WEBP lossless with quality=100, method=6, exact=True. The board inlines it at 192 wide and generate_action_board_v2.py's bundled_merchant() measures the aspect off this file rather than carrying a number for it.",
+      "sha256": "c8a561538d8e3fe59ad9b345c4289f51c8f831d01ff8a3c4ed089eaa74456311"
+    },
+    "tokens/markers/merchant_marker_v04.webp": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "licence": "openai-generated",
+      "source": "derived from merchant_marker_master_v03.png; see that entry for what changed",
+      "collection": "Pilgrim board_v2 markers",
+      "title": "Merchant marker, seamless satchel",
+      "derivedFrom": "merchant_marker_master_v03.png",
+      "ground": "board",
+      "role": "the merchant the board stands on every duty's icon line, in the slot between the marks and the resource -- Taxation included, which takes no tithe and gets the marker in the same place regardless. ONE PICTURE FOR ALL EIGHT: not tinted, not per seat and not per duty, because it belongs to the board rather than to a player or a tile.",
+      "modifications": "cropped to where the drawing actually is and re-encoded; nothing resized, nothing recoloured, every pixel inside the crop the master's own. CROPPED AT ALPHA 8 RATHER THAN AT ANY ALPHA AT ALL, for the reason v01 had to be re-cut: this master carries 6,713 pixels under alpha 8 -- at most 3% opaque, invisible on any ground -- scattered to within a few pixels of the canvas edge, and PIL's getbbox() counts every one of them. Trimmed to that halo the figure would sit in empty canvas and float above the line the duty icons stand on. Cropped to the ink the file is 579 x 843, an aspect of 1.4560 against v03's 1.4549: a tenth of a percent, so nothing else on the line moves to make room for it. 5,040 pixels under alpha 8 survive INSIDE the crop, which is the point rather than a miss -- they are the drawing's own soft edge, and the halo the threshold is there to drop was the one out in the corners. Encoded WebP LOSSLESS, because a flat-coloured drawing with a soft edge is the shape lossy coding handles worst; the decoded file was checked pixel-identical to the crop.",
+      "reproducibleBy": "PIL: open the master, take the bounding box of alpha > 8 rather than getbbox(), crop to it, save WEBP lossless with quality=100, method=6, exact=True. The board inlines it at 192 wide and generate_action_board_v2.py's bundled_merchant() measures the aspect off this file rather than carrying a number for it.",
+      "sha256": "041be787c5e73ad6df9f16d79ae0823f6cad84f37ef8fb12e98a3f4abf2fd7f0"
     },
     "tokens/masters/seal_silver_v01.png": {
       "state": "present",

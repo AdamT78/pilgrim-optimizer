@@ -290,6 +290,9 @@ def sweep(tmpl, geo):
         _function(tmpl, "mostActions"),
         _function(tmpl, "plateHeight"),
         _function(tmpl, "plateFor"),
+        "var LINE_MIN_GAP = %s;" % _decl(tmpl, "LINE_MIN_GAP"),
+        _function(tmpl, "slotsFor"),
+        _function(tmpl, "inkAt"),
         _function(tmpl, "plateHang"),
         _function(tmpl, "cellRect"),
         _function(tmpl, "plateInset"),
@@ -324,7 +327,9 @@ def sweep(tmpl, geo):
         "          plateW: L.has ? L.width : 0, plateH: L.has ? P.height : 0,",
         "          fullH: P.height, fullW: L.width, hasPlate: L.has,",
         "          rowBox: P.rowBox, fullRow: P.fullRow,",
-        "          igap: P.igap, ip: P.ip, mg: P.mg, inset: P.inset,",
+        "          igap: P.igap, ip: P.ip, mg: P.mg, g: P.g, most: P.most,",
+        "          widths: P.line.w, at: P.line.at, band: P.line.band, box: P.line.box,",
+        "          seats: L.seats,",
         "          marks: (function(){ var a = []; for (var k = 0; k < nAct; k++)",
         "                              a.push(markAt(P, k)); return a; })(),",
         "          hasTithe: L.hasTithe, titheWhenNoneIsDealt: N.hasTithe,",
@@ -372,6 +377,20 @@ def sweep(tmpl, geo):
                          * len(NACTS) * 9), (
         "the sweep produced %d rectangles" % len(rows))
     return rows
+
+
+# THE BOARD'S OWN HEIGHT, which two guards now measure the wheel against because the wheel is
+# pinned to its bottom edge rather than centred in the area above it.
+def _canvas_height() -> float:
+    import importlib.util as _il
+
+    spec = _il.spec_from_file_location("_abv2geo", TOOL / "geometry.py")
+    mod = _il.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return float(mod.as_dict()["canvas"]["height"])
+
+
+GEO_CANVAS_H = _canvas_height()
 
 
 def PLATE_DROP_OF(text: str) -> float:
@@ -530,7 +549,6 @@ def test_the_sweep_covers_the_sliders_the_page_actually_offers(tmpl):
     # left out, so a slider that joins the page has to be accounted for in one place or the
     # other instead of quietly falling outside both.
     not_swept = {"rFig": "scales the acolytes; no rectangle moves",
-                 "rApart": "moves the acolytes apart; no rectangle moves",
                  "rMerch": "scales the merchant on the duty line; no rectangle moves, and "
                            "nothing else on the line is placed from it"}
     offered = set(re.findall(r"<input type=range id=(\w+)", tmpl))
@@ -611,15 +629,18 @@ def test_nothing_is_displaced_out_of_the_grid_area(sweep):
         # on purpose and is allowed to take them past the area -- that is the trade it makes to
         # keep every bottom edge where it was, and the readout reports it in amber. Everything
         # else about the box still has to stay inside.
-        if row["height"] == 100:
-            assert c["y"] >= box["y"] - 1e-9, (
-                "%s: starts at y %g, above %g" % (_tag(row), c["y"], box["y"]))
+
         assert c["x"] + c["width"] <= box["x"] + box["width"] + 1e-9, (
             "%s: reaches x %g, past %g"
             % (_tag(row), c["x"] + c["width"], box["x"] + box["width"]))
-        assert c["y"] + c["height"] <= box["y"] + box["height"] + 1e-9, (
-            "%s: reaches y %g, past %g"
-            % (_tag(row), c["y"] + c["height"], box["y"] + box["height"]))
+        # AND DOWN, THE AREA IS NO LONGER THE TEST. The wheel is pinned to the bottom margin
+        # now, not centred in the area, so where its top lands is whatever the arrangement's own
+        # height makes it -- and the top row is allowed above the area, which is what pinning
+        # the other end means. What must still hold is the pin itself, and that is the next
+        # guard's business.
+        assert c["y"] + c["height"] <= GEO_CANVAS_H + 1e-9, (
+            "%s: reaches y %g, past the bottom of the board"
+            % (_tag(row), c["y"] + c["height"]))
 
 
 @needs_node
@@ -668,93 +689,77 @@ def test_the_block_stays_on_the_canvas_at_every_setting(sweep, geo):
 
 
 @needs_node
-def test_everything_drawn_is_centred_in_the_area_at_every_setting(sweep):
-    """Centred was asked for by name, and off-centre by a few pixels is invisible one slider at a
-    time and obvious across the three.
+def test_the_wheel_stands_on_the_bottom_margin_and_is_centred_across(sweep, tmpl):
+    """Across it is centred; down it is pinned, to the one gap this board already repeats.
 
-    TWO CLAIMS, NOT ONE, BECAUSE THE DRAWING IS NO LONGER THE RECTANGLES. Across, the arrangement
-    IS the nine outlines: a plate is centred under its own rectangle and never wider than it, so
-    the left and right edges are the rectangles'. Down, the plates hang below the bottom row and
-    reach 62px past it at the opening settings -- so centring the outlines alone put equal slack
-    above and below the OUTLINES and visibly more above than below the DRAWING.
+    IT WAS CENTRED BOTH WAYS and the vertical half never held still: the slack moved with every
+    slider, so the lowest plate finished a different distance off the bottom edge on every
+    setting -- and the plates hang below the rectangles, so centring the OUTLINES put visibly
+    more air above the drawing than below it. The wheel now sits so the lowest plate keeps
+    exactly the drop a plate keeps from its own rectangle. The board ends on the spacing it is
+    built from, and the number stops depending on where the sliders are.
 
-    The horizontal claim is about the cells at every setting; the vertical one is about the
-    cells plus the hang, and only at height 100 -- the height slider grows the rectangles upward
-    deliberately and is allowed to take their tops past the area, which is what keeps every
-    bottom edge where it was. That is also why the centring adds the displacement back --
-    `(width - (bw + 2*d))/2 + d` -- which is exactly the term a simplification would drop,
-    because on the face of it the `+ d` looks like it cancels.
+    MEASURED TO THE LOWEST PLATE, not the lowest rectangle: the bottom row's middle cell is
+    pushed down by the displacement and its plate hangs below that.
 
-    Falsify: drop the `+ d` from either `ox` or `oy`, or drop `hang` from `oy`.
+    ACROSS, NOTHING CHANGED. A plate is centred under its own rectangle and never wider than it,
+    so the arrangement's left and right edges are the rectangles' -- and the slack is split.
+
+    Falsify: centre the block vertically again, drop the displacement from the pin, or measure
+    it to the rectangles instead of the plates.
     """
-    for key, a in _arrangements(sweep).items():
-        area, cells = a["area"], a["cells"]
+    drop = PLATE_DROP_OF(tmpl)
+    by_arrangement = {}
+    for row in sweep:
+        key = (row["gap"], row["disp"], row["size"], row["height"], row["cols"])
+        by_arrangement.setdefault(key, []).append(row)
+    for key, rows in by_arrangement.items():
+        area = rows[0]["area"]
+        cells = [r["cell"] for r in rows]
         left = min(c["x"] for c in cells)
         right = max(c["x"] + c["width"] for c in cells)
-        top = min(c["y"] for c in cells)
-        bot = max(c["y"] + c["height"] for c in cells)
         tag = "gap %d, edge %d, size %d, height %d, cols %d" % key
-        assert abs((left - area["x"]) - (area["x"] + area["width"] - right)) < 1e-6, (
-            "%s: %g of slack on the left and %g on the right"
-            % (tag, left - area["x"], area["x"] + area["width"] - right))
-        # The reserve the arrangement was centred on, which is capped by the room available --
-        # so on a tall arrangement it is less than a plate's full hang, and the plates that then
-        # run off the board are refused and counted rather than drawn.
-        hang = a["hang"]
-        if key[3] != 100:
-            continue                # the height slider raises the tops on purpose; see below
-        assert abs((top - area["y"])
-                   - (area["y"] + area["height"] - (bot + hang))) < 1e-6, (
-            "%s: %g of slack above the rectangles and %g below the plates that hang under them "
-            "(the hang is %g)"
-            % (tag, top - area["y"], area["y"] + area["height"] - (bot + hang), hang))
+        if key[4] <= 0:
+            assert abs((left - area["x"]) - (area["x"] + area["width"] - right)) < 1e-6, (
+                "%s: %g of slack on the left and %g on the right"
+                % (tag, left - area["x"], area["x"] + area["width"] - right))
+        # THE PIN, measured the way the page draws it: the lowest rectangle's bottom, the drop
+        # below it, the plate's own height, and then the same drop again to the board's edge.
+        plated = [r for r in rows if r.get("plate") and r["plate"]["hasPlate"]]
+        if not plated:
+            continue
+        low = max(r["plate"]["plateY"] + r["plate"]["fullH"] for r in plated)
+        assert abs((GEO_CANVAS_H - low) - drop) < 1e-6, (
+            "%s: the lowest plate ends %g above the board's bottom edge, against the %g a plate "
+            "keeps from its own rectangle" % (tag, GEO_CANVAS_H - low, drop))
 
 
 @needs_node
-def test_the_room_reserved_for_the_plates_is_the_room_they_take(sweep, tmpl):
-    """THE RESERVE AND THE DRAWING ARE TWO EXPRESSIONS AND MUST AGREE.
+def test_the_plate_reaches_exactly_what_the_arrangement_expects_of_it(sweep, tmpl):
+    """What hangs below a rectangle is one expression, and the pin is built on it.
 
-    `gridCells` reserves `plateHang()` below the bottom row before it centres anything;
-    `drawGrid` then places each plate at `r.y + r.height + PLATE_DROP`. If the reserve were
-    computed from a different plate -- a different action count, say -- the arrangement would be
-    centred on a hang that is not the one drawn, and the whole wheel would sit a few pixels off
-    with nothing to compare it against.
+    THE RESERVE IS GONE AND THE AGREEMENT IS NOT. `gridCells` used to hold back `plateHang()`
+    below the bottom row before centring the block on it, which meant the reserve and the drawn
+    plate had to be the same number or the whole wheel sat a few pixels off with nothing to
+    compare it against. Pinning the bottom replaced the reserve with the same arithmetic used
+    the other way round -- the offset is worked out FROM the plate's drop and height -- so the
+    two expressions still have to agree, and this is still where that is held.
 
-    THE RESERVE IS CAPPED BY THE ROOM LEFT, so it is allowed to be SHORT of what a plate takes:
-    the rectangles are sized before the hang is known -- `fit` cannot account for it without
-    solving for its own output -- and an arrangement that already fills the area vertically has
-    nothing left to hold back. Taking it anyway pushed the top row 24px above the area and within
-    4px of the card row. So the claim is one-directional, except at the opening defaults, where
-    the room has to be there.
-
-    Falsify: drop the PLATE_DROP from plateHang, or remove the cap so the reserve exceeds
-    what is drawn.
+    Falsify: drop PLATE_DROP from either end of the pin, or reserve for a plate of a different
+    height than the one drawn.
     """
-    d = _grid_defaults()
-    defaults = (d["gap"], d["disp"], d["size"], d["height"], d["cols"])
+    drop = PLATE_DROP_OF(tmpl)
+    checked = 0
     for row in sweep:
-        if row["centre"]:
+        p, r = row.get("plate"), row.get("r")
+        if not p or not p["hasPlate"]:
             continue
-        p, r = row["plate"], row["r"]
-        reserved = row["cell"]["hang"]
-        want = PLATE_DROP_OF(tmpl) + p["fullH"]
-        assert reserved <= want + 1e-9, (
-            "%s: %g is reserved below the rectangle and a plate only ever takes %g"
-            % (_tag(row), reserved, want))
-        if (row["gap"], row["disp"], row["size"], row["height"],
-                row["cols"]) == defaults:
-            # AND AT THE SETTINGS THE BOARD OPENS ON, THE CAP MUST NOT BITE. Everywhere else the
-            # reserve is allowed to be short -- the rectangles are sized before the hang is known
-            # -- but a board whose own defaults cannot hold their plates is a board that opens
-            # unbalanced, which is the thing this reserve was added for.
-            assert abs(reserved - want) < 1e-6, (
-                "%s: the board opens on these settings and reserves %g where a plate takes %g"
-                % (_tag(row), reserved, want))
-        if p["hasPlate"]:
-            drawn_to = (p["plateY"] + p["fullH"]) - (r["y"] + r["height"])
-            assert abs(want - drawn_to) < 1e-9, (
-                "%s: the reserve is built for %g below the rectangle and the plate reaches %g"
-                % (_tag(row), want, drawn_to))
+        drawn_to = (p["plateY"] + p["fullH"]) - (r["y"] + r["height"])
+        assert abs((drop + p["fullH"]) - drawn_to) < 1e-9, (
+            "%s: a plate is built to hang %g below its rectangle and reaches %g"
+            % (_tag(row), drop + p["fullH"], drawn_to))
+        checked += 1
+    assert checked > 500, "only %d plates were measured" % checked
 
 
 @needs_node
@@ -879,17 +884,17 @@ def test_the_grid_area_is_read_off_the_row_above_it_and_not_typed(tmpl, geo):
     """THE GRID LINES UP WITH THE ROW ABOVE, END TO END, and every number comes from that row.
 
     It used to run margin to margin -- the card's left edge to the same distance off the right of
-    the canvas -- which lined it up with the BOARD rather than with the things on the board. The
-    card row stops at the Tithe's right edge, 198 short of that mirror margin, so the grid was
-    wider than every object above it by most of a Tithe box.
+    the canvas -- which lined it up with the BOARD rather than with the things on the board. Then
+    it ran card to card, on the argument that the wheel answers to the two pictures it is a
+    choice between and not to a box that is not a duty; that left it ending 170 short of the
+    rightmost thing above it, which reads as a wheel that missed rather than as a wheel making a
+    point.
 
-    Now both ends are the ACTION CARDS: the leftmost card's left edge and the second card's
-    right edge -- the two pictures the nine rectangles are a choice between. It reached the
-    Tithe's right edge for a round, which lined the wheel up with a box that is not a duty. A
-    constant that happened to equal today's 1004 would pass any check OF today's numbers, so
-    this moves each end in turn and insists the area follows.
+    BOTH ENDS ARE OBJECTS: the first card's left edge and the TAKE TITHE box's right edge. A
+    constant that happened to equal today's 1174 would pass any check OF today's numbers, so
+    this moves the objects and demands the area follow them.
 
-    Falsify: write 28, 1004 or GEO.canvas.width - 2 * m into gridArea.
+    Falsify: type either end, or read the second card's right edge again.
     """
     def area(g):
         return _node("\n".join([
@@ -904,9 +909,9 @@ def test_the_grid_area_is_read_off_the_row_above_it_and_not_typed(tmpl, geo):
     assert base["x"] == want["slots"]["actionA"]["x"], (
         "the area starts at %g and the leftmost card at %g"
         % (base["x"], want["slots"]["actionA"]["x"]))
-    far = want["slots"]["actionB"]
+    far = want["tithe"]
     assert base["x"] + base["width"] == far["x"] + far["width"], (
-        "the area ends at %g and the second action card at %g"
+        "the area ends at %g and the Take Tithe box at %g"
         % (base["x"] + base["width"], far["x"] + far["width"]))
 
     # move the left end
@@ -926,18 +931,18 @@ def test_the_grid_area_is_read_off_the_row_above_it_and_not_typed(tmpl, geo):
 
     # and the right end, on its own
     g = geo.as_dict()
-    g["slots"]["actionB"]["x"] -= 40
+    g["tithe"]["x"] -= 40
     shrunk = area(g)
-    assert shrunk["x"] == base["x"], "moving the second card moved the area's LEFT edge"
+    assert shrunk["x"] == base["x"], "moving the Tithe box moved the area's LEFT edge"
     assert shrunk["width"] == base["width"] - 40, (
-        "the second card moved 40 left and the width went from %g to %g"
+        "the Tithe box moved 40 left and the width went from %g to %g"
         % (base["width"], shrunk["width"]))
 
-    # and the Tithe is no longer one of its ends
+    # and the second card is no longer one of its ends
     g = geo.as_dict()
-    g["tithe"]["x"] += 55
+    g["slots"]["actionB"]["x"] += 55
     assert area(g)["width"] == base["width"], (
-        "moving the Tithe changed the grid's width, so it is still one of the ends")
+        "moving the second action card changed the grid's width, so it is still one of the ends")
 
 
 @needs_node
@@ -955,11 +960,15 @@ def test_the_build_summary_says_what_the_page_will_draw(tmpl, geo):
     Falsify: change either side's expression without the other.
     """
     src = (TOOL / "generate_action_board_v2.py").read_text(encoding="utf-8")
-    m = re.search(r"print\(\"  the duty grid is centred in %d x %d at \(%d, %d\)[^\n]*\n"
+    m = re.search(r"print\(\"  the duty grid is fitted to %d x %d at \(%d, %d\)[^\n]*\n"
                   r"\s*% \((.*?)\)\)", src, re.S)
     assert m, "the build summary no longer prints the grid's area"
     d = geo.as_dict()
-    card, far = d["slots"]["actionA"], d["slots"]["actionB"]
+    # THE SAME TWO OBJECTS THE SUMMARY NAMES, bound here so the printed expression can be run.
+    # They are the first action card and the Take Tithe box -- the ends of the row above the
+    # wheel -- and if the summary ever names something else this evaluates to nothing and says
+    # so, which is the point of running it rather than reading it.
+    card, far = d["slots"]["actionA"], d["tithe"]
     lift = d["art"]["y"] - (d["status"]["y"] + d["status"]["height"] + 16)
     m_ = card["x"]
     top = (card["y"] - lift) + card["height"] + m_
@@ -1489,9 +1498,25 @@ def test_the_frame_is_built_to_the_marks_and_the_resource_is_outside_it(sweep, t
         assert p_["plateX"] + p_["plateW"] < r["x"] + r["width"] - border, (
             "%s: the frame still reaches the rectangle's far edge" % _tag(row))
     assert drew, "no arrangement in the sweep drew a frame, so nothing was checked"
-    assert len(widths) == 1, (
-        "the frames come in %d widths (%s); one is built to something other than the widest row"
-        % (len(widths), sorted(widths)))
+    # ONE WIDTH PER ARRANGEMENT, WHICH IS THE CLAIM THAT SURVIVED THE LINE BEING JUSTIFIED. The
+    # frame used to be one number for the whole board at every setting -- the widest row any duty
+    # needs plus its margin -- because the spacing inside it was fixed at `igap`. The spacing is
+    # now whatever the line's leftover divides into, so the frame grows and shrinks with the
+    # rectangles. What must still hold is that every duty's frame is the same object: at one
+    # slider setting, all eight are identical, however many marks they hold.
+    by_arrangement = {}
+    for row in sweep:
+        if row["centre"] or not row["plate"]["hasPlate"]:
+            continue
+        key = (row["gap"], row["disp"], row["size"], row["height"], row["cols"])
+        by_arrangement.setdefault(key, set()).add(round(row["plate"]["plateW"], 6))
+    bad = {k: sorted(v) for k, v in by_arrangement.items() if len(v) > 1}
+    assert not bad, (
+        "within one arrangement the frames come in more than one width, so a duty is being "
+        "framed to what IT holds rather than to the widest row: %s" % sorted(bad.items())[:3])
+    assert len(widths) > 1, (
+        "the frame is one width at every setting, so it is no longer built to the line's own "
+        "spacing and this guard is watching a constant")
 
 
 def test_the_resource_did_not_move_when_the_frame_left_it(sweep, tmpl, geo):
@@ -1519,16 +1544,16 @@ def test_the_resource_did_not_move_when_the_frame_left_it(sweep, tmpl, geo):
             continue
         p_, r = row["plate"], row["r"]
         drew += 1
-        right = p_["titheMark"]["x"] + p_["titheMark"]["size"]
-        assert right == r["x"] + r["width"] - border - pad, (
+        right = p_["titheMark"]["x"] + p_["titheMark"]["w"]
+        assert abs(right - (r["x"] + r["width"] - border - pad)) < 1e-9, (
             "%s: the resource ends %g from the rectangle's inner right edge, not %g"
             % (_tag(row), (r["x"] + r["width"] - border) - right, pad))
-        assert p_["titheMark"]["y"] == p_["plateY"] + pad, (
-            "%s: the resource sits %g below the frame's top, not %g"
-            % (_tag(row), p_["titheMark"]["y"] - p_["plateY"], pad))
-        assert p_["titheMark"]["size"] == p_["sz"], (
-            "%s: the resource is %g and a duty mark is %g"
-            % (_tag(row), p_["titheMark"]["size"], p_["sz"]))
+        # AND IT IS THE SAME HEIGHT AS EVERYTHING ELSE ON THE LINE. The drawings are not the
+        # same shape, so sizing them by a box makes them look like different sizes: what they
+        # share is the band, and the width each one takes follows its own drawing.
+        assert abs(p_["titheMark"]["h"] - p_["band"]) < 1e-9, (
+            "%s: the resource is %g tall and the line's band is %g"
+            % (_tag(row), p_["titheMark"]["h"], p_["band"]))
         # LEVEL WITH THE MARKS, measured rather than argued. The marks are placed against the
         # frame's PADDING box, one PLATE_BORDER inside its top; the resource is placed against the
         # board. Comparing them without that border is off by one -- which is the size of error
@@ -1540,74 +1565,92 @@ def test_the_resource_did_not_move_when_the_frame_left_it(sweep, tmpl, geo):
     assert drew, "no arrangement in the sweep drew a resource, so nothing was checked"
 
 
-def test_the_resource_never_crowds_the_dutys_own_marks(sweep):
-    """INSIDE ONE FRAME, DISTANCE IS THE ONLY THING SAYING THESE ARE TWO KINDS OF OBJECT.
+def test_every_gap_on_the_duty_line_is_the_same(sweep):
+    """FOUR OBJECTS, THREE SPACES, ONE NUMBER -- which is the whole of what was asked for.
 
-    While the resource had a frame of its own the separation was structural: two grounds, two
-    borders, nothing to read. In one frame a row of marks means "the actions you may take", and a
-    resource that drifts within `igap` of the last mark becomes a third icon in that row -- the
-    single misreading this arrangement has to avoid, and one that no amount of comment prevents.
+    The line was 6, 13 and 17.6 at the opening settings: the frame padded its own marks, the
+    merchant stood in what was left over, and the resource was pinned to the rectangle's far
+    edge. Three different gaps on one line read as three unrelated pairs rather than as a row,
+    and no amount of saying "the frame is the signal" fixes that -- the eye measures the spaces.
 
-    SO THE CLEARANCE IS THE GAP BETWEEN THE MARKS THEMSELVES, which is the only distance on this
-    frame that already means "these belong together". Anything at least that far out is further
-    apart than the things that do. At the opening settings it comes to 24px against that 6.
+    SO THE ROW IS JUSTIFIED BETWEEN TWO FIXED ENDS and everything between is spaced by one
+    number. That number also decides the frame's width, because the gap INSIDE the frame is the
+    same gap as the ones outside it.
 
-    Falsify: drop the clearance term from `hasTithe`, or compare against zero instead of `igap`.
+    MEASURED MARK TO MARK, NOT FROM THE FRAME'S EDGE. The frame carries `ip` of ground past its
+    last mark; that ground belongs to the mark it surrounds, not to the space after it, so a
+    guard measuring from the frame's outer edge would be asking for `g + ip` between two of the
+    four pairs and `g` between the others -- the very unevenness this replaced.
+
+    Falsify: pad the frame into the gap, pin the merchant to the frame's edge, or give the
+    resource a margin of its own.
     """
     drew = 0
     for row in sweep:
         if row["centre"]:
             continue
         p = row["plate"]
-        if not (p["hasPlate"] and p["hasTithe"]):
+        if not (p["hasPlate"] and p["hasTithe"] and p["merchant"]):
             continue
         drew += 1
-        # THE FRAME'S OWN RIGHT EDGE, which is the boundary the eye actually sees. It used to be
-        # where the row of marks ended, inside a frame that reached past it.
-        frame_end = p["plateX"] + p["plateW"]
-        assert p["titheMark"]["x"] - frame_end >= p["igap"], (
-            "%s: the frame ends at %g and the resource starts at %g, which is %g apart against "
-            "the %g between the marks themselves"
-            % (_tag(row), frame_end, p["titheMark"]["x"],
-               p["titheMark"]["x"] - frame_end, p["igap"]))
-    assert drew, "no arrangement drew both, so nothing was checked"
+        g, at, w = p["g"], p["at"], p["widths"]
+        assert g >= p["igap"] - 1e-9, (
+            "%s: the line is spaced %g apart, under the %g a mark keeps from a mark"
+            % (_tag(row), g, p["igap"]))
+        # EVERY PAIR IN THE LINE, FROM THE SLOTS THEMSELVES. There is no arithmetic here that
+        # repeats the layout's -- the slots say where each drawing starts and how wide it came
+        # out, and the only claim is that the space between any two of them is the same number.
+        assert len(at) == len(w) == p["most"] + 2, (
+            "%s: the line has %d slots and %d widths" % (_tag(row), len(at), len(w)))
+        for k in range(1, len(at)):
+            assert abs((at[k] - (at[k - 1] + w[k - 1])) - g) < 1e-9, (
+                "%s: slot %d starts %g after slot %d ends, against a spacing of %g"
+                % (_tag(row), k + 1, at[k] - (at[k - 1] + w[k - 1]), k, g))
+        # AND THE TWO ENDS ARE WHERE THE RECTANGLE PUT THEM.
+        assert abs(at[0] - p["ip"]) < 1e-9, (
+            "%s: the line starts %g inside the rectangle, not %g" % (_tag(row), at[0], p["ip"]))
+        assert abs((at[-1] + w[-1]) - (p["innerW"] - p["ip"])) < 1e-9, (
+            "%s: the line ends %g from the rectangle's far edge, not %g"
+            % (_tag(row), p["innerW"] - (at[-1] + w[-1]), p["ip"]))
+        # AND THE FRAME STILL ENDS BEFORE WHAT COMES NEXT. Its padding eats into the gap by `ip`,
+        # so at the tightest settings its edge comes close -- but never past.
+        assert p["plateX"] + p["plateW"] <= p["plateX"] + at[p["most"]] + 1e-9, (
+            "%s: the frame's edge has reached into the merchant's slot" % _tag(row))
+    assert drew > 500, "only %d arrangements drew the whole line" % drew
 
 
 @needs_node
-def test_the_resource_is_given_up_before_the_dutys_own_marks_are(sweep):
-    """WHICH OF THE TWO GOES WHEN THE RECTANGLE RUNS OUT OF ROOM, and it is not arbitrary.
+def test_the_line_is_drawn_whole_or_not_at_all(sweep):
+    """A frame with no resource beside it was a state; it is not one any more.
 
-    The duty's marks are the object on this board that carries meaning -- they say what you may do
-    -- and the resource is a thing the board shows you. Testing both against the rectangle
-    together would drop the marks to keep the decoration; testing the frame against what the plate
-    LEAVES drops the decoration first. So `hasTithe` implies `has`, at every setting.
+    THE LINE USED TO BE GIVEN UP A PIECE AT A TIME -- the merchant first, then the resource, then
+    the frame -- because each was fitted into what the one before it had left. Justifying the row
+    took that apart: every piece is sized from the same band and the same leftover, so when the
+    leftover closes it closes for all of them at once. There is nothing left to order.
 
-    AND THE IMPLICATION IS NOT VACUOUS, which is the half of this that a one-line assert would
-    miss. If the resource and the marks always came and went together the implication would hold
-    perfectly and mean nothing, so the sweep is also asked to show settings where the marks are
-    drawn and the resource is not.
+    WHICH IS WORTH A GUARD BECAUSE IT IS EASY TO BREAK QUIETLY. A refusal written against one
+    piece -- a floor on the merchant, a clearance on the resource -- would bring back a line that
+    is drawn in parts, and a tile missing only its resource looks exactly like Taxation.
 
-    IT MATTERS MORE NOW THAN IT DID, because the resource is a CHILD of the duty's frame. When it
-    had a frame of its own the worst case was one frame hanging alone; placed into a frame that
-    was never drawn it lands loose inside the rectangle, which `.dcell`'s `overflow:hidden` then
-    crops to nothing. `hasTithe` keeps `has` as a term for exactly this -- and the width half of
-    `has` is implied by the clearance while the HEIGHT half is not, which is why the term stays
-    rather than going the way the last implied condition went.
-
-    Falsify: drop `has` from `hasTithe`, or drop the clearance term.
+    Falsify: refuse any one piece on a rectangle that drew the rest.
     """
-    only_plate = 0
+    checked = 0
     for row in sweep:
         if row["centre"]:
             continue
         p = row["plate"]
-        assert not (p["hasTithe"] and not p["hasPlate"]), (
-            "%s: a resource was drawn under a rectangle whose own marks were refused" % _tag(row))
-        if p["hasPlate"] and not p["hasTithe"]:
-            only_plate += 1
-    assert only_plate, (
-        "no setting in the sweep draws the marks without the resource, so the order they are "
-        "given up in was never exercised")
+        if not p["hasPlate"]:
+            assert not p["hasTithe"] and not p["merchant"], (
+                "%s: a rectangle with no frame drew the rest of its line" % _tag(row))
+            continue
+        assert p["hasTithe"], (
+            "%s: the frame is drawn and its resource is not, which is the one state Taxation's "
+            "empty end is supposed to mean" % _tag(row))
+        assert p["merchant"], (
+            "%s: the frame and the resource are drawn and the merchant between them is not"
+            % _tag(row))
+        checked += 1
+    assert checked > 500, "only %d rectangles drew a line" % checked
 
 
 @needs_node
@@ -1721,7 +1764,7 @@ def pool(tmpl, geo):
         _function(tmpl, "lifted"),
         _function(tmpl, "controlBox"),
         "var out = {pools: {}, only: {}, layout: {}, iso: {}, isoOnly: {},",
-        "           can: {}, canIso: {}, canOff: {}};",
+        "           can: {}, canIso: {}, canIsoOff: {}, canOff: {}};",
         "function _can(){ return GEO.duties.filter(function(d){ return eligible(d.slug); })",
         "                     .map(function(d){ return d.slug; }); }",
         "%s.forEach(function(p){ S.seat = p;" % json.dumps(players),
@@ -1757,7 +1800,13 @@ def pool(tmpl, geo):
             json.dumps({"taxation": ["z"]}),
             json.dumps({_single_duty(geo, ring): ["z"]})),
         "for (var k in ISO){ S.occupancy = ISO[k]; S.seat = 'z';",
-        "  out.iso[k] = tithePool('z'); out.isoOnly[k] = onlyTithe(); out.canIso[k] = _can(); }",
+        "  out.iso[k] = tithePool('z'); out.isoOnly[k] = onlyTithe(); out.canIso[k] = _can();",
+        # AND THE SAME ONE FIGURE WITH THE PHASE TURNED OFF, which is the only place left where
+        # the gate's difference can be SEEN. Every seat in the demo deal now stands on every
+        # tile, so "what this seat may act on" and "every duty" are the same list for all four
+        # of them, live or not -- a gate that had stopped working would agree with that.
+        "  S.phase = 'not-' + GEO.livePhase; out.canIsoOff[k] = _can();",
+        "  S.phase = GEO.livePhase; }",
         "S.occupancy = REAL;",
         "process.stdout.write(JSON.stringify(out));",
     ])
@@ -1788,8 +1837,16 @@ def test_the_pool_is_what_this_seats_figures_are_standing_on(pool, geo):
 
     Falsify: read the selected duty's resource instead, or drop the occupancy test.
     """
-    assert pool["pools"]["p1"] == ["wheat", "stone"], (
-        "p1 stands on Clerical, Allocation and Give Alms -- wheat, stone, wheat -- and got %s"
+    # WORKED OUT FROM THE DEAL RATHER THAN TYPED. It used to be ["wheat", "stone"], which was
+    # p1's three tiles in the old demo occupancy -- and every seat stands on every duty now, so
+    # a typed answer would be a sentence about a board that no longer exists. What the guard is
+    # for survives: the pool is what THIS seat's figures are standing on, whatever that is.
+    want = []
+    for (slug, _n, _d), key in zip(geo.DUTIES, _v2_tithe()):
+        if key and key != _tithe_token()["wild"] and "p1" in _v2_seats()[slug] and key not in want:
+            want.append(key)
+    assert sorted(pool["pools"]["p1"]) == sorted(want), (
+        "p1 stands on tiles offering %s and got %%s" % want
         % pool["pools"]["p1"])
     assert pool["pools"]["p2"] == ["wheat", "stone", "silver"], pool["pools"]["p2"]
 
@@ -1851,8 +1908,17 @@ def test_the_cornucopia_unions_every_resource_in_and_taxation_adds_none(pool):
 
     # AND A SEAT STANDING NOWHERE HAS NOTHING. The empty box is the case easiest to forget and
     # the one that lets a confirm be offered for a move nobody can make.
-    assert pool["pools"]["p4"] == [], "p4 stands nowhere and got %s" % pool["pools"]["p4"]
+    #
+    # DRIVEN BY A SEAT OF THIS FILE'S OWN, NOT BY THE DEAL. It used to be p4, which stood on no
+    # duty in the demo occupancy -- and the demo is a bench: every seat now has a figure on every
+    # tile so the four acolytes can be checked against the four slots they stand over. A deal
+    # arranged for looking at is the wrong place to keep a degenerate case; `nowhere` is a seat
+    # standing on nothing, which is the case itself rather than a board that happens to contain
+    # it.
     assert pool["iso"]["nowhere"] == [], pool["iso"]["nowhere"]
+    assert all(pool["pools"][p] for p in pool["pools"]), (
+        "a seat in the demo deal holds nothing, so the board opens with a box the bench cannot "
+        "show: %s" % pool["pools"])
 
 
 @needs_node
@@ -2073,10 +2139,10 @@ def test_a_seat_may_act_exactly_where_its_figures_stand(pool):
         assert sorted(got) == want, (
             "%s stands on %s and the board offers %s" % (seat, want, sorted(got)))
 
-    # A SEAT STANDING NOWHERE MAY ACT NOWHERE, which is the state p4 is in and the one the engine
-    # cannot produce -- sowing guarantees a figure on at least one tile. Kept because it is the
-    # cheapest way to find a rule that quietly divides by the number of your own figures.
-    assert pool["can"]["p4"] == [], "p4 stands nowhere and may act on %s" % pool["can"]["p4"]
+    # A SEAT STANDING NOWHERE MAY ACT NOWHERE, which is the state the engine cannot produce --
+    # sowing guarantees a figure on at least one tile. Kept because it is the cheapest way to
+    # find a rule that quietly divides by the number of your own figures, and driven by a seat
+    # standing on nothing rather than by whichever seat the demo deal happens to leave out.
     assert pool["canIso"]["nowhere"] == [], pool["canIso"]["nowhere"]
     assert pool["canIso"]["taxOnly"] == ["taxation"], pool["canIso"]["taxOnly"]
 
@@ -2119,8 +2185,17 @@ def test_nothing_is_refused_outside_action_selection(pool):
         assert sorted(got) == want, (
             "outside Action Selection %s is refused %s"
             % (seat, sorted(set(want) - set(got))))
-    assert pool["canOff"]["p4"] and not pool["can"]["p4"], (
-        "the gate makes no difference, so it is not a gate")
+    # AND THE DIFFERENCE IS SHOWN WITH ONE FIGURE, because the demo deal can no longer show it:
+    # every seat stands on every tile now, so "what this seat may act on" is the whole ring
+    # whether the phase is live or not, and a gate that had stopped working would produce
+    # exactly that. A seat standing on Taxation alone may act on Taxation while the phase is
+    # live and on everything outside it -- which only the gate can account for.
+    assert pool["canIso"]["taxOnly"] == ["taxation"], pool["canIso"]["taxOnly"]
+    assert sorted(pool["canIsoOff"]["taxOnly"]) == want, (
+        "outside Action Selection a seat standing on one tile is refused %s"
+        % sorted(set(want) - set(pool["canIsoOff"]["taxOnly"])))
+    assert not pool["canIso"]["nowhere"] and sorted(pool["canIsoOff"]["nowhere"]) == want, (
+        "the gate makes no difference to a seat standing nowhere, so it is not a gate")
 
 
 def test_the_pool_and_the_tiles_ask_one_question(tmpl):
@@ -3518,12 +3593,13 @@ def test_the_resource_is_right_aligned_and_not_centred_like_a_short_row(sweep, t
     assert compared, (
         "no rectangle drew a resource at both action counts, so the one thing this guard is "
         "about was never compared")
-    # AND THE SPREAD WOULD BE VISIBLE IF IT HAPPENED, which is what makes the equality above worth
-    # asserting rather than merely true. A duty holding fewer marks than the widest row has a
-    # non-zero inset to borrow.
-    assert any(row["plate"]["inset"] > 0 for row in sweep if not row["centre"]), (
-        "every rectangle in the sweep held a full row, so the centring term was never non-zero "
-        "and borrowing it would have moved nothing")
+    # AND THE RESOURCE IS WHERE THE LINE ENDS, which is what makes the equality above worth
+    # asserting rather than merely true: it is one of the two fixed points the rest of the row is
+    # justified between, so if anything about a duty's own marks could reach it, the whole line
+    # would move on two tiles out of eight.
+    assert any(row["plate"]["g"] > row["plate"]["igap"] for row in sweep if not row["centre"]), (
+        "every rectangle in the sweep was spaced at the minimum, so the justification never "
+        "actually divided anything")
 
 
 @needs_node
@@ -3737,11 +3813,11 @@ def test_the_icons_sit_inside_the_plate_that_was_sized_for_them(sweep, tmpl):
         assert first["left"] >= 0, (
             "%s: the first mark starts at %g, outside its own frame"
             % (_tag(row), first["left"]))
-        assert last["left"] + last["size"] <= inner_w + 1e-9, (
+        assert last["left"] + last["w"] <= inner_w + 1e-9, (
             "%s: the last of %d mark(s) reaches %g inside a frame %g wide"
-            % (_tag(row), n, last["left"] + last["size"], inner_w))
+            % (_tag(row), n, last["left"] + last["w"], inner_w))
         # AND THE SAME GAP TOP AND BOTTOM, which is what the frame's height is for.
-        assert abs(first["top"] - (inner_h - (first["top"] + first["size"]))) < 1e-9, (
+        assert abs(first["top"] - (inner_h - (first["top"] + first["h"]))) < 1e-9, (
             "%s: a mark sits %g from the top of its frame and %g from the bottom"
             % (_tag(row), first["top"], inner_h - (first["top"] + first["size"])))
 
@@ -3822,53 +3898,42 @@ def test_every_duty_gets_the_same_frame_whatever_it_holds(sweep, tmpl):
 
 
 @needs_node
-def test_a_short_row_of_marks_is_centred_in_the_frame(sweep, tmpl):
-    """ONE MARK IN A FRAME BUILT FOR TWO HAS TO SIT IN THE MIDDLE OF IT.
+def test_a_short_row_leaves_its_slot_empty_rather_than_closing_up(sweep, tmpl):
+    """ONE MARK IN A FRAME BUILT FOR TWO SITS IN THE FIRST SLOT, and that is a reversal.
 
-    The inset is the only thing that puts it there, and it is zero for a duty holding the full
-    row -- so the two cases are one expression and a duty with every mark cannot be pushed off
-    centre by the arithmetic that centres a duty with fewer.
+    It used to be centred: an inset of half the difference put Allocation's single mark in the
+    middle of the span a two-mark duty fills, so the frame read as one object holding what it
+    had. That was right while the frame was the only thing on the line -- and is wrong now that
+    four acolytes stand over four slots. Centred, Allocation's mark would sit BETWEEN the first
+    and second acolyte, with a person over each side of it.
 
-    THE PLATE'S OWN BORDER IS PAID FOR, which is what makes "centred" true rather than nearly
-    true. `*{box-sizing:border-box}` means the border eats into the declared size and the marks
-    are placed against the PADDING box -- so a row set at `pad` from the left had `pad` on one
-    side and `pad - 2` on the other. Two pixels, invisible on a pair and exactly what stops a
-    single centred mark from being centred. A control mark's ground is drawn the same way, which
-    is why the plate places its row one border in.
+    SO A SLOT IS A PLACE AND NOT A THING THAT HAPPENS TO BE FILLED. A duty with fewer marks
+    leaves the slot empty; the frame is the same width on every tile, and every tile's people
+    line up with the same four positions.
 
-    CENTRED IN THE ROW BOX, NOT IN THE FRAME, and the two came apart when the frame was widened
-    to hold the tithe resource. The frame spans the rectangle now; centring a short row in THAT
-    would put Allocation's single mark in the middle of its rectangle, nowhere near where the
-    other duties' marks sit, and the row of eight would stop being a row. What the inset centres
-    is the row inside the WIDEST ROW ANY DUTY NEEDS -- `rowBox` -- which is the span the marks
-    occupy at the frame's left-hand end and is unchanged by the widening.
-
-    Falsify: drop the `- PLATE_BORDER` from the marks' placement, the `/ 2` from the inset, or
-    centre the row in `innerW`.
+    Falsify: put the inset back, or build the frame to the marks the duty actually holds.
     """
-    border = float(_decl(tmpl, "PLATE_BORDER"))
-    assert border > 0, "PLATE_BORDER is not positive"
-    seen = set()
+    assert "inset" not in _code(_function(tmpl, "markAt")), (
+        "the short-row centring term is back in markAt, which moves a single mark off its slot")
+    seen, border = set(), float(_decl(tmpl, "PLATE_BORDER"))
     for row in sweep:
-        if row["centre"]:
+        if row["centre"] or not row["plate"]["hasPlate"]:
             continue
         p, n = row["plate"], row["nAct"]
-        # MEASURED FROM THE FRAME'S OUTER EDGE, which is the frame everybody can see. markAt
-        # returns offsets from the PADDING box -- one border further in -- so the border is added
-        # back before the two ends are compared. Comparing padding-box numbers against a row box
-        # measured from the outer edge is off by exactly one border, which is the size of error
-        # this test exists to catch and would therefore have hidden.
-        left = border + p["marks"][0]["left"]
-        right = p["rowBox"] - (border + p["marks"][-1]["left"] + p["marks"][-1]["size"])
         seen.add(n)
-        assert abs(left - right) < 1e-9, (
-            "%s: %d mark(s) sit %g from one end of the frame and %g from the other"
-            % (_tag(row), n, left, right))
-        if n == 1:
-            assert p["inset"] > 0, (
-                "%s: a single mark is not inset at all, so it is not centred in a frame built "
-                "for more" % _tag(row))
-    assert seen == set(NACTS), "the sweep did not cover every action count: %s" % sorted(seen)
+        # THE FIRST MARK IS ALWAYS IN THE SAME PLACE, whatever the duty holds: one padding in
+        # from the frame's outer edge, which is `ip` less the border the padding box already
+        # paid for.
+        assert abs(p["marks"][0]["left"] - (p["ip"] - border)) < 1e-9, (
+            "%s: the first of %d mark(s) sits %g from the frame's padding box, against %g"
+            % (_tag(row), n, p["marks"][0]["left"], p["ip"] - border))
+        # AND EVERY MARK AFTER IT IS ONE SLOT ON.
+        for k in range(1, n):
+            assert abs(p["marks"][k]["left"]
+                       - (p["marks"][0]["left"] + k * (p["sz"] + p["g"]))) < 1e-9, (
+                "%s: mark %d is not one slot past the one before it" % (_tag(row), k))
+    assert seen == {1, 2}, (
+        "the sweep did not cover both a short row and a full one: %s" % sorted(seen))
 
 
 def test_no_rectangle_carries_a_name_any_more(tmpl):
@@ -4160,8 +4225,14 @@ def test_the_figure_row_is_centred_in_its_rectangle(tmpl):
     assert re.search(r"var slack = \(r\.figRight - r\.figLeft\) - \(fw \* 4 \+ gap \* 3\);",
                      body), \
         "the row's slack is no longer the span less four figures and three gaps:\n%s" % body
-    assert re.search(r"var x = r\.figLeft \+ slack / 2 \+ j \* \(fw \+ gap\);", body), (
+    # THE FALLBACK, WHICH IS NOW THE CITY'S. The eight duties stand their people over the slots
+    # on the line below them; the City has no line, so it keeps the even spread -- and the spread
+    # is still centred, for the reason this whole guard exists.
+    assert re.search(r"x = r\.figLeft \+ slack / 2 \+ j \* \(fw \+ gap\);", body), (
         "the row is no longer placed at half the slack, so it is not centred:\n%s" % body)
+    assert re.search(r"if \(r\.seats && r\.seats\[j\] != null\)", body), (
+        "the figures no longer stand over the duty line's slots, so the spread below is the "
+        "only rule left and nothing lines up with anything:\n%s" % body)
     assert "fw * (4 + 3 * HOOD.gap)" not in body, (
         "the slack is measured against the width that would FIT rather than the width being "
         "DRAWN. Those are the same number only while no slider has moved the figures.")
@@ -4195,20 +4266,24 @@ def test_the_plate_height_is_a_ceiling_the_figures_never_pass(sweep, geo, hood):
         p = row["plate"]
         return p["fullH"] / h, (p["figRight"] - p["figLeft"]) / slots
 
-    # AT THE BOARD'S OWN DEFAULTS THE CEILING IS NOT REACHED, and that is the fact worth
-    # pinning: it is the state anybody opening the page sees. If this starts failing the
-    # defaults have moved into the range where the plate sets the size, and the note above --
-    # and what the board looks like on opening -- both need re-reading.
+    # AT THE BOARD'S OWN DEFAULTS THE TWO AGREE, which is what replaced a claim that has now
+    # flipped twice in a day. It used to be that the row was the tighter of the two and the
+    # acolytes came out shorter than their plate; widening the wheel to the Take Tithe box made
+    # the plate the tighter one; opening the size slider at 100 instead of 110 brought the row
+    # back to within a fifth of a pixel of it. Which of them wins at the opening settings is not
+    # a property of this board -- it is where three sliders happen to sit -- so what is pinned is
+    # that they agree, and that a figure is the smaller of the two whichever that is.
     at_default = [r for r in sweep if not r["centre"] and r["plate"]["hasPlate"]
                   and (r["gap"], r["disp"], r["size"], r["height"],
                        r["cols"]) == defaults]
     assert at_default, "the sweep does not cover the opening defaults"
     for row in at_default:
         wants, allows = wants_vs_allows(row)
-        assert allows < wants, (
-            "%s: the row now allows a %g-wide figure against the %g the plate asks for, so the "
-            "acolytes ARE the plate's height at the settings the board opens on -- which they "
-            "were not when this was written" % (_tag(row), allows, wants))
+        assert abs(allows - wants) < 1.0, (
+            "%s: the plate asks for a %g-wide figure and the row allows %g. They are a pixel "
+            "apart at the settings the board opens on, and were tuned to be; if that is no "
+            "longer wanted this guard is the place to say so."
+            % (_tag(row), wants, allows))
 
     # AND IT IS REACHED SOMEWHERE, or asking for it is decoration.
     reached = [r for r in sweep if not r["centre"] and r["plate"]["hasPlate"]
@@ -4328,44 +4403,47 @@ def test_the_merchant_clears_what_it_stands_between(sweep):
 
     Falsify: drop the `2 * P.igap` from the width, or add the clearance to one side only.
     """
-    # ASKED OF THE SIZE THE LINE OFFERED, for the reason the guard below it is: the trade
-    # slider is allowed past 100, where the merchant grows into the frame and the resource on
-    # purpose, so the DRAWN clearance is whatever the person dragging it wants. What has to hold
-    # is the clearance the placement was built with -- and because the slider grows the marker
-    # about its own middle, that box is the middle plus and minus half the offered width.
-    scale = _grid_defaults()["merch"] / 100.0
+    # ASKED OF THE SLOTS, NOT OF THE DRAWING. The trade slider scales the merchant and the line
+    # re-justifies around it, so the merchant's own box is whatever the person dragging it asked
+    # for -- what has to hold is that its SLOT keeps the line's spacing from the slot on each
+    # side of it, and that the drawing sits in the slot it was given.
     checked = 0
     for row in sweep:
         pl = row.get("plate")
         if not pl or not pl["hasPlate"] or not pl["hasTithe"] or not pl["merchant"]:
             continue
-        m, P = pl["merchant"], pl
+        m = pl["merchant"]
         frame_end = pl["plateX"] + pl["rowBox"]
-        mid, half = m["x"] + m["w"] / 2, m["w"] / scale / 2
-        assert (mid - half) - frame_end >= P["igap"] - 1e-9, (
-            "%s: the merchant was placed %.2f after the frame ends, against the %s the duty's "
-            "own marks keep from each other" % (_tag(row), (mid - half) - frame_end, P["igap"]))
-        assert pl["titheMark"]["x"] - (mid + half) >= P["igap"] - 1e-9, (
-            "%s: the resource is %.2f past the merchant, against %s"
-            % (_tag(row), pl["titheMark"]["x"] - (mid + half), P["igap"]))
+        at, w, k = pl["at"], pl["widths"], pl["most"]
+        assert abs((at[k] - (at[k - 1] + w[k - 1])) - pl["g"]) < 1e-9, (
+            "%s: the merchant's slot starts %.2f after the slot before it, against the %.2f the "
+            "line is spaced by" % (_tag(row), at[k] - (at[k - 1] + w[k - 1]), pl["g"]))
+        assert abs((at[k + 1] - (at[k] + w[k])) - pl["g"]) < 1e-9, (
+            "%s: the resource starts %.2f after the merchant, against %.2f"
+            % (_tag(row), at[k + 1] - (at[k] + w[k]), pl["g"]))
+        # CENTRED IN ITS SLOT, NOT FLUSH WITH IT. The slots are all one width and the drawings
+        # in them are not, so what has to line up is the middles.
+        assert abs((m["x"] + m["w"] / 2) - (pl["plateX"] + at[k] + pl["box"] / 2)) < 1e-9, (
+            "%s: the merchant's middle is at %.2f and its slot's at %.2f"
+            % (_tag(row), m["x"] + m["w"] / 2, pl["plateX"] + at[k] + pl["box"] / 2))
+        assert frame_end <= pl["plateX"] + at[k] + 1e-9, (
+            "%s: the frame's edge has reached into the merchant's slot" % _tag(row))
         checked += 1
     assert checked > 500, "only %d arrangements drew a merchant to check" % checked
 
 
 @needs_node
-def test_the_merchant_stands_a_mark_tall_until_the_line_cannot_take_it(sweep):
-    """Height is what the eye compares, so height is what is capped -- and width takes over.
+def test_the_merchant_stands_a_mark_tall_on_every_board(sweep):
+    """Height is what the eye compares it by, so height is what its slot is built to.
 
-    TWO CAPS AND THE SMALLER ONE WINS. A figure beside a row of 50-pixel emblems is read against
-    their HEIGHT, so that is the cap: a marker sized by the gap instead would stand a third
-    taller than the icons at the opening settings and taller still as the sliders opened the
-    board out. The width only ever takes size AWAY, when the gap is too tight for the figure
-    that height asks for -- and the sweep has to show BOTH caps biting, or one of them is a line
-    of code that has never run.
+    IT USED TO BE FITTED INTO WHAT WAS LEFT OVER, capped at a mark and cut down by the gap
+    whenever the gap was tighter than that -- which meant the figure beside a row of 50-pixel
+    emblems was a different size on a board whose rectangles had moved. The line is justified
+    around its slot now: the slot is a mark tall at every setting, and what changes with the
+    sliders is the SPACE between the slots, which is the thing that is supposed to change.
 
-    AND BELOW HALF A MARK IT IS NOT DRAWN. The space closes with the rectangles, and a width
-    that simply followed it down would draw a figure three pixels wide on every tile: dirt on
-    the board rather than a thing that is there on purpose.
+    AND BELOW HALF A MARK THE LINE IS NOT SPACED, IT IS PACKED, so the marker is refused rather
+    than drawn as dirt on every tile.
     """
     # THE CAPS ARE ON THE SIZE THE LINE OFFERS, NOT ON THE SIZE THAT IS DRAWN, which is the
     # whole point of the trade slider sitting outside them: it opens at 90 today and could open
@@ -4373,7 +4451,7 @@ def test_the_merchant_stands_a_mark_tall_until_the_line_cannot_take_it(sweep):
     # moved it -- as this one did. So the drawn width is divided back out by the setting the
     # sweep ran at, and what is asserted is what the arithmetic decided before the slider.
     scale = _grid_defaults()["merch"] / 100.0
-    sizes, dropped, by_height, by_width = set(), 0, 0, 0
+    sizes, dropped, by_height = set(), 0, 0
     for row in sweep:
         pl = row.get("plate")
         if not pl or not pl["hasPlate"] or not pl["hasTithe"]:
@@ -4391,21 +4469,28 @@ def test_the_merchant_stands_a_mark_tall_until_the_line_cannot_take_it(sweep):
         assert offered_w >= pl["sz"] * 0.5 - 1e-9, (
             "%s: the merchant was offered %.2f of width, under half a mark -- it should have "
             "been refused" % (_tag(row), offered_w))
-        if abs(offered_h - pl["sz"]) < 1e-6:
-            by_height += 1
-        else:
-            by_width += 1
+        assert abs(offered_h - pl["sz"]) < 1e-6, (
+            "%s: the merchant is offered %.2f of height against a %s mark -- its slot is a mark "
+            "tall at every setting now, because the line is justified around it rather than it "
+            "being fitted into what the line had left" % (_tag(row), offered_h, pl["sz"]))
+        by_height += 1
         sizes.add(round(m["w"], 3))
-    assert dropped, ("no arrangement in the sweep refused a merchant, so the floor under its "
-                     "width is never reached and cannot be said to work")
-    assert by_height and by_width, (
-        "the sweep never exercised both caps: %d arrangements stood a mark tall and %d were cut "
-        "down by the gap" % (by_height, by_width))
-    assert len(sizes) > 1, "the merchant is one width at every setting, so nothing is being sized"
+    # AND THE FLOOR IS NOT REACHED HERE, WHICH IS SAID RATHER THAN HIDDEN. The sweep drives the
+    # line at a mark's band -- that is placeFor's default and what every guard above is written
+    # against -- and the merchant is refused by the BAND falling under half a mark, which only
+    # the page's own board-wide sizing can produce. The trade slider's guard covers the other
+    # half: a size somebody asked for is never a reason to refuse the figure.
+    assert not dropped, (
+        "%d arrangements refused a merchant at a full band, which the floor should not do"
+        % dropped)
+    assert by_height, "no arrangement drew a merchant at all"
+    assert len(sizes) == 1, (
+        "the merchant comes in %d widths; a mark tall is one width on every board, and the only "
+        "thing that may change it is the trade slider" % len(sizes))
 
 
 @needs_node
-def test_the_merchant_stands_on_the_same_line_as_the_duty_s_own_icons(sweep):
+def test_the_merchant_stands_on_the_same_line_as_the_duty_s_own_icons(sweep, tmpl):
     """Its feet and the bottom of the marks are the same line, at every setting and every size.
 
     THE EYE LINES THINGS UP BY THEIR BOTTOMS, NOT BY THEIR BOXES. The marker is smaller than a
@@ -4430,9 +4515,13 @@ def test_the_merchant_stands_on_the_same_line_as_the_duty_s_own_icons(sweep):
             % (_tag(row), m["w"], m["h"]))
         feet = m["y"] + m["h"]
         marks = pl["marks"][0]
-        assert abs(feet - (pl["plateY"] + marks["top"] + marks["size"])) < 1e-6, (
-            "%s: the merchant's feet are at %.2f and the duty's icons stand on %.2f"
-            % (_tag(row), feet, pl["plateY"] + marks["top"] + marks["size"]))
+        # ONE BORDER, WHICH IS THE WHOLE OF THE DIFFERENCE BETWEEN THESE TWO. A mark is placed
+        # against the frame's PADDING box and the merchant against the board, so comparing the
+        # two without it is off by exactly the size of error this guard exists to catch.
+        pb = float(_decl(tmpl, "PLATE_BORDER"))
+        assert abs(feet - (pl["plateY"] + pb + marks["top"] + marks["h"])) < 1e-6, (
+            "%s: the merchant's feet are at %.2f and the duty's drawings stand on %.2f"
+            % (_tag(row), feet, pl["plateY"] + marks["top"] + marks["h"]))
 
 
 @needs_node
@@ -4547,16 +4636,26 @@ def test_the_trade_slider_scales_the_merchant_and_moves_nothing_else(tmpl, geo):
         _function(tmpl, "mostActions"),
         _function(tmpl, "plateHeight"),
         _function(tmpl, "plateFor"),
+        "var LINE_MIN_GAP = %s;" % _decl(tmpl, "LINE_MIN_GAP"),
+        _function(tmpl, "slotsFor"),
+        _function(tmpl, "inkAt"),
         _function(tmpl, "plateInset"),
         _function(tmpl, "markAt"),
         _function(tmpl, "titheMarkAt"),
         _function(tmpl, "merchantAt"),
         _function(tmpl, "placeFor"),
         "var r = {x: 100, y: 200, width: 236, height: 165};",
+        # A BAND THE WHOLE RANGE FITS IN. On the page the band is worked out across the eight
+        # duties AT THE SLIDER'S CURRENT SETTING -- drag the merchant to twice its size and every
+        # drawing on the board comes down to make room -- which is a board-wide pass this test
+        # has no business reproducing. Fixing the band instead isolates what is being asked:
+        # what the slider does to the merchant and to the spaces around it.
+        "var BAND = 30;",
     ]), "(function(){ var out = []; "
         "[40, 70, 100, 150, 200].forEach(function(v){ GRID.merch = v; "
-        "  var L = placeFor(r, 2, true); "
+        "  var L = placeFor(r, 2, true, null, BAND); "
         "  out.push({v: v, m: L.merchant, plateX: L.x, rowBox: L.p.rowBox, "
+        "            at: L.p.line.at, widths: L.p.line.w, g: L.p.line.g, "
         "            mark: markAt(L.p, 0), tithe: L.titheMark}); }); return out; })()")
     rows = {row["v"]: row for row in body}
     base = rows[100]
@@ -4570,13 +4669,395 @@ def test_the_trade_slider_scales_the_merchant_and_moves_nothing_else(tmpl, geo):
         assert abs(m["h"] - m["w"] * 1.5) < 1e-6, (
             "at %d%% the merchant is %.3f x %.3f, so the slider is stretching it rather than "
             "scaling it" % (v, m["w"], m["h"]))
-        assert abs((m["x"] + m["w"] / 2) - (base["m"]["x"] + base["m"]["w"] / 2)) < 1e-6, (
-            "at %d%% the merchant's middle is at %.3f against %.3f at 100%% -- the slider is "
-            "walking it along the line instead of opening it out"
-            % (v, m["x"] + m["w"] / 2, base["m"]["x"] + base["m"]["w"] / 2))
         assert abs((m["y"] + m["h"]) - (base["m"]["y"] + base["m"]["h"])) < 1e-6, (
             "at %d%% the merchant's feet have left the line they stand on" % v)
-        for k in ("plateX", "rowBox"):
-            assert row[k] == base[k], "%s moved when the merchant was scaled" % k
-        assert row["mark"] == base["mark"], "the duty's own icons moved when the merchant scaled"
-        assert row["tithe"] == base["tithe"], "the resource moved when the merchant was scaled"
+        # AND THE LINE IS STILL EVENLY SPACED, which is what it means for the slider to belong
+        # to the line rather than to sit on top of it. A smaller merchant in a slot kept at full
+        # width would put more air around it than around anything else -- the unevenness this
+        # whole arrangement was rebuilt to remove -- so the row re-justifies and everything
+        # moves a little. What must not change is that the spaces are all one number.
+        at, w, g = row["at"], row["widths"], row["g"]
+        for k in range(1, len(at)):
+            assert abs((at[k] - (at[k - 1] + w[k - 1])) - g) < 1e-9, (
+                "at %d%% slot %d is %g past the one before it, against a spacing of %g"
+                % (v, k + 1, at[k] - (at[k - 1] + w[k - 1]), g))
+        assert abs(at[0] - base["at"][0]) < 1e-9, "at %d%% the line no longer starts where it did" % v
+        assert abs((at[-1] + w[-1]) - (base["at"][-1] + base["widths"][-1])) < 1e-9, (
+            "at %d%% the line no longer ends where it did" % v)
+        assert row["mark"]["w"] == base["mark"]["w"], (
+            "at %d%% a duty mark changed size when the merchant was scaled" % v)
+
+
+@needs_node
+def test_every_acolyte_has_a_place_on_the_line_below_it(sweep):
+    """Seat one over the first mark, seat two over the second, seat three over the merchant,
+    seat four over the resource -- on every tile, at every setting.
+
+    THIS IS WHY THE SLOTS ARE FIXED. A player's figures and the thing those figures can take are
+    the same question asked twice, and the answer should be readable by looking straight down
+    rather than by counting across. Spread evenly instead -- which is what they did -- four
+    people sit over four places that have nothing to do with the four objects beneath them, and
+    the board quietly stops saying who may do what.
+
+    AND A SLOT THAT IS EMPTY STILL HAS A MIDDLE. Taxation takes no tithe and Allocation holds one
+    mark; their people stand in the same four places as everyone else's, because a slot is a
+    position on the line rather than a thing that happens to be drawn in it. A line that closed
+    up would move two tiles' people out of step with the other six.
+
+    Falsify: publish three seats, order them differently, anchor them to a slot's left edge
+    instead of its middle, or let a missing resource close the line up.
+    """
+    checked = 0
+    for row in sweep:
+        if row["centre"]:
+            continue
+        pl = row["plate"]
+        if not pl["hasPlate"]:
+            assert pl["seats"] is None, (
+                "%s: a rectangle with no line published places to stand over it" % _tag(row))
+            continue
+        seats = pl["seats"]
+        assert seats and len(seats) == pl["most"] + 2, (
+            "%s: the line publishes %s places against %d slots"
+            % (_tag(row), seats and len(seats), pl["most"] + 2))
+        at, w = pl["at"], pl["widths"]
+        for k in range(len(at)):
+            want = pl["plateX"] + at[k] + w[k] / 2
+            assert abs(seats[k] - want) < 1e-9, (
+                "%s: seat %d stands at %g and slot %d is centred at %g"
+                % (_tag(row), k + 1, seats[k], k + 1, want))
+        # AND THE LAST OF THEM IS OVER THE RESOURCE ITSELF, which is the one slot whose drawing
+        # is placed by the board rather than by the line's own arithmetic.
+        assert abs(seats[-1] - (pl["titheMark"]["x"] + pl["titheMark"]["w"] / 2)) < 1e-9, (
+            "%s: the last seat is not over the resource" % _tag(row))
+        if pl["merchant"]:
+            assert abs(seats[pl["most"]]
+                       - (pl["merchant"]["x"] + pl["merchant"]["w"] / 2)) < 1e-9, (
+                "%s: the third seat is not over the merchant" % _tag(row))
+        checked += 1
+    assert checked > 500, "only %d lines published places to stand" % checked
+
+
+@needs_node
+def test_the_places_are_the_same_whether_a_duty_fills_its_slots_or_not(sweep):
+    """Allocation holds one mark and Taxation takes no tithe; their people stand where everyone
+    else's do.
+
+    THE TWO TILES THE WHOLE ARRANGEMENT TURNS ON. Every other duty fills all four slots, so any
+    rule at all lines their people up; these two are where a line that closed up would show
+    itself, and they are the pair the board has got wrong before -- the frame used to centre
+    Allocation's single mark, which put it between two acolytes rather than under one.
+
+    Falsify: size the line from the marks a duty actually holds, or skip the empty slot.
+    """
+    by_cell = {}
+    for row in sweep:
+        if row["centre"] or not row["plate"]["hasPlate"]:
+            continue
+        key = (row["gap"], row["disp"], row["size"], row["height"], row["cols"],
+               row["cell"]["col"], row["cell"]["row"])
+        by_cell.setdefault(key, {})[row["nAct"]] = row["plate"]["seats"]
+    compared = 0
+    for key, seats in by_cell.items():
+        if len(seats) < 2:
+            continue
+        compared += 1
+        one, two = seats[min(seats)], seats[max(seats)]
+        assert one == two, (
+            "a duty holding one action stands its people at %s and one holding two at %s"
+            % (one, two))
+    assert compared > 100, "only %d rectangles were asked at both action counts" % compared
+
+
+def test_a_figure_stands_centred_on_its_slot_rather_than_beside_it(tmpl):
+    """The slot's middle, less half a figure -- and the half is the whole guard.
+
+    EVERYTHING ELSE ABOUT THIS IS CHECKED IN placeFor, which publishes the four slot middles and
+    is run by the sweep above. What no sweep can see is what drawFigures does with them: it
+    places a figure by its LEFT edge, so a line that forgot to take half the figure off would
+    put every acolyte half a body to the right of the thing it stands over -- about 25 pixels,
+    on all nine rectangles, with the arithmetic behind it still perfectly correct.
+
+    AND THE FALLBACK HAS TO STAY A FALLBACK. Reading the spread's expression where the slots
+    exist is the other half of the same mistake: the people would be evenly spaced and line up
+    with nothing, which is exactly what the board did before.
+
+    Falsify: drop the `- fw / 2`, or place from `r.figLeft` where `r.seats` is set.
+    """
+    body = _code(_function(tmpl, "drawFigures"))
+    assert re.search(r"x = r\.seats\[j\] - fw / 2;", body), (
+        "a figure is no longer centred on the slot it stands over:\n%s" % body)
+    # THE TWO BRANCHES ARE IN THE RIGHT ORDER, which a regex for each cannot tell on its own.
+    i, k = body.index("r.seats[j] - fw / 2"), body.index("r.figLeft + slack / 2")
+    assert i < k, "the even spread is being taken before the slots are looked at"
+
+
+def test_every_seat_stands_on_every_duty_in_the_demo_deal(geo):
+    """Four acolytes, four slots, on all eight tiles -- which is what makes the alignment
+    checkable by looking.
+
+    THE BOARD IS A BENCH BEFORE IT IS A GAME. A duty's line has four places on it and a player's
+    figures stand over them one each; on a tile where the fourth seat has nobody, the fourth
+    column is empty and "seat four stands over the resource" is a claim rather than something
+    anybody can see. The deal used to leave p4 off the board entirely, so the one alignment
+    hardest to get right was the one never on screen.
+
+    AND THE DEGENERATE CASE DID NOT GO WITH IT. A seat standing nowhere is still driven, by a
+    seat of the tests' own -- see `nowhere` in the pool fixture -- rather than by whichever seat
+    the demo happens to leave out. A deal arranged for looking at is the wrong place to keep it.
+
+    Falsify: drop a seat from any duty in V2_SEATS.
+    """
+    seats = _v2_seats()
+    players = [p["id"] for p in geo.as_dict()["players"]]
+    duties = [slug for slug, _name, _deg in geo.DUTIES]
+    assert sorted(seats) == sorted(duties), (
+        "the deal covers %s and the ring has %s" % (sorted(seats), sorted(duties)))
+    for slug in duties:
+        missing = [p for p in players if p not in seats[slug]]
+        assert not missing, (
+            "%s has nobody from %s standing on it, so %s of the four slots below it cannot be "
+            "checked against anybody" % (slug, ", ".join(missing), len(missing)))
+
+
+@needs_node
+def test_the_acolytes_stand_at_one_pitch(sweep):
+    """Evenly spaced, because the slots they stand over are.
+
+    THIS IS THE WHOLE REASON THE BOXES ARE EVEN. The line was laid out the other way for an
+    afternoon -- slots as wide as the drawings they hold, with the space between the pictures
+    shared equally -- and the people above it inherited slot middles that were not evenly
+    spaced: a figure beside a narrow drawing came within a pixel of its neighbour while the one
+    beside the wheat stalk had a hand's width of air. Four figures of one width cannot be evenly
+    spaced over unevenly spaced slots; the drawings gave way instead.
+
+    Falsify: size a slot from the drawing it holds.
+    """
+    checked = 0
+    for row in sweep:
+        if row["centre"] or not row["plate"]["hasPlate"]:
+            continue
+        seats = row["plate"]["seats"]
+        if not seats or len(seats) < 3:
+            continue
+        pitch = seats[1] - seats[0]
+        for k in range(2, len(seats)):
+            assert abs((seats[k] - seats[k - 1]) - pitch) < 1e-9, (
+                "%s: seat %d stands %g past the one before it and seat 2 stands %g past seat 1"
+                % (_tag(row), k + 1, seats[k] - seats[k - 1], pitch))
+        checked += 1
+    assert checked > 500, "only %d lines were measured" % checked
+
+
+@needs_node
+def test_a_drawing_is_one_height_and_centred_in_its_slot(tmpl, geo):
+    """Driven with shapes nothing like each other, because squares prove nothing here.
+
+    THE SWEEP RUNS ON SQUARES. placeFor's own default is a square drawing in every slot, which is
+    what every guard above is written against -- and in a line of squares, "centred in its slot"
+    and "flush with its slot" are the same arithmetic. The two drawings this board actually has
+    trouble with are a stone block at 1.30 and a wheat stalk at 0.29, so they are what this runs.
+
+    ONE HEIGHT IS THE CLAIM THAT MAKES THEM A SET. Fit each drawing to its box instead and the
+    wide ones come out short and the narrow ones tall, which is what the board looked like before
+    any of this: four pictures in four identical boxes, all apparently different sizes.
+
+    Falsify: fit the drawings to their boxes, or anchor them to a slot's left edge.
+    """
+    shapes = [1.30, 0.29, 0.687, 1.00]
+    body = _node("\n".join([
+        "var GEO = %s;" % json.dumps(geo.as_dict()),
+        "var CELL_BORDER = %s;" % _decl(tmpl, "CELL_BORDER"),
+        "var PLATE_DROP = %s;" % _decl(tmpl, "PLATE_DROP"),
+        "var PLATE_BORDER = %s;" % _decl(tmpl, "PLATE_BORDER"),
+        "var LINE_MIN_GAP = %s;" % _decl(tmpl, "LINE_MIN_GAP"),
+        "var MERCHANT = {h: 1.4547, src: \"\"};",
+        "var MERCHANT_FLOOR = %s;" % _decl(tmpl, "MERCHANT_FLOOR"),
+        "var DUTIES = %s;" % json.dumps({"a": {"actions": 1}, "b": {"actions": 2}}),
+        "var GRID = {merch: 100};",
+        _function(tmpl, "mostActions"),
+        _function(tmpl, "plateHeight"),
+        _function(tmpl, "plateFor"),
+        _function(tmpl, "slotsFor"),
+        _function(tmpl, "inkAt"),
+        _function(tmpl, "plateInset"),
+        _function(tmpl, "markAt"),
+        _function(tmpl, "titheMarkAt"),
+        _function(tmpl, "merchantAt"),
+        _function(tmpl, "placeFor"),
+        "var r = {x: 100, y: 200, width: 236, height: 165};",
+        "var SHAPES_IN = %s;" % json.dumps(shapes),
+    ]), "(function(){ var L = placeFor(r, 2, true, SHAPES_IN, {band: 36, box: 47}); "
+        "  return {marks: [markAt(L.p, 0), markAt(L.p, 1)], tithe: L.titheMark, "
+        "          merchant: L.merchant, seats: L.seats, at: L.p.line.at, box: L.p.line.box, "
+        "          band: L.p.line.band, x: L.x, plateY: L.y}; })()")
+
+    band, box = body["band"], body["box"]
+    drawn = [(body["marks"][0], shapes[0]), (body["marks"][1], shapes[1])]
+    for mark, aspect in drawn:
+        assert abs(mark["h"] - band) < 1e-9, (
+            "a mark of aspect %.2f is %g tall and the band is %g" % (aspect, mark["h"], band))
+        assert abs(mark["w"] - band * aspect) < 1e-9, (
+            "a mark of aspect %.2f is %g wide, which is not that shape at %g tall"
+            % (aspect, mark["w"], band))
+    # CENTRED, which is only visible when the drawing is narrower than its slot. A mark is
+    # placed against the frame's PADDING box, one border inside its outer edge, so that border
+    # is paid before the two middles are compared -- the omission this file has been bitten by
+    # three times.
+    pb = float(_decl(tmpl, "PLATE_BORDER"))
+    for k, (mark, aspect) in enumerate(drawn):
+        drawn_mid = body["x"] + pb + mark["left"] + mark["w"] / 2
+        slot_mid = body["x"] + body["at"][k] + box / 2
+        assert abs(drawn_mid - slot_mid) < 1e-9, (
+            "the mark of aspect %.2f is centred at %g and its slot at %g"
+            % (aspect, drawn_mid, slot_mid))
+    assert abs(body["tithe"]["h"] - band) < 1e-9, "the resource is not the band's height"
+    assert abs(body["merchant"]["h"] - band) < 1e-9, "the merchant is not the band's height"
+    # AND THE SEATS ARE THE SLOT MIDDLES, whatever is drawn in them.
+    for k in range(len(body["seats"])):
+        assert abs(body["seats"][k] - (body["x"] + body["at"][k] + box / 2)) < 1e-9, (
+            "seat %d does not stand over the middle of slot %d" % (k + 1, k + 1))
+
+
+@needs_node
+def test_four_figures_fit_between_the_slots_they_stand_over(sweep):
+    """The pitch is wider than the row allows a figure to be, so nobody overlaps anybody.
+
+    DRAWN FIGURES ARE SIZED BY THE ROW AND PLACED BY THE SLOTS, and those are two different
+    numbers. While the slots were as wide as the drawings they held, the gap between two of them
+    could close to nothing and the people above them walked into each other -- which is what the
+    even boxes fixed. This is the claim that replaced the cap drawFigures briefly grew: a quarter
+    of the figure row is never wider than the distance between two slot middles.
+
+    Falsify: narrow a slot to its drawing, or widen the figure row past the rectangle.
+    """
+    checked = 0
+    for row in sweep:
+        if row["centre"] or not row["plate"]["hasPlate"]:
+            continue
+        pl = row["plate"]
+        seats = pl["seats"]
+        if not seats or len(seats) < 2:
+            continue
+        pitch = seats[1] - seats[0]
+        room = (pl["figRight"] - pl["figLeft"]) / 4
+        assert room <= pitch + 1e-9, (
+            "%s: the row allows a figure %g wide and the slots are %g apart, so two of them "
+            "overlap" % (_tag(row), room, pitch))
+        checked += 1
+    assert checked > 500, "only %d lines were measured" % checked
+
+
+@needs_node
+def test_the_widest_drawing_on_the_board_still_fits_its_slot(tmpl, geo):
+    """The box is sized FROM the widest drawing, which is the only order that works.
+
+    ONE HEIGHT AND EVEN BOXES ARE TWO CLAIMS AND THEY CONSTRAIN EACH OTHER. Pick the box first
+    and the broadest drawing -- a block of stone at 1.30 against a wheat stalk at 0.29 -- has to
+    shrink to fit it, and shrinking takes its height with it: the set stops being one size, which
+    was the whole point. So the height is whatever makes the widest drawing exactly fill a box,
+    and every narrower one keeps air at its sides.
+
+    THE SWEEP CANNOT SEE THIS. It drives placeFor with square drawings and a band handed to it,
+    which is the arithmetic below the decision; bandFor is where the decision is, it reads the
+    whole board to make it, and nothing else in this file runs it.
+
+    Falsify: drop the divide by the widest aspect, or measure the merchant at the trade slider's
+    size, which would shrink every icon on the board as it was dragged.
+    """
+    shapes = {"seal:a:actionA": 1.30, "seal:a:actionB": 0.29,
+              "seal:b:actionA": 1.00, "seal:b:actionB": 0.90, "tithe:x": 1.21}
+    duties = {"a": {"actions": 2, "tithe": "x", "actionA": {"seal": "seal:a:actionA"},
+                    "actionB": {"seal": "seal:a:actionB"}},
+              "b": {"actions": 2, "tithe": None, "actionA": {"seal": "seal:b:actionA"},
+                    "actionB": {"seal": "seal:b:actionB"}}}
+    merch_h = 1.4547
+    body = _node("\n".join([
+        "var GEO = %s;" % json.dumps({"duties": [{"slug": "a"}, {"slug": "b"}],
+                                      "canvas": geo.as_dict()["canvas"],
+                                      "ribbon": geo.as_dict()["ribbon"],
+                                      "marks": geo.as_dict()["marks"]}),
+        "var CELL_BORDER = %s;" % _decl(tmpl, "CELL_BORDER"),
+        "var LINE_MIN_GAP = %s;" % _decl(tmpl, "LINE_MIN_GAP"),
+        "var MERCHANT = {h: %s, src: \"\"};" % merch_h,
+        "var SHAPES = %s;" % json.dumps(shapes),
+        "var DUTIES = %s;" % json.dumps(duties),
+        "var GRID = {merch: 200};",
+        "function dutyOf(slug){ return DUTIES[slug]; }",
+        _function(tmpl, "mostActions"),
+        _function(tmpl, "plateHeight"),
+        _function(tmpl, "plateFor"),
+        _function(tmpl, "lineShapes"),
+        _function(tmpl, "bandFor"),
+    ]), "(function(){ var P = plateFor(236, 165, 2); var L = bandFor(P); "
+        "  return {band: L.band, box: L.box, span: P.span, gaps: P.gaps, most: P.most, "
+        "          sz: P.sz}; })()")
+
+    widest = max(list(shapes.values()) + [1 / merch_h])
+    assert body["band"] * widest <= body["box"] + 1e-9, (
+        "the widest drawing is %g wide at a band of %g and its box is %g, so it is drawn outside "
+        "its own slot" % (body["band"] * widest, body["band"], body["box"]))
+    assert body["band"] <= body["sz"] + 1e-9, (
+        "the drawings are %g tall against a %g mark" % (body["band"], body["sz"]))
+    n = body["most"] + 2
+    g = (body["span"] - n * body["box"]) / body["gaps"]
+    assert g >= float(_decl(tmpl, "LINE_MIN_GAP")) - 1e-9, (
+        "the line comes out spaced %g apart, under its own minimum" % g)
+    # AND THE TRADE SLIDER IS NOT ALLOWED TO DECIDE IT. This runs at 200%, where a merchant
+    # measured at its drawn size would be the widest thing on the board by a distance.
+    assert abs(body["band"] - min(body["sz"], body["box"] / widest)) < 1e-9, (
+        "the band moved with the trade slider: %g" % body["band"])
+
+
+@needs_node
+def test_the_city_stands_its_people_at_the_same_pitch_as_a_duty(sweep):
+    """The ninth rectangle has no line, and it spaces its four columns like the eight that do.
+
+    IT HAD A SPREAD OF ITS OWN -- four figures and three gaps shared across the rectangle --
+    which was the right answer while the duties had one too. The day the duties started standing
+    their people over the slots on their own lines, the City became the one tile where the
+    distance between two acolytes meant something different, and on a board whose whole job is
+    comparing nine piles that is the worst place for an exception.
+
+    SO IT BORROWS THE PITCH. Every cell in the wheel is the same size, so the line the City does
+    not draw would have the same slots as the one next door; its four columns are centred on its
+    middle at that spacing.
+
+    Falsify: give the City its own spread again, or centre it on anything but the rectangle.
+    """
+    # THE SWEEP DOES NOT PLACE THE CITY -- it has no plate and no line -- so what is held here is
+    # the number it borrows: a duty's seats are exactly one slot plus one gap apart, which is
+    # what drawGrid centres four City columns on. The guard below holds that it reads it from
+    # placeFor rather than working it out a second time.
+    checked = 0
+    for row in sweep:
+        if row["centre"] or not row.get("plate") or not row["plate"]["hasPlate"]:
+            continue
+        pl = row["plate"]
+        pitch = pl["box"] + pl["g"]
+        seats = pl["seats"]
+        if not seats:
+            continue
+        assert abs((seats[1] - seats[0]) - pitch) < 1e-9, (
+            "%s: a duty's seats are %g apart and its slots are %g"
+            % (_tag(row), seats[1] - seats[0], pitch))
+        checked += 1
+    assert checked > 500, "only %d lines were measured" % checked
+
+
+def test_the_city_reads_its_pitch_off_a_line_rather_than_inventing_one(tmpl):
+    """drawGrid is the one function the guards cannot call, so its source is asked instead.
+
+    THE CITY'S FOUR COLUMNS ARE PLACED IN drawGrid, in the branch that returns before any line
+    is drawn -- there is no plate, no marks and no resource on that rectangle. The pitch
+    therefore has to come from placeFor, run against the City's own rectangle, or it is a second
+    copy of the line's arithmetic living where nothing can compare it.
+
+    Falsify: type a pitch into the City's branch, or spread its people across the rectangle.
+    """
+    body = _code(_function(tmpl, "drawGrid"))
+    city = body[:body.index("GRIDPOS.city")]
+    assert "placeFor(r, 1, false, null, LINE)" in city, (
+        "the City no longer asks placeFor for the line it would have had:\n%s" % city[-600:])
+    assert re.search(r"r\.seats\.push\(cmid \+ \(cs - 1\.5\) \* cpitch\)", city), (
+        "the City's four columns are no longer centred on its middle at the line's own pitch")
