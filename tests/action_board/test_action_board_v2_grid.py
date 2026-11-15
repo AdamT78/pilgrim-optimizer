@@ -4328,6 +4328,12 @@ def test_the_merchant_clears_what_it_stands_between(sweep):
 
     Falsify: drop the `2 * P.igap` from the width, or add the clearance to one side only.
     """
+    # ASKED OF THE SIZE THE LINE OFFERED, for the reason the guard below it is: the trade
+    # slider is allowed past 100, where the merchant grows into the frame and the resource on
+    # purpose, so the DRAWN clearance is whatever the person dragging it wants. What has to hold
+    # is the clearance the placement was built with -- and because the slider grows the marker
+    # about its own middle, that box is the middle plus and minus half the offered width.
+    scale = _grid_defaults()["merch"] / 100.0
     checked = 0
     for row in sweep:
         pl = row.get("plate")
@@ -4335,12 +4341,13 @@ def test_the_merchant_clears_what_it_stands_between(sweep):
             continue
         m, P = pl["merchant"], pl
         frame_end = pl["plateX"] + pl["rowBox"]
-        assert m["x"] - frame_end >= P["igap"] - 1e-9, (
-            "%s: the merchant starts %.2f after the frame ends, against the %s the duty's own "
-            "marks keep from each other" % (_tag(row), m["x"] - frame_end, P["igap"]))
-        assert pl["titheMark"]["x"] - (m["x"] + m["w"]) >= P["igap"] - 1e-9, (
+        mid, half = m["x"] + m["w"] / 2, m["w"] / scale / 2
+        assert (mid - half) - frame_end >= P["igap"] - 1e-9, (
+            "%s: the merchant was placed %.2f after the frame ends, against the %s the duty's "
+            "own marks keep from each other" % (_tag(row), (mid - half) - frame_end, P["igap"]))
+        assert pl["titheMark"]["x"] - (mid + half) >= P["igap"] - 1e-9, (
             "%s: the resource is %.2f past the merchant, against %s"
-            % (_tag(row), pl["titheMark"]["x"] - (m["x"] + m["w"]), P["igap"]))
+            % (_tag(row), pl["titheMark"]["x"] - (mid + half), P["igap"]))
         checked += 1
     assert checked > 500, "only %d arrangements drew a merchant to check" % checked
 
@@ -4360,6 +4367,12 @@ def test_the_merchant_stands_a_mark_tall_until_the_line_cannot_take_it(sweep):
     that simply followed it down would draw a figure three pixels wide on every tile: dirt on
     the board rather than a thing that is there on purpose.
     """
+    # THE CAPS ARE ON THE SIZE THE LINE OFFERS, NOT ON THE SIZE THAT IS DRAWN, which is the
+    # whole point of the trade slider sitting outside them: it opens at 90 today and could open
+    # anywhere, and a guard that measured the drawn figure would start failing the day somebody
+    # moved it -- as this one did. So the drawn width is divided back out by the setting the
+    # sweep ran at, and what is asserted is what the arithmetic decided before the slider.
+    scale = _grid_defaults()["merch"] / 100.0
     sizes, dropped, by_height, by_width = set(), 0, 0, 0
     for row in sweep:
         pl = row.get("plate")
@@ -4369,14 +4382,16 @@ def test_the_merchant_stands_a_mark_tall_until_the_line_cannot_take_it(sweep):
         if m is None:
             dropped += 1
             continue
-        assert m["h"] <= pl["sz"] + 1e-9, (
-            "%s: the merchant stands %.2f tall against a %s mark" % (_tag(row), m["h"], pl["sz"]))
-        assert m["w"] <= pl["titheMark"]["x"] - (pl["plateX"] + pl["rowBox"]) + 1e-9, (
-            "%s: the merchant is wider than the gap it stands in" % _tag(row))
-        assert m["w"] >= pl["sz"] * 0.5 - 1e-9, (
-            "%s: the merchant is %.2f wide, under half a mark -- it should have been refused"
-            % (_tag(row), m["w"]))
-        if abs(m["h"] - pl["sz"]) < 1e-6:
+        offered_w, offered_h = m["w"] / scale, m["h"] / scale
+        assert offered_h <= pl["sz"] + 1e-9, (
+            "%s: the merchant is offered %.2f of height against a %s mark"
+            % (_tag(row), offered_h, pl["sz"]))
+        assert offered_w <= pl["titheMark"]["x"] - (pl["plateX"] + pl["rowBox"]) + 1e-9, (
+            "%s: the merchant is offered more width than the gap it stands in" % _tag(row))
+        assert offered_w >= pl["sz"] * 0.5 - 1e-9, (
+            "%s: the merchant was offered %.2f of width, under half a mark -- it should have "
+            "been refused" % (_tag(row), offered_w))
+        if abs(offered_h - pl["sz"]) < 1e-6:
             by_height += 1
         else:
             by_width += 1
