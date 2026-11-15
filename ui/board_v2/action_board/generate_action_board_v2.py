@@ -68,6 +68,7 @@ sys.path.insert(0, str(HERE))
 
 import generate_action_board as v1          # noqa: E402  (after the path insert, deliberately)
 import hood                                 # noqa: E402  board_v2's own copy of the figure
+import friar                                # noqa: E402  and the drawn alternative to it
 import geometry as G                        # noqa: E402
 
 TMPL = HERE / "action_board_v2.html.tmpl"
@@ -82,9 +83,9 @@ OUT = HERE / "generated" / "action_board_v2.html"
 # WHERE THE SLIDERS START, AND THE ONLY PLACE THEY ARE WRITTEN DOWN. The template reads them out
 # of __GRID__ rather than carrying them in the markup, so changing a default is changing this
 # dict and nothing else. They are in BOARD pixels, like every other number this tool passes.
-# `height` OPENS JUST OFF 100. 100 is the 2:1 rectangle this fork exists to look at and the
-# slider only goes up from there; it grows the boxes UPWARD, so the line the acolytes stand on
-# does not move when it is dragged.
+# `height` OPENS ABOVE 100. 100 is the 2:1 rectangle this fork exists to look at and the slider
+# only goes up from there; it grows the boxes UPWARD, so the line the acolytes stand on does not
+# move when it is dragged.
 # `bare` OPENS ON. It hides three edges of every rectangle and their ground, leaving the bottom
 # line the acolytes stand on. It opened OFF while it was a way of LOOKING at a framed board;
 # the frameless arrangement is now the one being judged, so that is what the page opens on and
@@ -92,7 +93,30 @@ OUT = HERE / "generated" / "action_board_v2.html"
 # NO `centre`. The City was a ninth rectangle you could switch off while it stood for nothing;
 # it is where the City panel went and it holds people, so it is part of the wheel now and there
 # is nothing to switch.
-GRID_DEFAULTS = {"gap": 115, "disp": 60, "size": 90, "height": 130, "bare": True}
+# `fig` OPENS AT 100, which is the size the board works out for itself. The other sliders
+# move the RECTANGLES and the acolytes follow, because a figure is sized to fit the row it
+# stands in; this one is the only way to ask for people of a different size in rectangles that
+# have not moved. It scales what the caps allowed rather than replacing them, so 100 is exactly
+# today's board and the caps still do the work of fitting four across and a pile down.
+# `apart` IS AN ADJUSTMENT, not a setting -- hundredths of a figure's width added to whatever
+# spacing the figure itself asks for. That is why one number here is right for either acolyte:
+# the hood wants 0.24 of a width between neighbours and the drawn one wants 0, and this is the
+# same amount added to each. A slider holding the spacing OUTRIGHT would have to open at a
+# different number per figure, which is a default that depends on another default.
+#
+# THESE SIX WERE SET BY EYE, TOGETHER, and that is the only way they could be. Each one changes
+# what the others look like: the gap and the edge both eat the room the rectangles divide, the
+# size decides how much of what is left they take, and the two figure sliders work inside
+# whatever that leaves. There is no order in which they can be chosen one at a time, so they
+# were dragged until the board looked right and the positions read off.
+# `cols` OPENS AT 0 AND IS A PULL, like `apart` and for the same reason. It is board pixels
+# taken off the distance between the middle column of tiles and each outer one, so one number
+# moves both: the left column right by it and the right column left by it, and the wheel stays
+# centred on the middle column whatever it is set to. Negative brings them in, positive pushes
+# them out. It does NOT resize anything -- `gap` already does that, by eating the room the
+# three columns divide -- which is what makes the two worth having separately.
+GRID_DEFAULTS = {"gap": 120, "disp": 60, "size": 110, "height": 140, "fig": 100, "apart": 20,
+                 "cols": -30, "merch": 100, "bare": True}
 
 # WHAT AN OPEN DUTY TILE WEARS, AND WHEN EACH ONE STARTS WEARING IT.
 #
@@ -136,6 +160,65 @@ FILM_STEMS = {"action": "duty_open_smoke", "sow": "duty_sow_smoke"}
 # down once and travels as data like the rest.
 FILM_CITY = ("sow",)
 CITY_SLUG = "city"
+
+# WHICH ACOLYTE THE BOARD STANDS ON ITS TILES. "hood" is the parametric outline this board grew
+# up with -- one shape, one fill, a seat's colour free for the asking. "friar" is the drawn one,
+# which arrives as three layers because a drawing cannot be recoloured by setting an attribute:
+# two masks the page fills with the seat's colour and that colour darkened, and an overlay
+# carrying the ink and the tan, which are the drawing's own.
+#
+# A CONSTANT RATHER THAN A CONTROL ON THE PAGE. The sliders move what the board SHOWS; this
+# changes what it is built out of, and bundling both figures so one could be switched off would
+# put a hundred kilobytes of acolyte into every build to save a rebuild.
+#
+# AND IT FALLS BACK RATHER THAN FAILING. A tree with no acolyte layers in it still has a board,
+# so a missing drawing draws the hood and says so in the build line -- the same bargain the
+# artwork, the sounds and the films are all built on.
+ACOLYTE = "friar"
+ACOLYTE_DIR = v1.BOARD / "tokens" / "acolytes"
+# TWICE THE WIDEST A FIGURE IS EVER DRAWN, which is the usual bargain and is worth stating here
+# because a figure is SMALL. The board gives one 36 pixels at the opening settings and 60 at the
+# widest the sliders go, so 192 is better than three times the worst case on an ordinary screen
+# and costs 85 KB for the set -- against inlining the masters, which would be 1.8 MB to draw
+# something the size of a thumbnail.
+ACOLYTE_PX = 192
+
+
+def bundled_acolyte() -> tuple[dict, list]:
+    """The drawn acolyte's three layers, inlined, or nothing and a reason.
+
+    THE MASKS AND THE OVERLAY COME BACK TOGETHER OR NOT AT ALL. Two of three would draw a figure
+    with a hole in it, which is worse than drawing the hood: a board that is visibly missing a
+    layer looks like a bug in the page rather than a file that was never filed.
+    """
+    notes: list = []
+    try:
+        import PIL  # noqa: F401
+    except ImportError:
+        return {}, ["Pillow is not installed, so the drawn acolyte cannot be inlined"]
+    if not ACOLYTE_DIR.is_dir():
+        return {}, ["no tokens/acolytes/ at %s" % ACOLYTE_DIR]
+    rec = {}
+    if v1.ATTRIB_FILE.is_file():
+        rec = json.loads(v1.ATTRIB_FILE.read_text(encoding="utf-8")).get("files", {})
+    want = v1.image_suffixes()
+    out = {}
+    for layer in friar.LAYERS:
+        found = sorted(f for f in ACOLYTE_DIR.glob("%s_%s_v*" % (friar.STEM, layer))
+                       if f.is_file() and f.suffix.lower() in want)
+        if not found:
+            notes.append("no %s layer for the drawn acolyte" % layer)
+            continue
+        f = found[-1]
+        rel = "tokens/acolytes/%s" % f.name
+        if rel not in rec:
+            notes.append("%s: no attribution entry, left out" % rel)
+            continue
+        out[layer] = v1._inline(f, (ACOLYTE_PX, round(ACOLYTE_PX * friar.FRIAR_H)), "PNG")
+    if len(out) != len(friar.LAYERS):
+        return {}, notes + ["the drawn acolyte is incomplete, so the board draws the hood"]
+    return out, notes
+
 
 # WHERE THE THREE RESOURCE CUTS LIVE, and the three keys the board asks for them by.
 TITHE_DIR = v1.BOARD / "tokens" / "resources" / "icons"
@@ -262,6 +345,59 @@ def bundled_tithe() -> tuple[dict, list]:
             continue
         out["tithe:%s" % key] = v1._inline(f, (G.MARK * 2, G.MARK * 2), "PNG")
     return out, notes
+
+
+# WHERE THE MERCHANT LIVES, and the size it is carried at. A root of its own beside the acolytes
+# and the resources, because it is a third kind of thing: not a figure a player owns and not a
+# resource a tile hands out, but a marker standing on the line between them.
+MERCHANT_DIR = v1.BOARD / "tokens" / "markers"
+# TWICE THE WIDEST THE BOARD EVER DRAWS IT, WHICH THE TRADE SLIDER DECIDES AND NOT THE LINE. The
+# marker stands a duty mark tall -- 50 -- so at the drawing's aspect it is about 34 wide, and the
+# slider doubles that at its top end. 192 keeps better than two-to-one even there, and costs
+# 40 KB against the 290 KB the filed cut weighs at full size.
+MERCHANT_PX = 192
+
+
+def bundled_merchant() -> tuple[dict, list]:
+    """The merchant marker, inlined, with the aspect it was drawn at.
+
+    THE SHAPE TRAVELS WITH THE PICTURE. The page places this marker by its WIDTH -- whatever the
+    line between the frame and the resource can spare -- and works the height out from this
+    number, so a redrawn merchant at another aspect would be stretched to a shape nobody drew.
+    Measured off the file being inlined rather than written down, because a constant and a file
+    are two places for one fact and only one of them gets updated.
+
+    NO PICTURE IS NOT AN ERROR. The board draws the rest of the line and says so in the notes,
+    which is the rule every other picture here is held to: a marker silently absent is
+    indistinguishable from a marker the layout refused for want of room, and those are different
+    states with different cures.
+    """
+    notes: list = []
+    try:
+        from PIL import Image
+    except ImportError:
+        return {"h": 1.0, "src": ""}, ["Pillow is not installed, so the merchant is left out"]
+    if not MERCHANT_DIR.is_dir():
+        return {"h": 1.0, "src": ""}, ["no tokens/markers/ at %s, so no merchant is drawn"
+                                       % MERCHANT_DIR]
+    rec = {}
+    if v1.ATTRIB_FILE.is_file():
+        rec = json.loads(v1.ATTRIB_FILE.read_text(encoding="utf-8")).get("files", {})
+    want = v1.image_suffixes()
+    found = sorted(f for f in MERCHANT_DIR.glob("merchant_marker_v*")
+                   if f.is_file() and f.suffix.lower() in want)
+    if not found:
+        return {"h": 1.0, "src": ""}, ["no merchant marker under %s, so none is drawn"
+                                       % MERCHANT_DIR]
+    f = found[-1]
+    rel = "tokens/markers/%s" % f.name
+    if rel not in rec:
+        return {"h": 1.0, "src": ""}, ["%s: no attribution entry, left out" % rel]
+    with Image.open(f) as im:
+        w, h = im.size
+    aspect = h / w
+    return ({"h": round(aspect, 4),
+             "src": v1._inline(f, (MERCHANT_PX, round(MERCHANT_PX * aspect)), "PNG")}, notes)
 
 
 def open_offsets() -> dict:
@@ -447,10 +583,22 @@ def build() -> tuple[str, list]:
     sfx, xnotes = v1.bundled_sfx()
     beds, dnotes = v1.bundled_beds()
     controls, cnotes = v1.bundled_controls()
+    figure, figure_vars = hood.as_dict(), ""
+    if ACOLYTE == "friar":
+        layers, anotes = bundled_acolyte()
+        notes += anotes
+        if layers:
+            figure = friar.as_dict(layers["over"])
+            figure_vars = (':root{--robe-mask:url("%s");--shade-mask:url("%s")}'
+                           % (layers["robe"], layers["shade"]))
+    elif ACOLYTE != "hood":
+        raise SystemExit("ACOLYTE is %r, which is neither 'hood' nor 'friar'" % ACOLYTE)
+
     tithe, tnotes = bundled_tithe()
+    merchant, mnotes = bundled_merchant()
     names, nnotes = tithe_names()
     films, fnotes = bundled_films()
-    notes += snotes + xnotes + dnotes + cnotes + tnotes + nnotes + fnotes
+    notes += snotes + xnotes + dnotes + cnotes + tnotes + nnotes + fnotes + mnotes
 
     # THE BACKDROP IS NOT BUNDLED, because v2 does not draw it. It was the valley the ribbon of
     # eight tiles stood on, and the ribbon is gone. Carrying the picture anyway would leave 22 KB
@@ -492,6 +640,10 @@ def build() -> tuple[str, list]:
         # the asset could go missing without this build noticing -- which is correct here and
         # would not be in v1.
         "__GRID__": json.dumps(GRID_DEFAULTS),
+        # THE MERCHANT AND THE SHAPE OF IT. One picture for all eight duties, inlined once and
+        # pointed at eight times, with the aspect measured off that file -- see
+        # bundled_merchant() for why the shape is not a constant in the template.
+        "__MERCHANT__": json.dumps(merchant),
         # WHICH RESOURCES THERE ARE AND WHICH IS WILD. The page lists a player's pool in this
         # ORDER so the box reads the same way every time, and unions the whole order in when a
         # figure stands on the wild one. Both are facts about the tree, which is what this tool
@@ -504,7 +656,16 @@ def build() -> tuple[str, list]:
         # is a second thing to keep in step, and this one would be eight numbers that look
         # arbitrary wherever they are read.
         "__FILMS__": json.dumps(films),
-        "__HOOD__": json.dumps(hood.as_dict()),
+        # WHICHEVER ACOLYTE WAS ASKED FOR, under the name the page has always read it by. The
+        # two answer the same shape -- proportions, seat colours, how a pile stacks -- and say
+        # which they are in `kind`, so the page branches once at the point of drawing one and
+        # nowhere else.
+        "__HOOD__": json.dumps(figure),
+        # THE TWO MASKS ARE STYLESHEET, NOT MARKUP. A mask-image is a data URI and there are
+        # forty-two figures on a full board; set per figure it would be the same twenty kilobytes
+        # forty-two times, so they are two custom properties set once and the rule reads them.
+        # Empty when the hood is drawn, which costs an empty line in the stylesheet.
+        "__FIGURE_VARS__": figure_vars,
         "__SAVEKEYS__": json.dumps(v1.SAVE_KEYS),
         "__BUILD__": json.dumps({"version": v1.BUILD_VERSION + "+v2", "notes": notes}),
     }
@@ -580,9 +741,12 @@ def main() -> None:
     print("  the duty grid is centred in %d x %d at (%d, %d), margin %d, read at draw time"
           % ((far["x"] + far["width"]) - card["x"], d["canvas"]["height"] - top - m,
              card["x"], top, m))
-    print("  sliders open at gap %d, edge %d, size %d%%, height %d%%, bare %s"
+    print("  sliders open at gap %d, edge %d, size %d%%, height %d%%, folk %d%%, apart %+d, "
+          "cols %+d, trade %d%%, bare %s"
           % (GRID_DEFAULTS["gap"], GRID_DEFAULTS["disp"], GRID_DEFAULTS["size"],
-             GRID_DEFAULTS["height"], "on" if GRID_DEFAULTS["bare"] else "off"))
+             GRID_DEFAULTS["height"], GRID_DEFAULTS["fig"], GRID_DEFAULTS["apart"],
+             GRID_DEFAULTS["cols"], GRID_DEFAULTS["merch"],
+             "on" if GRID_DEFAULTS["bare"] else "off"))
     # WHAT WAS DEALT, IN THE ORDER IT WILL BE WALKED. Eight placeholders are the kind of thing
     # that goes unlooked-at for weeks, and the ring is the one property of them that is easy to
     # get wrong by one step -- so the build reads it out with the compass face beside each, which

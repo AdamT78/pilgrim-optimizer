@@ -70,7 +70,14 @@ TILE = {"overlap": 0.6, "gap": 0.24, "step": 0.3, "lean": 0.1}
 
 
 def as_dict() -> dict:
-    """Everything the page needs, in one object, so the template holds no copy of any of it."""
-    return {"path": HOOD_PATH, "h": HOOD_H, "face": HOOD_FACE, "ink": HOOD_INK,
+    """Everything the page needs, in one object, so the template holds no copy of any of it.
+
+    `kind` IS WHAT THE PAGE BRANCHES ON, and it is here rather than inferred from which fields
+    arrived. There are two figures now -- this one and the drawn acolyte in friar.py -- and a
+    reader that decided between them by testing for a `path` would be guessing from a side
+    effect; one of them says which it is.
+    """
+    return {"kind": "hood",
+            "path": HOOD_PATH, "h": HOOD_H, "face": HOOD_FACE, "ink": HOOD_INK,
             "stroke": HOOD_STROKE, "swatch": SEAT_SWATCH, "order": list(SEAT_ORDER),
             "step": TILE["step"], "lean": TILE["lean"], "gap": TILE["gap"]}

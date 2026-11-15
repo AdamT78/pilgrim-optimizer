@@ -56,41 +56,66 @@ BANNERS_DIR = BOARD / "duty_actions" / "banners"
 
 needs_node = pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
 
-# THE SLIDERS' FULL TRAVEL, AND BOTH ENDS OF IT. Every overflow this file exists to catch was
-# found at an END rather than in the middle: the plate hung out of the box at size 40, and
-# Ordination landed at x -12 at the opening default of edge 40. The middle values are the
-# defaults and two odd numbers, because an arrangement that only works on multiples of ten works
-# by luck. `test_the_sweep_covers_the_sliders_the_page_actually_offers` holds these against the
-# <input> elements, so widening a slider cannot quietly leave half of it unswept.
-GAPS = (0, 1, 73, 115, 150)
-DISPS = (0, 1, 60, 97, 150)
-SIZES = (40, 62, 90, 100, 160)
-# The height slider only goes UP from the 2:1 rectangle, so 100 is its floor and
-# every claim about 2:1 is a claim about that one value.
-HEIGHTS = (100, 130, 175, 250)
-# THE DIVIDER SLIDER, AND IT COSTS THE SWEEP NOTHING. `divide` moves one line and touches neither
-# the grid nor the frame nor the marks, so it is not a sixth dimension multiplying 9,000
-# rectangles by five -- every rectangle is simply asked for its divider at each of these, inside
-# the row it already produced. Both ends are covered, because both ends are where this board's
-# overflows have always been.
-NACTS = (1, 2)
-
-
 def _grid_defaults() -> dict:
     """The sliders' opening values, read out of the generator rather than restated here.
 
     Read as TEXT rather than imported: importing the generator pulls in v1 and everything v1
-    imports, for one dict. A regex over one literal line is the cheaper and more honest read.
+    imports, for one dict. A regex over the literal is the cheaper and more honest read.
+
+    IT NO LONGER INSISTS ON ONE LINE. It did, and the dict outgrew it the day a sixth slider was
+    added -- which failed here with a message about formatting, three tests away from anything
+    to do with sliders. The literal is matched across lines instead; what is actually being
+    relied on is that it IS a literal, not that it fits in eighty columns.
     """
     src = (TOOL / "generate_action_board_v2.py").read_text(encoding="utf-8")
-    m = re.search(r"^GRID_DEFAULTS\s*=\s*(\{.*?\})\s*$", src, re.M)
-    assert m, "the generator no longer declares GRID_DEFAULTS on one line"
+    m = re.search(r"^GRID_DEFAULTS\s*=\s*(\{.*?\})\s*$", src, re.M | re.S)
+    assert m, "the generator no longer declares GRID_DEFAULTS as a literal"
     out = {}
     for k, v in re.findall(r"\"(\w+)\":\s*(True|False|-?\d+)", m.group(1)):
         out[k] = {"True": True, "False": False}.get(v, v)
         if isinstance(out[k], str):
             out[k] = int(out[k])
     return out
+
+
+_D = _grid_defaults()
+
+# THE SLIDERS' FULL TRAVEL, AND BOTH ENDS OF IT. Every overflow this file exists to catch was
+# found at an END rather than in the middle: the plate hung out of the box at size 40, and
+# Ordination landed at x -12 at the opening default of edge 40. The rest are the opening
+# defaults and two odd numbers, because an arrangement that only works on multiples of ten works
+# by luck. `test_the_sweep_covers_the_sliders_the_page_actually_offers` holds these against the
+# <input> elements, so widening a slider cannot quietly leave half of it unswept.
+#
+# THE DEFAULTS ARE READ RATHER THAN TYPED, and they were typed until the day all six moved at
+# once. Two guards here assert things about the board AT ITS DEFAULTS -- the state anybody
+# opening the page sees -- and they find that row by matching the four numbers; typed in, they
+# went stale the moment the defaults changed and both failed with "the sweep does not cover the
+# opening defaults", which is a true sentence that says nothing about what had actually been
+# done. Derived, a default can move without this file knowing.
+GAPS = tuple(sorted({0, 1, 73, 150, _D["gap"]}))
+DISPS = tuple(sorted({0, 1, 97, 150, _D["disp"]}))
+SIZES = tuple(sorted({40, 62, 100, 160, _D["size"]}))
+# The height slider only goes UP from the 2:1 rectangle, so 100 is its floor and
+# every claim about 2:1 is a claim about that one value.
+HEIGHTS = tuple(sorted({100, 175, 250, _D["height"]}))
+# THE COLUMN PULL, AT ITS ENDS, AT REST, AND WHERE IT OPENS. It moves rectangles, so it cannot be
+# excused from the sweep the way the two figure sliders are -- but it is a plain horizontal shift
+# applied after everything is sized, so those four are the only interesting values. Four rather
+# than five of each, because every value here multiplies nine thousand rectangles.
+#
+# ZERO IS IN THE LIST WHATEVER THE DEFAULT IS, and it is not there because it used to be the
+# default. It is the RESTING position: three guards measure the pull by comparing an arrangement
+# against the same arrangement with the pull off, and two more make claims about the gap and the
+# fit that are only true with it off. The day the board opened on -30 instead of 0, a list of
+# "the ends and the default" quietly dropped the one value all five of them need.
+COLS = tuple(sorted({-150, 0, 150, _D["cols"]}))
+# THE DIVIDER SLIDER, AND IT COSTS THE SWEEP NOTHING. `divide` moves one line and touches neither
+# the grid nor the frame nor the marks, so it is not a sixth dimension multiplying 9,000
+# rectangles by five -- every rectangle is simply asked for its divider at each of these, inside
+# the row it already produced. Both ends are covered, because both ends are where this board's
+# overflows have always been.
+NACTS = (1, 2)
 
 
 def _v2_tithe() -> tuple:
@@ -249,7 +274,12 @@ def sweep(tmpl, geo):
         "var LIFT = %s;" % _decl(tmpl, "LIFT"),
         "var CELL_BORDER = %s;" % _decl(tmpl, "CELL_BORDER"),
         "var PLATE_DROP = %s;" % _decl(tmpl, "PLATE_DROP"),
-        "var GRID = {gap: 0, disp: 0, size: 100, height: 100};",
+        # `merch` AT ITS DEFAULT THROUGH THE WHOLE SWEEP. It scales the marker and nothing
+        # else, which is one short guard of its own below; running it as a sixth dimension would
+        # multiply 18,000 rectangles by however many sizes were tried, to re-answer a question
+        # that does not interact with any of the five.
+        "var GRID = {gap: 0, disp: 0, size: 100, height: 100, cols: 0, merch: %d};"
+        % _grid_defaults()["merch"],
         "var PLATES_DROPPED = 0;",
         "var PLATE_H = 0;",
         _function(tmpl, "gridArea"),
@@ -265,6 +295,18 @@ def sweep(tmpl, geo):
         _function(tmpl, "plateInset"),
         _function(tmpl, "markAt"),
         _function(tmpl, "titheMarkAt"),
+        # THE PICTURE IS STUBBED AND ITS SHAPE IS NOT. Only the aspect reaches the arithmetic,
+        # and it reaches it twice -- the marker is sized to stand a mark TALL, and the height it
+        # ends up with is read back off the same number -- so a stub carries everything the
+        # placement depends on. 1.5 rather than 1 on purpose: an aspect of 1 would make both
+        # "the height follows the drawing" and "a mark tall is this wide" true by accident, and
+        # the guards that ask them would pass against a page that had dropped the term. It is
+        # near the drawing's own 1.4547 so the sweep binds on the same cap the board does, and
+        # deliberately not equal to it, because it is a stub and not a second copy of a measured
+        # fact.
+        "var MERCHANT = {h: 1.5, src: \"\"};",
+        "var MERCHANT_FLOOR = %s;" % _decl(tmpl, "MERCHANT_FLOOR"),
+        _function(tmpl, "merchantAt"),
         _function(tmpl, "placeFor"),
         # Flattened, so the tests below read one dict per rectangle rather than a nest.
         #
@@ -287,21 +329,27 @@ def sweep(tmpl, geo):
         "                              a.push(markAt(P, k)); return a; })(),",
         "          hasTithe: L.hasTithe, titheWhenNoneIsDealt: N.hasTithe,",
         "          titheMark: L.titheMark,",
+        # BOTH MERCHANTS FROM THE SAME ROW, for the reason both tithe answers come from it: the
+        # one that stands between a frame and a resource, and the one Taxation puts on the other
+        # side of its frame because it has no resource to stand beside.
+        "          merchant: L.merchant, merchantAsTaxation: N.merchant,",
         "          innerW: P.innerW, innerH: P.innerH, hang: plateHang(),",
         "          figLeft: L.figLeft, figRight: L.figRight};",
         "}",
-        "var GAPS = %s, DISPS = %s, SIZES = %s, HEIGHTS = %s, NACTS = %s;" % (
+        "var GAPS = %s, DISPS = %s, SIZES = %s, HEIGHTS = %s, COLS = %s, NACTS = %s;" % (
             json.dumps(list(GAPS)), json.dumps(list(DISPS)), json.dumps(list(SIZES)),
-            json.dumps(list(HEIGHTS)), json.dumps(list(NACTS))),
+            json.dumps(list(HEIGHTS)), json.dumps(list(COLS)), json.dumps(list(NACTS))),
         "var out = [];",
         "GAPS.forEach(function(gap){ DISPS.forEach(function(disp){",
         "  SIZES.forEach(function(size){ HEIGHTS.forEach(function(height){",
-        "    GRID = {gap: gap, disp: disp, size: size, height: height};",
+        "  COLS.forEach(function(cols){",
+        "    GRID = {gap: gap, disp: disp, size: size, height: height, cols: cols,",
+        "            merch: %d};" % _grid_defaults()["merch"],
         "    var area = gridArea(), cells = gridCells();",
         "    NACTS.forEach(function(n){",
         "      cells.forEach(function(c){",
-        "        var row = {gap: gap, disp: disp, size: size, height: height, nAct: n,",
-        "                   area: area, cell: c, centre: c.centre};",
+        "        var row = {gap: gap, disp: disp, size: size, height: height, cols: cols,",
+        "                   nAct: n, area: area, cell: c, centre: c.centre};",
         # The rounding is the template's own: drawGrid() rounds the rectangle before anything
         # inside it is measured, so the plate is worked out against the integers the page uses.
         "        if (!c.centre){",
@@ -311,6 +359,7 @@ def sweep(tmpl, geo):
         "        out.push(row);",
         "      });",
         "    });",
+        "  });",
         "  }); });",
         "}); });",
         "process.stdout.write(JSON.stringify(out));",
@@ -319,7 +368,7 @@ def sweep(tmpl, geo):
     assert done.returncode == 0, (
         "the template's own grid arithmetic would not run:\n%s" % done.stderr[-3000:])
     rows = json.loads(done.stdout)
-    assert len(rows) == (len(GAPS) * len(DISPS) * len(SIZES) * len(HEIGHTS)
+    assert len(rows) == (len(GAPS) * len(DISPS) * len(SIZES) * len(HEIGHTS) * len(COLS)
                          * len(NACTS) * 9), (
         "the sweep produced %d rectangles" % len(rows))
     return rows
@@ -332,21 +381,27 @@ def PLATE_DROP_OF(text: str) -> float:
 
 def _tag(row):
     at = "cell (col %d, row %d)" % (row["cell"]["col"], row["cell"]["row"])
-    return "gap %d, edge %d, size %d, height %d, %d action(s), %s" % (
-        row["gap"], row["disp"], row["size"], row["height"], row["nAct"], at)
+    return "gap %d, edge %d, size %d, height %d, cols %d, %d action(s), %s" % (
+        row["gap"], row["disp"], row["size"], row["height"], row["cols"], row["nAct"], at)
 
 
 def _arrangements(rows):
-    """One entry per (gap, edge, size): its area and its nine cells, with actions collapsed.
+    """One entry per (gap, edge, size, height, cols): its area and nine cells, actions collapsed.
 
     The cells do not depend on the action count, so the tests about the GRID walk this and the
     tests about the plate walk the rows.
+
+    THE COLUMN PULL IS PART OF THE KEY and was left out of it for one run. Without it the three
+    pulls collapsed into one entry carrying twenty-seven cells, and every test that looks up an
+    arrangement and expects nine got a jumble of three different ones -- which showed up as
+    rectangles 150px apart at a gap of zero, a true statement about cells that were never in the
+    same arrangement.
     """
     seen = {}
     for row in rows:
         if row["nAct"] != NACTS[0]:
             continue
-        key = (row["gap"], row["disp"], row["size"], row["height"])
+        key = (row["gap"], row["disp"], row["size"], row["height"], row["cols"])
         e = seen.setdefault(key, {"area": row["area"], "cells": [],
                                   "hang": row["cell"]["hang"]})
         e["cells"].append(row["cell"])
@@ -468,14 +523,58 @@ def test_the_sweep_covers_the_sliders_the_page_actually_offers(tmpl):
 
     Falsify: change any slider's `max` in the template.
     """
-    for ident, values in (("rGap", GAPS), ("rDisp", DISPS), ("rSize", SIZES),
-                          ("rHeight", HEIGHTS)):
+    swept = {"rGap": GAPS, "rDisp": DISPS, "rSize": SIZES, "rHeight": HEIGHTS, "rCols": COLS}
+    # A SLIDER THE SWEEP DOES NOT NEED, AND WHY. The sweep measures RECTANGLES -- where they
+    # land and how big they are -- and this one does not move any: it scales the acolytes
+    # standing in them and the grid is identical at either end of it. Named here rather than
+    # left out, so a slider that joins the page has to be accounted for in one place or the
+    # other instead of quietly falling outside both.
+    not_swept = {"rFig": "scales the acolytes; no rectangle moves",
+                 "rApart": "moves the acolytes apart; no rectangle moves",
+                 "rMerch": "scales the merchant on the duty line; no rectangle moves, and "
+                           "nothing else on the line is placed from it"}
+    offered = set(re.findall(r"<input type=range id=(\w+)", tmpl))
+    unaccounted = sorted(offered - set(swept) - set(not_swept))
+    assert not unaccounted, (
+        "the page offers %s and this guard has never heard of %s. Add it to the sweep, or to "
+        "not_swept with the reason it does not belong there -- a slider in neither is the blind "
+        "spot this test exists to stop."
+        % (", ".join(unaccounted), "it" if len(unaccounted) == 1 else "them"))
+    for ident, values in swept.items():
         m = re.search(r"<input type=range id=%s min=(-?\d+) max=(-?\d+)" % ident, tmpl)
         assert m, "the template has no `<input type=range id=%s min=.. max=..>`" % ident
         lo, hi = int(m.group(1)), int(m.group(2))
         assert min(values) == lo and max(values) == hi, (
             "%s runs %d to %d and the sweep covers %d to %d"
             % (ident, lo, hi, min(values), max(values)))
+
+
+def test_every_slider_on_the_page_is_actually_listened_to(tmpl):
+    """A slider nobody subscribed moves and the board does nothing.
+
+    THIS IS NOT HYPOTHETICAL. The acolyte slider was added with its markup, its default, its
+    readout and its arithmetic all correct, and without the one line that subscribes it -- so it
+    dragged smoothly from end to end and changed nothing at all. There is no error, no console
+    line and no visual clue; the control simply does not work, which is indistinguishable from a
+    control whose effect you have not understood yet.
+
+    IT FOLLOWS THE VARIABLE RATHER THAN THE ID, because wireGrid looks each one up into a short
+    local -- `rf` for `rFig` -- and it is that local the listener is attached to. Checking for
+    the id in an addEventListener call would pass for a slider that is looked up and dropped.
+
+    Falsify: delete any `rX.addEventListener("input", apply)` from wireGrid.
+    """
+    wire = _code(_function(tmpl, "wireGrid"))
+    looked_up = dict(re.findall(r'var\s+(\w+)\s*=\s*document\.getElementById\("(\w+)"\)',
+                                wire))
+    for ident in sorted(re.findall(r"<input type=range id=(\w+)", tmpl)):
+        local = [v for v, i in looked_up.items() if i == ident]
+        assert local, ("wireGrid never looks %s up, so nothing can be listening to it" % ident)
+        assert len(local) == 1, "%s is read into %s" % (ident, ", ".join(local))
+        call = '%s.addEventListener("input", apply)' % local[0]
+        assert call in wire, (
+            "%s is read into `%s` and `%s` is never subscribed. The slider will drag and the "
+            "board will not move." % (ident, local[0], call))
 
 
 @needs_node
@@ -495,6 +594,15 @@ def test_nothing_is_displaced_out_of_the_grid_area(sweep):
     """
     for row in sweep:
         if row["size"] > 100:
+            continue
+        # AND THE COLUMN PULL IS ALLOWED OUT, ONE WAY. Pulled IN -- the direction it exists for --
+        # the outer columns move towards the middle and the arrangement can only get narrower, so
+        # the claim still has to hold and is still checked. Pushed OUT it is the size slider's
+        # bargain over again: asking for wider and silently being refused is worse than asking
+        # and seeing it, and the readout reports the overflow. Unlike the EDGE slider, this one
+        # is applied AFTER the rectangles are sized, which is the whole reason it does not shrink
+        # them -- and the price of that is exactly this.
+        if row["cols"] > 0:
             continue
         box, c = row["area"], row["cell"]
         assert c["x"] >= box["x"] - 1e-9, (
@@ -585,7 +693,7 @@ def test_everything_drawn_is_centred_in_the_area_at_every_setting(sweep):
         right = max(c["x"] + c["width"] for c in cells)
         top = min(c["y"] for c in cells)
         bot = max(c["y"] + c["height"] for c in cells)
-        tag = "gap %d, edge %d, size %d, height %d" % key
+        tag = "gap %d, edge %d, size %d, height %d, cols %d" % key
         assert abs((left - area["x"]) - (area["x"] + area["width"] - right)) < 1e-6, (
             "%s: %g of slack on the left and %g on the right"
             % (tag, left - area["x"], area["x"] + area["width"] - right))
@@ -623,7 +731,7 @@ def test_the_room_reserved_for_the_plates_is_the_room_they_take(sweep, tmpl):
     what is drawn.
     """
     d = _grid_defaults()
-    defaults = (d["gap"], d["disp"], d["size"], d["height"])
+    defaults = (d["gap"], d["disp"], d["size"], d["height"], d["cols"])
     for row in sweep:
         if row["centre"]:
             continue
@@ -633,7 +741,8 @@ def test_the_room_reserved_for_the_plates_is_the_room_they_take(sweep, tmpl):
         assert reserved <= want + 1e-9, (
             "%s: %g is reserved below the rectangle and a plate only ever takes %g"
             % (_tag(row), reserved, want))
-        if (row["gap"], row["disp"], row["size"], row["height"]) == defaults:
+        if (row["gap"], row["disp"], row["size"], row["height"],
+                row["cols"]) == defaults:
             # AND AT THE SETTINGS THE BOARD OPENS ON, THE CAP MUST NOT BITE. Everywhere else the
             # reserve is allowed to be short -- the rectangles are sized before the hang is known
             # -- but a board whose own defaults cannot hold their plates is a board that opens
@@ -647,6 +756,58 @@ def test_the_room_reserved_for_the_plates_is_the_room_they_take(sweep, tmpl):
                 "%s: the reserve is built for %g below the rectangle and the plate reaches %g"
                 % (_tag(row), want, drawn_to))
 
+
+@needs_node
+def test_the_two_outer_columns_move_by_the_same_amount_and_the_middle_does_not(sweep):
+    """One number, both ways, and the wheel stays centred on its middle column.
+
+    THE BRIEF WAS "BY THE SAME AMOUNT" and that is the half a sign error destroys. Give both
+    columns the same sign and the whole wheel slides sideways instead of closing up; move one
+    and leave the other and the middle column stops being the middle. Neither raises, and at a
+    small setting both look like a layout that was always slightly off rather than like a
+    slider doing the wrong thing -- which is why they are worth a test and not a reading.
+
+    IT IS MEASURED AGAINST THE SAME ARRANGEMENT AT REST, not against the slider in the abstract.
+    The pull is applied after the rectangles are sized, so nothing else about the arrangement
+    may move with it: same widths, same heights, same vertical positions, and the only
+    difference in x is the pull itself, taken off column 0 and added to column 2.
+
+    Falsify: flip either sign, drop either line, scale one by anything but one, or move the
+    middle column with them.
+    """
+    at = {}
+    for row in sweep:
+        if row["nAct"] != NACTS[0]:
+            continue
+        key = (row["gap"], row["disp"], row["size"], row["height"])
+        c = row["cell"]
+        at.setdefault(key, {}).setdefault(row["cols"], {})[(c["col"], c["row"])] = c
+    assert 0 in COLS, "the sweep has no arrangement with the pull at rest to measure against"
+    checked = 0
+    for key, pulls in at.items():
+        rest = pulls[0]
+        for cols, cells in pulls.items():
+            if cols == 0:
+                continue
+            for (col, rw), c in cells.items():
+                r = rest[(col, rw)]
+                want = {0: -cols, 1: 0, 2: cols}[col]
+                moved = c["x"] - r["x"]
+                assert abs(moved - want) < 1e-9, (
+                    "gap %d, edge %d, size %d, height %d: at a pull of %+d, column %d moved by "
+                    "%+g where it should have moved %+g. The outer columns take the pull off "
+                    "and add it on, by the SAME amount, and the middle column does not move at "
+                    "all -- that is what keeps the wheel centred on the City."
+                    % (key + (cols, col, moved, want)))
+                for same in ("y", "width", "height", "bottom"):
+                    assert abs(c[same] - r[same]) < 1e-9, (
+                        "gap %d, edge %d, size %d, height %d: at a pull of %+d, column %d row "
+                        "%d changed its %s from %g to %g. The pull is applied after the "
+                        "rectangles are sized, so it may move them and nothing else -- if it "
+                        "resizes anything it has become a second gap slider."
+                        % (key + (cols, col, rw, same, r[same], c[same])))
+                checked += 1
+    assert checked, "no arrangement was compared against its own resting pull"
 
 @needs_node
 def test_the_four_edge_rectangles_move_the_way_the_slider_says(sweep):
@@ -664,11 +825,11 @@ def test_the_four_edge_rectangles_move_the_way_the_slider_says(sweep):
     Falsify: change any of the four signs, or any of the four `d`s to `d / 2`.
     """
     for key, a in _arrangements(sweep).items():
-        gap, disp, size, _height = key
+        gap, disp, size, _height, _cols = key
         if disp == 0:
             continue                    # nothing to measure, and the test above covers it
         at = {(c["col"], c["row"]): c for c in a["cells"]}
-        tag = "gap %d, edge %d, size %d, height %d" % key
+        tag = "gap %d, edge %d, size %d, height %d, cols %d" % key
         moved = {
             "top rectangle rose":
                 at[(1, 1)]["y"] - at[(1, 0)]["y"] - (at[(0, 1)]["y"] - at[(0, 0)]["y"]),
@@ -693,7 +854,10 @@ def test_at_the_sliders_zero_the_rectangles_touch(sweep):
 
     Falsify: use a different term for `y`'s step than for `x`'s, e.g. `row * (rh + g + 1)`.
     """
-    a = _arrangements(sweep)[(0, 0, 100, 100)]
+    # AT REST ON THE PULL, because this is a claim about the GAP: it says that at gap 0
+    # the rectangles touch, and the column pull exists precisely to move two of the three
+    # columns away from where the gap put them.
+    a = _arrangements(sweep)[(0, 0, 100, 100, 0)]
     at = {(c["col"], c["row"]): c for c in a["cells"]}
     for row in range(3):
         for col in range(3):
@@ -837,14 +1001,16 @@ def test_the_height_slider_grows_the_boxes_upward_from_a_fixed_bottom(sweep):
     for row in sweep:
         if row["nAct"] != NACTS[0]:
             continue
-        key = (row["gap"], row["disp"], row["size"], row["cell"]["col"], row["cell"]["row"])
+        key = (row["gap"], row["disp"], row["size"], row["cols"],
+               row["cell"]["col"], row["cell"]["row"])
         by.setdefault(key, {})[row["height"]] = row["cell"]
     compared = 0
     for key, at in by.items():
         base = at.get(100)
         assert base is not None, "height 100 is not in the sweep for %s" % (key,)
         for h, c in sorted(at.items()):
-            tag = "gap %d, edge %d, size %d, cell (col %d, row %d) at height %d" % (key + (h,))
+            tag = ("gap %d, edge %d, size %d, cols %d, cell (col %d, row %d) at height %d"
+                   % (key + (h,)))
             assert abs((c["y"] + c["height"]) - (base["y"] + base["height"])) < 1e-9, (
                 "%s: the bottom edge moved from %g to %g"
                 % (tag, base["y"] + base["height"], c["y"] + c["height"]))
@@ -1098,12 +1264,16 @@ def test_the_wheel_measurement_is_the_rectangles_own_extent(tmpl, sweep):
     # would hide it.
     d = _grid_defaults()
     a = _arrangements(sweep)
-    for key, why in (((d["gap"], d["disp"], 100, 100), "where the block fills the area"),
-                     ((d["gap"], d["disp"], d["size"], d["height"]), "at the opening defaults")):
+    # AT REST ON THE PULL for the same reason as the gap test above: "the block fills the area
+    # exactly across" is a fact about the fit, and the pull moves two columns off it on purpose.
+    fills = (d["gap"], d["disp"], 100, 100, 0)
+    for key, why in ((fills, "where the block fills the area"),
+                     ((d["gap"], d["disp"], d["size"], d["height"], d["cols"]),
+                      "at the opening defaults")):
         assert key in a, (
-            "the sweep does not cover gap %d, edge %d, size %d, height %d -- add it to GAPS, "
-            "DISPS, SIZES and HEIGHTS" % key)
-    cells, area = a[(d["gap"], d["disp"], 100, 100)]["cells"], a[(d["gap"], d["disp"], 100, 100)]["area"]
+            "the sweep does not cover gap %d, edge %d, size %d, height %d, cols %d -- add it to "
+            "GAPS, DISPS, SIZES, HEIGHTS and COLS" % key)
+    cells, area = a[fills]["cells"], a[fills]["area"]
     w = max(c["x"] + c["width"] for c in cells) - min(c["x"] for c in cells)
     h = max(c["y"] + c["height"] for c in cells) - min(c["y"] for c in cells)
     assert abs(w - area["width"]) < 1e-6, (
@@ -3600,7 +3770,7 @@ def test_the_plate_lives_on_the_board_and_is_swept_with_the_grid(tmpl):
     m = re.search(r'querySelectorAll\("([^"]+)"\)', body)
     assert m, "drawGrid no longer sweeps anything before rebuilding"
     swept = {s.strip() for s in m.group(1).split(",")}
-    for need in (".dcell", ".iplate", ".tmark"):
+    for need in (".dcell", ".iplate", ".tmark", ".mmark"):
         assert need in swept, (
             "drawGrid does not sweep %s, which is not a child of the cells it does sweep -- so "
             "every slider event leaves one behind per duty: %s" % (need, sorted(swept)))
@@ -3971,22 +4141,30 @@ def test_the_figure_row_is_centred_in_its_rectangle(tmpl):
     and left anchored the group would read as people pushed against an edge, with the icon plate
     centred underneath disagreeing with them.
 
-    THE ROW'S WIDTH AND THE WIDTH THAT WOULD FILL IT ARE ONE EXPRESSION. `(4 + 3 * HOOD.gap)`
-    appears in the cap and again in the slack, and if those two ever disagree the row is centred
-    against a width it does not have -- which looks like a small, consistent lean.
+    THE SLACK MUST BE MEASURED AGAINST THE ROW BEING DRAWN. This used to be put as "the row's
+    width and the width that would fill the row are one expression" -- `(4 + 3 * HOOD.gap)`
+    appearing in the cap and again in the slack -- and that held while the cap was the only
+    thing deciding either. It stopped holding when two sliders arrived that move the drawn row
+    without moving the cap: `folk` scales the figures past what fits, and `apart` opens the gaps.
+    Measured against the cap's width the row would now be centred against a width it does not
+    have, which looks like a small, consistent lean that gets worse as either is dragged.
 
-    Falsify: drop the `/ 2`, or write the slack with a literal 4.72.
+    SO THE TWO THINGS THAT HAVE TO AGREE ARE THE SLACK AND THE STEP. Placement walks j from 0 to
+    3 by `fw + gap`, so the row really occupies four figures and three gaps; the slack has to
+    subtract exactly that, out of the same two variables.
+
+    Falsify: drop the `/ 2`, subtract the cap's width instead of the drawn one, or step by
+    something other than what the slack was measured with.
     """
     body = _code(_function(tmpl, "drawFigures"))
-    m = re.search(r"var slack = \(r\.figRight - r\.figLeft\) - fw \* \(4 \+ 3 \* HOOD\.gap\);",
-                  body)
-    assert m, "the row's slack is no longer the span less four slots:\n%s" % body
+    assert re.search(r"var slack = \(r\.figRight - r\.figLeft\) - \(fw \* 4 \+ gap \* 3\);",
+                     body), \
+        "the row's slack is no longer the span less four figures and three gaps:\n%s" % body
     assert re.search(r"var x = r\.figLeft \+ slack / 2 \+ j \* \(fw \+ gap\);", body), (
         "the row is no longer placed at half the slack, so it is not centred:\n%s" % body)
-    assert body.count("(4 + 3 * HOOD.gap)") == 2, (
-        "`(4 + 3 * HOOD.gap)` appears %d times; it is the row's width and the width that would "
-        "fill the row, and the two have to be the same expression"
-        % body.count("(4 + 3 * HOOD.gap)"))
+    assert "fw * (4 + 3 * HOOD.gap)" not in body, (
+        "the slack is measured against the width that would FIT rather than the width being "
+        "DRAWN. Those are the same number only while no slider has moved the figures.")
 
 
 @needs_node
@@ -4010,7 +4188,7 @@ def test_the_plate_height_is_a_ceiling_the_figures_never_pass(sweep, geo, hood):
     h = hood.as_dict()["h"]
     slots = 4 + 3 * hood.as_dict()["gap"]
     d = _grid_defaults()
-    defaults = (d["gap"], d["disp"], d["size"], d["height"])
+    defaults = (d["gap"], d["disp"], d["size"], d["height"], d["cols"])
 
     def wants_vs_allows(row):
         """What the plate asks of a figure's width, and what the row leaves for one."""
@@ -4022,7 +4200,8 @@ def test_the_plate_height_is_a_ceiling_the_figures_never_pass(sweep, geo, hood):
     # defaults have moved into the range where the plate sets the size, and the note above --
     # and what the board looks like on opening -- both need re-reading.
     at_default = [r for r in sweep if not r["centre"] and r["plate"]["hasPlate"]
-                  and (r["gap"], r["disp"], r["size"], r["height"]) == defaults]
+                  and (r["gap"], r["disp"], r["size"], r["height"],
+                       r["cols"]) == defaults]
     assert at_default, "the sweep does not cover the opening defaults"
     for row in at_default:
         wants, allows = wants_vs_allows(row)
@@ -4077,17 +4256,312 @@ def test_the_hood_has_not_drifted_from_the_tree_it_was_copied_from(hood):
 
 
 def test_the_page_is_handed_every_number_the_figure_needs(tmpl, hood):
-    """The template holds NO copy of any of this, so a key the page reads and `as_dict` does not
-    publish is `undefined` arithmetic -- which in JavaScript is NaN, and a NaN position is a
-    figure that is not on the page rather than a figure in the wrong place.
+    """The template holds NO copy of any of this, so a key the page reads and no figure publishes
+    is `undefined` arithmetic -- which in JavaScript is NaN, and a NaN position is a figure that
+    is not on the page rather than a figure in the wrong place.
 
-    Falsify: remove any key from hood.as_dict(), or read a new `HOOD.x` in the template.
+    THERE ARE TWO FIGURES NOW AND THE SCOPE HAD TO FOLLOW. This read hood.as_dict() alone, and
+    fired the day the template learned to draw the drawn acolyte -- correctly, because `over`
+    and `shadeOf` really are read and really are not the hood's. Widening it to the union of the
+    two would have been the lazy fix and a worse guard: it would then pass for a key published
+    only by the friar and read where EITHER figure is drawn, which is the same NaN as before.
+    So the template is split instead. There are exactly TWO places that know which figure is
+    being drawn -- hoodSvg, past the line that sends the drawn acolyte elsewhere, and
+    friarLayers -- and inside those a key need only be that figure's. Everywhere else, which is
+    everything that MEASURES a figure rather than draws one, it has to be BOTH.
+
+    Falsify: remove any key from either as_dict(), or read a new `HOOD.x` outside those two
+    functions that only one figure publishes.
     """
-    published = set(hood.as_dict())
-    read = set(re.findall(r"HOOD\.([A-Za-z_][A-Za-z0-9_]*)", tmpl))
-    missing = sorted(read - published)
+    friar = _load("friar")
+    draws = [_function(tmpl, "hoodSvg"), _function(tmpl, "friarLayers")]
+    everywhere = tmpl
+    for d in draws:
+        everywhere = everywhere.replace(d, "")
+
+    hood_keys, friar_keys = set(hood.as_dict()), set(friar.as_dict(""))
+    both = hood_keys & friar_keys
+
+    def reads(text):
+        return set(re.findall(r"HOOD\.([A-Za-z_][A-Za-z0-9_]*)", text))
+
+    missing = sorted(reads(everywhere) - both)
     assert not missing, (
-        "the template reads HOOD.%s and hood.as_dict() does not publish %s"
-        % (", HOOD.".join(missing), "it" if len(missing) == 1 else "them"))
+        "the template reads HOOD.%s where either figure may be drawn, and %s not published by "
+        "BOTH of them. "
+        "Everything drawn for either acolyte has to be answerable by either, or the board draws "
+        "one of them out of undefined."
+        % (", HOOD.".join(missing), "it is" if len(missing) == 1 else "they are"))
+    for fn, keys, who in ((draws[0], hood_keys | {"kind"}, "hoodSvg"),
+                          (draws[1], friar_keys, "friarLayers")):
+        missing = sorted(reads(fn) - keys)
+        assert not missing, (
+            "%s reads HOOD.%s, which the figure it draws does not publish"
+            % (who, ", HOOD.".join(missing)))
     for k in ("path", "h", "face", "ink", "stroke", "swatch", "order", "step", "lean", "gap"):
-        assert k in published, "hood.as_dict() no longer publishes %r" % k
+        assert k in hood_keys, "hood.as_dict() no longer publishes %r" % k
+    for k in ("kind", "h", "over", "shadeOf", "swatch", "order", "step", "lean", "gap"):
+        assert k in friar_keys, "friar.as_dict() no longer publishes %r" % k
+
+
+# =================================================================================================
+# THE MERCHANT, WHICH IS THE THIRD THING ON A LINE BUILT FOR TWO.
+#
+# EVERYTHING BELOW IS ABOUT ROOM. The frame is built to the marks and the resource is pinned to
+# the rectangle's right edge; the merchant gets what is left between them, and on Taxation -- the
+# one duty that takes no tithe -- it is mirrored to the other side of the frame, where what it has
+# to clear is the neighbouring rectangle rather than anything on its own line. All four ways this
+# goes wrong are invisible on a still board at the opening settings: a marker touching the frame,
+# a marker a different size from the other seven, a marker drawn where no room was checked for it,
+# and a marker that followed the SLIDERS down to a smudge instead of going away.
+
+
+@needs_node
+def test_the_merchant_clears_what_it_stands_between(sweep):
+    """It touches neither the frame nor the resource, at any setting of any slider.
+
+    THE GAP IT KEEPS IS THE MARKS' OWN. Inside a single line the only thing separating three
+    objects is distance, and the distance that says "these are not one row" is already named:
+    `igap`, the space between a duty's own two marks. Let the merchant come closer than that to
+    either side and the line reads as four icons in a row, which is exactly the misreading the
+    resource was moved out of the frame to avoid.
+
+    Falsify: drop the `2 * P.igap` from the width, or add the clearance to one side only.
+    """
+    checked = 0
+    for row in sweep:
+        pl = row.get("plate")
+        if not pl or not pl["hasPlate"] or not pl["hasTithe"] or not pl["merchant"]:
+            continue
+        m, P = pl["merchant"], pl
+        frame_end = pl["plateX"] + pl["rowBox"]
+        assert m["x"] - frame_end >= P["igap"] - 1e-9, (
+            "%s: the merchant starts %.2f after the frame ends, against the %s the duty's own "
+            "marks keep from each other" % (_tag(row), m["x"] - frame_end, P["igap"]))
+        assert pl["titheMark"]["x"] - (m["x"] + m["w"]) >= P["igap"] - 1e-9, (
+            "%s: the resource is %.2f past the merchant, against %s"
+            % (_tag(row), pl["titheMark"]["x"] - (m["x"] + m["w"]), P["igap"]))
+        checked += 1
+    assert checked > 500, "only %d arrangements drew a merchant to check" % checked
+
+
+@needs_node
+def test_the_merchant_stands_a_mark_tall_until_the_line_cannot_take_it(sweep):
+    """Height is what the eye compares, so height is what is capped -- and width takes over.
+
+    TWO CAPS AND THE SMALLER ONE WINS. A figure beside a row of 50-pixel emblems is read against
+    their HEIGHT, so that is the cap: a marker sized by the gap instead would stand a third
+    taller than the icons at the opening settings and taller still as the sliders opened the
+    board out. The width only ever takes size AWAY, when the gap is too tight for the figure
+    that height asks for -- and the sweep has to show BOTH caps biting, or one of them is a line
+    of code that has never run.
+
+    AND BELOW HALF A MARK IT IS NOT DRAWN. The space closes with the rectangles, and a width
+    that simply followed it down would draw a figure three pixels wide on every tile: dirt on
+    the board rather than a thing that is there on purpose.
+    """
+    sizes, dropped, by_height, by_width = set(), 0, 0, 0
+    for row in sweep:
+        pl = row.get("plate")
+        if not pl or not pl["hasPlate"] or not pl["hasTithe"]:
+            continue
+        m = pl["merchant"]
+        if m is None:
+            dropped += 1
+            continue
+        assert m["h"] <= pl["sz"] + 1e-9, (
+            "%s: the merchant stands %.2f tall against a %s mark" % (_tag(row), m["h"], pl["sz"]))
+        assert m["w"] <= pl["titheMark"]["x"] - (pl["plateX"] + pl["rowBox"]) + 1e-9, (
+            "%s: the merchant is wider than the gap it stands in" % _tag(row))
+        assert m["w"] >= pl["sz"] * 0.5 - 1e-9, (
+            "%s: the merchant is %.2f wide, under half a mark -- it should have been refused"
+            % (_tag(row), m["w"]))
+        if abs(m["h"] - pl["sz"]) < 1e-6:
+            by_height += 1
+        else:
+            by_width += 1
+        sizes.add(round(m["w"], 3))
+    assert dropped, ("no arrangement in the sweep refused a merchant, so the floor under its "
+                     "width is never reached and cannot be said to work")
+    assert by_height and by_width, (
+        "the sweep never exercised both caps: %d arrangements stood a mark tall and %d were cut "
+        "down by the gap" % (by_height, by_width))
+    assert len(sizes) > 1, "the merchant is one width at every setting, so nothing is being sized"
+
+
+@needs_node
+def test_the_merchant_stands_on_the_same_line_as_the_duty_s_own_icons(sweep):
+    """Its feet and the bottom of the marks are the same line, at every setting and every size.
+
+    THE EYE LINES THINGS UP BY THEIR BOTTOMS, NOT BY THEIR BOXES. The marker is smaller than a
+    mark and a different shape, so centring it in the row -- which is what it did first -- left
+    it floating a few pixels above icons that sit on a line: nothing anybody can name, and
+    everybody sees. Anchoring the bottom also makes the size slider grow it UPWARD, which is the
+    only direction that keeps the line still while the figure changes.
+
+    AND THE HEIGHT COMES FROM THE DRAWING'S OWN SHAPE. The marker is placed by width -- what the
+    gap can spare -- so without the aspect it would be square, which at this aspect is a 7%
+    stretch: a slightly different drawing rather than a visible fault.
+
+    Falsify: centre it in the row, hang it from the top, or drop the aspect from the height.
+    """
+    for row in sweep:
+        pl = row.get("plate")
+        if not pl or not pl["merchant"]:
+            continue
+        m = pl["merchant"]
+        assert abs(m["h"] - m["w"] * 1.5) < 1e-6, (
+            "%s: the merchant is %.2f x %.2f, which is not the shape the drawing was made in"
+            % (_tag(row), m["w"], m["h"]))
+        feet = m["y"] + m["h"]
+        marks = pl["marks"][0]
+        assert abs(feet - (pl["plateY"] + marks["top"] + marks["size"])) < 1e-6, (
+            "%s: the merchant's feet are at %.2f and the duty's icons stand on %.2f"
+            % (_tag(row), feet, pl["plateY"] + marks["top"] + marks["size"]))
+
+
+@needs_node
+def test_taxation_s_merchant_stands_where_every_other_duty_s_does(sweep):
+    """The duty that takes no tithe gets the same marker in the same place.
+
+    ITS RECTANGLE IS THE ODD ONE OUT AND ITS LINE IS NOT. Taxation has nothing on its right by
+    design, so a marker placed by what is actually beside it would be sized and set differently
+    from the other seven -- which is what the first version of this did, mirroring it to the
+    left of the frame entirely. The gap it stands in is measured to where a resource WOULD go,
+    and every rectangle has that whether it fills it or not.
+
+    Falsify: measure the gap to the resource rather than to its place, or special-case the duty
+    that has none.
+    """
+    seen = 0
+    for row in sweep:
+        pl = row.get("plate")
+        if not pl or not pl["hasPlate"]:
+            continue
+        m, t = pl["merchant"], pl["merchantAsTaxation"]
+        assert (m is None) == (t is None), (
+            "%s: one of the two is drawn and the other is not" % _tag(row))
+        if m is None:
+            continue
+        for k in ("x", "y", "w", "h"):
+            assert abs(m[k] - t[k]) < 1e-9, (
+                "%s: Taxation's merchant differs in %s -- %.3f against %.3f"
+                % (_tag(row), k, t[k], m[k]))
+        seen += 1
+    assert seen > 500, "only %d arrangements compared the two" % seen
+
+
+@needs_node
+def test_the_board_as_it_opens_draws_a_merchant_on_every_duty(sweep):
+    """Eight markers at the settings the board actually opens at, not merely "when there is room".
+
+    EVERY OTHER GUARD HERE IS AN INVARIANT, and an invariant is satisfied by drawing nothing at
+    all. A rule that refused the merchant more often than it had to -- a room measured against
+    cells on rows this one does not share, say -- would break none of them and would show up as
+    markers missing from a board nobody had touched the sliders on. This is the promise the rest
+    of the file cannot make: at the opening settings there are eight.
+
+    Falsify: widen anything that decides the room, or lower MERCHANT_FLOOR's effect, and tiles
+    start opening without their marker.
+    """
+    want = _grid_defaults()
+    opening = [r for r in sweep
+               if not r.get("centre")
+               and all(r[k] == want[k] for k in ("gap", "disp", "size", "height", "cols"))]
+    assert opening, "the sweep does not cover the settings the board opens at"
+    for r in opening:
+        pl = r["plate"]
+        assert pl["hasPlate"] and pl["hasTithe"], (
+            "%s: the board does not open with a full line on every duty" % _tag(r))
+        assert pl["merchant"], (
+            "%s: a duty opens without its merchant, though the frame and the resource both fit"
+            % _tag(r))
+        assert pl["merchantAsTaxation"], (
+            "%s: Taxation would open without its merchant, on a line with room for one" % _tag(r))
+
+
+def test_the_merchant_is_drawn_only_where_one_was_placed(tmpl):
+    """drawGrid is the one function these guards cannot call, so its source is asked instead.
+
+    THE ARITHMETIC IS TESTED AND THE DRAWING IS NOT. Everything above runs placeFor in node and
+    never builds a single element, which is what makes this file fast and what leaves exactly one
+    hole: a marker drawn from a placement that came back null would read `.x` off nothing and
+    take the whole board down with it -- no plates, no figures, no tiles -- at whichever slider
+    setting first refuses a merchant. Nothing in a headless arithmetic sweep can see that.
+
+    Falsify: draw the marker on `MERCHANT.src` alone, or hoist it out of the test entirely.
+    """
+    body = _code(_function(tmpl, "drawGrid"))
+    i = body.find('el("div", "mmark"')
+    assert i > 0, "drawGrid no longer draws a merchant at all"
+    assert body.count("if (L.merchant && MERCHANT.src)", 0, i) == 1, (
+        "the merchant is drawn without first asking BOTH questions. placeFor answers null "
+        "whenever the line has no room for one -- and `null.x` is a TypeError that stops "
+        "drawGrid mid-rebuild, taking the plates, the figures and the tiles with it -- while a "
+        "tree with no marker filed leaves MERCHANT.src empty, which would put an <img src=\"\"> "
+        "on all eight duties:\n%s" % body[max(0, i - 300):i + 120])
+
+
+@needs_node
+def test_the_trade_slider_scales_the_merchant_and_moves_nothing_else(tmpl, geo):
+    """One rectangle, one setting, the slider swept across its whole range.
+
+    KEPT OUT OF THE SWEEP ON PURPOSE and therefore asked here. The five sliders in the sweep all
+    move rectangles; this one moves nothing, and running it as a sixth dimension would multiply
+    eighteen thousand arrangements to re-answer a question none of them interact with. What it
+    has to be held to is exactly this: the marker scales with it, in proportion, about the place
+    it stood -- and the frame, the marks and the resource do not budge.
+
+    AND IT IS ALLOWED PAST THE EDGES. Over 100 the merchant grows into the frame and the
+    resource, which is what the slider is for: the size is being chosen by eye and a marker that
+    refused to be looked at would teach nothing. So this does not assert a clearance -- the
+    guard above holds that at the size the board opens at.
+
+    Falsify: scale the height and not the width, grow it from its left edge, or let the marker's
+    size leak into the frame or the resource.
+    """
+    body = _node("\n".join([
+        "var GEO = %s;" % json.dumps(geo.as_dict()),
+        "var CELL_BORDER = %s;" % _decl(tmpl, "CELL_BORDER"),
+        "var PLATE_DROP = %s;" % _decl(tmpl, "PLATE_DROP"),
+        "var PLATE_BORDER = %s;" % _decl(tmpl, "PLATE_BORDER"),
+        "var MERCHANT = {h: 1.5, src: \"\"};",      # a stub, as in the sweep above
+        "var MERCHANT_FLOOR = %s;" % _decl(tmpl, "MERCHANT_FLOOR"),
+        "var DUTIES = %s;" % json.dumps({"a": {"actions": 1}, "b": {"actions": 2}}),
+        "var GRID = {merch: 100};",
+        _function(tmpl, "mostActions"),
+        _function(tmpl, "plateHeight"),
+        _function(tmpl, "plateFor"),
+        _function(tmpl, "plateInset"),
+        _function(tmpl, "markAt"),
+        _function(tmpl, "titheMarkAt"),
+        _function(tmpl, "merchantAt"),
+        _function(tmpl, "placeFor"),
+        "var r = {x: 100, y: 200, width: 236, height: 165};",
+    ]), "(function(){ var out = []; "
+        "[40, 70, 100, 150, 200].forEach(function(v){ GRID.merch = v; "
+        "  var L = placeFor(r, 2, true); "
+        "  out.push({v: v, m: L.merchant, plateX: L.x, rowBox: L.p.rowBox, "
+        "            mark: markAt(L.p, 0), tithe: L.titheMark}); }); return out; })()")
+    rows = {row["v"]: row for row in body}
+    base = rows[100]
+    assert base["m"], "the merchant is not drawn at the setting the board opens at"
+    for v, row in rows.items():
+        m = row["m"]
+        assert m, "the merchant vanished at %d%% -- the slider is not a reason to refuse it" % v
+        assert abs(m["w"] - base["m"]["w"] * v / 100) < 1e-6, (
+            "at %d%% the merchant is %.3f wide against %.3f at 100%%"
+            % (v, m["w"], base["m"]["w"]))
+        assert abs(m["h"] - m["w"] * 1.5) < 1e-6, (
+            "at %d%% the merchant is %.3f x %.3f, so the slider is stretching it rather than "
+            "scaling it" % (v, m["w"], m["h"]))
+        assert abs((m["x"] + m["w"] / 2) - (base["m"]["x"] + base["m"]["w"] / 2)) < 1e-6, (
+            "at %d%% the merchant's middle is at %.3f against %.3f at 100%% -- the slider is "
+            "walking it along the line instead of opening it out"
+            % (v, m["x"] + m["w"] / 2, base["m"]["x"] + base["m"]["w"] / 2))
+        assert abs((m["y"] + m["h"]) - (base["m"]["y"] + base["m"]["h"])) < 1e-6, (
+            "at %d%% the merchant's feet have left the line they stand on" % v)
+        for k in ("plateX", "rowBox"):
+            assert row[k] == base[k], "%s moved when the merchant was scaled" % k
+        assert row["mark"] == base["mark"], "the duty's own icons moved when the merchant scaled"
+        assert row["tithe"] == base["tithe"], "the resource moved when the merchant was scaled"

@@ -516,10 +516,31 @@ body.full{background:#000}
    outline in it rather than nothing: a frame with a hole in it is visibly unfinished, where a
    frame that is simply absent is indistinguishable from Taxation's correct emptiness. */
 .tmark.empty{border:1px dashed #46413a;border-radius:3px}
+/* THE MERCHANT, WHICH ANSWERS NOTHING. It stands on the duty's line between the marks you may
+   choose and the resource the tile hands you, and it is neither: not a choice, so it takes no
+   pointer, and not this tile's property either. It is drawn at rest at the weight of the things
+   around it, with no ground of its own -- the same bargain the resource struck when it left the
+   frame, for the same reason: on this line, a border would say `press me`. */
+.mmark{position:absolute;pointer-events:none}
+.mmark img{width:100%;height:100%;object-fit:contain;display:block}
 /* NO TITLE RULES. A rectangle carries no name at all now -- not a parchment and not a word -- so
    the only thing inside it is its people, and the only thing beside it is its icons. */
 .fig{position:absolute;pointer-events:none}
 .fig svg{width:100%;height:100%;display:block;overflow:visible}
+/* THE DRAWN ACOLYTE, WHICH IS THREE THINGS STACKED IN ONE BOX. The hood above is a single
+   <svg> and needs none of this; a drawing cannot be recoloured by setting a fill, so the robe
+   and its shadow arrive as masks the page paints the seat's colour through, and the ink and the
+   tan ride on top in an <img> that is the same for every player.
+   THE MASKS COME FROM TWO CUSTOM PROPERTIES rather than from each figure's own style, because
+   a mask-image is a data URI and a full board carries forty-two figures. Set per figure that is
+   the same twenty kilobytes forty-two times; set here it is written once. */
+.fig > .l{position:absolute;inset:0;display:block}
+.fig > .robe{-webkit-mask-image:var(--robe-mask);mask-image:var(--robe-mask)}
+.fig > .shade{-webkit-mask-image:var(--shade-mask);mask-image:var(--shade-mask)}
+.fig > .robe, .fig > .shade{-webkit-mask-size:100% 100%;mask-size:100% 100%;
+                            -webkit-mask-repeat:no-repeat;mask-repeat:no-repeat}
+.fig > .over{width:100%;height:100%}
+__FIGURE_VARS__
 
 /* EDIT MODE is a mode, and it says so. In play the board must not look editable; while images
    are being replaced every slot that can take one is outlined, so there is no guessing. */
@@ -549,6 +570,22 @@ body.editing .art.drop,body.editing .seal.drop{outline:2px solid var(--line)}
   <input type=range id=rHeight min=100 max=250 step=1
          title="taller rectangles, as a percentage of the 2:1 height; they grow UPWARD, so the line the acolytes stand on does not move">
   <span class=val id=vHeight></span>
+  <span class=tag>folk</span>
+  <input type=range id=rFig min=40 max=220 step=1
+         title="the size of the acolytes, as a percentage of the size the board works out for itself; the rectangles do not move">
+  <span class=val id=vFig></span>
+  <span class=tag>apart</span>
+  <input type=range id=rApart min=-40 max=120 step=1
+         title="how far apart the acolytes stand, in hundredths of a figure's width, added to the spacing the figure itself asks for; their size does not change">
+  <span class=val id=vApart></span>
+  <span class=tag>cols</span>
+  <input type=range id=rCols min=-150 max=150 step=1
+         title="how far the left and right columns of tiles sit from the middle one, in board pixels; both move by the same amount and the middle column does not move">
+  <span class=val id=vCols></span>
+  <span class=tag>trade</span>
+  <input type=range id=rMerch min=40 max=200 step=1
+         title="how big the merchant stands on the duty line, as a percentage of the width the gap between the icons and the resource can spare; over 100 it grows into them on purpose, so the size can be chosen by eye">
+  <span class=val id=vMerch></span>
   <label class=chk><input type=checkbox id=cBare
          title="hide the rectangles' top, left and right edges and their ground; the bottom edge the acolytes stand on stays"> bare</label>
   <span class=tag>seat</span>
@@ -591,6 +628,15 @@ var TITHE_SLOT = "tithe";
 // what unions the rest in; both are facts about the tree's resources, and the tree is what the
 // generator walks. Written out here they would be a second list to keep in step with TITHE_KEYS.
 var TITHE = __TITHE__;
+
+// THE MERCHANT: one picture and the shape of it, or an empty src and no merchant on the board.
+//
+// ITS ASPECT TRAVELS WITH IT rather than being typed here, for the reason friar.FRIAR_H is not
+// typed into this file either: the marker is placed by its WIDTH -- what the line can spare --
+// and its height follows, so a redrawn merchant at another aspect would be stretched to a shape
+// it was never drawn in, silently, on every tile at once. The generator measures the file it
+// inlines and hands the number over with it.
+var MERCHANT = __MERCHANT__;
 
 // WHAT A MARKED TILE WEARS IN EACH PHASE, AND WHEN EACH TILE STARTS WEARING IT.
 //
@@ -1347,6 +1393,13 @@ var PLATES_DROPPED = 0;
 // lose, which is the state it is meant to be in.
 var TITHES_DROPPED = 0;
 
+// AND HOW MANY MERCHANTS WENT, which is a third number for a third reason. The merchant is the
+// last thing on the line to be given room and the first to run out of it: it stands BETWEEN two
+// objects that are placed before it, so it goes while both of those are still drawn. Counted
+// apart from the two above, because "three without room for icons" on a board whose icons are
+// all there is the one thing these readouts exist to prevent.
+var MERCHANTS_DROPPED = 0;
+
 
 // HOW TALL AN ICON PLATE CAME OUT, because the acolytes are drawn to match it and the two are
 // worked out in different passes. drawGrid() sizes the plates; drawFigures() runs after it and
@@ -1493,6 +1546,17 @@ function gridCells(){
       if (col === 1 && row === 2) y += d;         // bottom, down
       if (col === 0 && row === 1) x -= d;         // left, left
       if (col === 2 && row === 1) x += d;         // right, right
+      // AND THE TWO OUTER COLUMNS MOVE TOGETHER, TOWARDS OR AWAY FROM THE MIDDLE ONE. One
+      // number does both, so the wheel stays centred on its middle column at any setting: the
+      // left column takes it off its x and the right column adds it, and the middle -- which is
+      // the City and the two tiles above and below it -- never moves at all.
+      //
+      // IT IS NOT THE GAP SLIDER. `gap` is paid for BEFORE the rectangles are sized, so widening
+      // it eats the room the three columns divide and everything shrinks; this is applied after,
+      // so the tiles keep their size and only the distance changes. Two sliders because they are
+      // two questions, and the one asked here cannot be reached by the other at any setting.
+      if (col === 0) x -= GRID.cols;
+      if (col === 2) x += GRID.cols;
       // `hang` TRAVELS WITH THE CELLS because it is what the arrangement was centred on, and
       // it is capped -- so it is not something a reader can re-derive from rw and rh. Anything
       // asking "is this balanced?" has to ask the number that was actually used.
@@ -1679,6 +1743,56 @@ function titheMarkAt(r, P, y){
           y: y + P.ip, size: P.sz};
 }
 
+// HOW SMALL THE MERCHANT MAY GET BEFORE IT IS NOT DRAWN AT ALL, as a share of a duty mark. The
+// sliders take these rectangles down to 215 x 107 and the space between the frame and the
+// resource closes with them; below half a mark the figure is a smudge with a hat, and a smudge
+// on every tile reads as dirt on the board rather than as a thing that is there on purpose.
+var MERCHANT_FLOOR = 0.5;
+
+// WHERE THE MERCHANT STANDS.
+//
+// AS TALL AS A DUTY MARK, AND NO WIDER THAN THE LINE CAN SPARE. It is the third object on a line
+// whose other two are fixed -- the frame is built to the marks and the resource is pinned to the
+// rectangle's right edge -- so the merchant gets what is left and nothing else moves to make
+// room for it. HEIGHT IS WHAT THE EYE COMPARES, though, which is why the cap is on the height:
+// this is a standing figure beside 50-pixel emblems, and a figure sized by the gap would be a
+// third taller than them at the opening settings and taller still as the board got roomier.
+// Width only ever takes size AWAY, when the gap is too tight for the figure that height asks
+// for.
+//
+// AND IT KEEPS THE MARKS' OWN GAP FROM BOTH, which is the same `igap` the resource clears the
+// frame by. Centred in whatever is left over once the cap bites, so the two clearances stay
+// equal rather than the leftover piling up on one side.
+//
+// TAXATION GETS THE SAME MARKER IN THE SAME PLACE, which is why the gap is measured to where the
+// resource WOULD be rather than to a resource. It is the one duty that takes no tithe, so there
+// is nothing on its right to bound the space -- and placed by what it actually has beside it,
+// its merchant would stand somewhere no other merchant stands, on the tile that is already the
+// odd one out. Eight markers, one line, one offset from the frame.
+//
+// ON THE MARKS' OWN BASELINE, NOT CENTRED IN THE ROW. The frame's padding is not part of what
+// the eye lines things up by: what reads as the line is the bottom edge of the emblems, and a
+// figure is a thing that STANDS. Centred in the row it floated a few pixels above icons that
+// did not, which is the kind of difference nobody can name and everybody sees.
+//
+// AND THE SLIDER MULTIPLIES WHAT THE GAP CAN SPARE, and is allowed to go past it. Below 100 the
+// marker keeps its clearance and gains more; above it the clearance goes negative and the
+// merchant grows into the frame and the resource, which is the point -- the size is being
+// chosen by eye, and refusing to draw the thing being looked at teaches nothing. THE FLOOR IS
+// MEASURED ON THE UNSCALED WIDTH, so what is refused is a board with no room for a marker,
+// never a size somebody asked for.
+function merchantAt(P, frameX, y, gap){
+  var fits = Math.min(P.sz / (MERCHANT.h || 1), gap - 2 * P.igap);
+  if (fits < P.sz * MERCHANT_FLOOR) return null;
+  var w = fits * (GRID.merch == null ? 100 : GRID.merch) / 100;
+  var h = w * (MERCHANT.h || 1);
+  // GROWN ABOUT WHERE IT FITS rather than from its own left edge, so the slider opens it out
+  // around the place it stood instead of walking it along the line into the resource.
+  var clear = (gap - fits) / 2;
+  return {x: frameX + P.rowBox + clear + (fits - w) / 2,
+          y: y + plateInset(P) + P.sz - h, w: w, h: h};
+}
+
 function placeFor(r, nAct, hasTithe){
   var P = plateFor(r.width, r.height, nAct);
   // THE FRAME SPANS THE RECTANGLE, inner edge to inner edge. It was centred under the rectangle
@@ -1699,7 +1813,14 @@ function placeFor(r, nAct, hasTithe){
   // one above it. A literal cannot read its own fields, and the alternative -- restating the
   // resource's test inside the divider's -- is the second copy this file keeps being bitten by.
   var hasT = !!hasTithe && has && tm.x - frameEnd >= P.igap;
-  return {p: P, x: x, y: y, has: has, titheMark: tm,
+  // THE MERCHANT ASKS THE RECTANGLE, NOT THE DUTY. The gap it stands in is the one between the
+  // frame and where the resource goes, and every rectangle has that whether a resource is drawn
+  // in it or not -- which is what puts Taxation's marker in the same place as the other seven.
+  // It needs the FRAME, because that is what it is offset from: a rectangle too narrow for the
+  // row has no line for anything to stand on. Nothing else is asked, because a gap too tight
+  // for a resource is a gap too tight for this, and the arithmetic says so without being told.
+  var mer = has ? merchantAt(P, x, y, tm.x - frameEnd) : null;
+  return {p: P, x: x, y: y, has: has, titheMark: tm, merchant: mer,
           // THE FRAME'S DRAWN WIDTH, NAMED HERE RATHER THAN WORKED OUT IN drawGrid. It is
           // `P.innerW` and nothing else today, which is exactly why it needs a name: drawGrid is
           // the one function the guards cannot call, so a width decided there can only be
@@ -1736,11 +1857,14 @@ function drawGrid(){
   // AND THE RESOURCES, which left the plate when the frame stopped reaching them. A tmark is a
   // child of #board now, so a rebuild that swept only `.dcell, .iplate` would leave one behind
   // per duty per slider event -- the same failure the plates had the day they left the cell.
-  var old = board.querySelectorAll(".dcell, .iplate, .tmark");
+  // AND THE MERCHANTS, for the third time the same lesson has been learned on this line: a
+  // marker that is a child of #board is swept by #board or it is not swept at all.
+  var old = board.querySelectorAll(".dcell, .iplate, .tmark, .mmark");
   for (var i = 0; i < old.length; i++) old[i].remove();
   GRIDPOS = {};
   PLATES_DROPPED = 0;
   TITHES_DROPPED = 0;
+  MERCHANTS_DROPPED = 0;
   PLATE_H = 0;
   var byFace = {};
   GEO.duties.forEach(function(d){ byFace[d.face] = d; });
@@ -1836,6 +1960,7 @@ function drawGrid(){
     // which happens first. One counter for both would report "three without room for icons" on a
     // board whose icons are all drawn.
     if (tkey !== null && !L.hasTithe) TITHES_DROPPED++;
+    if (hasPlate && !L.merchant) MERCHANTS_DROPPED++;
     r.figLeft = L.figLeft;
     r.figRight = L.figRight;
 
@@ -1922,6 +2047,25 @@ function drawGrid(){
       tm.dataset.hoverTithe = tkey;
     }
 
+
+    // THE MERCHANT, ON THE SAME LINE AND BELONGING TO NEITHER END OF IT.
+    //
+    // A CHILD OF #board LIKE THE RESOURCE, and for the same reason: the frame is 118 wide and
+    // this stands past the end of it, so a marker parented to the plate would be placed outside
+    // its own box -- and on Taxation outside the rectangle as well.
+    //
+    // NO HANDLES AND NO DATASET. The resource carries `hoverDuty` because the Take Tithe box
+    // lights the tiles that feed it; nothing points at the merchant, nothing lights it, and a
+    // marker that answered the pointer would promise a move that does not exist yet.
+    if (L.merchant && MERCHANT.src){
+      var mm = el("div", "mmark",
+                  {left: px(L.merchant.x), top: px(L.merchant.y),
+                   width: px(L.merchant.w), height: px(L.merchant.h)});
+      var mi = document.createElement("img");
+      mi.src = MERCHANT.src; mi.alt = ""; mi.setAttribute("aria-hidden", "true");
+      mm.appendChild(mi);
+      mm.dataset.duty = d.slug;
+    }
 
     // THE SAME ENTRY POINT THE TILE USES. A cell and its tile are two handles on one duty, so
     // both go through pickDuty and the selection, the action cards and the grid all follow from
@@ -2067,6 +2211,14 @@ function markStanding(){
 // its position gives it, so a gap means a SPECIFIC player is missing rather than merely that
 // somebody is.
 function hoodSvg(seat, w){
+  // TWO FIGURES, ONE PLACE THAT KNOWS IT. Everything else on this board measures a figure --
+  // how wide one is, how a pile stacks, where the feet go -- off numbers both of them publish,
+  // so the only thing that has to care WHICH figure this is, is the thing that draws one.
+  //
+  // IT ASKS `kind` RATHER THAN TESTING FOR A FIELD. Branching on whether a path arrived would
+  // be reading a side effect, and would quietly draw the wrong figure the day a third one
+  // publishes a path for some other reason.
+  if (HOOD.kind === "friar") return friarLayers(seat);
   // ONE UNIT WIDE WITH ITS CROWN AT y = 0, so a viewBox of the INKED box is what the markup
   // needs: a stroke is centred on its path, so a box set to the path's bare bounds cuts half the
   // outline off on every edge -- the dome comes out flat and it reads as a figure that does not
@@ -2079,6 +2231,22 @@ function hoodSvg(seat, w){
        + '" stroke-linejoin="round"/>'
        + '<ellipse cx="0" cy="' + HOOD.face.cy + '" rx="' + HOOD.face.rx
        + '" ry="' + HOOD.face.ry + '" fill="#000" opacity="0.22"/></svg>';
+}
+
+function friarLayers(seat){
+  // THE ROBE, ITS SHADOW, AND WHAT IS NEITHER. The first two are masks and take their colour
+  // from the seat -- the shadow being that same colour with the light taken out, worked out at
+  // build time so the page holds no second palette. The third is the drawing's own ink and tan,
+  // which are not anybody's and are the same picture for all four players.
+  //
+  // AN UNKNOWN SEAT FALLS BACK TO ITS OWN ROBE COLOUR rather than to a fixed grey: a figure
+  // drawn in the right colour with no shading is a figure, where one drawn in grey shadow over
+  // a green robe is a mistake you have to look twice at.
+  var robe = HOOD.swatch[seat] || "#8fae6a";
+  return '<span class="l robe" style="background:' + robe + '"></span>'
+       + '<span class="l shade" style="background:' + ((HOOD.shadeOf || {})[seat] || robe)
+       + '"></span>'
+       + '<img class="l over" src="' + HOOD.over + '" alt="" aria-hidden="true">';
 }
 
 function drawFigures(){
@@ -2134,10 +2302,33 @@ function drawFigures(){
               / (HOOD.h * (1 + HOOD.step * (tallest - 1)));
     fw = Math.min(fw, w, cap);
   });
+  // AND THE SLIDER SCALES WHAT THE CAPS ALLOWED, rather than being a fourth cap. At 100 this is
+  // exactly the size the board worked out, so the opening board is unchanged; above it the
+  // figures are deliberately allowed past what fits, because "four across" is the right answer
+  // for a board being read and the wrong one for a board being looked at, which is what this
+  // page is for. They overlap rather than overflow: the row is centred on its rectangle below,
+  // so an oversized row grows into the margins from the middle instead of running off one end.
+  fw *= GRID.fig / 100;
   fh = fw * HOOD.h;
+  // AND THE READOUT SAYS WHAT CAME OUT, not just what was asked for. The percentage is the only
+  // thing the slider itself knows, and the width it lands on is not derivable from it -- the
+  // caps move with the other three sliders, so the same 100% is 42 pixels on the opening board
+  // and something else the moment a rectangle changes size. This is the one number on the page
+  // that says how big a person actually is.
+  var vf = document.getElementById("vFig");
+  if (vf) vf.textContent = GRID.fig + " \u00b7 " + Math.round(fw) + "px";
   if (fw < 3) return;                       // below this a hood is a smudge; draw nobody
 
-  var step = fh * HOOD.step, lean = fw * HOOD.lean, gap = fw * HOOD.gap;
+  // HOW FAR APART THEY STAND, WHICH IS NOT HOW BIG THEY ARE. The cap above divides the row by
+  // the figure's OWN spacing and is left alone, so moving this slider does not resize anybody --
+  // `folk` owns the size and this owns the distance, and two controls that each changed both
+  // would be impossible to aim. Past what fits, the row overflows the way an oversized one does:
+  // centred, into the margins from the middle.
+  var apart = HOOD.gap + GRID.apart / 100;
+  var va = document.getElementById("vApart");
+  if (va) va.textContent = (GRID.apart > 0 ? "+" : "") + GRID.apart
+                         + " \u00b7 " + Math.round(fw * apart) + "px";
+  var step = fh * HOOD.step, lean = fw * HOOD.lean, gap = fw * apart;
   CELLS.forEach(function(slug){
     var r = GRIDPOS[slug];
     if (!r) return;
@@ -2156,13 +2347,37 @@ function drawFigures(){
       // and the 89 left over has to be somewhere. Split, so the group sits over the middle of
       // its rectangle the way the icon plate sits under it. Anchored left it would have read as
       // people pushed against an edge, with the icons centred underneath disagreeing.
-      // THE SAME 4.72 AS THE CAP ABOVE, deliberately written the same way: the row's width and
-      // the width that would fill the row are one expression, so they cannot come apart.
-      var slack = (r.figRight - r.figLeft) - fw * (4 + 3 * HOOD.gap);
+      // THE WIDTH OF THE ROW AS IT IS ACTUALLY DRAWN: four figures and the three gaps between
+      // them, in the sizes the sliders landed on. It used to be written as 4.72 figure widths,
+      // the same expression as the cap above, so that the row's width and the width that would
+      // fill the row could not come apart -- which was true while the cap was the only thing
+      // deciding either. Two sliders now move one and not the other, so the row is measured
+      // from what is being drawn rather than from what would have fitted.
+      //
+      // AND THAT DIFFERENCE IS THE WHOLE MECHANISM HERE. When the row is wider than its
+      // rectangle the slack goes NEGATIVE and half of it comes off the left edge, which is how
+      // an oversized row ends up centred rather than hanging off the right of it.
+      var slack = (r.figRight - r.figLeft) - (fw * 4 + gap * 3);
       var x = r.figLeft + slack / 2 + j * (fw + gap);
       for (var i = 0; i < n; i++){
         var up = n - 1 - i;                 // 0 is the one standing on the line
-        var side = up === 0 ? 0 : (up % 2 ? lean : -lean);
+        // EVERY OTHER ONE IS NUDGED, AND THE ONE ON THE LINE IS NOT. The jog exists so a pile
+        // reads as several people rather than one smeared silhouette, and it only does that if
+        // the steps up the stack are even.
+        //
+        // THEY WERE NOT. This alternated a figure LEFT or RIGHT of its column -- `-lean`, then
+        // `+lean`, then `-lean` -- with the figure standing on the line exempted at 0, because
+        // a seat's feet must not move when its count changes. That exemption made the FIRST
+        // step up a pile half the size of every step above it: 0, +lean, -lean, +lean steps by
+        // one lean and then by two, and the eye reads the bottom pair as misaligned against the
+        // rest. It was reported as exactly that, and from the second figure up it looked right.
+        //
+        // SO THE COLUMN IS THE BASELINE AND THE JOG IS ONE-SIDED. Even rows sit on the column,
+        // odd rows are nudged off it, and every step is `lean`. The figure on the line keeps
+        // its place -- it is an even row, so it needs no exemption and the feet still do not
+        // move -- and the amplitude is unchanged because each figure's `lean` was doubled to
+        // match: what used to be a swing of two leans is now a swing of one.
+        var side = (up % 2) ? lean : 0;
         var f = el("div", "fig", {left: px(x + side), top: px(foot - fh - up * step),
                                   width: px(fw), height: px(fh)});
         f.innerHTML = hoodSvg(seat, fw);
@@ -2180,19 +2395,27 @@ function wireGrid(){
   var rd = document.getElementById("rDisp");
   var rs = document.getElementById("rSize");
   var rt = document.getElementById("rHeight");
+  var rf = document.getElementById("rFig");
+  var ra = document.getElementById("rApart");
+  var rc = document.getElementById("rCols");
+  var rm = document.getElementById("rMerch");
   var cb = document.getElementById("cBare");
   rg.value = GRID.gap; rd.value = GRID.disp; rs.value = GRID.size;
-  rt.value = GRID.height;
+  rt.value = GRID.height; rf.value = GRID.fig; ra.value = GRID.apart;
+  rc.value = GRID.cols; rm.value = GRID.merch;
   cb.checked = !!GRID.bare;
   function apply(){
     GRID.gap = +rg.value; GRID.disp = +rd.value; GRID.size = +rs.value;
-    GRID.height = +rt.value;
+    GRID.height = +rt.value; GRID.fig = +rf.value; GRID.apart = +ra.value;
+    GRID.cols = +rc.value; GRID.merch = +rm.value;
+    document.getElementById("vCols").textContent = (GRID.cols > 0 ? "+" : "") + GRID.cols;
+    document.getElementById("vMerch").textContent = GRID.merch + "%";
     GRID.bare = cb.checked;
     document.getElementById("vGap").textContent = GRID.gap;
     document.getElementById("vDisp").textContent = GRID.disp;
     document.getElementById("vSize").textContent = GRID.size;
     document.getElementById("vHeight").textContent = GRID.height;
-    drawGrid();
+    drawGrid();                             // which writes vFig, because only it knows the pixels
     // WHAT THE TWO NUMBERS COST, SAID OUT LOUD. Both sliders shrink the rectangles -- the gap
     // because it eats the row, the edge because the arrangement is inset to stay inside the
     // wheel -- so the size is the thing to watch while dragging, and it is the one number the
@@ -2228,13 +2451,20 @@ function wireGrid(){
                     + (PLATES_DROPPED ? "  ·  " + PLATES_DROPPED + " without room for icons"
                                       : "")
                     + (TITHES_DROPPED ? "  ·  " + TITHES_DROPPED + " without room for a resource"
-                                      : "");
-    tag.style.color = (over > 0.5 || PLATES_DROPPED || TITHES_DROPPED) ? "#d08c6a" : "";
+                                      : "")
+                    + (MERCHANTS_DROPPED ? "  ·  " + MERCHANTS_DROPPED
+                                           + " without room for the merchant" : "");
+    tag.style.color = (over > 0.5 || PLATES_DROPPED || TITHES_DROPPED || MERCHANTS_DROPPED)
+                    ? "#d08c6a" : "";
   }
   rg.addEventListener("input", apply);
   rd.addEventListener("input", apply);
   rs.addEventListener("input", apply);
   rt.addEventListener("input", apply);
+  rf.addEventListener("input", apply);
+  ra.addEventListener("input", apply);
+  rc.addEventListener("input", apply);
+  rm.addEventListener("input", apply);
   // THE SEAT IS NOT A GRID SETTING AND IS WIRED APART FROM THEM. It changes nothing about the
   // arrangement -- no rectangle moves -- so it does not belong in apply(), which rebuilds the
   // nine and re-measures them. It changes WHOSE box is drawn, which is render()'s business.
