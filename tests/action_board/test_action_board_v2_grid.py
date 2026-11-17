@@ -2051,6 +2051,7 @@ def test_choosing_an_action_puts_the_resource_down(tmpl):
             "%s does not put the resource down, so it can outlive the action:\n%s" % (fn, body))
 
 
+@needs_node
 def test_the_board_never_claims_a_duty_and_a_tithe_at_once(tmpl):
     """TAKING A TITHE CHOOSES NO DUTY, so no duty may wear the chosen rim while one is taken.
 
@@ -2059,16 +2060,31 @@ def test_the_board_never_claims_a_duty_and_a_tithe_at_once(tmpl):
     box was also lit, which is two answers to a question that has one. The cards above stay up,
     because they are what you are BROWSING; the rim is what says CHOSEN.
 
-    Falsify: set the rim from S.duty alone again.
+    THIS GUARD USED TO READ render()'s TEXT AND THAT IS WHY IT MISSED THE SEQUEL. It asked that
+    `var chosen = ...` mentioned the tithe, which was true of render() for as long as render()
+    was the only place the rim was drawn -- and drawGrid()'s post-rebuild sweep was drawing it
+    too, from `d.slug === S.duty` alone. The rule now has one name and this asks what it ANSWERS;
+    test_both_places_that_draw_the_rim_ask_the_one_rule holds that both sites ask it.
+
+    THE CASE IN THE MIDDLE IS NOT A MISTAKE. A duty with no action chosen yet still wears the
+    rim -- pickDuty puts the duty down and clears the slot -- so a null slot is chosen and only
+    the tithe is not. A guard that demanded a slot as well would forbid the state the board is in
+    for the whole moment between picking a duty and picking its action.
+
+    Falsify: drop the `S.slot !== TITHE_SLOT` half of dutyChosen and the third case lights.
     """
-    body = _code(_function(tmpl, "render"))
-    m = re.search(r"var chosen = (.*?);", body)
-    assert m, "render no longer works the chosen duty out in one place:\n%s" % body[:600]
-    assert "S.slot !== TITHE_SLOT" in m.group(1), (
-        "the chosen rim ignores the tithe, so a duty stays lit while one is taken: %s"
-        % m.group(1))
-    assert body.count('classList.toggle("sel", chosen)') == 2, (
-        "the tile and the grid rectangle no longer take the rim from one answer")
+    prelude = "\n".join([
+        "var TITHE_SLOT = %s;" % _decl(tmpl, "TITHE_SLOT"),
+        "var S = {duty: null, slot: null};",
+        _function(tmpl, "dutyChosen"),
+        "function at(duty, slot){ S.duty = duty; S.slot = slot; return dutyChosen('clerical'); }",
+    ])
+    got = _node(prelude, "[at('clerical', 'actionA'), at('clerical', null),"
+                         " at('clerical', TITHE_SLOT), at('produce', 'actionA'),"
+                         " at('produce', TITHE_SLOT)]")
+    assert got == [True, True, False, False, False], (
+        "dutyChosen answered %s for: clerical+action, clerical+nothing, clerical+tithe, "
+        "another duty+action, another duty+tithe" % got)
 
 
 def test_the_confirm_waits_for_the_resource(tmpl):
@@ -5061,3 +5077,32 @@ def test_the_city_reads_its_pitch_off_a_line_rather_than_inventing_one(tmpl):
         "the City no longer asks placeFor for the line it would have had:\n%s" % city[-600:])
     assert re.search(r"r\.seats\.push\(cmid \+ \(cs - 1\.5\) \* cpitch\)", city), (
         "the City's four columns are no longer centred on its middle at the line's own pitch")
+
+
+def test_both_places_that_draw_the_rim_ask_the_one_rule(tmpl):
+    """render() and drawGrid()'s post-rebuild sweep go through dutyChosen, not through a copy.
+
+    THIS IS THE GUARD FOR A DRIFT THAT ALREADY HAPPENED. render() held the rule in full and the
+    sweep held `d.slug === S.duty` alone, so with a tithe taken one slider drag put the gold back
+    on the grid cell while its own tile stayed clear -- the two halves of a single answer visibly
+    disagreeing until the next render(). Only the sliders call drawGrid() without a render()
+    behind it, which is why no player met it and a tuning session did.
+
+    THE TAKE TITHE BOX IS LEFT OUT ON PURPOSE. It asks `S.slot === TITHE_SLOT` directly, which is
+    not this rule and not a copy of it: it is the other side of the same choice, and the box has
+    no duty to be chosen for.
+
+    Falsify: inline the comparison at either site, or let the sweep ask about S.duty alone.
+    """
+    rend = _code(_function(tmpl, "render"))
+    grid = _code(_function(tmpl, "drawGrid"))
+    assert re.search(r"var chosen = dutyChosen\(d\.slug\);", rend), (
+        "render() no longer takes the rule from dutyChosen()")
+    assert rend.count('classList.toggle("sel", chosen)') == 2, (
+        "render() lights the tile and its grid cell from one word; it now lights %d that way"
+        % rend.count('classList.toggle("sel", chosen)'))
+    assert 'classList.toggle("sel", dutyChosen(d.slug))' in grid, (
+        "drawGrid()'s post-rebuild sweep no longer asks dutyChosen()")
+    for name, body in (("render", rend), ("drawGrid", grid)):
+        assert not re.search(r'toggle\("sel",[^)]*S\.duty', body), (
+            "%s compares S.duty where it draws the rim instead of asking dutyChosen()" % name)

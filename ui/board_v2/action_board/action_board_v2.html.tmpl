@@ -2154,9 +2154,12 @@ function drawGrid(){
   // DRAWN IN THE RIGHT STATE RATHER THAN DRAWN AND THEN CORRECTED. The sliders rebuild these
   // nine elements on every input event, and a rebuild that dropped the selection until the next
   // render() would flicker the gold off and on under the pointer.
+  // AND THROUGH dutyChosen(), NOT THROUGH A COPY OF IT. The rule has a tithe half; a sweep that
+  // asked `d.slug === S.duty` here put the gold back during a tithe and disagreed with the tile
+  // beside it. See dutyChosen().
   GEO.duties.forEach(function(d){
     var cell = document.getElementById("dcell-" + d.slug);
-    if (cell) cell.classList.toggle("sel", d.slug === S.duty);
+    if (cell) cell.classList.toggle("sel", dutyChosen(d.slug));
   });
   markStanding();
   drawFigures();
@@ -3071,18 +3074,31 @@ function pickAction(duty, slot){
   render();
 }
 
+// WHAT "CHOSEN" MEANS, ASKED IN ONE PLACE BY EVERYTHING THAT DRAWS IT.
+//
+// AND NOT WHILE A TITHE IS BEING TAKEN, which is the half that gets dropped. Taking a tithe moves
+// nobody and depends on no duty, so the duty you happened to be looking at is not chosen -- and a
+// board wearing the gold rim on Construct while the Take Tithe box is also lit is claiming two
+// answers to a question that has one. The cards above stay up, because they are what you are
+// BROWSING; the rim is what says CHOSEN, and only one thing can be.
+//
+// IT IS A FUNCTION BECAUSE THE COPY ALREADY DRIFTED. render() said this in full and drawGrid()'s
+// post-rebuild sweep said `d.slug === S.duty` alone, having been written from the half of the rule
+// that was obvious. With a tithe taken, one slider drag put the gold back on the grid cell while
+// its own tile -- same rule, same frame -- stayed clear: not the forbidden state the comment was
+// guarding against, but a worse one, the two halves of a single answer visibly disagreeing until
+// the next render(). Only the sliders call drawGrid() without a render() behind it, so no player
+// ever met it; a tuning session did. The comment right below used to claim two loops WOULD drift
+// the first time one was edited. It was right. There is one rule now, and three askers.
+function dutyChosen(slug){ return slug === S.duty && S.slot !== TITHE_SLOT; }
+
 function render(){
   GEO.duties.forEach(function(d){
+    var chosen = dutyChosen(d.slug);
     var tile = document.getElementById("tile-" + d.slug);
-    // AND NOT WHILE A TITHE IS BEING TAKEN. Taking a tithe moves nobody and depends on no duty,
-    // so the duty you happened to be looking at is not chosen -- and a board wearing the gold rim
-    // on Construct while the Take Tithe box is also lit is claiming two answers to a question
-    // that has one. The cards above stay up, because they are what you are BROWSING; the rim is
-    // what says CHOSEN, and only one thing can be.
-    var chosen = d.slug === S.duty && S.slot !== TITHE_SLOT;
     if (tile) tile.classList.toggle("sel", chosen);
-    // AND THE GRID, FROM THE SAME LINE. Two loops would be two answers the first time one of
-    // them was edited; this is the rule lightFace() already states for the hover pair.
+    // AND THE GRID, FROM THE SAME LINE -- this is the rule lightFace() already states for the
+    // hover pair.
     var face = document.getElementById("dcell-" + d.slug);
     if (face) face.classList.toggle("sel", chosen);
   });
