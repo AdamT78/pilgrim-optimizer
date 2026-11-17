@@ -9358,10 +9358,13 @@
       "sha256": "f346b6a18f4620e4e02a5ed25013e603f5d6c3db138c56388c3fd39a7482f484"
     }
   },
+  "assetDirsNote": "THE FOLDERS ui/assets/verify_assets.py WOULD OPEN IF IT WERE POINTED AT THIS TREE -- and it is not, by anything in CI. board_v2's own guard is tests/layout_lab/test_board_v2_attribution.py, which does not read this list at all: it walks the WHOLE tree by asset suffix and skips generated/, _to_delete/, _masters/ and _reference/, each skip justified by a named gitignore line that a sibling test asserts is still there. That is the stronger shape, because a folder cannot go unchecked merely by being left off a list. This list is kept because two guards read membership in it as a claim -- tests/action_board/test_action_board_v2_grid.py holds that effects/ is in it -- so a stale entry here is a false claim in a file whose whole purpose is true ones. layout_lab/assets WAS such an entry: it named a folder that exists nowhere in the repository, so the one place anybody looked to ask what gets checked answered with a directory nobody has. assets/, backdrop/ and duty_art_lab/reference/ are the other direction -- they hold eight recorded files and were missing from the list, which the tree-walking guard covers anyway and this list should not have been quietly wrong about. duty_art_lab is named at its reference/ subfolder and not whole, because the rest of it is a lab: generators, templates and fifty-odd prompt files, none of them assets.",
   "assetDirs": [
-    "layout_lab/assets",
+    "assets",
+    "backdrop",
     "duty_actions",
     "controls",
+    "duty_art_lab/reference",
     "tokens/acolytes",
     "tokens/markers",
     "tokens/masters",
