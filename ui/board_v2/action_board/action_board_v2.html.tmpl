@@ -286,8 +286,30 @@ body.full{background:#000}
    on this card blends now, so the fence guards nothing; it goes with the thing it was built for,
    and this note is here so the next blend knows what it will need. */
 .art{overflow:hidden;background:#000;cursor:pointer;
-  outline:2px solid var(--edge);outline-offset:-1px;transition:outline-color .12s ease}
-.art img{width:100%;height:100%;object-fit:cover;display:block}
+  outline:2px solid var(--edge);outline-offset:-1px;transition:outline-color .18s ease}
+/* TWO PICTURES IN THE CARD, AND THE STATE IS WHICH ONE YOU ARE LOOKING AT.
+   The cold one is always there; the colour one lies exactly on top of it and fades in. Nothing
+   at rest, 65% under the pointer, the whole picture when the card is chosen. The pair is a
+   luminance-to-palette grade of one drawing -- nothing resized, nothing regenerated -- so every
+   pixel sits over its own original and the blend at any opacity is the picture blended with
+   itself. That is why this reads as colour arriving rather than as two images dissolving.
+   65% RATHER THAN A SATURATION OF 65%, and they are not the same thing. This is 65% of the
+   colour picture over 35% of the cold one; a saturation filter would move every pixel along its
+   own hue axis and could not reach this palette at all, which is why there are two files.
+   ABSOLUTE, BECAUSE THERE ARE TWO. One picture could be a block filling the card; two have to
+   occupy the same rectangle, and `inset:0` against a card that is already positioned is the
+   whole of what that needs. The caption is appended after them and therefore paints above. */
+.art img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+.art img.hot{opacity:0;transition:opacity .18s ease}
+.art:hover img.hot{opacity:.65}
+/* AFTER THE HOVER RULE AND AT THE SAME WEIGHT, so a chosen card stays in full colour while the
+   pointer is on it -- the order .dcell states for .lit and .sel, and the row's edge states too. */
+.art.sel img.hot{opacity:1}
+/* AND A CARD WITH NO COLD TWIN SHOWS ITS COLOUR PICTURE OUTRIGHT. Last on purpose: it has to beat
+   both rules above. An action whose Cold Slate layer is missing or unrecorded is drawn exactly as
+   it was before this existed rather than fading to nothing, because a card that is blank until
+   you point at it is indistinguishable from a card that is broken. The build says which ones. */
+.art.nocold img.hot{opacity:1;transition:none}
 /* THE NAME ONLY, AND NO SCRIM BEHIND IT.
    The effect line used to live along the bottom of the picture and moved into the upper text box,
    which halved the scrim count and handed the bottom of every card back -- the corner the briefs
@@ -349,11 +371,15 @@ body.full{background:#000}
    edge, 1px in and 1px out, and the row has 16px of canvas between its boxes, so nothing meets
    anything.
 
-   .12s, WHICH IS THE WHEEL'S. This was .14s for one commit, to agree with the hover wash that
-   fired on the same card at the same moment -- two cues on one object arriving 20ms apart is a
-   flicker you can see. The wash is gone, so the edge answers hover alone and there is nothing
-   left for it to agree with except the rectangles, which is what it matches. When the crossfade
-   lands the card will answer twice again and the two durations are to be settled together. */
+   .18s ON BOTH THE CARD AND THE BOX, AND THE WHEEL'S .12s IS LEFT ALONE. The card answers hover
+   twice -- this edge and the colour arriving above it -- and two cues on one object at different
+   speeds is a flicker you can see, so they are one number. It is the PICTURE's number rather than
+   the edge's: the crossfade is the heavy cue and an edge that finished first would look like it
+   had jumped. A card and a rectangle in different parts of the board differing by 60ms is not
+   visible, which is the trade; the rectangles have one cue and keep the pace that suits it.
+   AND THE TWO HALVES OF THE ROW AGREE NOW, WHICH THEY DID NOT. The card was moved to .12s when
+   the hover wash came off and the Tithe box beside it was left at .14s -- 20ms apart, on one row,
+   from one edit that changed one of them. Both are set here, in one place, for that reason. */
 .art:hover, .panel:hover{outline-color:var(--edge-lit)}
 /* AFTER THE HOVER RULE AND AT THE SAME WEIGHT, so a chosen card keeps its gold while the pointer
    is on it. This is the order .dcell already states for .lit and .sel, for the same reason. */
@@ -418,7 +444,7 @@ body.full{background:#000}
    it and every one of them moves a pixel up and left. Kept at its width, emptied of its
    colour. */
 .panel{border:1px solid transparent;border-radius:5px;background:#0e0d0b;
-  outline:2px solid var(--edge);outline-offset:-1px;transition:outline-color .14s ease}
+  outline:2px solid var(--edge);outline-offset:-1px;transition:outline-color .18s ease}
 /* NO .panel.eligible RULE. The box wore the same wash for a round and it has been taken back
    out: a box with nothing in it already writes "no tithe available" across its own middle, so
    the light was the board saying one thing twice on one object. The rectangles keep it because
@@ -3171,10 +3197,27 @@ function render(){
     var art = document.getElementById("art-" + slot);
     var a = info && info[slot];
     var has = a && a.art && IMAGES[a.art];
+    // THE COLD TWIN IS FOUND BY ITS NAME, not carried in the duty record. One key becomes the
+    // other by its prefix, so an action that gains a Cold Slate layer gains it without the duty
+    // text, the generator's duty block or this list of slots being taught anything at all.
+    var ckey = (a && a.art) ? a.art.replace("art:", "cold:") : null;
+    var cold = (ckey && IMAGES[ckey]) ? IMAGES[ckey] : null;
     art.innerHTML = "";
+    // SET WHETHER OR NOT THERE IS A PICTURE, because innerHTML clears children and not classes:
+    // a card that went from a twinned action to an untwinned one would otherwise keep the old
+    // answer and fade up a picture with nothing underneath it.
+    art.classList.toggle("nocold", !cold);
     art.style.display = (info && info.actions === 1 && slot === "actionB") ? "none" : "";
     if (has){
-      var im = document.createElement("img"); im.src = IMAGES[a.art]; art.appendChild(im);
+      // THE COLD ONE FIRST, so the colour one lies over it. Both are decoration -- the card's
+      // name is in the caption and the choice is announced by the frame -- so neither is read
+      // out, and the cold layer is hidden from the tree outright rather than named twice.
+      if (cold){
+        var ci = document.createElement("img"); ci.className = "cold"; ci.src = cold;
+        ci.alt = ""; ci.setAttribute("aria-hidden", "true"); art.appendChild(ci);
+      }
+      var im = document.createElement("img"); im.className = "hot"; im.src = IMAGES[a.art];
+      im.alt = ""; im.setAttribute("aria-hidden", "true"); art.appendChild(im);
     } else {
       var ph = document.createElement("div"); ph.className = "ph";
       ph.innerHTML = "<b>" + ((a && a.name) || "no second action") + "</b>" +

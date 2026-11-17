@@ -219,11 +219,29 @@ def test_the_stated_default_is_written_down_and_is_the_one_actually_used(record)
     assert "ChatGPT" in record.get("defaultProvenance", ""), (
         "the default is not stated in the record itself")
     # And it is not merely declared: the artwork actually carries it.
+    #
+    # THIS USED TO FORBID A NON-DEFAULT LICENCE OUTRIGHT while its own failure message said
+    # "each needs a source saying why" -- so the message described the rule the paragraph above
+    # states and the assertion enforced a stricter one nobody had written down. It held for as
+    # long as every picture here happened to be ChatGPT's. On 2026-11-17 the fourteen duty action
+    # pictures and their fourteen Cold Slate twins arrived from Krea, every one of them naming a
+    # creator and a source exactly as defaultProvenance says a departure must, and this guard
+    # went red on a tree that was doing the right thing. It asks what it always claimed to ask
+    # now: a departure is allowed, and it has to be ACCOUNTED FOR.
     art = [k for k in record["files"] if k.startswith(("duty_actions/", "tokens/"))]
     assert art, "no artwork entries to check the default against"
-    odd = [k for k in art if record["files"][k]["licence"] != "openai-generated"]
-    assert not odd, (
-        "these carry a non-default licence and each needs a source saying why: %s" % odd)
+    assert [k for k in art if record["files"][k]["licence"] == "openai-generated"], (
+        "no artwork carries the default licence any more, so calling it the default is a claim "
+        "about nothing -- either the tree moved on or defaultProvenance is out of date")
+    for k in art:
+        entry = record["files"][k]
+        if entry["licence"] == "openai-generated":
+            continue
+        assert entry.get("creator"), (
+            "%s departs from the stated default and names no creator, so nothing says who made "
+            "it" % k)
+        assert entry.get("source"), (
+            "%s departs from the stated default and names no source, so nothing says why" % k)
 
 
 def test_a_derived_file_says_what_it_came_from(record):
@@ -410,3 +428,101 @@ def test_a_rewritten_cutout_states_the_ramp_it_was_actually_cut_at(record):
         "that describe them are hand-written and have to move with the constants, or the record "
         "documents a derivation that never happened."
         % (len(stale), found, rewritten, lo, hi, "\n  ".join(stale)))
+
+
+SLATE_SCRIPT = ROOT / "tools" / "duty_art" / "pilgrim_slate_batch.py"
+
+
+def _cold_pairs():
+    """Every Cold Slate file under duty_actions/, with the colour file it claims to come from."""
+    out = []
+    for cold in sorted((TREE / "duty_actions").rglob("cold/*.png")):
+        action = cold.parent.parent
+        stem = cold.name.split("_cold_v")[0]
+        colour = sorted(action.glob(stem + "_v*.png"))
+        if colour:
+            out.append((colour[-1], cold))
+    return out
+
+
+def test_every_action_picture_has_a_cold_twin(record):
+    """A card with no cold layer is a card whose hover says nothing, and it fails quietly.
+
+    The board draws such a card in full colour at every state -- which is right, because a card
+    that went blank until you pointed at it would be indistinguishable from a broken one -- and
+    that correctness is exactly what makes the omission invisible. So it is counted here.
+
+    Falsify: delete a cold/ folder, or add a fifteenth action picture without grading it.
+    """
+    colour = [k for k in record["files"]
+              if k.startswith("duty_actions/") and "/cold/" not in k
+              and k.endswith(".png") and record["files"][k].get("slot") in ("left", "right")
+              and record["files"][k]["state"] == "present"
+              and not any(part in k.split("/") for part in ("masters", "seals", "icons", "cutouts"))]
+    assert colour, "no action pictures on record at all"
+    missing = []
+    for k in colour:
+        action = (TREE / k).parent
+        stem = (TREE / k).name.rsplit("_v", 1)[0]
+        if not sorted((action / "cold").glob(stem + "_cold_v*.png")):
+            missing.append(k)
+    assert not missing, (
+        "%d action picture(s) have no Cold Slate twin, so their cards never go grey: %s"
+        % (len(missing), ", ".join(missing)))
+
+
+def test_a_cold_twin_is_what_its_record_says_the_script_made(record):
+    """The provenance claim under cold/, RUN rather than read.
+
+    EVERY ONE OF THESE RECORDS SAYS THE SAME THING: that the file is
+    tools/duty_art/pilgrim_slate_batch.py applied to the colour picture named in `derivedFrom`,
+    at gamma 0.88, with nothing resized, regenerated or filtered. That is either true of the
+    bytes on disk or it is a story, and the difference is one function call -- so it is made.
+
+    IT IS ALSO WHAT THE BOARD'S CROSSFADE RESTS ON. The card fades the colour picture over the
+    cold one and the result only reads as colour arriving because the two are the same drawing
+    pixel for pixel. A cold file that drifted from its twin -- regenerated, re-exported at
+    another size, graded at another gamma -- would still look like a picture and would ghost
+    under the fade, which is the kind of wrong nobody reports precisely.
+
+    Falsify: regrade one file at --gamma 0.9, or re-save it through any editor.
+    """
+    pytest.importorskip("numpy")
+    Image = pytest.importorskip("PIL.Image", reason="Pillow is needed to read the pictures")
+    assert SLATE_SCRIPT.is_file(), (
+        "the grading script is not at %s, so nothing in cold/ can be reproduced and every "
+        "record under it is an unverifiable claim" % SLATE_SCRIPT.relative_to(ROOT))
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("pilgrim_slate_batch", SLATE_SCRIPT)
+    slate = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(slate)
+
+    pairs = _cold_pairs()
+    assert pairs, "no cold/ files to check"
+    bad = []
+    for colour, cold in pairs:
+        with Image.open(colour) as src:
+            made = slate.convert_image(src)          # the script's own default gamma, 0.88
+        with Image.open(cold) as have:
+            if made.tobytes() != have.convert("RGBA").tobytes():
+                bad.append(cold.relative_to(TREE).as_posix())
+    assert not bad, (
+        "%d of %d cold file(s) are NOT what pilgrim_slate_batch.py makes from their colour twin, "
+        "so their records describe a transform that did not produce them: %s"
+        % (len(bad), len(pairs), ", ".join(bad)))
+
+
+def test_a_cold_record_names_the_script_that_made_it(record):
+    """The bytes are checked above; this holds that the record points at the thing that was run.
+
+    A file that reproduces and a record that does not say how are two different kinds of right.
+    The check above would go on passing if every `reproducibleBy` were deleted tomorrow.
+    """
+    for name, entry in record["files"].items():
+        if "/cold/" not in name:
+            continue
+        assert entry.get("derivedFrom"), "%s does not say which picture it was graded from" % name
+        assert "pilgrim_slate_batch.py" in (entry.get("reproducibleBy") or ""), (
+            "%s does not name the script that makes it" % name)
+        assert "0.88" in (entry.get("modifications") or "") + (entry.get("reproducibleBy") or ""), (
+            "%s does not state the gamma, which is the one setting that changes the output" % name)

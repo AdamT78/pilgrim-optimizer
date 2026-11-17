@@ -358,6 +358,74 @@ MERCHANT_DIR = v1.BOARD / "tokens" / "markers"
 MERCHANT_PX = 192
 
 
+def bundled_cold_art() -> tuple[dict, list]:
+    """The Cold Slate twin of each action picture, inlined beside it.
+
+    TWO PICTURES, ONE STACK, AND NO THIRD STATE TO DRAW. The card shows the cold picture at rest
+    and crossfades the colour one over it -- nothing on hover, part-way, full colour when chosen.
+    The alternative was a filter on the single colour picture, and it was rejected on what the
+    filter can reach: CSS has saturate, hue-rotate and brightness, and the grade this board wants
+    is a luminance-to-palette lookup that none of them can express. A picture that cannot be
+    described is a picture that has to be shipped.
+
+    THEY CROSSFADE CLEANLY BECAUSE THE GRADE IS PER-PIXEL AND DEPENDS ONLY ON LUMINANCE. Nothing
+    is resized, warped or regenerated between the two files, so every pixel of the cold one sits
+    exactly over its colour original and the blend at any opacity is the blend of one picture
+    with itself. tools/duty_art/pilgrim_slate_batch.py is the transform and the records under
+    cold/ name it; a guard re-runs it on a pair rather than taking that on trust.
+
+    `cold/` IS A NON-SLOT FOLDER, which is what keeps this honest. v1's bundled_art walks a duty
+    deep and takes the LAST file per slot by path; `.../gain_coins/cold/..._cold_v01.png` sorts
+    after `.../gain_coins/clerical_gain_coins_right_v07.png`, so without the skip the cold twin
+    would quietly become the card art and the board would open grey. The folder is listed in
+    attribution.json's nonSlotFolders, with the seals and the masters, for exactly that reason.
+
+    A MISSING TWIN IS A NOTE, NOT A FAILURE, and it is the same rule every other picture here is
+    held to. The board draws the colour card alone and says which action has no cold layer --
+    because a card that silently never goes grey is indistinguishable from a card whose hover is
+    broken, and those want different fixes.
+    """
+    notes: list = []
+    try:
+        from PIL import Image  # noqa: F401
+    except ImportError:
+        return {}, ["Pillow is not installed, so no Cold Slate layer is built in"]
+    if not v1.ART_DIR.is_dir():
+        return {}, ["no duty_actions/ folder at %s, so no Cold Slate layer" % v1.ART_DIR]
+    rec = {}
+    if v1.ATTRIB_FILE.is_file():
+        rec = json.loads(v1.ATTRIB_FILE.read_text(encoding="utf-8")).get("files", {})
+    want = set(v1.image_suffixes())
+    side_to_slot = {"left": "actionA", "right": "actionB"}
+    out: dict = {}
+    for slug, _name, _deg in G.DUTIES:
+        duty = v1.ART_DIR / slug
+        if not duty.is_dir():
+            continue
+        for action in sorted(p for p in duty.iterdir() if p.is_dir()):
+            folder = action / "cold"
+            if not folder.is_dir():
+                continue
+            found = sorted(f for f in folder.iterdir()
+                           if f.is_file() and f.suffix.lower() in want)
+            if not found:
+                continue
+            f = found[-1]                       # sorted ascending, so _v02 beats _v01
+            rel = f.relative_to(v1.BOARD).as_posix()
+            if rel not in rec:
+                notes.append("%s: no attribution entry, left out" % rel)
+                continue
+            side = rec[rel].get("slot")
+            if side not in side_to_slot:
+                side = "left" if "_left" in f.name else ("right" if "_right" in f.name else None)
+            if side not in side_to_slot:
+                notes.append("%s: no slot recorded, left out" % rel)
+                continue
+            out["cold:%s:%s" % (slug, side_to_slot[side])] = v1._inline(
+                f, (G.ART_W * v1.ART_SCALE, G.ART_H * v1.ART_SCALE))
+    return out, notes
+
+
 def bundled_merchant() -> tuple[dict, list]:
     """The merchant marker, inlined, with the aspect it was drawn at.
 
@@ -672,9 +740,11 @@ def build() -> tuple[str, list]:
     shapes = {**sshape, **tshape}
     tnotes += inotes1 + inotes2
     merchant, mnotes = bundled_merchant()
+    cold, kinotes = bundled_cold_art()
     names, nnotes = tithe_names()
     films, fnotes = bundled_films()
     notes += snotes + xnotes + dnotes + cnotes + tnotes + nnotes + fnotes + mnotes
+    notes += kinotes
 
     # THE BACKDROP IS NOT BUNDLED, because v2 does not draw it. It was the valley the ribbon of
     # eight tiles stood on, and the ribbon is gone. Carrying the picture anyway would leave 22 KB
@@ -709,7 +779,7 @@ def build() -> tuple[str, list]:
         "__GEOMETRY__": json.dumps(G.as_dict()),
         "__DUTIES__": json.dumps(duties),
         "__CONTROLS__": json.dumps(v1.control_text()),
-        "__IMAGES__": json.dumps({**art, **seals, **controls, **tithe}),
+        "__IMAGES__": json.dumps({**art, **cold, **seals, **controls, **tithe}),
         "__SFX__": json.dumps(sfx),
         "__BEDS__": json.dumps(beds),
         # NO __WHEEL_SVG__. The drawing is not inlined and geometry.WHEEL_ASSET is not read, so
