@@ -5163,3 +5163,51 @@ def test_the_action_row_wears_the_wheels_three_states(tmpl):
     for name in (".art", ".panel"):
         assert "px solid var(--edge)" not in _rule(tmpl, name).get("border", ""), (
             "%s draws its rest edge with a border, which changes the box" % name)
+
+
+def test_the_card_crossfades_between_its_two_pictures(tmpl):
+    """Rest is the cold picture, hover is 65% of the colour one, chosen is all of it.
+
+    ONE DRAWING, TWO FILES, AND NO THIRD STATE TO PAINT. The cold layer is a luminance-to-palette
+    grade of the colour one -- nothing resized or regenerated -- so the two sit pixel over pixel
+    and an opacity between them reads as colour arriving rather than as two pictures dissolving.
+    tests/layout_lab/test_board_v2_attribution.py holds that claim by re-running the transform.
+
+    65% IS NOT A SATURATION OF 65% and the two cannot be swapped. This is 65% of the colour
+    picture over 35% of the cold one; a saturation filter moves each pixel along its own hue axis
+    and cannot reach this palette at all, which is the whole reason there are two files to ship.
+
+    ORDER CARRIES THE PRECEDENCE, because all four rules weigh the same. Hover before chosen, so
+    a chosen card under the pointer stays in full colour; both before `nocold`, so an action
+    whose cold layer is missing shows its colour picture outright instead of fading to nothing.
+
+    Falsify: reorder the three rules, or let the pictures lay out in flow instead of on top of
+    each other.
+    """
+    base = _rule(tmpl, ".art img")
+    assert base.get("position") == "absolute" and base.get("inset") == "0", (
+        "the two pictures no longer share one rectangle, so they stack in flow: %s" % base)
+    assert _rule(tmpl, ".art img.hot").get("opacity") == "0", "the card does not open cold"
+    assert _rule(tmpl, ".art:hover img.hot").get("opacity") == ".65", "hover is not 65% colour"
+    assert _rule(tmpl, ".art.sel img.hot").get("opacity") == "1", "chosen is not full colour"
+    assert _rule(tmpl, ".art.nocold img.hot").get("opacity") == "1", (
+        "an action with no cold twin no longer shows its colour picture, so it draws as blank")
+
+    css = _rule_free(tmpl)
+    hover, sel, nocold = (css.index(".art:hover img.hot"), css.index(".art.sel img.hot"),
+                          css.index(".art.nocold img.hot"))
+    assert hover < sel < nocold, (
+        "the crossfade rules are out of order, so hover beats chosen or a missing twin fades: "
+        "hover@%d sel@%d nocold@%d" % (hover, sel, nocold))
+
+    draw = _code(_function(tmpl, "render"))
+    assert 'a.art.replace("art:", "cold:")' in draw, (
+        "the cold twin is no longer found from the colour key, so an action that gains a layer "
+        "has to be taught about somewhere else as well")
+    assert 'classList.toggle("nocold", !cold)' in draw, (
+        "nothing tells the card whether it has a cold twin")
+    assert draw.index('classList.toggle("nocold"') < draw.index("if (has){"), (
+        "`nocold` is set inside the branch that has a picture, so a card that loses its twin "
+        "keeps the old answer -- innerHTML clears children, not classes")
+    assert draw.index('ci.className = "cold"') < draw.index('im.className = "hot"'), (
+        "the colour picture is appended first, so the cold one covers it and nothing fades")
