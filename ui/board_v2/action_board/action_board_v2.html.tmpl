@@ -17,6 +17,13 @@
    and still guarded, because they may come back. Nothing on this page loads them. */
 :root{
   --ink:#e2d7bc; --dim:#968e7c; --line:#c9b27a; --faint:#2c2924;
+  /* THE EDGE OF A THING YOU CAN CHOOSE, AT REST AND UNDER THE POINTER. --line already named the
+     third state, and these two were literals in .dcell while the rectangles were the only object
+     on this board with three states to say. The action cards and the Tithe box have them now, so
+     the numbers have four readers and are a name for the reason --plate became one: two things
+     using one colour is exactly when it stops being a literal. Matching by eye is how a board
+     ends up with two nearly-identical greys and no way to tell which is the mistake. */
+  --edge:#6a6252; --edge-lit:#9d9079;
   --panel:#0e0d0b; --panelline:#46413710;
   /* THE PLATE, AND NOW THE TILE'S. It was written once, in .seal.plate, while the tile under it
      was near-black -- so a cut-out icon sat on a visible coloured square. The tile carries the
@@ -270,19 +277,16 @@ body.full{background:#000}
 
 
 /* ---- the two action cards -------------------------------------------------------------- */
-/* ISOLATED, AND THAT IS A FIX RATHER THAN A TIDY-UP. The `lift` overlay below is
+/* NO isolation:isolate ANY MORE, AND IT IS WORTH SAYING WHY IT WAS THERE. The hover overlay was
    mix-blend-mode:screen, and a blended element blends with its nearest STACKING CONTEXT's
-   backdrop -- not with its parent. `.art` is position:absolute with z-index:auto, which does not
-   make one, so each card's overlay was blending against everything painted beneath it across the
-   whole board: the backdrop picture, the road, the ribbon.
-   TWO CONSEQUENCES, one of them visible. The effect is meant to lift the flames in THIS card's
-   own picture, and it was reaching outside the card to do it. And a blending group that spans the
-   board has to be rasterised together, so anything that changes compositing elsewhere -- a tile
-   taking its hover transform, a mark animating its filter -- invalidates it, and the two cards
-   flash while it is rebuilt. Two cards, side by side: a black rectangle on each side of the row.
-   `isolation:isolate` makes each card its own stacking context, so the blend sees its own picture
-   and nothing else, and the group cannot be disturbed by anything outside the card. */
-.art{overflow:hidden;background:#000;cursor:pointer;isolation:isolate}
+   backdrop rather than with its parent. `.art` is position:absolute at z-index:auto, which makes
+   no context, so each card's wash was blending against the whole board painted beneath it -- and
+   a blending group that spans the board is rasterised together, so any compositing change
+   elsewhere flashed both cards black while it rebuilt. `isolation:isolate` fenced it in. Nothing
+   on this card blends now, so the fence guards nothing; it goes with the thing it was built for,
+   and this note is here so the next blend knows what it will need. */
+.art{overflow:hidden;background:#000;cursor:pointer;
+  outline:2px solid var(--edge);outline-offset:-1px;transition:outline-color .12s ease}
 .art img{width:100%;height:100%;object-fit:cover;display:block}
 /* THE NAME ONLY, AND NO SCRIM BEHIND IT.
    The effect line used to live along the bottom of the picture and moved into the upper text box,
@@ -309,22 +313,51 @@ body.full{background:#000}
 .art .ph span{display:block}
 .art .ph b{display:block;font:600 15px/1.4 Georgia,serif;color:#857c67;letter-spacing:.1em;
   text-transform:uppercase;margin-bottom:4px}
-/* THE HOVER LIFT IS A SCREEN OVERLAY, NOT filter: brightness(). Measured on these cards,
-   brightness(1.08) moves the shadows -- where 85% of the picture and all the hatching live --
-   by 0.4 L*, which nobody can see, while moving the flames by 4.6 and taking the blown-out area
-   from 0.119% to 1.090% of the card. Screen at 4% does the opposite: +3.2 L* in the shadows,
-   +0.5 in the flames, and it cannot clip, because screen only reaches white where the pixel
-   already is. It also leaves the flames alone for the animation to have later. */
-.art .lift{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .14s ease;
-  background:#ffd696;mix-blend-mode:screen}
-.art:hover .lift{opacity:.04}
+/* NO HOVER OVERLAY. A 4%-opacity screen wash used to brighten the picture under the pointer --
+   chosen over filter:brightness() because brightness moved the shadows, where 85% of the picture
+   lives, by 0.4 L* while blowing the flames out from 0.119% to 1.090% of the card. The
+   measurement stood up; the cue is being replaced rather than corrected. Each action is getting
+   TWO pictures, a colour-graded cold one and the original, stacked and crossfaded -- 0% colour at
+   rest, part-way under the pointer, full colour when chosen -- so hover will be said by the
+   picture turning colour, which is a far louder answer than 4% of light and needs no overlay at
+   all. The wash is gone NOW, ahead of the pictures, so the board never carries two hover cues
+   that disagree. Until they land, the edge below says hover by itself. */
 /* CHOSEN, AND THE TITHE BOX SAYS IT THE SAME WAY. These are the three things the action row
    offers -- this duty's first action, its second, and taking the tithe instead -- so one choice
    among them should look like one kind of answer. The Tithe box said nothing at all until now:
    it has been clickable since it was drawn and the only sign it had been pressed was the commit
    mark appearing in the column. A resource that selects it makes that silence much louder, so
-   the box joins the declaration rather than getting an outline of its own that matches. */
-.art.sel, .panel.sel{outline:2px solid var(--line);outline-offset:-1px}
+   the box joins the declaration rather than getting an outline of its own that matches.
+
+   AND ALL THREE STATES NOW, IN THE WHEEL'S OWN COLOURS. Selection used to be the only thing
+   these edges said: a card at rest had no frame at all and hover was carried entirely by the
+   picture lifting. So the row had one state where the rectangles below it have three, and the
+   two halves of the board disagreed about what an edge means. The numbers are .dcell's, copied
+   rather than matched by eye -- --edge at rest, --edge-lit under the pointer, --line when
+   chosen -- because an edge that merely LOOKS like the wheel's is the thing that drifts.
+
+   OUTLINE AND NOT BORDER, WHICH IS NOT A STYLE CHOICE. `.art` is overflow:hidden round an image
+   at width:100%, and `.panel`'s label and three resource slots are absolutely positioned against
+   its padding box. A border is part of the box, so two pixels of one would rescale every action
+   picture and walk the Tithe's contents a pixel in. An outline is painted and occupies nothing,
+   so the arrangement geometry.py owns is untouched at every state. That is also why `.panel`
+   keeps a 1px TRANSPARENT border: it held the box's shape before this rule existed and removing
+   it outright would move the contents it was holding out.
+
+   -1px OF OFFSET, INHERITED FROM THE RULE THIS REPLACES, so the gold -- the one state that
+   already looked right -- sits exactly where it has been sitting. The outline straddles the
+   edge, 1px in and 1px out, and the row has 16px of canvas between its boxes, so nothing meets
+   anything.
+
+   .12s, WHICH IS THE WHEEL'S. This was .14s for one commit, to agree with the hover wash that
+   fired on the same card at the same moment -- two cues on one object arriving 20ms apart is a
+   flicker you can see. The wash is gone, so the edge answers hover alone and there is nothing
+   left for it to agree with except the rectangles, which is what it matches. When the crossfade
+   lands the card will answer twice again and the two durations are to be settled together. */
+.art:hover, .panel:hover{outline-color:var(--edge-lit)}
+/* AFTER THE HOVER RULE AND AT THE SAME WEIGHT, so a chosen card keeps its gold while the pointer
+   is on it. This is the order .dcell already states for .lit and .sel, for the same reason. */
+.art.sel, .panel.sel{outline-color:var(--line)}
 
 /* ---- buttons and the right-hand column -------------------------------------------------- */
 .btn{display:grid;place-items:center;border-radius:4px;cursor:pointer;
@@ -379,7 +412,13 @@ body.full{background:#000}
 .mark.off{display:none}
 .mark img{width:100%;height:100%;object-fit:contain;display:block}
 @media (prefers-reduced-motion:reduce){.mark{transition:none}}
-.panel{border:1px solid #46413a;border-radius:5px;background:#0e0d0b}
+/* THE BORDER IS TRANSPARENT AND STILL 1px. It drew this box's edge until the three-state
+   outline above took that job; what it still does is HOLD THE SHAPE, because the label and
+   the three resource slots inside are absolutely positioned against the padding box. Drop
+   it and every one of them moves a pixel up and left. Kept at its width, emptied of its
+   colour. */
+.panel{border:1px solid transparent;border-radius:5px;background:#0e0d0b;
+  outline:2px solid var(--edge);outline-offset:-1px;transition:outline-color .14s ease}
 /* NO .panel.eligible RULE. The box wore the same wash for a round and it has been taken back
    out: a box with nothing in it already writes "no tithe available" across its own middle, so
    the light was the board saying one thing twice on one object. The rectangles keep it because
@@ -404,7 +443,7 @@ body.full{background:#000}
    A face was a filled shape and could be brightened; a cell is an OUTLINE, and there is nothing
    inside it to brighten. So hover and selection are carried by the border and the ground
    instead -- the same two states, said in the only language this object has. */
-.dcell{position:absolute;border:2px solid #6a6252;border-radius:3px;background:#14120f;
+.dcell{position:absolute;border:2px solid var(--edge);border-radius:3px;background:#14120f;
   cursor:pointer;display:grid;place-items:start stretch;overflow:hidden;
   transition:border-color .12s ease,background .12s ease}
 /* THE NAME SITS AT THE TOP, NOT IN THE MIDDLE, and the acolytes are why. They stand along the
@@ -412,7 +451,7 @@ body.full{background:#000}
    middle of the word -- ALLOCATION unreadable behind three figures on the first build. The
    wheel never had this problem because its labels were in the drawing and the figures ringed
    the outside of it. A rectangle has an inside, and now two things want to be in it. */
-.dcell.lit{border-color:#9d9079;background:#1b1813}
+.dcell.lit{border-color:var(--edge-lit);background:#1b1813}
 /* SELECTION IS A SECOND STATE, NOT THE SAME ONE. The tile has carried `sel` since there was a
    board, and the wheel's faces were given it for the same reason: without a second state,
    hovering one duty while another is selected shows two identical highlights and no way to tell
@@ -3153,7 +3192,6 @@ function render(){
       nm.textContent = a.name;
       art.appendChild(nm);
     }
-    var lift = document.createElement("div"); lift.className = "lift"; art.appendChild(lift);
     art.classList.toggle("sel", S.slot === slot);
   });
   // THE COMMIT APPEARS WHEN THERE IS SOMETHING TO COMMIT, which is what the confirm buttons it

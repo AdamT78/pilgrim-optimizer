@@ -2612,8 +2612,10 @@ def test_the_box_says_it_in_words_and_the_tiles_say_it_in_light(tmpl):
     assert "no tithe available" in empty, (
         "the empty box no longer writes what is wrong with it:\n%s" % empty[-700:])
 
-    assert "outline" in _rule(tmpl, ".art.sel, .panel.sel"), (
-        "the chosen box no longer uses the outline")
+    assert _rule(tmpl, ".art.sel, .panel.sel").get("outline-color") == "var(--line)", (
+        "the chosen box no longer takes the gold from --line. The outline itself is declared on "
+        "the base rules now, because the row wears three states rather than one; see "
+        "test_the_action_row_wears_the_wheels_three_states.")
 
     take = _code(_function(tmpl, "takeTithe"))
     assert "explainWhy(GEO.lines.noTithe)" in take, (
@@ -3311,8 +3313,10 @@ def test_the_tithe_box_and_the_chosen_resource_are_lit_from_the_state(tmpl):
             % (fn, body))
 
     sel = _rule(tmpl, ".art.sel, .panel.sel")
-    assert sel.get("outline"), (
-        "the Tithe box no longer shares the action cards' own chosen outline: %s" % sel)
+    assert sel.get("outline-color") == "var(--line)", (
+        "the Tithe box no longer shares the action cards' own chosen outline: %s. The shared "
+        "declaration moved to the base rules when the row gained three states; what matters "
+        "here is still that ONE rule answers for both." % sel)
     lit = _rule(tmpl, ".seal.filled, .tmark.filled, .tslot.filled")
     assert lit.get("filter"), (
         "the board's marks no longer share one rest weight: %s" % lit)
@@ -5106,3 +5110,56 @@ def test_both_places_that_draw_the_rim_ask_the_one_rule(tmpl):
     for name, body in (("render", rend), ("drawGrid", grid)):
         assert not re.search(r'toggle\("sel",[^)]*S\.duty', body), (
             "%s compares S.duty where it draws the rim instead of asking dutyChosen()" % name)
+
+
+def test_the_action_row_wears_the_wheels_three_states(tmpl):
+    """The cards and the Tithe box say rest, hover and chosen in the rectangles' own colours.
+
+    THE TWO HALVES OF THE BOARD USED TO DISAGREE ABOUT WHAT AN EDGE MEANS. The nine rectangles
+    have had three states since they replaced the wheel; the action row had one -- a card at rest
+    carried no frame at all and hover was said entirely by the picture lifting -- so the only
+    edge-state the row could show was the gold, and an edge meant "chosen" above the fold and
+    "this is a thing" below it.
+
+    AND IT IS ONE TOKEN, NOT TWO MATCHING NUMBERS. --edge and --edge-lit exist because four rules
+    read them; --line already named the third. A guard that allowed the literals back would allow
+    the row and the wheel to drift a shade apart, which is the failure that cannot be seen in a
+    screenshot of either one alone.
+
+    OUTLINE ON THE ROW, BORDER ON THE RECTANGLES, AND THAT ASYMMETRY IS LOAD-BEARING. `.art` is
+    overflow:hidden round an image at width:100% and `.panel`'s contents are absolutely positioned
+    against its padding box, so a border on either would move pixels geometry.py owns. The colours
+    are shared; the property carrying them cannot be.
+
+    Falsify: type a literal back into any of the six declarations, or give the row a border.
+    """
+    root = _rule(tmpl, ":root")
+    assert root.get("--edge") and root.get("--edge-lit"), (
+        "the rest and hover edges are no longer names, so nothing holds the row and the wheel "
+        "to one pair of colours: %s" % {k: v for k, v in root.items() if "edge" in k})
+
+    for name, rule, prop in (
+            (".dcell", _rule(tmpl, ".dcell"), "border"),
+            (".art", _rule(tmpl, ".art"), "outline"),
+            (".panel", _rule(tmpl, ".panel"), "outline")):
+        assert rule.get(prop) == "2px solid var(--edge)", (
+            "%s no longer draws its rest edge from --edge: %s" % (name, rule.get(prop)))
+
+    assert _rule(tmpl, ".dcell.lit").get("border-color") == "var(--edge-lit)", (
+        "the rectangles' hover no longer comes from --edge-lit")
+    assert _rule(tmpl, ".art:hover, .panel:hover").get("outline-color") == "var(--edge-lit)", (
+        "the row's hover no longer comes from --edge-lit")
+
+    assert _rule(tmpl, ".dcell.sel").get("border-color") == "var(--line)", (
+        "the rectangles' chosen edge no longer comes from --line")
+    assert _rule(tmpl, ".art.sel, .panel.sel").get("outline-color") == "var(--line)", (
+        "the row's chosen edge no longer comes from --line")
+
+    # AND THE ROW KEEPS ITS LAYOUT OUT OF IT. A border here would rescale fourteen pictures and
+    # walk the Tithe's label and three slots a pixel; the transparent border on .panel is what
+    # holds that box's shape now that its edge is painted rather than laid out.
+    assert "transparent" in _rule(tmpl, ".panel").get("border", ""), (
+        "the Tithe box's border is carrying colour again, so its contents move with it")
+    for name in (".art", ".panel"):
+        assert "px solid var(--edge)" not in _rule(tmpl, name).get("border", ""), (
+            "%s draws its rest edge with a border, which changes the box" % name)
