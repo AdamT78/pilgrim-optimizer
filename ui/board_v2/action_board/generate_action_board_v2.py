@@ -116,7 +116,7 @@ OUT = HERE / "generated" / "action_board_v2.html"
 # them out. It does NOT resize anything -- `gap` already does that, by eating the room the
 # three columns divide -- which is what makes the two worth having separately.
 GRID_DEFAULTS = {"gap": 120, "disp": 60, "size": 100, "height": 140, "fig": 100,
-                 "cols": -30, "merch": 90, "bare": True}
+                 "cols": -30, "icon": 120, "merch": 110, "bare": True}
 
 # WHAT AN OPEN DUTY TILE WEARS, AND WHEN EACH ONE STARTS WEARING IT.
 #
@@ -894,10 +894,10 @@ def main() -> None:
           % ((far["x"] + far["width"]) - card["x"], d["canvas"]["height"] - top - m,
              card["x"], top, m))
     print("  sliders open at gap %d, edge %d, size %d%%, height %d%%, folk %d%%, "
-          "cols %+d, trade %d%%, bare %s"
+          "cols %+d, icons %d%%, trade %d%%, bare %s"
           % (GRID_DEFAULTS["gap"], GRID_DEFAULTS["disp"], GRID_DEFAULTS["size"],
              GRID_DEFAULTS["height"], GRID_DEFAULTS["fig"],
-             GRID_DEFAULTS["cols"], GRID_DEFAULTS["merch"],
+             GRID_DEFAULTS["cols"], GRID_DEFAULTS["icon"], GRID_DEFAULTS["merch"],
              "on" if GRID_DEFAULTS["bare"] else "off"))
     # WHAT WAS DEALT, IN THE ORDER IT WILL BE WALKED. Eight placeholders are the kind of thing
     # that goes unlooked-at for weeks, and the ring is the one property of them that is easy to

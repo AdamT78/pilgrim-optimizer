@@ -654,9 +654,13 @@ body.editing .art.drop,body.editing .seal.drop{outline:2px solid var(--line)}
   <input type=range id=rCols min=-150 max=150 step=1
          title="how far the left and right columns of tiles sit from the middle one, in board pixels; both move by the same amount and the middle column does not move">
   <span class=val id=vCols></span>
+  <span class=tag>icons</span>
+  <input type=range id=rIcon min=40 max=200 step=1
+         title="how big the duty action icons and the tile's tithe resource are drawn, as a percentage of the height the duty line gives them; one number for all of them, and nothing moves -- the four columns stay where they are and only the drawings change size inside them. Over 100 they grow past their slot on purpose, so the size can be chosen by eye">
+  <span class=val id=vIcon></span>
   <span class=tag>trade</span>
   <input type=range id=rMerch min=40 max=200 step=1
-         title="how big the merchant stands on the duty line, as a percentage of the width the gap between the icons and the resource can spare; over 100 it grows into them on purpose, so the size can be chosen by eye">
+         title="how big the merchant stands on the duty line, as a percentage of the height the line gives it -- the same measure the icons slider uses, so the two can be compared. It has a slot of its own and stands on the line rather than being centred in it; over 100 it grows past that slot on purpose, so the size can be chosen by eye">
   <span class=val id=vMerch></span>
   <label class=chk><input type=checkbox id=cBare
          title="hide the rectangles' top, left and right edges and their ground; the bottom edge the acolytes stand on stays"> bare</label>
@@ -1846,8 +1850,25 @@ function inkAt(P, k, scale){
 // the widest row any duty needs, which looked right while the frame was the only thing on the
 // line -- and is wrong now that four acolytes stand over four slots: Allocation's one mark
 // centred would sit between slot A and slot B with a person over each of them.
+// HOW BIG THE ICONS ON THE DUTY LINE ARE DRAWN, as a percentage of the height the line gives
+// them. ONE NUMBER FOR THE MARKS AND THE RESOURCE, because they share a line and are read against
+// each other: two sliders would let the thing that must stay true -- that a duty's actions and
+// what it hands out are the same weight -- be broken by moving one of them.
+//
+// AND NOTHING MOVES. The scale goes into inkAt(), which centres the ink in its slot, and the two
+// callers below centre it vertically in the plate; a slot's middle does not depend on how much of
+// it is filled. So the four columns stay exactly where they are at any setting and only the
+// drawings grow or shrink inside them -- which is the whole point, since the columns are what the
+// acolytes are aligned to.
+//
+// OVER 100 IT GROWS PAST THE SLOT, deliberately, exactly as `trade` does for the merchant. The
+// slot was sized from the widest drawing on the whole board, so a number that refused to exceed it
+// would stop short of what the eye may want; growing into the gap is visible and reversible, and
+// a slider that silently refused would be the worse of the two.
+function iconScale(){ return (GRID.icon == null ? 100 : GRID.icon) / 100; }
+
 function markAt(P, k){
-  var ink = inkAt(P, k, 1);
+  var ink = inkAt(P, k, iconScale());
   return {left: plateInset(P) + ink.x - P.ip,
           top: plateInset(P) + (P.sz - ink.h) / 2,
           w: ink.w, h: ink.h};
@@ -1861,7 +1882,7 @@ function markAt(P, k){
 // has to name it: nothing else would take it away on a rebuild, and it would pile up one copy
 // per slider event.
 function titheMarkAt(r, P, y){
-  var ink = inkAt(P, P.line.w.length - 1, 1);
+  var ink = inkAt(P, P.line.w.length - 1, iconScale());
   return {x: r.x + CELL_BORDER + ink.x,
           y: y + P.ip + (P.sz - ink.h) / 2, w: ink.w, h: ink.h};
 }
@@ -1883,13 +1904,25 @@ var MERCHANT_FLOOR = 0.5;
 // would teach nothing.
 //
 // ON THE MARKS' OWN BASELINE. What reads as the line is the bottom edge of the drawings, and a
-// figure is a thing that STANDS; scaled about its middle it would float as the slider moved.
+// figure is a thing that STANDS; scaled about its middle it would float as the trade slider moved.
+//
+// AND THE BASELINE IS ASKED FOR RATHER THAN ASSUMED, which is what this got wrong. It used to
+// read `(P.sz - L.band) / 2 + L.band` -- the bottom of the UNSCALED band -- which was the marks'
+// bottom edge for as long as the marks were only ever drawn at the band. The icons slider grows
+// them about their own middle, so their baseline moved down and the merchant's did not: at icons
+// 120 the figure stood 4.3 pixels above the line it is supposed to be standing on, at every
+// setting of its own slider. The marks' bottom is `(P.sz + band * iconScale()) / 2` and that is
+// what is written here now, so the two cannot drift again whatever either slider is doing.
+//
+// NOTE THAT IT DEPENDS ON THE ICONS SLIDER AND NOT ON ITS OWN. Its own slider decides how TALL
+// the figure is; the icons slider decides where the GROUND is. Those are different questions and
+// this is the line where they meet.
 function merchantAt(P, frameX, y){
   var L = P.line;
   if (L.band < P.sz * MERCHANT_FLOOR) return null;
   var ink = inkAt(P, P.most, (GRID.merch == null ? 100 : GRID.merch) / 100);
-  return {x: frameX + ink.x, w: ink.w, h: ink.h,
-          y: y + P.ip + (P.sz - L.band) / 2 + L.band - ink.h};
+  var baseline = y + P.ip + (P.sz + L.band * iconScale()) / 2;
+  return {x: frameX + ink.x, w: ink.w, h: ink.h, y: baseline - ink.h};
 }
 
 // THE SHAPES ONE DUTY'S LINE HOLDS, in slot order: its marks, the merchant, its resource. A
@@ -2562,17 +2595,19 @@ function wireGrid(){
   var rf = document.getElementById("rFig");
   var rc = document.getElementById("rCols");
   var rm = document.getElementById("rMerch");
+  var ri = document.getElementById("rIcon");
   var cb = document.getElementById("cBare");
   rg.value = GRID.gap; rd.value = GRID.disp; rs.value = GRID.size;
   rt.value = GRID.height; rf.value = GRID.fig;
-  rc.value = GRID.cols; rm.value = GRID.merch;
+  rc.value = GRID.cols; rm.value = GRID.merch; ri.value = GRID.icon;
   cb.checked = !!GRID.bare;
   function apply(){
     GRID.gap = +rg.value; GRID.disp = +rd.value; GRID.size = +rs.value;
     GRID.height = +rt.value; GRID.fig = +rf.value;
-    GRID.cols = +rc.value; GRID.merch = +rm.value;
+    GRID.cols = +rc.value; GRID.merch = +rm.value; GRID.icon = +ri.value;
     document.getElementById("vCols").textContent = (GRID.cols > 0 ? "+" : "") + GRID.cols;
     document.getElementById("vMerch").textContent = GRID.merch + "%";
+    document.getElementById("vIcon").textContent = GRID.icon + "%";
     GRID.bare = cb.checked;
     document.getElementById("vGap").textContent = GRID.gap;
     document.getElementById("vDisp").textContent = GRID.disp;
@@ -2627,6 +2662,7 @@ function wireGrid(){
   rf.addEventListener("input", apply);
   rc.addEventListener("input", apply);
   rm.addEventListener("input", apply);
+  ri.addEventListener("input", apply);
   // THE SEAT IS NOT A GRID SETTING AND IS WIRED APART FROM THEM. It changes nothing about the
   // arrangement -- no rectangle moves -- so it does not belong in apply(), which rebuilds the
   // nine and re-measures them. It changes WHOSE box is drawn, which is render()'s business.
