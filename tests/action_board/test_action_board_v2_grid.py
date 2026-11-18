@@ -293,6 +293,10 @@ def sweep(tmpl, geo):
         "var LINE_MIN_GAP = %s;" % _decl(tmpl, "LINE_MIN_GAP"),
         _function(tmpl, "slotsFor"),
         _function(tmpl, "inkAt"),
+        # markAt and titheMarkAt ask iconScale() for the icon slider, so it travels with
+        # them: a prelude that slices a function without what it calls fails in node with
+        # a ReferenceError and takes the whole fixture -- and 38 tests -- down with it.
+        _function(tmpl, "iconScale"),
         _function(tmpl, "plateHang"),
         _function(tmpl, "cellRect"),
         _function(tmpl, "plateInset"),
@@ -550,7 +554,12 @@ def test_the_sweep_covers_the_sliders_the_page_actually_offers(tmpl):
     # other instead of quietly falling outside both.
     not_swept = {"rFig": "scales the acolytes; no rectangle moves",
                  "rMerch": "scales the merchant on the duty line; no rectangle moves, and "
-                           "nothing else on the line is placed from it"}
+                           "nothing else on the line is placed from it",
+                 "rIcon": "scales the duty marks and the tile's resource; no rectangle and no "
+                          "SLOT moves, because the scale goes into inkAt(), which centres the ink "
+                          "in a slot whose middle does not mention it -- "
+                          "test_the_icon_slider_resizes_without_moving_anything runs that rather "
+                          "than taking it on trust, which is what earns the place on this list"}
     offered = set(re.findall(r"<input type=range id=(\w+)", tmpl))
     unaccounted = sorted(offered - set(swept) - set(not_swept))
     assert not unaccounted, (
@@ -4659,6 +4668,10 @@ def test_the_trade_slider_scales_the_merchant_and_moves_nothing_else(tmpl, geo):
         "var LINE_MIN_GAP = %s;" % _decl(tmpl, "LINE_MIN_GAP"),
         _function(tmpl, "slotsFor"),
         _function(tmpl, "inkAt"),
+        # markAt and titheMarkAt ask iconScale() for the icon slider, so it travels with
+        # them: a prelude that slices a function without what it calls fails in node with
+        # a ReferenceError and takes the whole fixture -- and 38 tests -- down with it.
+        _function(tmpl, "iconScale"),
         _function(tmpl, "plateInset"),
         _function(tmpl, "markAt"),
         _function(tmpl, "titheMarkAt"),
@@ -4900,6 +4913,10 @@ def test_a_drawing_is_one_height_and_centred_in_its_slot(tmpl, geo):
         _function(tmpl, "plateFor"),
         _function(tmpl, "slotsFor"),
         _function(tmpl, "inkAt"),
+        # markAt and titheMarkAt ask iconScale() for the icon slider, so it travels with
+        # them: a prelude that slices a function without what it calls fails in node with
+        # a ReferenceError and takes the whole fixture -- and 38 tests -- down with it.
+        _function(tmpl, "iconScale"),
         _function(tmpl, "plateInset"),
         _function(tmpl, "markAt"),
         _function(tmpl, "titheMarkAt"),
@@ -5211,3 +5228,124 @@ def test_the_card_crossfades_between_its_two_pictures(tmpl):
         "keeps the old answer -- innerHTML clears children, not classes")
     assert draw.index('ci.className = "cold"') < draw.index('im.className = "hot"'), (
         "the colour picture is appended first, so the cold one covers it and nothing fades")
+
+
+@needs_node
+def test_the_icon_slider_resizes_without_moving_anything(tmpl):
+    """One number sizes the duty line's marks AND its resource, and no column moves.
+
+    THE COLUMNS ARE WHAT THE ACOLYTES ARE ALIGNED TO. p1 stands over the first mark, p2 over the
+    second, p3 over the merchant and p4 over the resource, and that alignment is the whole reason
+    the line was rebuilt as four even slots. A size control that shifted a slot would quietly undo
+    it -- and would do it on a slider, where nobody is looking at the figures.
+
+    SO THE SCALE GOES INTO inkAt(), WHICH CENTRES THE INK IN ITS SLOT. A slot's middle is
+    `at[k] + box/2` and does not mention the scale at all, so the centre is invariant by
+    construction; this runs it rather than reading it, at sizes either side of 100.
+
+    ONE SLIDER, NOT TWO. The marks and the resource share a line and are read against each other
+    -- a duty's actions and what it hands out are meant to be the same weight -- so both callers
+    take the same iconScale(). Two numbers would let that be broken by moving one of them.
+
+    Falsify: pass a literal 1 back into either caller, give the resource its own slider, or make
+    inkAt place the ink from an edge rather than from the middle.
+    """
+    prelude = "\n".join([
+        "var GRID = {icon: 100};",
+        _function(tmpl, "iconScale"),
+        _function(tmpl, "inkAt"),
+        # markAt and titheMarkAt ask iconScale() for the icon slider, so it travels with
+        # them: a prelude that slices a function without what it calls fails in node with
+        # a ReferenceError and takes the whole fixture -- and 38 tests -- down with it.
+        _function(tmpl, "iconScale"),
+        "var P = {line: {band: 40, box: 60, at: [0, 70, 140, 210]}, shapes: [1.4, 0.8, 1, 1.1]};",
+        "function mid(k, pct){ GRID.icon = pct; var i = inkAt(P, k, iconScale());"
+        "  return {c: i.x + i.w / 2, h: i.h, w: i.w}; }",
+    ])
+    got = _node(prelude, "[[0,1,2,3].map(function(k){ return mid(k, 100).c; }),"
+                         " [40, 60, 100, 160, 200].map(function(p){ return mid(2, p); })]")
+    centres, sizes = got
+    for pct in (40, 60, 160, 200):
+        moved = _node(prelude, "[0,1,2,3].map(function(k){ return mid(k, %d).c; })" % pct)
+        for k, (a, b) in enumerate(zip(centres, moved)):
+            assert abs(a - b) < 1e-9, (
+                "slot %d's middle moves from %g to %g at icons %d%%, so the acolyte standing "
+                "under it no longer lines up" % (k, a, b, pct))
+    # and it actually resizes, in proportion, or the slider is a number that does nothing
+    for (pct, got_) in zip((40, 60, 100, 160, 200), sizes):
+        assert abs(got_["h"] - 40 * pct / 100.0) < 1e-9, (
+            "icons %d%% gave an ink height of %g against the band's 40" % (pct, got_["h"]))
+
+    body = _rule_free(tmpl)
+    assert "inkAt(P, k, iconScale())" in body, (
+        "the duty marks no longer take the icon slider")
+    assert "inkAt(P, P.line.w.length - 1, iconScale())" in body, (
+        "the tile's tithe resource no longer takes the icon slider, so the line can be sized "
+        "into disagreeing with itself")
+    assert body.count("function iconScale()") == 1, "the scale is stated more than once"
+    assert 'id=rIcon' in body and 'id=vIcon' in body, "the slider is not on the page"
+
+
+@needs_node
+def test_the_merchant_stands_on_the_line_the_marks_make(tmpl):
+    """The merchant's feet, the marks' bottom edge and the resource's bottom edge are one line.
+
+    WHAT READS AS "THE LINE" IS THE BOTTOM OF THE DRAWINGS, not the middle of them. The marks and
+    the resource are emblems and are centred in their slots; the merchant is a FIGURE and stands.
+    Those are different rules, and they agree only if the figure is stood on the edge the others
+    actually reach -- which is why this is asked across both sliders rather than at their defaults.
+
+    IT WAS PINNED TO THE WRONG NUMBER AND THE SECOND SLIDER FOUND IT. merchantAt stood the figure
+    on the bottom of the UNSCALED band, which was the marks' bottom edge for exactly as long as
+    the marks were only ever drawn at the band. The icons slider grows them about their middle, so
+    their baseline moved down and the merchant's did not: 4.3 pixels of daylight under its feet at
+    icons 120%, at every setting of its own slider, on all eight tiles.
+
+    THE TWO SLIDERS ASK DIFFERENT QUESTIONS, which is the thing to keep hold of. `trade` decides
+    how TALL the figure is. `icons` decides where the GROUND is. A merchant at 90% against icons
+    at 120% is shorter than its neighbours AND still standing on their line -- that is correct,
+    and a guard that compared middles would call it broken.
+
+    Falsify: stand the merchant on `(P.sz - L.band) / 2 + L.band` again, or centre it like a mark.
+    """
+    prelude = "\n".join([
+        "var GRID = {icon: 100, merch: 100};",
+        "var CELL_BORDER = %s;" % _decl(tmpl, "CELL_BORDER"),
+        "var PLATE_BORDER = %s;" % _decl(tmpl, "PLATE_BORDER"),
+        "var MERCHANT_FLOOR = %s;" % _decl(tmpl, "MERCHANT_FLOOR"),
+        _function(tmpl, "iconScale"),
+        _function(tmpl, "inkAt"),
+        _function(tmpl, "plateInset"),
+        _function(tmpl, "markAt"),
+        _function(tmpl, "titheMarkAt"),
+        _function(tmpl, "merchantAt"),
+        "var P = {ip: 6, sz: 50, most: 2,",
+        "         line: {band: 40, box: 60, at: [0, 70, 140, 210], w: [0,0,0,0]},",
+        "         shapes: [1.2, 0.9, 0.687, 1.1]};",
+        "var R = {x: 100, y: 200, width: 300, height: 150};",
+        "function feet(ic, tr){ GRID.icon = ic; GRID.merch = tr;",
+        "  var y = 400;",
+        "  var m = merchantAt(P, R.x + CELL_BORDER, y);",
+        "  var k = markAt(P, 0), t = titheMarkAt(R, P, y);",
+        "  return {merch: m && (m.y + m.h), mark: y + P.ip - plateInset(P) + k.top + k.h,",
+        "          tithe: t.y + t.h, h: m && m.h}; }",
+    ])
+    pairs = [(100, 100), (120, 120), (120, 90), (140, 80), (60, 200), (200, 40)]
+    got = _node(prelude, "[%s]" % ", ".join("feet(%d, %d)" % p for p in pairs))
+    for (ic, tr), row in zip(pairs, got):
+        assert row["merch"] is not None, "the merchant was refused at icons %d / trade %d" % (ic, tr)
+        assert abs(row["merch"] - row["tithe"]) < 1e-9, (
+            "icons %d%% / trade %d%%: the merchant's feet are at %g and the resource's bottom at "
+            "%g -- %.2f of daylight under a figure that is supposed to be standing on that line"
+            % (ic, tr, row["merch"], row["tithe"], row["merch"] - row["tithe"]))
+        assert abs(row["mark"] - row["tithe"]) < 1e-9, (
+            "icons %d%% / trade %d%%: a mark's bottom is %g and the resource's %g, so the line "
+            "the merchant is stood on is not one line" % (ic, tr, row["mark"], row["tithe"]))
+    # and the figure's HEIGHT still answers to its own slider, or the fix flattened the thing
+    tall = {(ic, tr): row["h"] for (ic, tr), row in zip(pairs, got)}
+    assert tall[(120, 120)] > tall[(120, 90)], (
+        "the trade slider no longer changes how tall the merchant is: %s" % tall)
+
+    body = _rule_free(tmpl)
+    assert "(P.sz + L.band * iconScale()) / 2" in body, (
+        "the merchant no longer takes its ground from where the marks actually reach")
